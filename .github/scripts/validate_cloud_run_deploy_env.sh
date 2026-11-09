@@ -135,6 +135,21 @@ if [[ -n "${PUBLIC_API_AUTH_ISSUER:-}" && "${PUBLIC_API_AUTH_ISSUER}" != https:/
   exit 1
 fi
 
+# Optional: the Auth0 client IDs whose client-credentials tokens are server
+# credentials. Unset or empty allows no client. Each listed client's tokens
+# are checked with the issuer and audience above, so they are required.
+server_client_ids="${PUBLIC_API_SERVER_CLIENT_IDS:-}"
+if [[ -n "${server_client_ids//[[:space:]]/}" ]]; then
+  if [[ ! "${server_client_ids}" =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ ]]; then
+    echo "PUBLIC_API_SERVER_CLIENT_IDS must be Auth0 client IDs separated by commas, with no spaces or empty entries" >&2
+    exit 1
+  fi
+  if [[ -z "${PUBLIC_API_AUTH_ISSUER:-}" || -z "${PUBLIC_API_AUTH_AUDIENCE:-}" ]]; then
+    echo "PUBLIC_API_SERVER_CLIENT_IDS requires PUBLIC_API_AUTH_ISSUER and PUBLIC_API_AUTH_AUDIENCE" >&2
+    exit 1
+  fi
+fi
+
 auth0_management_count=0
 for name in \
   AUTH0_MANAGEMENT_DOMAIN \

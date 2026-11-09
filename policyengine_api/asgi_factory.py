@@ -39,6 +39,12 @@ from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
     normalize_observability_id,
 )
+from policyengine_api.request_caller import (
+    bind_request_caller,
+    caller_attributes,
+    check_request_caller,
+    reset_request_caller,
+)
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     _asgi_incoming_observability_id,
@@ -52,10 +58,13 @@ from policyengine_api.vary_headers import UniqueVaryMiddleware
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
     from contextlib import AbstractAsyncContextManager
+    from contextvars import Token
 
     from policyengine_observability import ObservabilityRuntime
     from starlette.routing import BaseRoute
     from starlette.types import ASGIApp, Scope
+
+    from policyengine_api.libs.server_credentials import RequestCaller
 
 
 def _apply_request_id_header(
@@ -115,6 +124,11 @@ class _RequestContextTokens:
         self._incoming_observability_id_token = _asgi_incoming_observability_id.set(
             incoming_observability_id
         )
+        self._caller_token: Token[RequestCaller | None] | None = None
+
+    def bind_caller(self, caller: RequestCaller) -> None:
+        """Bind the request's checked caller in the context."""
+        self._caller_token = bind_request_caller(caller)
 
     def rebind_request_id(self, request_id: str) -> None:
         """Replace the request ID in the context."""
@@ -123,6 +137,8 @@ class _RequestContextTokens:
 
     def reset(self) -> None:
         """Restore every context variable to its value before the request."""
+        if self._caller_token is not None:
+            reset_request_caller(self._caller_token)
         _asgi_request_id.reset(self._request_id_token)
         _asgi_observability_id.reset(self._observability_id_token)
         _asgi_incoming_observability_id.reset(self._incoming_observability_id_token)
@@ -177,6 +193,12 @@ class _NativeRouteTelemetry:
             )
         self._request_id = request_id
         return request_id
+
+    def record_caller(self, caller: RequestCaller) -> None:
+        """Record the request's checked caller in its runtime record."""
+        # Telemetry must never fail the request.
+        with contextlib.suppress(Exception):
+            self._runtime.set_context(**caller_attributes(caller))
 
     def annotate_response(
         self,
@@ -242,9 +264,22 @@ async def _call_route(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
     telemetry: _NativeRouteTelemetry | None,
+    context_tokens: _RequestContextTokens,
 ) -> Response:
-    """Call the route, recording a native route that raises as a server error."""
+    """Check the request's credential, then call the route.
+
+    The check runs before route matching, for Flask and native routes alike
+    (see :mod:`policyengine_api.request_caller`); a refused credential
+    returns the refusal without calling the route. A native route that
+    raises, or a check that raises, is recorded as a server error.
+    """
     try:
+        caller = await check_request_caller(request)
+        if isinstance(caller, Response):
+            return caller
+        context_tokens.bind_caller(caller)
+        if telemetry is not None:
+            telemetry.record_caller(caller)
         return await call_next(request)
     except Exception as error:
         if telemetry is not None:
@@ -302,7 +337,7 @@ async def _serve_with_request_context(
         request_id = telemetry.begin(request_id, context_tokens)
 
     try:
-        response = await _call_route(request, call_next, telemetry)
+        response = await _call_route(request, call_next, telemetry, context_tokens)
         return _finish_response(response, request_id, telemetry)
     finally:
         context_tokens.reset()

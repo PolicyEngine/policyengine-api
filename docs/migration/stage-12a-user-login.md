@@ -441,6 +441,7 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
+| `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs the issuer and audience |
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
@@ -456,14 +457,27 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 > identities automatically.
 
 `readiness.validate_policy_runtime_configuration` validates the
-`PUBLIC_API_AUTH_*` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
+`PUBLIC_API_AUTH_*`, `PUBLIC_API_SERVER_CLIENT_IDS` and `AUTH0_MANAGEMENT_*`
+settings. Inconsistent values fail
 readiness, which is the deploy gate. Request handling reads the
 `PUBLIC_API_AUTH_*` settings only for a bearer token, so nothing in them
 blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
 `PUBLIC_API_AUTH_REQUIRED` (`0` or `1`) and checks the issuer, audience, and
 all-or-none Management settings, and it rejects Management settings outside
-production. `deploy_cloud_run_candidate.sh` writes them to
-the revision. The release test step unsets them.
+production and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
+`deploy_cloud_run_candidate.sh` writes them to the revision. The release test
+step unsets them.
+
+Every request's `Authorization` header is checked before route matching
+(`policyengine_api.request_caller`), so a bearer token sent to any route, not
+only a user route, is validated. A token that fails validation, an
+unlisted client's token and two `Authorization` headers get the Public API's
+plain 401 (`WWW-Authenticate: Bearer`,
+`{"status":"error","message":"Authentication is required"}`) before the route
+runs; an expired user token is refused there too, so a user route no longer
+answers it with `error="invalid_token"`. A bearer token that cannot be checked
+gets 503. A signed-in user's valid token passes the check and the user route
+checks it again.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:

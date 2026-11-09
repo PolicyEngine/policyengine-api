@@ -52,6 +52,25 @@ The HTTP response contains the header only when the request started a
 calculation, continued one synchronously, or restored an existing report
 identifier.
 
+## Request caller
+
+Every request's record says who sent it. Before route matching, the ASGI shell
+checks the `Authorization` header (`policyengine_api.request_caller`) and adds
+to the request's runtime record, for Flask and native routes alike:
+
+- `caller.kind`: `none` (no credential), `server` (an allowed Auth0
+  client-credentials token) or `user` (a signed-in user's valid token);
+- `caller.client_id`: the server's Auth0 client ID, only for `server`.
+
+A user's subject or email address is never recorded. A request without a
+credential logs nothing of its own. A refused credential is logged at INFO as
+`public_api_credential_refused`, with `refusal_reason`, the method, the path
+and, for a valid token of an unlisted client, `caller.client_id`; a bearer
+token that cannot be checked is logged at WARNING as
+`public_api_credential_check_unavailable`. Attribute names must avoid the
+runtime's prohibited key parts (such as `authorization`, `credential` and
+`token`), which it drops.
+
 ## Simulation client transport
 
 The simulation HTTP client reads identifiers from request context. Its request

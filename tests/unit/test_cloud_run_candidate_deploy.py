@@ -401,8 +401,9 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
     assert "PUBLIC_API_AUTH_REQUIRED=1" in result.stdout
     assert "PUBLIC_API_AUTH_ISSUER=https://auth.example.test/" in result.stdout
     assert "PUBLIC_API_AUTH_AUDIENCE=https://api.policyengine.org/" in result.stdout
-    # No server client is allowed until the variable is set.
-    assert "|PUBLIC_API_SERVER_CLIENT_IDS=|" in result.stdout
+    # No server client is allowed until the variable is set. The command
+    # trace escapes the list's separators.
+    assert r"\|PUBLIC_API_SERVER_CLIENT_IDS=\|" in result.stdout
     assert "AUTH0_MANAGEMENT_DOMAIN" not in result.stdout
 
     with_management = _run_script(
@@ -436,4 +437,5 @@ def test_deploy_cloud_run_candidate_passes_the_server_client_allow_list():
     )
 
     assert result.returncode == 0, result.stderr
-    assert "|PUBLIC_API_SERVER_CLIENT_IDS=client-a,client-b|" in result.stdout
+    # The command trace escapes the list's separators and the comma.
+    assert r"\|PUBLIC_API_SERVER_CLIENT_IDS=client-a\,client-b\|" in result.stdout

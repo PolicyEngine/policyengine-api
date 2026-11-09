@@ -21,6 +21,7 @@ from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
     normalize_observability_id,
 )
+from policyengine_api.request_caller import caller_attributes, current_request_caller
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     generate_request_id,
@@ -177,8 +178,9 @@ def _record_request_migration_context(
 ) -> None:
     """Record a Flask response's migration context.
 
-    With a runtime, the context enriches the runtime's own request record;
-    without one, it is logged as a migration request record.
+    With a runtime, the context enriches the runtime's own request record,
+    including the caller the ASGI shell checked; without one, it is logged as
+    a migration request record.
     """
     country_id = (
         flask.request.view_args.get("country_id") if flask.request.view_args else None
@@ -194,6 +196,9 @@ def _record_request_migration_context(
         }
         if observability_id is not None:
             runtime_context["observability_id"] = observability_id
+        caller = current_request_caller()
+        if caller is not None:
+            runtime_context.update(caller_attributes(caller))
         runtime.set_context(**runtime_context)
         return
     log_migration_request(
