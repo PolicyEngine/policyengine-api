@@ -408,9 +408,12 @@ def test_a_stored_failure_of_a_readable_policy_is_replayed_as_before(
     economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
     economy_harness.report_the_job_failed()
     failed = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+    polls_before = economy_harness.gateway_polls()
 
     replayed = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
 
+    # Answered from the stored failure, without polling the job again.
+    assert economy_harness.gateway_polls() == polls_before
     expected_status = 502 if economy_harness.route == ANNUAL_ROUTE else 200
     assert failed.status_code == expected_status, failed.get_json()
     assert replayed.status_code == expected_status, replayed.get_json()
