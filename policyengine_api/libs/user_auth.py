@@ -211,8 +211,9 @@ class JWTDecoder:
     def decode(self, token: str) -> Mapping[str, Any]:
         """Verify the signature, issuer, audience and required claims; return claims.
 
-        Raise ``jwt.PyJWKClientConnectionError`` when the signing keys cannot be
-        fetched, and another ``jwt.PyJWTError`` when the token is invalid.
+        Raise ``jwt.PyJWKClientConnectionError``, or an ``OSError`` that urllib
+        leaves unwrapped, when the signing keys cannot be fetched, and another
+        ``jwt.PyJWTError`` when the token is invalid.
         """
         signing_key = self.jwks_client.get_signing_key_from_jwt(token).key
         return jwt.decode(
@@ -302,7 +303,10 @@ def authenticate_bearer(
     selected_decoder = decoder or _decoder(settings.issuer, settings.audience)
     try:
         claims = selected_decoder.decode(token)
-    except jwt.PyJWKClientConnectionError as error:
+    # urllib leaves errors raised while reading the JWKS response unwrapped (a
+    # reset connection, a TLS error), and PyJWT converts only some of them to
+    # PyJWKClientConnectionError; either way the keys could not be fetched.
+    except (jwt.PyJWKClientConnectionError, OSError) as error:
         logger.warning(
             "public_api_user_auth_unavailable",
             extra={"policyengine_attributes": {"error_type": type(error).__name__}},

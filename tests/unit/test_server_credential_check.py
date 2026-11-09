@@ -10,6 +10,7 @@ request without a credential is still served.
 from __future__ import annotations
 
 import logging
+import ssl
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
@@ -76,6 +77,7 @@ def _bearer(token: str) -> dict[str, str]:
 # can't expire between collection and the test and pass for the wrong reason.
 REFUSED_AUTHORIZATION_HEADERS: dict[str, Callable[[], str]] = {
     "bearer-not-a-jwt": lambda: "Bearer not-a-jwt",
+    "no-break-space": lambda: "\xa0",
     "bearer-without-a-token": lambda: "Bearer",
     "basic-scheme": lambda: "Basic dXNlcjpwYXNzd29yZA==",
     "expired-server-token": lambda: bearer(server_token(exp=EXPIRED)),
@@ -269,7 +271,7 @@ def test_a_request_without_a_credential_is_served_and_recorded_without_warnings(
 def test_an_empty_authorization_header_counts_as_no_credential(path: str) -> None:
     application = _application()
 
-    response = application.client.get(path, headers={"Authorization": "  "})
+    response = application.client.get(path, headers={"Authorization": " \t "})
 
     assert response.status_code == 200
     assert _recorded_caller(application.runtime) == {"caller.kind": "none"}
@@ -305,8 +307,9 @@ def test_a_credential_that_fails_validation_is_refused_before_the_route(
 ) -> None:
     application = _application()
 
+    # Sent as Latin-1 bytes, as HTTP carries them, so a no-break space can be.
     response = application.client.get(
-        path, headers={"Authorization": build_authorization()}
+        path, headers={"Authorization": build_authorization().encode("latin-1")}
     )
 
     _assert_refused(response)
@@ -488,6 +491,35 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
     ]
 
 
+@pytest.mark.parametrize(
+    "fetch_error",
+    [
+        ConnectionResetError("connection reset"),
+        ssl.SSLError("bad record"),
+        TimeoutError("read timed out"),
+    ],
+    ids=["connection-reset", "tls-error", "timeout"],
+)
+@ROUTE_PATHS
+def test_a_signing_key_fetch_error_pyjwt_does_not_wrap_is_unavailable(
+    path: str, fetch_error: OSError, install_signing_keys
+) -> None:
+    # urllib leaves errors from reading the response unwrapped, and PyJWT
+    # converts only some of them; each must still answer 503, not 500.
+    install_signing_keys(StaticJWKClient(error=fetch_error))
+    application = _application()
+    client = TestClient(application.client.app, raise_server_exceptions=False)
+
+    refused = client.get(path, headers=_bearer(server_token()))
+
+    assert refused.status_code == 503
+    assert refused.json() == UNAVAILABLE_BODY
+    assert [
+        (name, severity)
+        for name, severity, _attributes in _credential_events(application.runtime)
+    ] == [("public_api_credential_check_unavailable", "WARNING")]
+
+
 @ROUTE_PATHS
 @pytest.mark.usefixtures("install_signing_keys")
 def test_a_bearer_token_is_unavailable_without_auth_settings(
@@ -505,6 +537,16 @@ def test_a_bearer_token_is_unavailable_without_auth_settings(
     assert refused.json() == UNAVAILABLE_BODY
     assert served.status_code == 200
     assert _route_calls(application) == 1
+    assert [
+        (name, severity, attributes["error_type"])
+        for name, severity, attributes in _credential_events(application.runtime)
+    ] == [
+        (
+            "public_api_credential_check_unavailable",
+            "WARNING",
+            "CredentialCheckUnavailableError",
+        )
+    ]
 
 
 @pytest.mark.usefixtures("install_signing_keys")
@@ -521,6 +563,16 @@ def test_a_malformed_allow_list_makes_a_bearer_token_unavailable(
     assert refused.status_code == 503
     assert refused.json() == UNAVAILABLE_BODY
     assert served.status_code == 200
+    assert [
+        (name, severity, attributes["error_type"])
+        for name, severity, attributes in _credential_events(application.runtime)
+    ] == [
+        (
+            "public_api_credential_check_unavailable",
+            "WARNING",
+            "UserAuthConfigurationError",
+        )
+    ]
 
 
 def test_recorded_attributes_survive_the_runtimes_attribute_rules(
