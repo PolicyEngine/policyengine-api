@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Flask
 from policyengine_core.errors import SituationParsingError
+from werkzeug.exceptions import NotFound
 
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
@@ -155,8 +156,7 @@ def test_stored_household_calculation_answers_an_id_that_isnt_digits_with_404(
     assert response.status_code == 404
     assert response.get_json() == {
         "status": "error",
-        "message": "404 Not Found: The requested URL was not found on the server. "
-        "If you entered the URL manually please check your spelling and try again.",
+        "message": str(NotFound()),
         "result": None,
     }
     calculation_service.calculate_stored_household.assert_not_called()
