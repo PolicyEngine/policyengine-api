@@ -250,11 +250,17 @@ def test_declared_privileges_name_the_five_managed_roles() -> None:
     }
 
 
-def test_only_the_new_simulation_roles_await_provisioning() -> None:
+def test_no_declared_role_awaits_provisioning() -> None:
+    """Every declared role exists in staging and production.
+
+    The simulation service and Modal worker roles exist in both since
+    2026-11-09, so a deploy that can't find either one fails, as for every
+    other declared role.
+    """
     declared_roles = set(declared_privileges(TEST_ENVIRONMENT))
 
-    assert {SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE} == ROLES_AWAITING_PROVISIONING
-    assert declared_roles >= ROLES_AWAITING_PROVISIONING
+    assert {SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE} <= declared_roles
+    assert frozenset() == ROLES_AWAITING_PROVISIONING
 
 
 def test_simulation_service_creates_simulation_rows_and_reads_run_inputs() -> None:
