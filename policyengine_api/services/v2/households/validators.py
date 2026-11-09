@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 from enum import StrEnum
+from functools import partial
 from typing import TYPE_CHECKING, Any
+
+from typing_extensions import override
 
 from policyengine_api.spm import SPMSelection
 
@@ -81,6 +84,15 @@ class HouseholdValidationError(ValueError):
         super().__init__(message)
         self.reason = reason
 
+    @override
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Tell copy and pickle to rebuild the error with its reason.
+
+        ``BaseException`` rebuilds an error as ``type(error)(*error.args)``,
+        which would leave out the keyword-only ``reason``.
+        """
+        return (partial(type(self), reason=self.reason), self.args, self.__dict__)
+
 
 class HouseholdNotFoundError(LookupError):
     """Raised when a household UUID is absent from the selected country."""
@@ -114,6 +126,15 @@ class LegacyHouseholdTranslationError(ValueError):
         """Keep the message for debugging and the fixed reason for logs."""
         super().__init__(message)
         self.reason = reason
+
+    @override
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Tell copy and pickle to rebuild the error with its reason.
+
+        ``BaseException`` rebuilds an error as ``type(error)(*error.args)``,
+        which would leave out the keyword-only ``reason``.
+        """
+        return (partial(type(self), reason=self.reason), self.args, self.__dict__)
 
 
 def require_json_value(

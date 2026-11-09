@@ -137,17 +137,31 @@ Alert on `outcome=error`, grouped by `failure_category` and `country_id`, and
 inspect `pending_event`. Records contain the legacy identifier, destination
 UUID when available, configured and actual database sources, duration, and
 outcome; they contain no household values, SQL, database URLs, or credentials.
+The observability runtime drops attributes whose keys contain `household` or
+`person` and attributes whose values are null or not single values, so in the
+log bucket a record has no `legacy_household_id`, `destination_household_id`,
+`household_created`, `attempted_write_sources` or `actual_write_sources`, and
+`attributes.omitted_count` counts what was dropped.
 
 A failed copy also records the exception's class name in `error_type`, and a
-`translation` failure records a fixed `failure_reason`. It is null for other
-categories. The record never holds the error's message, which can quote the
-household's names. A translation whose result breaks a v2 household document
-rule records that rule's reason:
+`translation` failure records a fixed `failure_reason`. For other categories
+`failure_reason` is null, so the log bucket's record has none. The record
+never holds the error's message, which can quote the household's names.
+
+These are the reasons a copy can record. A translation whose result breaks a
+v2 household document rule records that rule's reason:
 
 | Source | `failure_reason` |
 | --- | --- |
-| The v1 household | `legacy_unsupported_collections`, `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give), `value_not_json` |
-| The translated v2 document | `incomplete_memberships` (a person in no record of one of the country's entity collections), `absent_membership_target`, `invalid_identifier` (an id, source name or membership that is not a non-empty string of at most 255 characters), `too_many_records`, `too_many_values`, `duplicate_record_id`, `record_fields_invalid`, `record_not_object`, `values_not_object`, `memberships_not_object`, `collection_not_list`, `unsupported_collections`, `people_missing`, `document_not_object`, `spm_not_object`, `spm_selection_invalid`, `unsupported_country` |
+| The v1 household | `legacy_unsupported_collections` (a top-level key other than `people`, the country's group collections and, for the US, `spm`), `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give) |
+| The translated v2 document | `incomplete_memberships` (a person in no record of one of the country's entity collections), `invalid_identifier` (a person or group name that is blank or longer than 255 characters), `too_many_records`, `too_many_values`, `spm_not_object`, `spm_selection_invalid` |
+
+The other `HouseholdValidationReason` codes name rules that the translation's
+own output always meets, such as `duplicate_record_id` or
+`absent_membership_target`; they apply to documents sent to the v2 household
+routes, not to copies. `value_not_json` marks a value that isn't standards-compliant
+JSON, but a stored copy event is validated when it is read, so such a value
+fails there, as an `integrity` failure with no `failure_reason`.
 
 ## Exact-Event Operator
 
