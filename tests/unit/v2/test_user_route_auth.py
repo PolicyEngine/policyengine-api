@@ -43,6 +43,9 @@ def configured_auth(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_REQUIRED_ENV, "1")
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_ISSUER_ENV, ISSUER.rstrip("/"))
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_AUDIENCE_ENV, AUDIENCE)
+    # The machine-client tests use an allowed server client, so its token
+    # passes the credential check that runs before every route.
+    monkeypatch.setenv("PUBLIC_API_SERVER_CLIENT_IDS", "abc123")
 
     def install(claims: Mapping[str, Any] | Exception) -> FakeDecoder:
         decoder = FakeDecoder(claims)
@@ -132,13 +135,13 @@ def test_authentication_precedes_query_body_and_path_validation(
     assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_invalid_tokens_are_rejected_with_an_invalid_token_challenge(
+def test_invalid_tokens_are_refused_before_the_user_route(
     configured_auth,
 ) -> None:
     import jwt
 
     decoder = configured_auth(jwt.ExpiredSignatureError("expired"))
-    _services_by_name, factories = _services()
+    services, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
 
     response = client.get(
@@ -146,10 +149,17 @@ def test_invalid_tokens_are_rejected_with_an_invalid_token_challenge(
         headers={"Authorization": "Bearer expired-token"},
     )
 
+    # The credential check that runs before every route refuses it with the
+    # Public API's plain authentication error, so the route never decodes it.
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == 'Bearer error="invalid_token"'
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json() == {
+        "status": "error",
+        "message": "Authentication is required",
+    }
     assert "expired-token" not in response.text
     assert decoder.tokens == ["expired-token"]
+    assert not services["account"].calls
 
 
 def test_machine_client_principals_are_forbidden(configured_auth) -> None:
@@ -166,6 +176,25 @@ def test_machine_client_principals_are_forbidden(configured_auth) -> None:
 
     assert response.status_code == 403
     assert response.json()["status"] == "error"
+    assert not services["policy"].calls
+
+
+def test_unlisted_machine_clients_are_refused_before_the_user_route(
+    configured_auth,
+) -> None:
+    configured_auth(
+        {"iss": ISSUER, "sub": "unlisted@clients", "gty": "client-credentials"}
+    )
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/user-policies?country_id=us",
+        headers={"Authorization": "Bearer machine-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
     assert not services["policy"].calls
 
 
@@ -409,7 +438,7 @@ def test_an_invalid_bearer_token_never_falls_back_to_the_header(
     )
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == 'Bearer error="invalid_token"'
+    assert response.headers["www-authenticate"] == "Bearer"
     assert not services["policy"].calls
 
 

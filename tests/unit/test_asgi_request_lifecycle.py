@@ -79,6 +79,7 @@ def test_native_request_calls_the_runtime_and_logger_in_a_fixed_order() -> None:
     assert timeline.mock_calls == [
         call.runtime.begin_request(headers=ANY, method="GET", route="/health"),
         call.runtime.set_context(request_id="runtime-request-id"),
+        call.runtime.set_context(**{"caller.kind": "none"}),
         call.runtime.set_context(observability_id=OBSERVABILITY_ID),
         call.runtime.response_headers(),
         call.log(
@@ -110,7 +111,10 @@ def test_native_request_keeps_its_id_when_the_runtime_assigns_none() -> None:
         )
 
     assert response.headers[REQUEST_ID_HEADER] == "incoming-request-id"
-    runtime.set_context.assert_called_once_with(request_id="incoming-request-id")
+    assert runtime.set_context.call_args_list == [
+        call(request_id="incoming-request-id"),
+        call(**{"caller.kind": "none"}),
+    ]
     assert log_request.call_args.args[0].request_id == "incoming-request-id"
     assert log_request.call_args.args[0].country_id is None
 
@@ -135,6 +139,7 @@ def test_failing_native_route_logs_and_finishes_as_a_server_error() -> None:
     assert timeline.mock_calls == [
         call.runtime.begin_request(headers=ANY, method="GET", route="/health"),
         call.runtime.set_context(request_id="failed-request"),
+        call.runtime.set_context(**{"caller.kind": "none"}),
         call.log(
             ServedRequest(
                 request_id="failed-request",

@@ -4,7 +4,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -314,7 +314,10 @@ def test_native_route_uses_observability_request_lifecycle():
     runtime.begin_request.assert_called_once()
     assert runtime.begin_request.call_args.kwargs["method"] == "GET"
     assert runtime.begin_request.call_args.kwargs["route"] == "/health"
-    runtime.set_context.assert_called_once_with(request_id="request-123")
+    assert runtime.set_context.call_args_list == [
+        call(request_id="request-123"),
+        call(**{"caller.kind": "none"}),
+    ]
     assert OBSERVABILITY_ID_HEADER not in response.headers
     runtime.update_request_route.assert_called_once_with("/health")
     runtime.update_request_status.assert_called_once_with(200)
