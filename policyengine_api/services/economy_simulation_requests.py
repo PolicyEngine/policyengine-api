@@ -25,7 +25,6 @@ from policyengine_api.economy_years import (
     ECONOMY_YEARS,
     dataset_year_unavailable_message,
 )
-from policyengine_api.gcp_logging import logger
 from policyengine_api.json_types import JSONValue
 from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
@@ -41,6 +40,7 @@ from policyengine_api.services.economy_impact_types import (
     EconomicImpactSetupOptions,
     ImpactPolicies,
     SimulationOptions,
+    log_skipped_policy_check,
 )
 from policyengine_api.services.economy_policy_values import (
     UnreadablePolicies,
@@ -120,16 +120,7 @@ class SimulationRequestMixin:
         try:
             stored_policies = list(self._stored_policy_objects(setup_options))
         except Exception as error:  # noqa: BLE001  # the check must not make a stored failure's replay fail; logged below
-            logger.log_struct(
-                {
-                    "message": (
-                        "Could not check the stored policies before replaying a "
-                        "stored economic impact failure"
-                    ),
-                    "error_type": type(error).__name__,
-                },
-                severity="WARNING",
-            )
+            log_skipped_policy_check(error)
             return None
         return find_unreadable_policies(stored_policies)
 

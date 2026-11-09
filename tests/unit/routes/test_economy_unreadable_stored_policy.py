@@ -7,11 +7,12 @@ reads its parameters, and the route answered 502, logged at ERROR, and replayed
 that failure to later requests (issue #4244).
 
 Before it starts an annual or budget-window job, or replays a stored failure,
-the service checks the stored policies with the checks new policies get
-(``policyengine_api.utils.policy_data_validation``). When any entry fails, the
-route answers 422 naming the policy, the parameters and the periods, nothing
-is submitted or claimed, and nothing is logged at ERROR. Policies that pass
-are answered as before.
+the service checks the stored policies for what economy simulations refuse
+(``policyengine_api.services.economy_policy_values``): a value that fails the
+value check new policies get, or a period key the simulation service can't
+parse. When any entry fails, the route answers 422 naming the policy, the
+parameters and the periods, nothing is submitted or claimed, and nothing is
+logged at ERROR. Policies that pass are answered as before.
 
 The tests serve the routes from a real service over in-memory caches, through
 a real observability runtime that keeps every record it writes, so they check
@@ -490,3 +491,37 @@ def test_a_stored_failure_is_replayed_as_before_when_the_policies_cannot_be_read
     [skipped] = economy_harness.collected.with_message(SKIPPED_CHECK_LOG_MESSAGE)
     assert skipped["severity"] == "WARNING"
     assert skipped["attributes"]["error_type"] == "RuntimeError"
+
+
+@pytest.mark.parametrize(
+    "period_key",
+    ["2026-01-01.2025-12-31", "2026-01-01.2026-06-30.2026-12-31", "2026"],
+    ids=["reversed-range", "three-dates", "year-only"],
+)
+def test_a_period_key_the_simulation_service_refuses_answers_422(
+    economy_harness, period_key
+):
+    economy_harness.stored_policies[REFORM_POLICY_ID] = {RATE: {period_key: 0.21}}
+
+    response = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+
+    _assert_refused_without_error_records(
+        economy_harness,
+        response,
+        [REFORM_POLICY_ID],
+        [
+            {
+                "type": "policy_period",
+                "name": RATE,
+                "path": f"data.{RATE}.{period_key}",
+                "message": (
+                    f"Period key `{period_key}` at `data.{RATE}.{period_key}` "
+                    "must be a date (YYYY-MM-DD) or an inclusive date range "
+                    "(YYYY-MM-DD.YYYY-MM-DD) of real calendar dates whose start "
+                    "is no later than its end."
+                ),
+                "policy_id": REFORM_POLICY_ID,
+            }
+        ],
+    )
+    assert economy_harness.submitted_payloads() == []

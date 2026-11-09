@@ -23,6 +23,24 @@ answer such a request with 422, a client error, so it forms no error group.
 """
 
 
+def log_skipped_policy_check(error: Exception) -> None:
+    """Log at WARNING that a stored failure is replayed without checking its policies.
+
+    The stored policies couldn't be read, as during a database outage. The
+    failure is replayed as before the check existed.
+    """
+    logger.log_struct(
+        {
+            "message": (
+                "Could not check the stored policies before replaying a stored "
+                "economic impact failure"
+            ),
+            "error_type": type(error).__name__,
+        },
+        severity="WARNING",
+    )
+
+
 def _log_unreadable_policies(unreadable_policies: UnreadablePolicies) -> None:
     logger.log_struct(
         {
