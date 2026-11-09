@@ -293,11 +293,27 @@ def _validate_calculation_request(
     return decorator
 
 
+def _is_successful_calculation_result(view_result: object) -> bool:
+    """Return whether the HTTP cache may store a calculation view's result.
+
+    The calculation views return a dict, which Flask sends with status 200,
+    for a successful calculation and a Response for every failure. Only a
+    2xx result is cached, so the request after a failed calculation runs it
+    again, and an unexpected failure is logged again, instead of replaying the
+    failure for the cache's whole timeout.
+    """
+    if isinstance(view_result, Response):
+        return HTTPStatus.OK <= view_result.status_code < HTTPStatus.MULTIPLE_CHOICES
+    return isinstance(view_result, dict)
+
+
 def _calculation_cache_key(*_args: object, **_kwargs: object) -> str:
     country_id = request.view_args["country_id"]
     return hash_object(
         {
-            "schema": 3,
+            # Schema 4 started when only successes were cached: keys of earlier
+            # schemas can hold error responses.
+            "schema": 4,
             "path": request.full_path,
             "payload": request.get_json(),
             "spm": g.spm,
@@ -557,7 +573,10 @@ def _calculation_error_response(
 @household_bp.route("/<country_id>/calculate", methods=["POST"])
 @validate_country
 @_validate_calculation_request(add_missing=False)
-@cache.cached(make_cache_key=_calculation_cache_key)
+@cache.cached(
+    make_cache_key=_calculation_cache_key,
+    response_filter=_is_successful_calculation_result,
+)
 def get_calculate(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household without adding omitted yearly variables."""
     return _calculate()
@@ -566,7 +585,10 @@ def get_calculate(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask 
 @household_bp.route("/<country_id>/calculate-full", methods=["POST"])
 @validate_country
 @_validate_calculation_request(add_missing=True)
-@cache.cached(make_cache_key=_calculation_cache_key)
+@cache.cached(
+    make_cache_key=_calculation_cache_key,
+    response_filter=_is_successful_calculation_result,
+)
 def get_calculate_full(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household after adding omitted yearly variables."""
     return _calculate()
