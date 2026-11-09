@@ -177,6 +177,14 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
             "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
             "PUBLIC_API_SERVER_CLIENT_IDS": "client-a client-b",
         },
+        # Enforcement is 0 or 1, and refusing every request without a server
+        # credential needs at least one allowed server client.
+        {"PUBLIC_API_SERVER_CREDENTIAL_REQUIRED": "true"},
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED": "1",
+        },
     ],
 )
 def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment):
@@ -185,6 +193,7 @@ def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment
         "PUBLIC_API_AUTH_ISSUER",
         "PUBLIC_API_AUTH_AUDIENCE",
         "PUBLIC_API_SERVER_CLIENT_IDS",
+        "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED",
         "AUTH0_MANAGEMENT_DOMAIN",
         "AUTH0_MANAGEMENT_CLIENT_ID",
         "AUTH0_MANAGEMENT_CLIENT_SECRET",
@@ -207,6 +216,24 @@ def test_required_user_auth_settings_pass_readiness(monkeypatch):
     monkeypatch.setenv("PUBLIC_API_AUTH_ISSUER", "https://auth.example.test")
     monkeypatch.setenv("PUBLIC_API_AUTH_AUDIENCE", "https://api.policyengine.org/")
     monkeypatch.setenv("PUBLIC_API_SERVER_CLIENT_IDS", "client-a,client_B9")
+
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        readiness.mark_ready()
+        assert readiness.is_ready() is True
+
+
+@pytest.mark.parametrize("enforcement", ["0", "1"])
+def test_enforcement_with_allowed_server_clients_passes_readiness(
+    monkeypatch, enforcement
+):
+    monkeypatch.setenv("PUBLIC_API_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("PUBLIC_API_AUTH_ISSUER", "https://auth.example.test")
+    monkeypatch.setenv("PUBLIC_API_AUTH_AUDIENCE", "https://api.policyengine.org/")
+    monkeypatch.setenv("PUBLIC_API_SERVER_CLIENT_IDS", "client-a")
+    monkeypatch.setenv("PUBLIC_API_SERVER_CREDENTIAL_REQUIRED", enforcement)
 
     with patch(
         "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
