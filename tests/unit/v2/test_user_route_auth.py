@@ -169,9 +169,14 @@ def test_machine_client_principals_are_forbidden(configured_auth) -> None:
     services, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
 
+    # A listed machine client in Authorization is a server, so the user
+    # routes read the user it forwards; a forwarded machine token is no user.
     response = client.get(
         "/v2/user-policies?country_id=us",
-        headers={"Authorization": "Bearer machine-token"},
+        headers={
+            "Authorization": "Bearer machine-token",
+            "PolicyEngine-User-Authorization": "Bearer machine-token",
+        },
     )
 
     assert response.status_code == 403
@@ -455,6 +460,7 @@ def test_machine_client_principals_are_forbidden_beside_the_header(
         "/v2/user-policies?country_id=us",
         headers={
             "Authorization": "Bearer machine-token",
+            "PolicyEngine-User-Authorization": "Bearer machine-token",
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
     )
