@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-from flask import Flask
+from flask import Flask, Response
 from policyengine_core.errors import SituationParsingError
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
@@ -67,6 +67,11 @@ FAILURES: dict[str, tuple[Callable[[MagicMock, Exception], None], Exception, int
         SituationParsingError(["people"], "people must be an object"),
         400,
     ),
+    "household rejected while parsing": (
+        _fail_parsing,
+        SituationParsingError(["people"], "people must be an object"),
+        400,
+    ),
     "input unrecognised": (
         _fail_calculation,
         InvalidHouseholdInputsError(
@@ -124,7 +129,7 @@ def test_a_failed_calculation_is_computed_again_on_the_next_request(
     assert replay.get_json() == retried.get_json()
     # The failure isn't replayed; the success after it is.
     assert calculation_service.calculate_prepared_household.call_count == (
-        1 if failure == "parsing raises" else 2
+        1 if FAILURES[failure][0] is _fail_parsing else 2
     )
     assert calculation_service.parse_prepared_household.call_count == 2
 
@@ -176,3 +181,26 @@ def test_an_error_the_previous_release_cached_is_not_served(
 
     assert response.status_code == 200
     assert calculation_service.calculate_prepared_household.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "view_result",
+    [{"status": "ok"}, Response(status=200), Response(status=299)],
+)
+def test_a_dict_or_a_2xx_response_is_cacheable(view_result: object) -> None:
+    assert household_routes._is_successful_calculation_result(view_result) is True
+
+
+@pytest.mark.parametrize(
+    "view_result",
+    [
+        Response(status=199),
+        Response(status=300),
+        Response(status=400),
+        Response(status=500),
+        None,
+        "ok",
+    ],
+)
+def test_any_other_view_result_is_not_cacheable(view_result: object) -> None:
+    assert household_routes._is_successful_calculation_result(view_result) is False
