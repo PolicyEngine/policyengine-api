@@ -21,8 +21,9 @@ spaces. An empty or unset list allows no client.
   token included), or a valid token of a client that is not listed.
 
 A bearer token that cannot be checked, because the signing keys cannot be
-fetched or the settings are missing or malformed, raises
-:class:`CredentialCheckUnavailableError`.
+fetched or the issuer and audience are not set, raises
+:class:`CredentialCheckUnavailableError`. Malformed settings raise
+:class:`UserAuthConfigurationError` from the loaders, before classification.
 
 This module never logs or returns a token or a user's subject. A client ID is
 returned only from a token whose signature and claims are valid.

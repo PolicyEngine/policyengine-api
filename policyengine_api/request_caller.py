@@ -15,10 +15,11 @@ record: ``caller.kind`` (``none``, ``server`` or ``user``) and, for a server,
 records nothing of its own; its record carries ``caller.kind=none``.
 
 Each refusal is a runtime event at INFO, ``public_api_credential_refused``,
-with its reason, the method, the path and the request ID the response
-returns, never the header. A refused request to a Flask route never reaches
+with its reason, the method, the routed path and the request ID the
+response returns, never the header. A refused request to a Flask route never reaches
 Flask, so this event is its only record. A token that cannot be checked is a
-WARNING event, ``public_api_credential_check_unavailable``. They are runtime
+WARNING event, ``public_api_credential_check_unavailable``, with the same
+method, path and request ID. They are runtime
 events rather than standard-library log records because the deployed process
 leaves the root logger at WARNING, which drops INFO records.
 """
@@ -47,6 +48,8 @@ from policyengine_api.libs.user_auth import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from policyengine_observability import ObservabilityRuntime
     from starlette.requests import Request
 
@@ -114,9 +117,21 @@ def _identify(authorization: str) -> RequestCaller:
     )
 
 
-def _request_id_attributes(request: Request) -> dict[str, str]:
+def _request_attributes(request: Request) -> dict[str, str]:
+    """Return the method, the routed path and the request ID of ``request``.
+
+    The path is ``scope["path"]``, the decoded path the routers match.
+    ``request.url`` is not used: Starlette rebuilds it from the ``Host``
+    header, which the caller controls, so it can name another path or raise.
+    """
+    attributes = {
+        "http.request.method": request.method,
+        "url.path": request.scope["path"],
+    }
     request_id = getattr(request.state, "policyengine_request_id", None)
-    return {"request.id": request_id} if isinstance(request_id, str) else {}
+    if isinstance(request_id, str):
+        attributes["request.id"] = request_id
+    return attributes
 
 
 def _record_event(
@@ -124,11 +139,12 @@ def _record_event(
     name: str,
     *,
     severity: str,
-    attributes: dict[str, str],
+    attributes: Callable[[], dict[str, str]],
 ) -> None:
+    """Record one runtime event; building or recording it never fails a request."""
     # Telemetry must never fail the request.
     with contextlib.suppress(Exception):
-        runtime.event(name, severity=severity, attributes=attributes)
+        runtime.event(name, severity=severity, attributes=attributes())
 
 
 def _record_refusal(
@@ -138,20 +154,21 @@ def _record_refusal(
     *,
     client_id: str | None = None,
 ) -> None:
-    attributes = {"refusal_reason": reason.value}
-    if client_id is not None:
-        attributes[CALLER_CLIENT_ID_ATTRIBUTE] = client_id
-    attributes["http.request.method"] = request.method
-    attributes["url.path"] = request.url.path
-    attributes.update(_request_id_attributes(request))
+    def attributes() -> dict[str, str]:
+        refusal = {"refusal_reason": reason.value}
+        if client_id is not None:
+            refusal[CALLER_CLIENT_ID_ATTRIBUTE] = client_id
+        return refusal | _request_attributes(request)
+
     _record_event(runtime, REFUSAL_EVENT, severity="INFO", attributes=attributes)
 
 
 def _record_unavailable(
     runtime: ObservabilityRuntime, request: Request, error: Exception
 ) -> None:
-    attributes = {"error_type": type(error).__name__}
-    attributes.update(_request_id_attributes(request))
+    def attributes() -> dict[str, str]:
+        return {"error_type": type(error).__name__} | _request_attributes(request)
+
     _record_event(runtime, UNAVAILABLE_EVENT, severity="WARNING", attributes=attributes)
 
 
