@@ -70,10 +70,8 @@ PERSISTENT_ENVIRONMENTS: Final = frozenset({"staging", "production"})
 # one is missing, the deploy's ``apply`` and ``verify`` skip it and name it,
 # instead of failing; once it exists they grant and check its privileges.
 # Remove a role from this set when it exists in both environments, so that its
-# absence fails the deploy again.
-ROLES_AWAITING_PROVISIONING: Final[frozenset[str]] = frozenset(
-    {SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE}
-)
+# absence fails the deploy again. Empty: every declared role exists in both.
+ROLES_AWAITING_PROVISIONING: Final[frozenset[str]] = frozenset()
 ENVIRONMENT_PATTERN: Final = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
 
