@@ -66,11 +66,13 @@ answers first (see [Settings](#settings)):
 - an invalid token, or another scheme: 401 with `WWW-Authenticate: Bearer`
   and "Authentication is required" (an invalid token never falls back to the
   header);
-- a machine-to-machine (`…@clients`) token of a client not in
-  `PUBLIC_API_SERVER_CLIENT_IDS`: the same 401;
-- a listed client's token: the request is from a server, so the user routes
-  read the user it forwards (below), and answer 401 when it forwards none;
-  only a forwarded machine-to-machine token gets 403;
+- a machine-to-machine (`…@clients`) token from the users' tenant, or from
+  the Public API's own tenant (`PUBLIC_API_SERVER_AUTH_ISSUER`) but of a
+  client not in `PUBLIC_API_SERVER_CLIENT_IDS`: the same 401, as is any
+  token from the Public API's own tenant without a client subject;
+- a listed client's token from the Public API's own tenant: the request is
+  from a server, so the user routes read the user it forwards (below), and
+  answer 401 when it forwards none;
 - authentication not configured, or signing keys unreachable: 503.
 
 The user routes' own `WWW-Authenticate: Bearer error="invalid_token"`
@@ -452,7 +454,8 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
-| `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs the issuer and audience |
+| `PUBLIC_API_SERVER_AUTH_ISSUER` | GitHub variable (optional) | Issuer of server tokens: the Public API's own Auth0 tenant (decision 1.1 · 5), for example `https://policyengine-api.uk.auth0.com/` in production and `https://policyengine-api-staging.uk.auth0.com/` in staging. Normalized to a trailing `/`; HTTPS; needs `PUBLIC_API_AUTH_AUDIENCE` and must differ from `PUBLIC_API_AUTH_ISSUER`. Unset accepts no server token |
+| `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs in that tenant, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs `PUBLIC_API_SERVER_AUTH_ISSUER` |
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
@@ -503,9 +506,10 @@ checked before routing:
   `WWW-Authenticate: Bearer error="invalid_token"` and "The bearer access
   token is invalid", where a direct one now gets the plain 401 above; two
   forwarded headers get that `invalid_token` 401 too;
-- a machine-to-machine token gets 403 whether or not its client is in
-  `PUBLIC_API_SERVER_CLIENT_IDS`, where a direct one from an unlisted client
-  gets 401.
+- a machine-to-machine token from the users' tenant gets 403 whether or not
+  its client is in `PUBLIC_API_SERVER_CLIENT_IDS`, where a direct one gets
+  401; a forwarded token from the Public API's own tenant is no user token,
+  so it gets the `invalid_token` 401.
 `PolicyEngine-User-Authorization` is read only from a server; on any other
 request it is ignored. It is not in the OpenAPI schema, because only servers
 send it.

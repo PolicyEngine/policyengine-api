@@ -138,7 +138,8 @@ def _normalized_issuer(value: str) -> str:
     return f"{value.rstrip('/')}/" if value else ""
 
 
-def _validate_issuer_url(value: str) -> None:
+def validate_issuer_url(value: str, setting_name: str) -> None:
+    """Raise unless ``value`` is an absolute HTTPS URL fit to be a token issuer."""
     parsed = urlparse(value)
     if (
         parsed.scheme != "https"
@@ -150,7 +151,7 @@ def _validate_issuer_url(value: str) -> None:
         or parsed.fragment
     ):
         msg = (
-            f"{PUBLIC_API_AUTH_ISSUER_ENV} must be an absolute HTTPS URL without "
+            f"{setting_name} must be an absolute HTTPS URL without "
             "credentials, parameters, a query string, or a fragment"
         )
         raise UserAuthConfigurationError(msg)
@@ -181,7 +182,7 @@ def load_user_auth_settings(
         )
         raise UserAuthConfigurationError(msg)
     if issuer:
-        _validate_issuer_url(issuer)
+        validate_issuer_url(issuer, PUBLIC_API_AUTH_ISSUER_ENV)
     return UserAuthSettings(required=required, issuer=issuer, audience=audience)
 
 

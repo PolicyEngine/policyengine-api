@@ -27,9 +27,11 @@ from policyengine_api.services.v2.user_accounts.types import (
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyPage
 from tests.unit.credential_token_support import (
+    ALLOWED_CLIENT_ID,
     EXPIRED,
     ISSUER,
     OTHER_SIGNING_KEY,
+    SIGNING_KEY,
     UNLISTED_CLIENT_ID,
     USER_SUBJECT,
     bearer,
@@ -45,12 +47,21 @@ BROWSER_USER_ID = UUID("3c9d5e7f-1a2b-4c6d-8e0f-a1b2c3d4e5f6")
 OTHER_USER_SUBJECT = "auth0|other-user-0001"
 USER_POLICIES_PATH = "/v2/user-policies?country_id=us"
 SIGNED_IN_USER = UserPrincipal(issuer=ISSUER, subject=USER_SUBJECT)
-SERVER_AUTHORIZATION = {"Authorization": bearer(server_token())}
 
 
 @pytest.fixture(autouse=True)
 def _credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     configure_credentials(monkeypatch)
+
+
+def _server_authorization() -> dict[str, str]:
+    """Return a listed server's own credential from the Public API's tenant."""
+    return {"Authorization": bearer(server_token())}
+
+
+def _users_tenant_client_token(client_id: str = ALLOWED_CLIENT_ID) -> str:
+    """Return a client token from the users' tenant: no server credential."""
+    return server_token(client_id, iss=ISSUER, signing_key=SIGNING_KEY)
 
 
 def _empty_policy_page(_name: str, _kwargs: dict) -> UserPolicyPage:
@@ -76,7 +87,7 @@ def test_a_server_can_forward_a_signed_in_users_token() -> None:
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: bearer(user_token()),
         },
     )
@@ -90,7 +101,10 @@ def test_a_server_can_forward_a_signed_out_browsers_user() -> None:
 
     response = client.get(
         USER_POLICIES_PATH,
-        headers={**SERVER_AUTHORIZATION, UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID)},
+        headers={
+            **_server_authorization(),
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
     )
 
     assert response.status_code == 200
@@ -103,7 +117,7 @@ def test_a_forwarded_users_token_takes_precedence_over_the_browsers_user() -> No
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: bearer(user_token()),
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
@@ -116,7 +130,7 @@ def test_a_forwarded_users_token_takes_precedence_over_the_browsers_user() -> No
 def test_a_server_that_forwards_no_user_must_authenticate_one() -> None:
     client, service = _policy_client()
 
-    response = client.get(USER_POLICIES_PATH, headers=SERVER_AUTHORIZATION)
+    response = client.get(USER_POLICIES_PATH, headers=_server_authorization())
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
@@ -144,7 +158,7 @@ def test_an_invalid_forwarded_token_is_refused_as_a_direct_one_was(
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: bearer(forwarded_token),
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
@@ -160,17 +174,38 @@ def test_an_invalid_forwarded_token_is_refused_as_a_direct_one_was(
 
 
 def test_a_forwarded_machine_token_is_forbidden() -> None:
+    # A client token from the users' tenant passes the users' validation and
+    # is a machine principal, which the user routes forbid.
     client, service = _policy_client()
 
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
-            FORWARDED_USER_HEADER: bearer(server_token()),
+            **_server_authorization(),
+            FORWARDED_USER_HEADER: bearer(_users_tenant_client_token()),
         },
     )
 
     assert response.status_code == 403
+    assert service.calls == []
+
+
+def test_a_forwarded_server_tenant_token_is_no_user_token() -> None:
+    # The Public API's own tenant signs no users, so its token fails the
+    # users' validation as any invalid user token does.
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers={
+            **_server_authorization(),
+            FORWARDED_USER_HEADER: bearer(server_token()),
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == 'Bearer error="invalid_token"'
     assert service.calls == []
 
 
@@ -179,7 +214,7 @@ def test_a_forwarded_malformed_browser_user_is_refused() -> None:
 
     response = client.get(
         USER_POLICIES_PATH,
-        headers={**SERVER_AUTHORIZATION, UNAUTHENTICATED_HEADER: "not-a-uuid"},
+        headers={**_server_authorization(), UNAUTHENTICATED_HEADER: "not-a-uuid"},
     )
 
     assert response.status_code == 401
@@ -212,7 +247,7 @@ def test_a_blank_forwarded_header_counts_as_none() -> None:
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: " ",
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
@@ -228,7 +263,7 @@ def test_a_forwarded_credential_with_another_scheme_is_refused() -> None:
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: "Basic dXNlcjpwYXNzd29yZA==",
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
@@ -260,7 +295,7 @@ def test_a_blank_forwarded_header_alone_must_authenticate_a_user() -> None:
 
     response = client.get(
         USER_POLICIES_PATH,
-        headers={**SERVER_AUTHORIZATION, FORWARDED_USER_HEADER: " "},
+        headers={**_server_authorization(), FORWARDED_USER_HEADER: " "},
     )
 
     assert response.status_code == 401
@@ -269,14 +304,17 @@ def test_a_blank_forwarded_header_alone_must_authenticate_a_user() -> None:
 
 
 def test_a_forwarded_unlisted_machine_token_is_forbidden() -> None:
-    # A forwarded token isn't checked against the allow list; it is no user.
+    # A forwarded token isn't checked against the allow list: a client token
+    # from the users' tenant is a machine principal whether listed or not.
     client, service = _policy_client()
 
     response = client.get(
         USER_POLICIES_PATH,
         headers={
-            **SERVER_AUTHORIZATION,
-            FORWARDED_USER_HEADER: bearer(server_token(UNLISTED_CLIENT_ID)),
+            **_server_authorization(),
+            FORWARDED_USER_HEADER: bearer(
+                _users_tenant_client_token(UNLISTED_CLIENT_ID)
+            ),
         },
     )
 
@@ -292,7 +330,10 @@ def test_a_server_upgrade_needs_the_forwarded_users_token() -> None:
 
     response = client.post(
         "/v2/me/upgrade?country_id=us",
-        headers={**SERVER_AUTHORIZATION, UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID)},
+        headers={
+            **_server_authorization(),
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
     )
 
     assert response.status_code == 401
@@ -320,7 +361,7 @@ def test_a_server_can_upgrade_a_browsers_user_into_the_forwarded_account() -> No
     response = client.post(
         "/v2/me/upgrade?country_id=us",
         headers={
-            **SERVER_AUTHORIZATION,
+            **_server_authorization(),
             FORWARDED_USER_HEADER: bearer(user_token()),
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },

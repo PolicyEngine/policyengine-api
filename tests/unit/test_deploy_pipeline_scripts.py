@@ -129,6 +129,7 @@ def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
             "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
             "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
             "PUBLIC_API_SERVER_CLIENT_IDS": "client-a",
+            "PUBLIC_API_SERVER_AUTH_ISSUER": "https://server-auth.example.test/",
             "RUNTIME_CACHE_MODE": "local",
             "RUNTIME_CACHE_URL": "redis://127.0.0.1:6379/0",
         },
@@ -146,6 +147,7 @@ def test_release_tests_drop_deployment_settings(tmp_path: Path) -> None:
     assert "PUBLIC_API_AUTH_ISSUER" not in names
     assert "PUBLIC_API_AUTH_AUDIENCE" not in names
     assert "PUBLIC_API_SERVER_CLIENT_IDS" not in names
+    assert "PUBLIC_API_SERVER_AUTH_ISSUER" not in names
     assert "RUNTIME_CACHE_MODE=local" in dumped
     assert "RUNTIME_CACHE_URL=redis://127.0.0.1:6379/0" in dumped
     # make test runs this runner's shard of the suite.

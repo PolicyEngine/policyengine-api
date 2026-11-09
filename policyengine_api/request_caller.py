@@ -34,6 +34,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.libs.server_credentials import (
+    HTTP_WHITESPACE,
     NO_CREDENTIAL,
     CredentialCheckUnavailableError,
     CredentialRefusedError,
@@ -59,7 +60,6 @@ CALLER_CLIENT_ID_ATTRIBUTE = "caller.client_id"
 AUTHENTICATION_REQUIRED_MESSAGE = "Authentication is required"
 AUTHENTICATION_UNAVAILABLE_MESSAGE = "Authentication is unavailable"
 BEARER_CHALLENGE = "Bearer"
-HTTP_WHITESPACE = " \t"
 REFUSAL_EVENT = "public_api_credential_refused"
 UNAVAILABLE_EVENT = "public_api_credential_check_unavailable"
 

@@ -41,6 +41,10 @@ from tests.unit.credential_token_support import (
     OTHER_SIGNING_KEY,
     SECOND_ALLOWED_CLIENT_ID,
     SERVER_CLIENT_IDS_ENV,
+    SERVER_ISSUER,
+    SERVER_ISSUER_ENV,
+    SERVER_SIGNING_KEY,
+    SIGNING_KEY,
     UNLISTED_CLIENT_ID,
     USER_SUBJECT,
     StaticJWKClient,
@@ -91,6 +95,20 @@ REFUSED_AUTHORIZATION_HEADERS: dict[str, Callable[[], str]] = {
         server_token(signing_key=OTHER_SIGNING_KEY)
     ),
     "unlisted-client": lambda: bearer(server_token(UNLISTED_CLIENT_ID)),
+    # Server credentials come only from the Public API's own tenant, and that
+    # tenant issues only server credentials.
+    "listed-client-from-the-users-issuer": lambda: bearer(
+        server_token(iss=ISSUER, signing_key=SIGNING_KEY)
+    ),
+    "user-token-from-the-server-issuer": lambda: bearer(
+        user_token(iss=SERVER_ISSUER, signing_key=SERVER_SIGNING_KEY)
+    ),
+    "server-issuer-claimed-with-the-users-key": lambda: bearer(
+        server_token(signing_key=SIGNING_KEY)
+    ),
+    "users-issuer-claimed-with-the-server-key": lambda: bearer(
+        user_token(signing_key=SERVER_SIGNING_KEY)
+    ),
     "user-subject-ending-in-clients": lambda: bearer(
         signed_token(sub="auth0|someone@clients")
     ),
@@ -526,6 +544,7 @@ def test_a_bearer_token_is_unavailable_without_auth_settings(
     path: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(SERVER_CLIENT_IDS_ENV)
+    monkeypatch.delenv(SERVER_ISSUER_ENV)
     for name in user_auth.PUBLIC_API_AUTH_ENV_VARS:
         monkeypatch.delenv(name)
     application = _application()
@@ -606,3 +625,58 @@ def test_recorded_attributes_survive_the_runtimes_attribute_rules(
         )
         assert omitted == 0
         assert normalized == attributes
+
+
+@pytest.mark.usefixtures("install_signing_keys")
+@pytest.mark.parametrize(
+    ("build_authorization", "expected_attributes"),
+    [
+        (
+            lambda: bearer(server_token(iss=ISSUER, signing_key=SIGNING_KEY)),
+            {
+                "refusal_reason": "client_from_user_issuer",
+                "caller.client_id": ALLOWED_CLIENT_ID,
+            },
+        ),
+        (
+            lambda: bearer(
+                user_token(iss=SERVER_ISSUER, signing_key=SERVER_SIGNING_KEY)
+            ),
+            {"refusal_reason": "non_client_from_server_issuer"},
+        ),
+    ],
+    ids=["listed-client-from-the-users-issuer", "user-token-from-the-server-issuer"],
+)
+def test_a_token_from_the_wrong_tenant_is_refused_with_its_reason(
+    build_authorization: Callable[[], str], expected_attributes: dict[str, str]
+) -> None:
+    application = _application()
+
+    response = application.client.get(
+        FLASK_PATH, headers={"Authorization": build_authorization()}
+    )
+
+    _assert_refused(response)
+    ((_name, _severity, attributes),) = _credential_events(application.runtime)
+    assert {
+        name: value
+        for name, value in attributes.items()
+        if name in {"refusal_reason", "caller.client_id"}
+    } == expected_attributes
+
+
+@ROUTE_PATHS
+@pytest.mark.usefixtures("install_signing_keys")
+def test_without_a_server_issuer_no_token_is_a_server_credential(
+    path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(SERVER_ISSUER_ENV)
+    monkeypatch.delenv(SERVER_CLIENT_IDS_ENV)
+    application = _application()
+
+    refused = application.client.get(path, headers=_bearer(server_token()))
+    signed_in = application.client.get(path, headers=_bearer(user_token()))
+
+    _assert_refused(refused)
+    assert signed_in.status_code == 200
+    assert _recorded_caller(application.runtime) == {"caller.kind": "user"}

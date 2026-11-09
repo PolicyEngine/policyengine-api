@@ -16,9 +16,10 @@ user's token in ``PolicyEngine-User-Authorization: Bearer``, which takes the
 place of ``Authorization`` above, or the same unauthenticated-user header.
 That user is then authenticated by the same code as a direct request's
 credential. A forwarded token is not checked before routing, so an invalid
-one gets the ``invalid_token`` challenge below, and a forwarded machine token
-gets 403 even from an unlisted client. Without a server credential the
-forwarded header is ignored.
+one gets the ``invalid_token`` challenge below (a token from the Public
+API's own tenant included, since that tenant signs no users), and a forwarded
+client token from the users' tenant gets 403 even from an unlisted client.
+Without a server credential the forwarded header is ignored.
 
 Failures map to the shared API v2 error envelope:
 
@@ -61,6 +62,10 @@ if TYPE_CHECKING:
 
 REJECTED_BEARER_MESSAGE = "The bearer access token is invalid"
 
+MACHINE_CLIENT_FORBIDDEN_MESSAGE = (
+    "This resource requires a signed-in user; machine clients are not permitted"
+)
+
 
 def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     """Return the signed-in user principal or raise a typed HTTP failure."""
@@ -84,10 +89,7 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
         msg = "User authentication is unavailable"
         raise V2AuthenticationUnavailableError(msg) from error
     if principal.kind is PrincipalKind.CLIENT:
-        msg = (
-            "This resource requires a signed-in user; machine clients are not permitted"
-        )
-        raise V2PermissionDeniedError(msg)
+        raise V2PermissionDeniedError(MACHINE_CLIENT_FORBIDDEN_MESSAGE)
     return UserPrincipal(
         issuer=principal.issuer,
         subject=principal.subject,

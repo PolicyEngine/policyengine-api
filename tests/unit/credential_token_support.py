@@ -1,8 +1,10 @@
 """Real RS256 Auth0-style tokens for tests of the Public API's credential checks.
 
-Tokens are signed with a key generated for the test run, and
-:func:`install_token_decoder` makes the Public API verify them with that key's
-public half, without a network.
+There are two issuers, as in production: the signed-in users' tenant
+(``ISSUER``) and the Public API's own tenant for server clients
+(``SERVER_ISSUER``). Each signs with its own key, generated for the test run,
+and :func:`install_token_decoder` makes the Public API verify each issuer's
+tokens with its key's public half, without a network.
 """
 
 from __future__ import annotations
@@ -20,14 +22,17 @@ if TYPE_CHECKING:
     import pytest
 
 ISSUER = "https://auth.example.test/"
+SERVER_ISSUER = "https://server-auth.example.test/"
 AUDIENCE = "https://api.policyengine.org/"
 SERVER_CLIENT_IDS_ENV = "PUBLIC_API_SERVER_CLIENT_IDS"
+SERVER_ISSUER_ENV = "PUBLIC_API_SERVER_AUTH_ISSUER"
 ALLOWED_CLIENT_ID = "AllowedServerClient0000000000001"
 SECOND_ALLOWED_CLIENT_ID = "AllowedServerClient0000000000002"
 UNLISTED_CLIENT_ID = "UnlistedServerClient000000000003"
 BROWSER_SIGN_IN_CLIENT_ID = "BrowserSignInClient0000000000004"
 USER_SUBJECT = "google-oauth2|1234567890"
 SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+SERVER_SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 OTHER_SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 EXPIRED = datetime.now(UTC) - timedelta(minutes=1)
 
@@ -50,13 +55,25 @@ def signed_token(
     return jwt.encode(present_claims, signing_key, algorithm="RS256")
 
 
-def server_token(client_id: str = ALLOWED_CLIENT_ID, **claims: object) -> str:
-    """Return an Auth0 client-credentials token of ``client_id``."""
+def server_token(
+    client_id: str = ALLOWED_CLIENT_ID,
+    *,
+    signing_key: rsa.RSAPrivateKey = SERVER_SIGNING_KEY,
+    **claims: object,
+) -> str:
+    """Return an Auth0 client-credentials token of ``client_id``.
+
+    By default it comes from the Public API's own tenant (``SERVER_ISSUER``).
+    """
     return signed_token(
-        sub=f"{client_id}@clients",
-        azp=client_id,
-        gty="client-credentials",
-        **claims,
+        signing_key=signing_key,
+        **{
+            "iss": SERVER_ISSUER,
+            "sub": f"{client_id}@clients",
+            "azp": client_id,
+            "gty": "client-credentials",
+            **claims,
+        },
     )
 
 
@@ -71,11 +88,16 @@ def bearer(token: str) -> str:
 
 
 class StaticJWKClient:
-    """Serve the test signing key's public half, or raise ``error``."""
+    """Serve one signing key's public half, or raise ``error``."""
 
-    def __init__(self, error: Exception | None = None) -> None:
-        """Serve the key, or raise ``error`` for every token."""
-        self._public_key = SIGNING_KEY.public_key()
+    def __init__(
+        self,
+        error: Exception | None = None,
+        *,
+        signing_key: rsa.RSAPrivateKey = SIGNING_KEY,
+    ) -> None:
+        """Serve ``signing_key``'s public half, or raise ``error`` for every token."""
+        self._public_key = signing_key.public_key()
         self._error = error
 
     def get_signing_key_from_jwt(self, _token: str) -> SimpleNamespace:
@@ -89,17 +111,27 @@ def configure_credentials(
     monkeypatch: pytest.MonkeyPatch,
     allowed_client_ids: tuple[str, ...] = (ALLOWED_CLIENT_ID, SECOND_ALLOWED_CLIENT_ID),
 ) -> None:
-    """Set the Auth0 settings and the allow list, and verify with the test key."""
+    """Set both issuers, the audience and the allow list, with the test keys."""
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_REQUIRED_ENV, "1")
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_ISSUER_ENV, ISSUER)
     monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_AUDIENCE_ENV, AUDIENCE)
+    monkeypatch.setenv(SERVER_ISSUER_ENV, SERVER_ISSUER)
     monkeypatch.setenv(SERVER_CLIENT_IDS_ENV, ",".join(allowed_client_ids))
-    install_token_decoder(monkeypatch, StaticJWKClient())
+    install_token_decoder(monkeypatch)
 
 
 def install_token_decoder(
-    monkeypatch: pytest.MonkeyPatch, jwks_client: StaticJWKClient
+    monkeypatch: pytest.MonkeyPatch, jwks_client: StaticJWKClient | None = None
 ) -> None:
-    """Make the Public API verify tokens with ``jwks_client``'s key."""
-    decoder = user_auth.JWTDecoder(ISSUER, AUDIENCE, jwks_client=jwks_client)
-    monkeypatch.setattr(user_auth, "_decoder", lambda _issuer, _audience: decoder)
+    """Verify each issuer's tokens with its own key, or both with ``jwks_client``."""
+    jwks_clients = {
+        ISSUER: jwks_client or StaticJWKClient(signing_key=SIGNING_KEY),
+        SERVER_ISSUER: jwks_client or StaticJWKClient(signing_key=SERVER_SIGNING_KEY),
+    }
+    decoders = {
+        issuer: user_auth.JWTDecoder(issuer, AUDIENCE, jwks_client=client)
+        for issuer, client in jwks_clients.items()
+    }
+    monkeypatch.setattr(
+        user_auth, "_decoder", lambda issuer, _audience: decoders[issuer]
+    )

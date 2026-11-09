@@ -53,6 +53,8 @@ env_vars=(
   "PUBLIC_API_AUTH_AUDIENCE=${PUBLIC_API_AUTH_AUDIENCE:-}"
   # Empty allows no server client (see validate_cloud_run_deploy_env.sh).
   "PUBLIC_API_SERVER_CLIENT_IDS=${PUBLIC_API_SERVER_CLIENT_IDS:-}"
+  # Empty accepts no server token (see validate_cloud_run_deploy_env.sh).
+  "PUBLIC_API_SERVER_AUTH_ISSUER=${PUBLIC_API_SERVER_AUTH_ISSUER:-}"
 )
 while IFS= read -r live_since_var; do
   env_vars+=("${live_since_var}")
