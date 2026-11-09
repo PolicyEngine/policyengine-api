@@ -54,9 +54,9 @@ identifier.
 
 ## Request caller
 
-Every request's record says who sent it. Before route matching, the ASGI shell
-checks the `Authorization` header (`policyengine_api.request_caller`) and adds
-to the request's runtime record, for Flask and native routes alike:
+Every served request's record says who sent it. Before route matching, the
+ASGI shell checks the `Authorization` header (`policyengine_api.request_caller`)
+and adds to the request's runtime record, for Flask and native routes alike:
 
 - `caller.kind`: `none` (no credential), `server` (an allowed Auth0
   client-credentials token) or `user` (a signed-in user's valid token);
@@ -69,8 +69,9 @@ method, the path, `request.id` (the response's `X-PolicyEngine-Request-Id`)
 and, for a valid token of an unlisted client, `caller.client_id`. A refused
 request to a Flask route never reaches Flask, so that event is its only
 record. A bearer token that cannot be checked is a WARNING event,
-`public_api_credential_check_unavailable`, with `error_type` and
-`request.id`.
+`public_api_credential_check_unavailable`, with `error_type`, the method,
+the path and `request.id`. A refused request's records carry no `caller.*`
+attributes; its event says why it was refused.
 
 These are runtime events (`ObservabilityRuntime.event`), not
 standard-library log records. The deployed process leaves the root logger at
