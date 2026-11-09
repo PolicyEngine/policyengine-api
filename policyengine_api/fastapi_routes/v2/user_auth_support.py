@@ -93,7 +93,7 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     )
 
 
-def forwarded_user_authorization(header_values: Sequence[str]) -> str | None:
+def forwarded_user_credential(header_values: Sequence[str]) -> str | None:
     """Return the one forwarded user credential, or None when none is sent.
 
     A blank value counts as none. Two or more values are refused as an
@@ -110,20 +110,15 @@ def forwarded_user_authorization(header_values: Sequence[str]) -> str | None:
 def authenticate_account_request(
     authorization: str | None,
     unauthenticated_user: str | None,
-    *,
-    from_server: bool = False,
-    forwarded_user_authorization: str | None = None,
 ) -> AccountPrincipal:
     """Return the request's account principal or raise a typed HTTP failure.
 
-    A bearer token is validated as for any signed-in request and the
-    unauthenticated-user header is then ignored. Without one, the header
-    selects the browser's unauthenticated user. For a request from a
-    credentialed server (``from_server``), ``Authorization`` is the server's,
-    so the forwarded user credential takes its place.
+    ``authorization`` is the user's bearer credential: the request's
+    ``Authorization`` header, or for a credentialed server the forwarded
+    ``PolicyEngine-User-Authorization`` header. It is validated as for any
+    signed-in request and the unauthenticated-user header is then ignored.
+    Without one, the header selects the browser's unauthenticated user.
     """
-    if from_server:
-        authorization = forwarded_user_authorization
     if authorization is None and unauthenticated_user is not None:
         try:
             return UnauthenticatedPrincipal(

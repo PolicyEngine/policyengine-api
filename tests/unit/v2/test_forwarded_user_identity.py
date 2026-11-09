@@ -205,6 +205,55 @@ def test_two_forwarded_user_headers_are_refused() -> None:
     assert service.calls == []
 
 
+def test_a_blank_forwarded_header_counts_as_none() -> None:
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers={
+            **SERVER_AUTHORIZATION,
+            FORWARDED_USER_HEADER: " ",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 200
+    assert _principal(service) == UnauthenticatedPrincipal(user_id=BROWSER_USER_ID)
+
+
+def test_a_forwarded_credential_with_another_scheme_is_refused() -> None:
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers={
+            **SERVER_AUTHORIZATION,
+            FORWARDED_USER_HEADER: "Basic dXNlcjpwYXNzd29yZA==",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert service.calls == []
+
+
+def test_two_forwarded_headers_without_a_server_credential_are_ignored() -> None:
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers=[
+            ("Authorization", bearer(user_token())),
+            (FORWARDED_USER_HEADER, bearer(user_token(OTHER_USER_SUBJECT))),
+            (FORWARDED_USER_HEADER, "Bearer made-up"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert _principal(service) == SIGNED_IN_USER
+
+
 def test_a_server_can_upgrade_a_browsers_user_into_the_forwarded_account() -> None:
     account = AccountRead(
         id=UUID("00000000-0000-0000-0000-000000000071"),
