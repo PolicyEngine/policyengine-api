@@ -467,6 +467,8 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
             "WARNING",
             {
                 "error_type": "CredentialCheckUnavailableError",
+                "http.request.method": "GET",
+                "url.path": path,
                 "request.id": refused.headers[REQUEST_ID_HEADER],
             },
         )
