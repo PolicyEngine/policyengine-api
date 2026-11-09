@@ -10,6 +10,7 @@ request without a credential is still served.
 from __future__ import annotations
 
 import logging
+import ssl
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
@@ -486,6 +487,35 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
             },
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "fetch_error",
+    [
+        ConnectionResetError("connection reset"),
+        ssl.SSLError("bad record"),
+        TimeoutError("read timed out"),
+    ],
+    ids=["connection-reset", "tls-error", "timeout"],
+)
+@ROUTE_PATHS
+def test_a_signing_key_fetch_error_pyjwt_does_not_wrap_is_unavailable(
+    path: str, fetch_error: OSError, install_signing_keys
+) -> None:
+    # urllib leaves errors from reading the response unwrapped, and PyJWT
+    # converts only some of them; each must still answer 503, not 500.
+    install_signing_keys(StaticJWKClient(error=fetch_error))
+    application = _application()
+    client = TestClient(application.client.app, raise_server_exceptions=False)
+
+    refused = client.get(path, headers=_bearer(server_token()))
+
+    assert refused.status_code == 503
+    assert refused.json() == UNAVAILABLE_BODY
+    assert [
+        (name, severity)
+        for name, severity, _attributes in _credential_events(application.runtime)
+    ] == [("public_api_credential_check_unavailable", "WARNING")]
 
 
 @ROUTE_PATHS
