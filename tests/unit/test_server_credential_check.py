@@ -411,6 +411,41 @@ def test_every_refusal_is_recorded_at_info_with_its_reason_and_request_id() -> N
 
 
 @ROUTE_PATHS
+@pytest.mark.usefixtures("install_signing_keys")
+def test_a_malformed_host_header_still_gets_the_refusal(path: str) -> None:
+    # Starlette builds request.url from Host; "[" makes it raise. The client
+    # returns a server error as a response, so the status is what is checked.
+    application = _application()
+    client = TestClient(application.client.app, raise_server_exceptions=False)
+
+    response = client.get(
+        path, headers={"Host": "[", "Authorization": "Bearer made-up"}
+    )
+
+    _assert_refused(response)
+    ((_severity, attributes),) = [
+        (severity, recorded_attributes)
+        for _name, severity, recorded_attributes in _credential_events(
+            application.runtime
+        )
+    ]
+    assert attributes["url.path"] == path
+
+
+@pytest.mark.usefixtures("install_signing_keys")
+def test_a_refusal_records_the_decoded_path_the_routers_match() -> None:
+    application = _application()
+
+    application.client.get(
+        "/us/metadata%3Fpart",
+        headers={"Host": "api.example.test/v2/me?", "Authorization": "Bearer made-up"},
+    )
+
+    ((_name, _severity, attributes),) = _credential_events(application.runtime)
+    assert attributes["url.path"] == "/us/metadata?part"
+
+
+@ROUTE_PATHS
 def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
     path: str, install_signing_keys
 ) -> None:
