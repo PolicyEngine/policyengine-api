@@ -98,13 +98,14 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
 def forwarded_user_credential(header_values: Sequence[str]) -> str | None:
     """Return the one forwarded user credential, or None when none is sent.
 
-    A blank value counts as none. Two or more values are refused as an
-    invalid token, so no layer can read a different one from the layer that
-    checked it.
+    A value of only spaces and tabs counts as none, as for ``Authorization``
+    in the credential check before routing. Two or more values are refused as
+    an invalid token, so no layer can read a different one from the layer
+    that checked it.
     """
     if len(header_values) > 1:
         raise V2AuthenticationRequiredError(REJECTED_BEARER_MESSAGE, invalid_token=True)
-    if not header_values or not header_values[0].strip():
+    if not header_values or not header_values[0].strip(" \t"):
         return None
     return header_values[0]
 
