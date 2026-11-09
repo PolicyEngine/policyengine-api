@@ -410,14 +410,18 @@ def post_household(country_id: str) -> Response:
 
 
 @household_bp.route(
-    "/<country_id>/household/<household_id>/policy/<policy_id>",
+    "/<country_id>/household/<int:household_id>/policy/<int:policy_id>",
     methods=["GET"],
 )
 @validate_country
 def get_household_under_policy(
-    country_id: str, household_id: str, policy_id: str
+    country_id: str, household_id: int, policy_id: int
 ) -> dict | Response:
-    """Get a stored household's output under a stored policy."""
+    """Get a stored household's output under a stored policy.
+
+    Both IDs use Flask's ``int`` converter, so a path whose household or
+    policy ID isn't a string of digits matches no route and gets a 404.
+    """
     try:
         get_v1_household_read_source()
     except ValueError:
@@ -425,8 +429,8 @@ def get_household_under_policy(
     try:
         calculation = household_calculation_service.calculate_stored_household(
             country_id,
-            int(household_id),
-            int(policy_id),
+            household_id,
+            policy_id,
             on_accepted=start_observability_id,
         )
     except (
@@ -460,8 +464,8 @@ def get_household_under_policy(
 def _stored_calculation_error_response(
     error: HouseholdNotFoundError | PolicyNotFoundError | InvalidHouseholdInputsError,
     *,
-    household_id: str,
-    policy_id: str,
+    household_id: int,
+    policy_id: int,
 ) -> Response:
     """Map an expected stored-household calculation failure to its error response."""
     if isinstance(error, HouseholdNotFoundError):

@@ -75,7 +75,7 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
         "policyengine_api.routes.household_routes.household_calculation_service",
         service,
     ):
-        response = get_household_under_policy("us", "1", "2")
+        response = get_household_under_policy("us", 1, 2)
 
     assert response["result"] == {"people": {"you": {"net_income": {"2026": 42}}}}
 
@@ -131,7 +131,7 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         "policyengine_api.routes.household_routes.household_calculation_service",
         service,
     ):
-        response = get_household_under_policy("us", "1", "2")
+        response = get_household_under_policy("us", 1, 2)
 
     assert response["result"] == calculated
     country.calculate.assert_called_once_with(
