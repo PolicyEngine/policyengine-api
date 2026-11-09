@@ -134,13 +134,14 @@ Monitor structured records with `metric_name=v1_household_mirror_operations`.
 A successful copy's message is `V1 household immediate copy completed`, and a
 failed copy's is `V1 household immediate copy failed`, at ERROR.
 Alert on `outcome=error`, grouped by `failure_category` and `country_id`, and
-inspect `pending_event`. Records contain the legacy identifier, destination
-UUID when available, configured and actual database sources, duration, and
-outcome; they contain no household values, SQL, database URLs, or credentials.
-The observability runtime drops attributes whose keys contain `household` or
-`person` and attributes whose values are null or not single values, so in the
-log bucket a record has no `legacy_household_id`, `destination_household_id`,
-`household_created`, `attempted_write_sources` or `actual_write_sources`, and
+inspect `pending_event`. The copy service logs each record with the legacy
+identifier, destination UUID when available, configured and actual database
+sources, duration, and outcome; it logs no household values, SQL, database
+URLs, or credentials. The observability runtime then drops attributes whose
+keys contain `household` or `person` and attributes whose values are null or
+not single values, so in the log bucket a record has no `legacy_household_id`,
+`destination_household_id`, `household_created`, `attempted_write_sources` or
+`actual_write_sources`, nor `mapping_created` when it is null, and
 `attributes.omitted_count` counts what was dropped.
 
 A failed copy also records the exception's class name in `error_type`, and a
@@ -153,15 +154,16 @@ v2 household document rule records that rule's reason:
 
 | Source | `failure_reason` |
 | --- | --- |
-| The v1 household | `legacy_unsupported_collections` (a top-level key other than `people`, the country's group collections and, for the US, `spm`), `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give), `legacy_default_year_out_of_range` (the year the periods give is outside the years v2 accepts), `value_not_json` (values nested deeper than the v2 document allows) |
+| The v1 household | `legacy_unsupported_collections` (a top-level key other than `people`, the country's group collections and, for the US, `spm`), `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give), `legacy_default_year_out_of_range` (the year the periods give is outside the years v2 accepts), `legacy_period_invalid` (a period key whose dates can't be computed, such as `day:9999-12-31:2`), `value_not_json` (values nested deeper than the v2 document allows) |
 | The translated v2 document | `incomplete_memberships` (a person in no record of one of the country's entity collections), `invalid_identifier` (a person or group name that is blank or longer than 255 characters), `too_many_records`, `too_many_values`, `spm_not_object`, `spm_selection_invalid` |
 
 The other `HouseholdValidationReason` codes name rules that the translation's
 own output always meets, such as `duplicate_record_id` or
 `absent_membership_target`; they apply to documents sent to the v2 household
-routes, not to copies. A value that isn't standards-compliant JSON in other
-ways, such as a number that isn't finite, fails when the stored copy event is
-read, as an `integrity` failure with no `failure_reason`.
+routes, not to copies. A v1 household holding a value that isn't
+standards-compliant JSON in other ways, such as a number that isn't finite, is
+not saved at all while dual-write is on: recording its copy event validates the
+snapshot, so the v1 save fails and no copy is attempted.
 
 ## Exact-Event Operator
 

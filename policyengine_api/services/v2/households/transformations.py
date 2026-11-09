@@ -173,8 +173,14 @@ def _period_years(value: object) -> set[int] | None:
             parsed = parse_policyengine_period(period_key)
         except ValueError:
             return None
-        years.add(parsed.start.year)
-        years.add(parsed.stop.year)
+        try:
+            years.add(parsed.start.year)
+            years.add(parsed.stop.year)
+        except (ValueError, OverflowError) as error:
+            msg = "legacy household has a period whose dates cannot be computed"
+            raise LegacyHouseholdTranslationError(
+                msg, reason=LegacyHouseholdTranslationReason.PERIOD_INVALID
+            ) from error
     return years
 
 

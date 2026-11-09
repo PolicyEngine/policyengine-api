@@ -84,9 +84,12 @@ def _failure_reason(error: Exception) -> str | None:
 
     The code never holds household content, unlike the error's message.
     """
-    if isinstance(error, LegacyHouseholdTranslationError):
-        return error.reason.value
-    return None
+    if not isinstance(error, LegacyHouseholdTranslationError):
+        return None
+    # This runs while the copy failure is handled, so it must not raise: a
+    # missing reason is recorded as None and any other value as its text.
+    reason = getattr(error, "reason", None)
+    return None if reason is None else str(reason)
 
 
 @dataclass(frozen=True)

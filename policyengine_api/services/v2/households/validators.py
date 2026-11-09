@@ -70,6 +70,8 @@ class LegacyHouseholdTranslationReason(StrEnum):
     AMBIGUOUS_DEFAULT_YEAR = "legacy_ambiguous_default_year"
     # The year the explicit periods give is outside the years v2 accepts.
     DEFAULT_YEAR_OUT_OF_RANGE = "legacy_default_year_out_of_range"
+    # A period key policyengine-core parses but whose dates can't be computed.
+    PERIOD_INVALID = "legacy_period_invalid"
     # A value that is not standards-compliant JSON (require_json_value), or
     # that the translated document nests too deeply.
     VALUE_NOT_JSON = "value_not_json"
