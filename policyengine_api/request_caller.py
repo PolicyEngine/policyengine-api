@@ -73,7 +73,7 @@ PUBLIC_ROUTES = frozenset(
     {("GET", "/health"), ("HEAD", "/health"), ("GET", "/v2/openapi.json")}
 )
 CORS_PREFLIGHT_METHOD = "OPTIONS"
-CORS_PREFLIGHT_HEADER = "access-control-request-method"
+CORS_PREFLIGHT_HEADERS = ("origin", "access-control-request-method")
 REFUSAL_EVENT = "public_api_credential_refused"
 UNAVAILABLE_EVENT = "public_api_credential_check_unavailable"
 
@@ -126,11 +126,17 @@ def current_request_caller() -> RequestCaller | None:
 def is_public_request(request: Request) -> bool:
     """Return whether ``request`` may be served without a credential.
 
-    A CORS preflight is an ``OPTIONS`` request that names the method it
-    precedes in ``Access-Control-Request-Method``; it carries no credential.
+    A CORS preflight is an ``OPTIONS`` request with ``Origin`` that names the
+    method it precedes in ``Access-Control-Request-Method``, as the CORS
+    middleware defines one; it carries no credential. The middleware answers
+    those before this check, so the exemption only keeps that answer from
+    depending on the middleware's position. An ``OPTIONS`` request without
+    either header is refused like any other.
     """
     method = request.method
-    if method == CORS_PREFLIGHT_METHOD and CORS_PREFLIGHT_HEADER in request.headers:
+    if method == CORS_PREFLIGHT_METHOD and all(
+        header in request.headers for header in CORS_PREFLIGHT_HEADERS
+    ):
         return True
     return (method, request.scope["path"]) in PUBLIC_ROUTES
 

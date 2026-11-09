@@ -493,11 +493,20 @@ matching, also refuses every request that has no server credential, a
 signed-in user's own token included, with that 401. `/` and unknown paths are
 refused too; a server gets the normal 404 for an unknown path. Only
 `GET`/`HEAD /health`, `GET /v2/openapi.json` and CORS preflights (`OPTIONS`
-with `Access-Control-Request-Method`) answer without a credential, matched
-exactly on the decoded path. They are exempted in the Public API's own code,
-because Cloud Run's startup probe calls `/health` on the container directly.
-A malformed value, or `1` with no allowed client, answers 503 outside those
-routes and fails readiness.
+with `Origin` and `Access-Control-Request-Method`) answer without a
+credential, matched exactly on the decoded path. They are exempted in the
+Public API's own code, because Cloud Run's startup probe calls `/health` on
+the container directly. A malformed value, or `1` with no allowed client,
+fails readiness and the deploy validation; a revision that has one anyway
+answers 503 to every non-public request that is not from a server, and still
+serves servers.
+
+Before switching it on in an environment, the deploy's own post-deploy tests
+there need the CI server credential (task 3.3 · 1). The staging integration
+tests (`test_cloud_run_candidate`, `test_live_v2_metadata`,
+`test_live_v2_policies`) and the live simulation tests call non-public
+routes with no credential or with a user's token, which enforcement
+refuses; only the health polling uses a public route.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:
