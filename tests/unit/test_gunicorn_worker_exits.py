@@ -114,15 +114,18 @@ class GunicornServer:
                 env=environment,
                 stdout=standard_output,
                 stderr=standard_error,
+                # Its own process group, so cleanup also reaches the workers.
+                start_new_session=True,
             )
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exception: object) -> None:
-        if self.process.poll() is None:
-            self.process.kill()
-            self.process.wait()
+        # A worker outlives a killed main process, so kill the whole group.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(self.process.pid, signal.SIGKILL)
+        self.process.wait()
 
     def gunicorn_log(self) -> str:
         return self.standard_error.read_text(encoding="utf-8", errors="replace")
@@ -212,6 +215,7 @@ def test_worker_killed_by_a_signal_writes_one_error_record(tmp_path):
         "signal_number": signal.SIGKILL.value,
         "worker_pid": killed_pid,
     }
+    assert record["operation.name"] == "gunicorn.worker_exit"
     assert record["schema_version"] == "policyengine.observability.v2"
     assert record["service.name"] == "policyengine-api"
     assert record["service.namespace"] == "policyengine.api-v1"
@@ -241,8 +245,9 @@ def test_worker_the_main_process_kills_while_shutting_down_writes_no_error_recor
     """A deploy stops a worker that is still serving a request.
 
     The main process sends SIGTERM, waits out its graceful timeout and then
-    sends SIGKILL; it usually exits before reaping the worker, which is why
-    the hook tests below also cover a reaped worker.
+    sends SIGKILL. It usually exits before reaping the worker, so this checks
+    only that the shutdown writes no ERROR record; the hook tests below cover
+    a worker the main process killed and then reaped.
     """
     with GunicornServer(tmp_path, "--graceful-timeout", "1") as server:
         server.wait_for_worker(1)
@@ -292,26 +297,47 @@ class GunicornLog:
         self.exceptions.append((message % arguments, type(sys.exc_info()[1]).__name__))
 
 
-def _main_process(*, listening: bool = True) -> SimpleNamespace:
+def _main_process() -> SimpleNamespace:
+    """Stand in for gunicorn's main process; ``kills`` keeps what it sent."""
+    kills: list[tuple[int, int]] = []
     return SimpleNamespace(
         pid=os.getpid(),
-        LISTENERS=[object()] if listening else [],
+        kills=kills,
+        kill_worker=lambda pid, sig: kills.append((pid, sig)),
         log=GunicornLog(),
     )
 
 
-def _reap_worker(monkeypatch, main_process, worker_pid: int, status: int) -> None:
-    """Start the hooks, then reap one worker exit and report it as gunicorn does."""
-    exits = [(worker_pid, status)]
+def _worker(*, aborted: bool = False) -> SimpleNamespace:
+    """Stand in for a gunicorn worker; ``aborted`` marks one that missed its timeout."""
+    return SimpleNamespace(pid=4321, aborted=aborted)
+
+
+def _reap_worker(
+    monkeypatch,
+    main_process,
+    worker,
+    status: int,
+    *,
+    killed_with: int | None = None,
+) -> None:
+    """Start the hooks, then reap one worker exit and report it as gunicorn does.
+
+    With ``killed_with``, the main process first sends the worker that signal
+    through ``kill_worker``.
+    """
+    exits = [(worker.pid, status)]
     monkeypatch.setattr(
         os,
         "waitpid",
         lambda _pid, _options: exits.pop(0) if exits else (0, 0),
     )
     gunicorn_config.on_starting(main_process)
+    if killed_with is not None:
+        main_process.kill_worker(worker.pid, killed_with)
     while os.waitpid(-1, os.WNOHANG)[0]:
         continue
-    gunicorn_config.child_exit(main_process, SimpleNamespace(pid=worker_pid))
+    gunicorn_config.child_exit(main_process, worker)
 
 
 def _written_records(capsys) -> list[dict]:
@@ -331,13 +357,16 @@ def observability_environment(monkeypatch):
 def test_worker_ended_by_an_unexpected_signal_is_recorded_at_error(
     monkeypatch, capsys, observability_environment, ended_by
 ):
-    _reap_worker(monkeypatch, _main_process(), 4321, _signal_status(ended_by))
+    _reap_worker(monkeypatch, _main_process(), _worker(), _signal_status(ended_by))
 
     records = _written_records(capsys)
 
-    assert [(record["severity"], record["message"]) for record in records] == [
-        ("ERROR", f"Signal {ended_by.name} ended gunicorn worker process 4321")
+    assert [(record["severity"], record.get("message")) for record in records] == [
+        ("ERROR", f"Signal {ended_by.name} ended gunicorn worker process 4321"),
+        ("INFO", None),
     ]
+    assert records[0]["operation.name"] == "gunicorn.worker_exit"
+    assert records[1]["event.name"] == "operation.completed"
     assert records[0]["attributes"] == {
         "signal": ended_by.name,
         "signal_number": ended_by.value,
@@ -349,29 +378,69 @@ def test_worker_ended_by_an_unexpected_signal_is_recorded_at_error(
 def test_worker_ended_by_a_stop_signal_writes_no_record(
     monkeypatch, capsys, observability_environment, ended_by
 ):
-    _reap_worker(monkeypatch, _main_process(), 4321, _signal_status(ended_by))
+    _reap_worker(monkeypatch, _main_process(), _worker(), _signal_status(ended_by))
 
     assert _written_records(capsys) == []
 
 
-def test_worker_killed_while_the_main_process_stops_writes_no_record(
+def test_worker_the_main_process_killed_writes_no_record(
+    monkeypatch, capsys, observability_environment
+):
+    """The main process sends SIGKILL to workers still running when it stops."""
+    main_process = _main_process()
+
+    _reap_worker(
+        monkeypatch,
+        main_process,
+        _worker(),
+        _signal_status(signal.SIGKILL),
+        killed_with=signal.SIGKILL,
+    )
+
+    assert main_process.kills == [(4321, signal.SIGKILL)]
+    assert _written_records(capsys) == []
+
+
+def test_worker_the_main_process_killed_after_its_timeout_is_recorded(
     monkeypatch, capsys, observability_environment
 ):
     _reap_worker(
         monkeypatch,
-        _main_process(listening=False),
-        4321,
+        _main_process(),
+        _worker(aborted=True),
         _signal_status(signal.SIGKILL),
+        killed_with=signal.SIGKILL,
     )
 
-    assert _written_records(capsys) == []
+    assert [record.get("message") for record in _written_records(capsys)] == [
+        "Signal SIGKILL ended gunicorn worker process 4321",
+        None,
+    ]
+
+
+def test_worker_killed_while_the_main_process_waits_for_it_to_stop_is_recorded(
+    monkeypatch, capsys, observability_environment
+):
+    """The main process sent SIGTERM; the kernel's SIGKILL came first."""
+    _reap_worker(
+        monkeypatch,
+        _main_process(),
+        _worker(),
+        _signal_status(signal.SIGKILL),
+        killed_with=signal.SIGTERM,
+    )
+
+    assert [record["severity"] for record in _written_records(capsys)] == [
+        "ERROR",
+        "INFO",
+    ]
 
 
 @pytest.mark.parametrize("exit_code", [0, 1])
 def test_worker_that_exited_with_a_code_writes_no_record(
     monkeypatch, capsys, observability_environment, exit_code
 ):
-    _reap_worker(monkeypatch, _main_process(), 4321, _exit_status(exit_code))
+    _reap_worker(monkeypatch, _main_process(), _worker(), _exit_status(exit_code))
 
     assert _written_records(capsys) == []
 
@@ -396,7 +465,7 @@ def test_failure_to_write_the_record_is_reported_to_gunicorn_log_and_not_raised(
     monkeypatch.setattr(gunicorn_worker_exits, "configure", refuse_configuration)
     main_process = _main_process()
 
-    _reap_worker(monkeypatch, main_process, 4321, _signal_status(signal.SIGKILL))
+    _reap_worker(monkeypatch, main_process, _worker(), _signal_status(signal.SIGKILL))
 
     assert _written_records(capsys) == []
     assert main_process.log.exceptions == [
@@ -410,7 +479,7 @@ def test_wait_status_is_kept_only_in_the_main_process(
     main_process = _main_process()
     main_process.pid = os.getpid() + 1
 
-    _reap_worker(monkeypatch, main_process, 4321, _signal_status(signal.SIGKILL))
+    _reap_worker(monkeypatch, main_process, _worker(), _signal_status(signal.SIGKILL))
 
     assert _written_records(capsys) == []
 
@@ -422,23 +491,22 @@ def test_settings_module_leaves_the_application_runtime_unbuilt():
     runtime built in another process instead of building its own.
     """
     script = """
-import contextlib
-import http.client
 import json
 import os
 import signal
 import sys
 from types import SimpleNamespace
-from typing import Self
 
 from policyengine_api import gunicorn_config
 
-server = SimpleNamespace(pid=os.getpid(), LISTENERS=[object()], log=None)
+server = SimpleNamespace(
+    pid=os.getpid(), kill_worker=lambda _pid, _sig: None, log=None
+)
 exits = [(4321, signal.SIGKILL.value)]
 os.waitpid = lambda _pid, _options: exits.pop(0) if exits else (0, 0)
 gunicorn_config.on_starting(server)
 os.waitpid(-1, os.WNOHANG)
-gunicorn_config.child_exit(server, SimpleNamespace(pid=4321))
+gunicorn_config.child_exit(server, SimpleNamespace(pid=4321, aborted=False))
 loaded = sorted(
     name
     for name in sys.modules
