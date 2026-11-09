@@ -52,6 +52,12 @@ therefore built in:
   re-import that runs without cpu-boost (and CPU-throttled at idle), recycling risks
   correlated zero-ready-worker windows; it needs its own qualification before adoption.
 - Candidate deploys set `--cpu-boost` to shorten the import (instance startup only).
+- `start.sh` also loads the gunicorn settings module `policyengine_api.gunicorn_config`
+  (`--config python:policyengine_api.gunicorn_config`). Its hooks, in
+  `policyengine_api/gunicorn_worker_exits.py`, make the master write an ERROR record
+  through policyengine-observability when a signal ends a worker unexpectedly, such as
+  the kernel's out-of-memory SIGKILL, so the daily telemetry error report sees worker
+  kills. See "Worker exits" in `docs/engineering/skills/observability.md`.
 
 ## Runtime shape and scaling (from the Stage 2 qualification)
 

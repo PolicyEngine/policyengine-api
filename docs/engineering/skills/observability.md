@@ -188,6 +188,31 @@ collector configuration changes with the `Deploy observability collector`
 workflow; committing `gcp/observability/collector/config.yaml` alone does not
 change the live Cloud Run service.
 
+## Worker exits
+
+gunicorn's master writes an ERROR record when a signal ends a worker
+unexpectedly (`policyengine_api/gunicorn_worker_exits.py`, loaded through the
+settings module `policyengine_api.gunicorn_config` that `gcp/cloud_run/start.sh`
+names). The message is `Signal <name> ended gunicorn worker process <pid>`,
+with the attributes `signal`, `signal_number` and `worker_pid`. The daily
+report groups these records by their first three words, so each signal gets a
+group of its own.
+
+- A worker that exits with an exit code writes no record, nor does one that
+  SIGTERM, SIGINT or SIGQUIT ends (gunicorn's stop signals; Cloud Run's
+  SIGTERM reaches workers through the master), nor one that SIGKILL ends once
+  the master has closed its listening sockets to shut down.
+- The master never imports `policyengine_api.observability`, whose import
+  builds the API's runtime: a worker forked afterwards would reuse it. It
+  takes the service and deployment identity from
+  `policyengine_api.observability_identity`, which the API's runtime uses too,
+  and writes each record through a runtime of its own with OpenTelemetry off
+  and inline standard-output logging, which starts no thread.
+- gunicorn's `child_exit` hook gets no wait status, so the `on_starting` hook
+  wraps `os.waitpid` in the master to keep the status of each child it reaps.
+- The hooks never raise: an exception in a hook stops gunicorn's main loop and
+  every worker. A failure goes to gunicorn's error log instead.
+
 ## Trace boundaries
 
 HTTP instrumentation carries W3C trace context across synchronous calls. The
