@@ -1,9 +1,12 @@
 """HTTP answers for a catalog version whose current-law values pruning removed.
 
 Every route that serves current-law parameter values, parameter tree rows or
-the parameter search file answers 503 with ``Cache-Control: no-store`` and the
+the parameter search file answers 404 with ``Cache-Control: no-store`` and the
 service's message, so no cache keeps the answer after the version is installed
-again and its values return.
+again and its values return. The request names data the catalog no longer
+holds, so the answer is a client error: a 503 would be counted as a server
+error by the daily telemetry error report (issue #4243). An unavailable
+catalog still answers 503.
 """
 
 from __future__ import annotations
@@ -12,6 +15,9 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    MetadataCatalogUnavailableError,
+)
 from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     MetadataResponseCache,
 )
@@ -51,14 +57,14 @@ def _pruned_reader(method_name: str) -> ResourceReader:
 
 
 def _assert_pruned_answer(response) -> None:
-    assert response.status_code == 503
+    assert response.status_code == 404
     assert response.json() == {"status": "error", "message": PRUNED_MESSAGE}
     assert response.headers["cache-control"] == "no-store"
     assert "etag" not in response.headers
 
 
 @pytest.mark.parametrize(("path", "method_name"), PRUNED_DATA_ROUTES)
-def test_routes_serving_pruned_data_answer_503_that_no_cache_keeps(
+def test_routes_serving_pruned_data_answer_404_that_no_cache_keeps(
     path: str,
     method_name: str,
 ) -> None:
@@ -71,7 +77,7 @@ def test_routes_serving_pruned_data_answer_503_that_no_cache_keeps(
     assert reader.closed
 
 
-def test_revalidating_a_pruned_version_search_file_answers_503_too() -> None:
+def test_revalidating_a_pruned_version_search_file_answers_404_too() -> None:
     reader = _pruned_reader("get_parameter_search_file_hash")
 
     response = metadata_route_client(lambda: reader).get(
@@ -102,25 +108,53 @@ def test_a_kept_whole_version_response_cache_does_not_keep_the_pruned_answer() -
     assert len(readers) == 2
 
 
-def test_openapi_describes_the_503_of_a_pruned_version() -> None:
+@pytest.mark.parametrize(("path", "method_name"), PRUNED_DATA_ROUTES)
+def test_routes_serving_pruned_data_still_answer_503_when_the_catalog_is_unavailable(
+    path: str,
+    method_name: str,
+) -> None:
+    reader = ResourceReader(
+        {method_name: None},
+        error=MetadataCatalogUnavailableError("catalog connection refused"),
+    )
+
+    response = metadata_route_client(lambda: reader).get(path)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": "V2 metadata catalog is unavailable",
+    }
+    assert "cache-control" not in response.headers
+
+
+PRUNED_DATA_PATHS = (
+    "/v2/parameter-values",
+    "/v2/parameter-values/{value_id}",
+    "/v2/parameters/children",
+    "/v2/parameters/search-file",
+    "/v2/model-catalog/variables",
+    "/v2/model-catalog/parameters",
+)
+
+
+def test_openapi_describes_the_404_of_a_pruned_version() -> None:
     schema = (
         metadata_route_client(lambda: ResourceReader({})).get("/v2/openapi.json").json()
     )
 
-    for path in (
-        "/v2/parameter-values",
-        "/v2/parameter-values/{value_id}",
-        "/v2/parameters/children",
-        "/v2/parameters/search-file",
-        "/v2/model-catalog/variables",
-        "/v2/model-catalog/parameters",
-    ):
-        description = schema["paths"][path]["get"]["responses"]["503"]["description"]
-        assert "pruned" in description, path
-        assert "no-store" in description, path
-    assert (
-        "pruned"
-        not in schema["paths"]["/v2/parameters"]["get"]["responses"]["503"][
-            "description"
-        ]
-    )
+    for path in PRUNED_DATA_PATHS:
+        responses = schema["paths"][path]["get"]["responses"]
+        not_found = responses["404"]["description"]
+        assert "pruned" in not_found, path
+        assert "no-store" in not_found, path
+        assert responses["404"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/V2ErrorResponse"
+        }, path
+        unavailable = responses["503"]["description"]
+        assert unavailable.startswith("The initialized v2 catalog is unavailable"), path
+        assert "pruned" not in unavailable, path
+    for path in ("/v2/parameters", "/v2/variables"):
+        responses = schema["paths"][path]["get"]["responses"]
+        assert "pruned" not in responses["404"]["description"], path
+        assert "pruned" not in responses["503"]["description"], path
