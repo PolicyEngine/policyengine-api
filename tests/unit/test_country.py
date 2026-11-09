@@ -270,7 +270,7 @@ UK_DATASET_DATA_YEAR = 2024
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
 def test__metadata_offers_the_countrys_economy_years_in_their_order(country_id):
-    """US 2024 to 2035 newest first, UK 2024 to 2032 oldest first."""
+    """US 2024 to 2036 newest first, UK 2024 to 2032 oldest first."""
     assert COUNTRIES[country_id].metadata["economy_options"]["time_period"] == [
         {"name": year, "label": str(year)} for year in ECONOMY_YEARS[country_id]
     ]

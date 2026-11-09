@@ -74,13 +74,13 @@ class TestEconomyService:
             """Only the start year must be one of the country's years.
 
             2034 is a US year, so the window from 2034 to 2038 is submitted as
-            before, although 2036 to 2038 are after the last US year (2035).
+            before, although 2037 and 2038 are after the last US year (2036).
             """
             base_params["start_year"] = "2034"
             base_params["window_size"] = 5
             mock_simulation_entrypoint.run_budget_window_batch.return_value = (
                 create_mock_budget_window_batch_execution(
-                    batch_job_id="fc-budget-after-2035", status="submitted"
+                    batch_job_id="fc-budget-after-2036", status="submitted"
                 )
             )
 

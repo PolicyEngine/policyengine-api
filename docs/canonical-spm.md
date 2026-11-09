@@ -329,7 +329,7 @@ annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
 digits. An annual `time_period`, and a budget window's `start_year`, must be
 one of the country's years in `/{country}/metadata`'s
-`economy_options.time_period` (US 2024 to 2035, UK 2024 to 2032, from
+`economy_options.time_period` (US 2024 to 2036, UK 2024 to 2032, from
 `policyengine_api/economy_years.py`). Any other year returns HTTP 400 with the
 code `DATASET_YEAR_UNAVAILABLE` in `errors`, before anything is read from the
 cache or submitted, even when a result for that year is stored. A budget

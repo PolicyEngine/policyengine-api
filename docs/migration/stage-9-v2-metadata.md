@@ -364,7 +364,7 @@ A catalog version's time-period options (`metadata_time_periods`), the years
 `/v2/economy-options` offers for it, come from the Public API's code, not from
 PolicyEngine.py: each country's years are defined once in
 `policyengine_api/economy_years.py`, which `/{country}/metadata` offers in
-`economy_options.time_period` and the economy routes accept (US 2024 to 2035,
+`economy_options.time_period` and the economy routes accept (US 2024 to 2036,
 newest first; UK 2024 to 2032, oldest first). They can therefore change while
 the PolicyEngine.py version stays the same, so republication does not compare
 them. After every other table and column of a stored version has been
