@@ -14,9 +14,11 @@ A request from a credentialed server, whose own client-credentials token is in
 ``Authorization``, authenticates the user it forwards instead: the signed-in
 user's token in ``PolicyEngine-User-Authorization: Bearer``, which takes the
 place of ``Authorization`` above, or the same unauthenticated-user header.
-That user is then authenticated exactly as a direct request with the same
-credential would be. Without a server credential the forwarded header is
-ignored.
+That user is then authenticated by the same code as a direct request's
+credential. A forwarded token is not checked before routing, so an invalid
+one gets the ``invalid_token`` challenge below, and a forwarded machine token
+gets 403 even from an unlisted client. Without a server credential the
+forwarded header is ignored.
 
 Failures map to the shared API v2 error envelope:
 

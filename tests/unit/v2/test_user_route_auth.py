@@ -162,7 +162,7 @@ def test_invalid_tokens_are_refused_before_the_user_route(
     assert not services["account"].calls
 
 
-def test_machine_client_principals_are_forbidden(configured_auth) -> None:
+def test_forwarded_machine_client_principals_are_forbidden(configured_auth) -> None:
     configured_auth(
         {"iss": ISSUER, "sub": "abc123@clients", "gty": "client-credentials"}
     )
@@ -447,7 +447,7 @@ def test_an_invalid_bearer_token_never_falls_back_to_the_header(
     assert not services["policy"].calls
 
 
-def test_machine_client_principals_are_forbidden_beside_the_header(
+def test_forwarded_machine_client_principals_are_forbidden_beside_the_header(
     configured_auth,
 ) -> None:
     configured_auth(

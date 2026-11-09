@@ -3,8 +3,8 @@
 The server sends its own client-credentials token in ``Authorization`` and the
 user it acts for in ``PolicyEngine-User-Authorization: Bearer <token>`` (a
 signed-in user) or ``PolicyEngine-Unauthenticated-User`` (a signed-out
-browser). The user routes then authenticate that user exactly as they would
-a direct request carrying the same credential. Without a server credential,
+browser). The user routes then authenticate that user with the same checks
+as a direct request carrying the same credential. Without a server credential,
 ``PolicyEngine-User-Authorization`` is ignored and a direct request works as
 before. Every request uses real RS256 tokens through the ASGI application.
 """
@@ -30,6 +30,7 @@ from tests.unit.credential_token_support import (
     EXPIRED,
     ISSUER,
     OTHER_SIGNING_KEY,
+    UNLISTED_CLIENT_ID,
     USER_SUBJECT,
     bearer,
     configure_credentials,
@@ -252,6 +253,51 @@ def test_two_forwarded_headers_without_a_server_credential_are_ignored() -> None
 
     assert response.status_code == 200
     assert _principal(service) == SIGNED_IN_USER
+
+
+def test_a_blank_forwarded_header_alone_must_authenticate_a_user() -> None:
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers={**SERVER_AUTHORIZATION, FORWARDED_USER_HEADER: " "},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert service.calls == []
+
+
+def test_a_forwarded_unlisted_machine_token_is_forbidden() -> None:
+    # A forwarded token isn't checked against the allow list; it is no user.
+    client, service = _policy_client()
+
+    response = client.get(
+        USER_POLICIES_PATH,
+        headers={
+            **SERVER_AUTHORIZATION,
+            FORWARDED_USER_HEADER: bearer(server_token(UNLISTED_CLIENT_ID)),
+        },
+    )
+
+    assert response.status_code == 403
+    assert service.calls == []
+
+
+def test_a_server_upgrade_needs_the_forwarded_users_token() -> None:
+    service = RecordingService()
+    client, _flask_calls = user_route_client(
+        require_user=None, v2_account_service_factory=lambda: service
+    )
+
+    response = client.post(
+        "/v2/me/upgrade?country_id=us",
+        headers={**SERVER_AUTHORIZATION, UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID)},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert service.calls == []
 
 
 def test_a_server_can_upgrade_a_browsers_user_into_the_forwarded_account() -> None:
