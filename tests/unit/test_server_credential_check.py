@@ -27,6 +27,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.services.v2.countries.types import CountryRead
 from tests.unit.credential_token_support import (
     ALLOWED_CLIENT_ID,
@@ -84,6 +85,7 @@ REFUSED_AUTHORIZATION_HEADERS = {
         server_token(signing_key=OTHER_SIGNING_KEY)
     ),
     "unlisted-client": bearer(server_token(UNLISTED_CLIENT_ID)),
+    "user-subject-ending-in-clients": bearer(signed_token(sub="auth0|someone@clients")),
     "client-grant-without-a-client-subject": bearer(
         signed_token(sub="not-a-client-subject", gty="client-credentials")
     ),
@@ -212,6 +214,20 @@ def _recorded_caller(runtime: Mock) -> dict[str, object]:
     return recorded
 
 
+def _credential_events(runtime: Mock) -> list[tuple[str, str, dict[str, object]]]:
+    """Return the credential check's runtime events as (name, severity, attributes)."""
+    return [
+        (
+            recorded_call.args[0],
+            recorded_call.kwargs["severity"],
+            recorded_call.kwargs["attributes"],
+        )
+        for recorded_call in runtime.event.call_args_list
+        if recorded_call.args
+        and str(recorded_call.args[0]).startswith("public_api_credential")
+    ]
+
+
 def _route_calls(application: SimpleNamespace) -> int:
     return len(application.flask_calls) + application.country_service.list_calls
 
@@ -235,6 +251,7 @@ def test_a_request_without_a_credential_is_served_and_recorded_without_warnings(
     assert response.status_code == 200
     assert _route_calls(application) == 1
     assert _recorded_caller(application.runtime) == {"caller.kind": "none"}
+    assert _credential_events(application.runtime) == []
     assert [
         record for record in credential_log_records if record.levelno > logging.INFO
     ] == []
@@ -352,35 +369,45 @@ def test_a_signed_in_users_token_is_served_and_recorded_without_the_user(
 
 
 @pytest.mark.usefixtures("install_signing_keys")
-def test_refusals_are_logged_at_info_with_their_reason(
-    credential_log_records: list[logging.LogRecord],
-) -> None:
+def test_every_refusal_is_recorded_at_info_with_its_reason_and_request_id() -> None:
+    """Refusals reach the runtime directly, whatever the logging levels.
+
+    A refused request to a Flask route never reaches Flask, so this event is
+    its only record; it carries the request ID the response returns.
+    """
     application = _application()
 
-    application.client.get(FLASK_PATH, headers={"Authorization": "Bearer made-up"})
-    application.client.get(
-        FLASK_PATH, headers=_bearer(server_token(UNLISTED_CLIENT_ID))
+    made_up = application.client.get(
+        FLASK_PATH, headers={"Authorization": "Bearer made-up"}
+    )
+    unlisted = application.client.get(
+        NATIVE_PATH, headers=_bearer(server_token(UNLISTED_CLIENT_ID))
     )
 
-    refusals = [
-        record
-        for record in credential_log_records
-        if record.getMessage() == "public_api_credential_refused"
+    assert _credential_events(application.runtime) == [
+        (
+            "public_api_credential_refused",
+            "INFO",
+            {
+                "refusal_reason": "invalid_token",
+                "http.request.method": "GET",
+                "url.path": FLASK_PATH,
+                "request.id": made_up.headers[REQUEST_ID_HEADER],
+            },
+        ),
+        (
+            "public_api_credential_refused",
+            "INFO",
+            {
+                "refusal_reason": "client_not_allowed",
+                "caller.client_id": UNLISTED_CLIENT_ID,
+                "http.request.method": "GET",
+                "url.path": NATIVE_PATH,
+                "request.id": unlisted.headers[REQUEST_ID_HEADER],
+            },
+        ),
     ]
-    assert [record.levelno for record in refusals] == [logging.INFO, logging.INFO]
-    assert refusals[0].policyengine_attributes == {
-        "refusal_reason": "invalid_token",
-        "http.request.method": "GET",
-        "url.path": FLASK_PATH,
-    }
-    assert refusals[1].policyengine_attributes == {
-        "refusal_reason": "client_not_allowed",
-        "caller.client_id": UNLISTED_CLIENT_ID,
-        "http.request.method": "GET",
-        "url.path": FLASK_PATH,
-    }
-    assert all(record.levelno <= logging.INFO for record in credential_log_records)
-    assert "made-up" not in str([vars(record) for record in credential_log_records])
+    assert "made-up" not in str(application.runtime.event.call_args_list)
 
 
 @ROUTE_PATHS
@@ -399,6 +426,16 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
     assert refused.json() == UNAVAILABLE_BODY
     assert served.status_code == 200
     assert _route_calls(application) == 1
+    assert _credential_events(application.runtime) == [
+        (
+            "public_api_credential_check_unavailable",
+            "WARNING",
+            {
+                "error_type": "CredentialCheckUnavailableError",
+                "request.id": refused.headers[REQUEST_ID_HEADER],
+            },
+        )
+    ]
 
 
 @ROUTE_PATHS
