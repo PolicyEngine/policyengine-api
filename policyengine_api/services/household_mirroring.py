@@ -79,15 +79,31 @@ def _failure_category(error: Exception) -> str:
     return "unexpected"
 
 
+def _failure_reason(error: Exception) -> str | None:
+    """Return a translation failure's fixed reason code, or None for others.
+
+    The code never holds household content, unlike the error's message.
+    """
+    if isinstance(error, LegacyHouseholdTranslationError):
+        return error.reason.value
+    return None
+
+
 @dataclass(frozen=True)
 class _CopyOutcome:
-    """How one immediate household copy ended, as its metric record reports it."""
+    """How one immediate household copy ended, as its metric record reports it.
+
+    A failed copy also records the exception's type, and a translation
+    failure its fixed reason; never the error's message.
+    """
 
     outcome: str
     actual_write_sources: list[str]
     pending_event: bool
     result: LegacyHouseholdPersistenceResult | None = None
     failure_category: str | None = None
+    error_type: str | None = None
+    failure_reason: str | None = None
 
 
 def _log_copy_operation(
@@ -102,7 +118,11 @@ def _log_copy_operation(
     with contextlib.suppress(Exception):
         logger.log_struct(
             {
-                "message": "V1 household immediate copy completed",
+                "message": (
+                    "V1 household immediate copy completed"
+                    if copy_outcome.outcome == "ok"
+                    else "V1 household immediate copy failed"
+                ),
                 "metric_name": "v1_household_mirror_operations",
                 "metric_value": 1,
                 "configured_write_source": "dual_write",
@@ -115,6 +135,8 @@ def _log_copy_operation(
                 ),
                 "outcome": copy_outcome.outcome,
                 "failure_category": copy_outcome.failure_category,
+                "error_type": copy_outcome.error_type,
+                "failure_reason": copy_outcome.failure_reason,
                 "household_created": (
                     result.household_created if result is not None else None
                 ),
@@ -189,6 +211,8 @@ def process_household_event_after_commit(
                 pending_event=True,
                 result=destination_result,
                 failure_category=_failure_category(error),
+                error_type=type(error).__name__,
+                failure_reason=_failure_reason(error),
             ),
         )
         msg = "The committed v1 household event could not be copied to v2"

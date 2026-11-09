@@ -131,10 +131,23 @@ household ID. No background process scans events. Use the exact-event workflow
 described below to copy a pending event.
 
 Monitor structured records with `metric_name=v1_household_mirror_operations`.
+A successful copy's message is `V1 household immediate copy completed`, and a
+failed copy's is `V1 household immediate copy failed`, at ERROR.
 Alert on `outcome=error`, grouped by `failure_category` and `country_id`, and
 inspect `pending_event`. Records contain the legacy identifier, destination
 UUID when available, configured and actual database sources, duration, and
 outcome; they contain no household values, SQL, database URLs, or credentials.
+
+A failed copy also records the exception's class name in `error_type`, and a
+`translation` failure records a fixed `failure_reason`. It is null for other
+categories. The record never holds the error's message, which can quote the
+household's names. A translation whose result breaks a v2 household document
+rule records that rule's reason:
+
+| Source | `failure_reason` |
+| --- | --- |
+| The v1 household | `legacy_unsupported_collections`, `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give), `value_not_json` |
+| The translated v2 document | `incomplete_memberships` (a person in no record of one of the country's entity collections), `absent_membership_target`, `invalid_identifier` (an id, source name or membership that is not a non-empty string of at most 255 characters), `too_many_records`, `too_many_values`, `duplicate_record_id`, `record_fields_invalid`, `record_not_object`, `values_not_object`, `memberships_not_object`, `collection_not_list`, `unsupported_collections`, `people_missing`, `document_not_object`, `spm_not_object`, `spm_selection_invalid`, `unsupported_country` |
 
 ## Exact-Event Operator
 
