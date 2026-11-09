@@ -393,11 +393,24 @@ def _snapshot(
             "legacy_default_year_out_of_range",
         ),
         (
-            # Shallow enough for each record's values, but the v2 document
-            # holds them three containers deeper than its 100-container limit.
-            _uk_household_of({"adult": {"age": {"2026": _nested_in_lists(97)}}}),
+            # The deepest value a stored v1 household can hold: within the
+            # snapshot's 100-container limit and each record's, but the v2
+            # document holds it deeper than its own limit.
+            _uk_household_of({"adult": {"age": {"2026": _nested_in_lists(96)}}}),
             "translated household values must be standards-compliant JSON",
             "value_not_json",
+        ),
+        (
+            # policyengine-core parses these periods, but their end dates
+            # overflow the calendar or name no month.
+            _uk_household_of({"adult": {"age": {"day:9999-12-31:2": 40}}}),
+            "legacy household has a period whose dates cannot be computed",
+            "legacy_period_invalid",
+        ),
+        (
+            _uk_household_of({"adult": {"age": {"month:0001-01:-1": 40}}}),
+            "legacy household has a period whose dates cannot be computed",
+            "legacy_period_invalid",
         ),
     ],
 )
