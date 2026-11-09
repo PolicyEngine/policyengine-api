@@ -129,7 +129,7 @@ response therefore changes only then, with the
 route's response format or with the day it is read on, and the `ETag` lets a
 client revalidate after the day. Catalog pruning doesn't change a successful
 response: it deletes rows, which restoring writes back identically, and a
-pruned version's 503 carries `Cache-Control: no-store` (see "Catalog
+pruned version's 404 carries `Cache-Control: no-store` (see "Catalog
 pruning"). A request without it selects the running
 version, which changes on deploy, and may be reused for five minutes
 (`max-age=300`). A response that depends on the request's UTC day, which is
@@ -139,7 +139,7 @@ response may be reused only until the UTC midnight after that instant,
 whichever lifetime would otherwise apply (`max-age=0` if its headers are
 written after that midnight). A request whose `If-None-Match` names the current `ETag` (strong or
 weak form, alone or in a list) gets HTTP 304 with no body. Error responses
-carry neither header; a pruned version's 503 carries `Cache-Control: no-store`
+carry neither header; a pruned version's 404 carries `Cache-Control: no-store`
 instead. Every cacheable response, and every 304, carries
 `Vary: Origin, Accept-Encoding`, each value once: the API reflects every
 origin in `Access-Control-Allow-Origin` and a request without `Origin` gets no
@@ -226,8 +226,11 @@ creation. The currently serving revision remains unchanged.
 Step 4 also prunes older catalog versions once the publication has committed
 (see "Catalog pruning"), while the previous revision still serves traffic.
 From the second release that includes pruning on, that revision reads
-`catalog_values_pruned_at` and answers 503 with `Cache-Control: no-store` for
-a pruned version. The previous revision of the first such release doesn't. From
+`catalog_values_pruned_at` and answers 404 with `Cache-Control: no-store` for
+a pruned version. Code from before issue #4243 answered 503, so during the
+release that brings the 404, its previous revision still answers 503. The
+previous revision of the first release that includes pruning doesn't read the
+column. From
 that release's seed job until its promotion, and until the next successful
 release if promotion fails, it answers a request that names a pruned version
 in `policyengine_version` with:
@@ -555,14 +558,17 @@ file as for a version that has none. The restored rows equal what the
 version's first publication wrote.
 
 For a pruned version, every metadata route that serves the deleted rows
-answers 503 with `Cache-Control: no-store` and a message naming the country
+answers 404 with `Cache-Control: no-store` and a message naming the country
 and version and saying that its current-law values return when that
 PolicyEngine.py version is installed again: `/v2/parameter-values`,
 `/v2/parameter-values/{value_id}`, `/v2/parameters/children`,
 `/v2/parameters/search-file` (also when revalidated with `If-None-Match`),
 and `/v2/model-catalog/variables` and `/v2/model-catalog/parameters`, which
 embed current-law values. The other metadata routes, which serve kept rows,
-answer as before.
+answer as before. The request names data the catalog no longer holds, so the
+answer is a client error: the Public API records every response of 500 or more
+at ERROR, so a 503 would count as a server error in the daily telemetry error
+report. A catalog that can't be read still answers 503.
 
 A process keeps each catalog version it has selected, with its
 `catalog_values_pruned_at` as read then (`SelectedCatalogStore`), and the
@@ -570,14 +576,14 @@ whole-version bodies it has built (see "Response caching"), so a process
 running while a version is pruned or restored answers as follows:
 
 - **It selected the version before the pruning.** A read of the deleted rows
-  that finds none reads `catalog_values_pruned_at` again and answers 503. A
+  that finds none reads `catalog_values_pruned_at` again and answers 404. A
   read that finds rows, possible only before the pruning committed, answers
   with them. Two reads need none of the deleted rows to answer:
   `/v2/model-catalog/variables` when no variable takes its parts from a
   parameter, and `/v2/model-catalog/parameters` when none of the requested
   names is a parameter of the version. With a selection from before the
   pruning these answer 200, holding none of the deleted data, while a process
-  that selects the pruned version afresh answers them with 503, as it answers
+  that selects the pruned version afresh answers them with 404, as it answers
   every route that serves deleted rows.
 - **It built the version's `/v2/model-catalog/variables` body before the
   pruning.** It keeps serving that body, with a 200, and answers 304 to its
@@ -586,7 +592,7 @@ running while a version is pruned or restored answers as follows:
   it is never rebuilt from the pruned rows.
 - **It selected the version while it was pruned.** Each read of the deleted
   rows first reads `catalog_values_pruned_at` again, one more query, and
-  answers 503 without reading the rows while it is set. Once a publication
+  answers 404 without reading the rows while it is set. Once a publication
   has restored the version, the first such read finds it clear, selects the
   version again, keeps the new selection and answers 200; later reads need no
   extra query.
@@ -739,8 +745,8 @@ runs, also after one failed promotion, so traffic moved back to the preceding
 revision reads a complete snapshot. A revision that runs any other stored
 version may run a pruned one, and what it answers then depends on its code:
 
-- A revision that includes catalog pruning answers 503 with
-  `Cache-Control: no-store` on `/v2/parameter-values`,
+- A revision that includes catalog pruning answers 404 (503 before issue
+  #4243) with `Cache-Control: no-store` on `/v2/parameter-values`,
   `/v2/parameter-values/{value_id}`, `/v2/parameters/children`,
   `/v2/parameters/search-file`, `/v2/model-catalog/variables` and
   `/v2/model-catalog/parameters`.

@@ -458,7 +458,8 @@ version in `policyengine_version` on `/v2/parameter-values`,
 holding no current-law values, `Cache-Control: public, max-age=86400` and an
 `ETag`. The maintainers accepted this for that one release, because nothing
 in production calls these routes with an older version until the v3 switch.
-Later releases' previous revisions read the column and answer 503. The Stage
+Later releases' previous revisions read the column and answer 404 (503
+before issue #4243). The Stage
 9 runbook's "Pre-activation sequence" describes the window.
 
 The maintainers' approval of this exception is the review of the pull request
