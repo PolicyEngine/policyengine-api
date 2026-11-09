@@ -44,6 +44,10 @@ from policyengine_api.services.v2.identity.types import (
     UserPrincipal,
 )
 
+MACHINE_CLIENT_FORBIDDEN_MESSAGE = (
+    "This resource requires a signed-in user; machine clients are not permitted"
+)
+
 
 def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     """Return the signed-in user principal or raise a typed HTTP failure."""
@@ -67,10 +71,7 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
         msg = "User authentication is unavailable"
         raise V2AuthenticationUnavailableError(msg) from error
     if principal.kind is PrincipalKind.CLIENT:
-        msg = (
-            "This resource requires a signed-in user; machine clients are not permitted"
-        )
-        raise V2PermissionDeniedError(msg)
+        raise V2PermissionDeniedError(MACHINE_CLIENT_FORBIDDEN_MESSAGE)
     return UserPrincipal(
         issuer=principal.issuer,
         subject=principal.subject,

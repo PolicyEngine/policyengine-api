@@ -544,6 +544,7 @@ def test_a_bearer_token_is_unavailable_without_auth_settings(
     path: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(SERVER_CLIENT_IDS_ENV)
+    monkeypatch.delenv(SERVER_ISSUER_ENV)
     for name in user_auth.PUBLIC_API_AUTH_ENV_VARS:
         monkeypatch.delenv(name)
     application = _application()

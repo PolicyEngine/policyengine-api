@@ -144,8 +144,29 @@ if [[ -n "${server_client_ids//[[:space:]]/}" ]]; then
     echo "PUBLIC_API_SERVER_CLIENT_IDS must be Auth0 client IDs separated by commas, with no spaces or empty entries" >&2
     exit 1
   fi
-  if [[ -z "${PUBLIC_API_AUTH_ISSUER:-}" || -z "${PUBLIC_API_AUTH_AUDIENCE:-}" ]]; then
-    echo "PUBLIC_API_SERVER_CLIENT_IDS requires PUBLIC_API_AUTH_ISSUER and PUBLIC_API_AUTH_AUDIENCE" >&2
+  if [[ -z "${PUBLIC_API_SERVER_AUTH_ISSUER:-}" || -z "${PUBLIC_API_AUTH_AUDIENCE:-}" ]]; then
+    echo "PUBLIC_API_SERVER_CLIENT_IDS requires PUBLIC_API_SERVER_AUTH_ISSUER and PUBLIC_API_AUTH_AUDIENCE" >&2
+    exit 1
+  fi
+fi
+
+# Optional: the issuer of server tokens, the Public API's own Auth0 tenant
+# (decision 1.1 · 5). Server tokens carry the same audience as users' tokens,
+# and the two issuers must differ, because the server issuer's tokens are
+# accepted only from clients.
+server_issuer="${PUBLIC_API_SERVER_AUTH_ISSUER:-}"
+if [[ -n "${server_issuer}" ]]; then
+  if [[ "${server_issuer}" != https://* ]]; then
+    echo "PUBLIC_API_SERVER_AUTH_ISSUER must be an absolute HTTPS URL" >&2
+    exit 1
+  fi
+  if [[ -z "${PUBLIC_API_AUTH_AUDIENCE:-}" ]]; then
+    echo "PUBLIC_API_SERVER_AUTH_ISSUER requires PUBLIC_API_AUTH_AUDIENCE" >&2
+    exit 1
+  fi
+  users_issuer="${PUBLIC_API_AUTH_ISSUER:-}"
+  if [[ -n "${users_issuer}" && "${server_issuer%/}" == "${users_issuer%/}" ]]; then
+    echo "PUBLIC_API_SERVER_AUTH_ISSUER must differ from PUBLIC_API_AUTH_ISSUER" >&2
     exit 1
   fi
 fi
