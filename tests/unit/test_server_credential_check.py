@@ -10,14 +10,12 @@ request without a credential is still served.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
 
@@ -30,19 +28,27 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.migration_logging import register_migration_request_logging
 from policyengine_api.services.v2.countries.types import CountryRead
+from tests.unit.credential_token_support import (
+    ALLOWED_CLIENT_ID,
+    AUDIENCE,
+    EXPIRED,
+    ISSUER,
+    OTHER_SIGNING_KEY,
+    SECOND_ALLOWED_CLIENT_ID,
+    SERVER_CLIENT_IDS_ENV,
+    UNLISTED_CLIENT_ID,
+    USER_SUBJECT,
+    StaticJWKClient,
+    bearer,
+    configure_credentials,
+    install_token_decoder,
+    server_token,
+    signed_token,
+    user_token,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-ISSUER = "https://auth.example.test/"
-AUDIENCE = "https://api.policyengine.org/"
-SERVER_CLIENT_IDS_ENV = "PUBLIC_API_SERVER_CLIENT_IDS"
-ALLOWED_CLIENT_ID = "AllowedServerClient0000000000001"
-SECOND_ALLOWED_CLIENT_ID = "AllowedServerClient0000000000002"
-UNLISTED_CLIENT_ID = "UnlistedServerClient000000000003"
-USER_SUBJECT = "google-oauth2|1234567890"
-SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-OTHER_SIGNING_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 FLASK_PATH = "/us/metadata"
 NATIVE_PATH = "/v2/countries"
@@ -59,81 +65,40 @@ CREDENTIAL_LOGGER_NAMES = (
 )
 
 
-def _token(*, signing_key: rsa.RSAPrivateKey = SIGNING_KEY, **claims: object) -> str:
-    issued_at = datetime.now(UTC)
-    payload: dict[str, object] = {
-        "iss": ISSUER,
-        "aud": AUDIENCE,
-        "iat": issued_at,
-        "exp": issued_at + timedelta(minutes=10),
-    }
-    payload.update(claims)
-    present_claims = {
-        name: value for name, value in payload.items() if value is not None
-    }
-    return jwt.encode(present_claims, signing_key, algorithm="RS256")
-
-
-def _server_token(client_id: str = ALLOWED_CLIENT_ID, **claims: object) -> str:
-    return _token(
-        sub=f"{client_id}@clients",
-        azp=client_id,
-        gty="client-credentials",
-        **claims,
-    )
-
-
-def _user_token(**claims: object) -> str:
-    return _token(sub=USER_SUBJECT, azp="BrowserSignInClient0000000000004", **claims)
-
-
 def _bearer(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": bearer(token)}
 
 
-EXPIRED = datetime.now(UTC) - timedelta(minutes=1)
 REFUSED_AUTHORIZATION_HEADERS = {
     "bearer-not-a-jwt": "Bearer not-a-jwt",
     "bearer-without-a-token": "Bearer",
     "basic-scheme": "Basic dXNlcjpwYXNzd29yZA==",
-    "expired-server-token": f"Bearer {_server_token(exp=EXPIRED)}",
-    "server-token-for-another-audience": (
-        f"Bearer {_server_token(aud='https://other-api.example.test/')}"
+    "expired-server-token": bearer(server_token(exp=EXPIRED)),
+    "server-token-for-another-audience": bearer(
+        server_token(aud="https://other-api.example.test/")
     ),
-    "server-token-from-another-issuer": (
-        f"Bearer {_server_token(iss='https://other-tenant.example.test/')}"
+    "server-token-from-another-issuer": bearer(
+        server_token(iss="https://other-tenant.example.test/")
     ),
-    "server-token-with-another-signing-key": (
-        f"Bearer {_server_token(signing_key=OTHER_SIGNING_KEY)}"
+    "server-token-with-another-signing-key": bearer(
+        server_token(signing_key=OTHER_SIGNING_KEY)
     ),
-    "unlisted-client": f"Bearer {_server_token(UNLISTED_CLIENT_ID)}",
-    "client-grant-without-a-client-subject": (
-        f"Bearer {_token(sub='not-a-client-subject', gty='client-credentials')}"
+    "unlisted-client": bearer(server_token(UNLISTED_CLIENT_ID)),
+    "client-grant-without-a-client-subject": bearer(
+        signed_token(sub="not-a-client-subject", gty="client-credentials")
     ),
-    "expired-user-token": f"Bearer {_user_token(exp=EXPIRED)}",
-    "user-token-with-another-signing-key": (
-        f"Bearer {_user_token(signing_key=OTHER_SIGNING_KEY)}"
+    "expired-user-token": bearer(user_token(exp=EXPIRED)),
+    "user-token-with-another-signing-key": bearer(
+        user_token(signing_key=OTHER_SIGNING_KEY)
     ),
-    "hs256-token": "Bearer "
-    + jwt.encode(
-        {"iss": ISSUER, "aud": AUDIENCE, "sub": f"{ALLOWED_CLIENT_ID}@clients"},
-        "shared-secret-" * 4,
-        algorithm="HS256",
+    "hs256-token": bearer(
+        jwt.encode(
+            {"iss": ISSUER, "aud": AUDIENCE, "sub": f"{ALLOWED_CLIENT_ID}@clients"},
+            "shared-secret-" * 4,
+            algorithm="HS256",
+        )
     ),
 }
-
-
-class StaticJWKClient:
-    """Serve one public key, or raise ``error``, without a network."""
-
-    def __init__(self, error: Exception | None = None) -> None:
-        self._public_key = SIGNING_KEY.public_key()
-        self._error = error
-
-    def get_signing_key_from_jwt(self, _token: str) -> SimpleNamespace:
-        if self._error is not None:
-            raise self._error
-        return SimpleNamespace(key=self._public_key)
 
 
 class FakeCountryService:
@@ -156,19 +121,12 @@ class RecordingHandler(logging.Handler):
 
 @pytest.fixture
 def install_signing_keys(monkeypatch: pytest.MonkeyPatch):
-    """Configure the Public API's Auth0 settings and its token decoder."""
-    monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_REQUIRED_ENV, "1")
-    monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_ISSUER_ENV, ISSUER)
-    monkeypatch.setenv(user_auth.PUBLIC_API_AUTH_AUDIENCE_ENV, AUDIENCE)
-    monkeypatch.setenv(
-        SERVER_CLIENT_IDS_ENV, f"{ALLOWED_CLIENT_ID},{SECOND_ALLOWED_CLIENT_ID}"
-    )
+    """Configure the Public API's Auth0 settings, allow list and token decoder."""
+    configure_credentials(monkeypatch)
 
     def install(jwks_client: StaticJWKClient) -> None:
-        decoder = user_auth.JWTDecoder(ISSUER, AUDIENCE, jwks_client=jwks_client)
-        monkeypatch.setattr(user_auth, "_decoder", lambda _issuer, _audience: decoder)
+        install_token_decoder(monkeypatch, jwks_client)
 
-    install(StaticJWKClient())
     return install
 
 
@@ -301,7 +259,7 @@ def test_an_allowed_server_credential_is_served_and_its_client_recorded(
 ) -> None:
     application = _application()
 
-    response = application.client.get(path, headers=_bearer(_server_token(client_id)))
+    response = application.client.get(path, headers=_bearer(server_token(client_id)))
 
     assert response.status_code == 200
     assert _route_calls(application) == 1
@@ -337,7 +295,7 @@ def test_every_allowed_client_is_refused_while_the_allow_list_is_empty(
     application = _application()
 
     response = application.client.post(
-        "/us/calculate", headers=_bearer(_server_token()), json={}
+        "/us/calculate", headers=_bearer(server_token()), json={}
     )
 
     _assert_refused(response)
@@ -369,7 +327,7 @@ def test_two_authorization_headers_are_refused_even_when_one_is_valid() -> None:
     response = application.client.get(
         FLASK_PATH,
         headers=[
-            ("Authorization", f"Bearer {_server_token()}"),
+            ("Authorization", f"Bearer {server_token()}"),
             ("Authorization", "Bearer made-up"),
         ],
     )
@@ -385,7 +343,7 @@ def test_a_signed_in_users_token_is_served_and_recorded_without_the_user(
 ) -> None:
     application = _application()
 
-    response = application.client.get(path, headers=_bearer(_user_token()))
+    response = application.client.get(path, headers=_bearer(user_token()))
 
     assert response.status_code == 200
     assert _route_calls(application) == 1
@@ -401,7 +359,7 @@ def test_refusals_are_logged_at_info_with_their_reason(
 
     application.client.get(FLASK_PATH, headers={"Authorization": "Bearer made-up"})
     application.client.get(
-        FLASK_PATH, headers=_bearer(_server_token(UNLISTED_CLIENT_ID))
+        FLASK_PATH, headers=_bearer(server_token(UNLISTED_CLIENT_ID))
     )
 
     refusals = [
@@ -434,7 +392,7 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
     )
     application = _application()
 
-    refused = application.client.get(path, headers=_bearer(_server_token()))
+    refused = application.client.get(path, headers=_bearer(server_token()))
     served = application.client.get(path)
 
     assert refused.status_code == 503
@@ -453,7 +411,7 @@ def test_a_bearer_token_is_unavailable_without_auth_settings(
         monkeypatch.delenv(name)
     application = _application()
 
-    refused = application.client.get(path, headers=_bearer(_server_token()))
+    refused = application.client.get(path, headers=_bearer(server_token()))
     served = application.client.get(path)
 
     assert refused.status_code == 503
@@ -470,7 +428,7 @@ def test_a_malformed_allow_list_makes_a_bearer_token_unavailable(
     monkeypatch.setenv(SERVER_CLIENT_IDS_ENV, allow_list)
     application = _application()
 
-    refused = application.client.get(FLASK_PATH, headers=_bearer(_server_token()))
+    refused = application.client.get(FLASK_PATH, headers=_bearer(server_token()))
     served = application.client.get(FLASK_PATH)
 
     assert refused.status_code == 503
