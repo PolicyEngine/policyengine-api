@@ -63,6 +63,9 @@ UNREADABLE_REFORM = {
     ALLOWANCE: {"2026-01-01": 12570, "2027-01-01": "13000"},
 }
 UNREADABLE_OTHER_REFORM = {RATE: {"2026-13-01": 0.22}}
+SCALAR_TEXT_POLICY_ID = 9
+# A value without periods, which .py applies from 1 January, stored as text.
+SCALAR_TEXT_REFORM = {RATE: "0.21"}
 VALUE_REQUIREMENT = (
     'a finite number, a boolean, null, a list, or the string "Infinity" or "-Infinity"'
 )
@@ -123,6 +126,10 @@ ROUTE_QUERIES = {
 REFUSAL_LOG_MESSAGE = (
     "Refused economic impact request for a stored policy that simulations can't read"
 )
+SKIPPED_CHECK_LOG_MESSAGE = (
+    "Could not check the stored policies before replaying a stored economic "
+    "impact failure"
+)
 WORKER_ERROR = (
     "ParameterParsingError: Value in gov.hmrc.income_tax.rates.uk[0].rate"
     "[2026-01-01] has type <class 'str'>"
@@ -155,6 +162,7 @@ class EconomyHarness:
     route: str
     gateway: Mock
     stored_policies: dict[int, dict]
+    policy_lookup: Mock
     cache_backend: InMemoryCacheBackend
     annual_claim: Mock
     budget_window_claim: Mock
@@ -235,6 +243,7 @@ def economy_harness(request, monkeypatch) -> EconomyHarness:
         CURRENT_LAW_POLICY_ID: {},
         REFORM_POLICY_ID: UNREADABLE_REFORM,
         OTHER_REFORM_POLICY_ID: UNREADABLE_OTHER_REFORM,
+        SCALAR_TEXT_POLICY_ID: SCALAR_TEXT_REFORM,
     }
     policies = Mock()
     policies.get_policy_json.side_effect = lambda country_id, policy_id: (
@@ -277,6 +286,7 @@ def economy_harness(request, monkeypatch) -> EconomyHarness:
         route=request.param,
         gateway=gateway,
         stored_policies=stored_policies,
+        policy_lookup=policies,
         cache_backend=cache_backend,
         annual_claim=annual_claim,
         budget_window_claim=budget_window_claim,
@@ -406,3 +416,77 @@ def test_a_stored_failure_of_a_readable_policy_is_replayed_as_before(
     assert replayed.get_json()["status"] == "error"
     assert WORKER_ERROR in replayed.get_json()["message"]
     assert economy_harness.collected.with_message(REFUSAL_LOG_MESSAGE) == []
+
+
+def test_a_value_without_periods_that_simulations_cannot_read_answers_422(
+    economy_harness,
+):
+    response = economy_harness.get(SCALAR_TEXT_POLICY_ID, CURRENT_LAW_POLICY_ID)
+
+    _assert_refused_without_error_records(
+        economy_harness,
+        response,
+        [SCALAR_TEXT_POLICY_ID],
+        [
+            {
+                "type": "policy_value",
+                "name": RATE,
+                "path": f"data.{RATE}",
+                "message": (
+                    f"Value at `data.{RATE}` must be {VALUE_REQUIREMENT}, "
+                    'but it is "0.21".'
+                ),
+                "policy_id": SCALAR_TEXT_POLICY_ID,
+            }
+        ],
+    )
+    assert economy_harness.submitted_payloads() == []
+
+
+@pytest.mark.parametrize(
+    "reform",
+    [
+        {RATE: {"2026-1-1": 0.21}},
+        {RATE: {"2026-4-6.2027-4-5": 0.21}},
+        {RATE: 0.21},
+    ],
+    ids=["unpadded-date", "unpadded-date-range", "value-without-periods"],
+)
+def test_stored_policies_economy_simulations_read_are_submitted_unchanged(
+    economy_harness, reform
+):
+    """New policies may not be saved this way, but economy simulations read them.
+
+    The simulation service parses period keys with ``strptime``, which also
+    reads unpadded months and days, and .py applies a value without periods
+    from 1 January of the simulated year.
+    """
+    economy_harness.stored_policies[REFORM_POLICY_ID] = reform
+
+    response = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+
+    assert response.status_code == 200, response.get_json()
+    [payload] = economy_harness.submitted_payloads()
+    assert payload["reform"] == reform
+    assert economy_harness.collected.with_message(REFUSAL_LOG_MESSAGE) == []
+
+
+def test_a_stored_failure_is_replayed_as_before_when_the_policies_cannot_be_read(
+    economy_harness,
+):
+    """The check before a replay must not make the replay fail."""
+    economy_harness.stored_policies[REFORM_POLICY_ID] = READABLE_REFORM
+    economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+    economy_harness.report_the_job_failed()
+    failed = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+    message = "policy table unavailable"
+    economy_harness.policy_lookup.get_policy_json.side_effect = RuntimeError(message)
+    economy_harness.collected.records.clear()
+
+    replayed = economy_harness.get(REFORM_POLICY_ID, CURRENT_LAW_POLICY_ID)
+
+    assert replayed.status_code == failed.status_code, replayed.get_json()
+    assert replayed.get_json() == failed.get_json()
+    [skipped] = economy_harness.collected.with_message(SKIPPED_CHECK_LOG_MESSAGE)
+    assert skipped["severity"] == "WARNING"
+    assert skipped["attributes"]["error_type"] == "RuntimeError"
