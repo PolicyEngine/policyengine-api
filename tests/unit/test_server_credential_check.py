@@ -12,12 +12,14 @@ from __future__ import annotations
 import logging
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import Mock, create_autospec
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
+from policyengine_observability import ObservabilityRuntime
+from policyengine_observability.schema import normalize_attributes
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -27,6 +29,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.services.v2.countries.types import CountryRead
 from tests.unit.credential_token_support import (
@@ -49,7 +52,7 @@ from tests.unit.credential_token_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 FLASK_PATH = "/us/metadata"
 NATIVE_PATH = "/v2/countries"
@@ -60,7 +63,6 @@ ROUTE_PATHS = pytest.mark.parametrize(
 REFUSAL_BODY = b'{"status":"error","message":"Authentication is required"}'
 UNAVAILABLE_BODY = {"status": "error", "message": "Authentication is unavailable"}
 CREDENTIAL_LOGGER_NAMES = (
-    "policyengine_api.request_caller",
     "policyengine_api.libs.server_credentials",
     "policyengine_api.libs.user_auth",
 )
@@ -70,30 +72,34 @@ def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": bearer(token)}
 
 
-REFUSED_AUTHORIZATION_HEADERS = {
-    "bearer-not-a-jwt": "Bearer not-a-jwt",
-    "bearer-without-a-token": "Bearer",
-    "basic-scheme": "Basic dXNlcjpwYXNzd29yZA==",
-    "expired-server-token": bearer(server_token(exp=EXPIRED)),
-    "server-token-for-another-audience": bearer(
+# Each value is built when the test runs, so a token signed for ten minutes
+# can't expire between collection and the test and pass for the wrong reason.
+REFUSED_AUTHORIZATION_HEADERS: dict[str, Callable[[], str]] = {
+    "bearer-not-a-jwt": lambda: "Bearer not-a-jwt",
+    "bearer-without-a-token": lambda: "Bearer",
+    "basic-scheme": lambda: "Basic dXNlcjpwYXNzd29yZA==",
+    "expired-server-token": lambda: bearer(server_token(exp=EXPIRED)),
+    "server-token-for-another-audience": lambda: bearer(
         server_token(aud="https://other-api.example.test/")
     ),
-    "server-token-from-another-issuer": bearer(
+    "server-token-from-another-issuer": lambda: bearer(
         server_token(iss="https://other-tenant.example.test/")
     ),
-    "server-token-with-another-signing-key": bearer(
+    "server-token-with-another-signing-key": lambda: bearer(
         server_token(signing_key=OTHER_SIGNING_KEY)
     ),
-    "unlisted-client": bearer(server_token(UNLISTED_CLIENT_ID)),
-    "user-subject-ending-in-clients": bearer(signed_token(sub="auth0|someone@clients")),
-    "client-grant-without-a-client-subject": bearer(
+    "unlisted-client": lambda: bearer(server_token(UNLISTED_CLIENT_ID)),
+    "user-subject-ending-in-clients": lambda: bearer(
+        signed_token(sub="auth0|someone@clients")
+    ),
+    "client-grant-without-a-client-subject": lambda: bearer(
         signed_token(sub="not-a-client-subject", gty="client-credentials")
     ),
-    "expired-user-token": bearer(user_token(exp=EXPIRED)),
-    "user-token-with-another-signing-key": bearer(
+    "expired-user-token": lambda: bearer(user_token(exp=EXPIRED)),
+    "user-token-with-another-signing-key": lambda: bearer(
         user_token(signing_key=OTHER_SIGNING_KEY)
     ),
-    "hs256-token": bearer(
+    "hs256-token": lambda: bearer(
         jwt.encode(
             {"iss": ISSUER, "aud": AUDIENCE, "sub": f"{ALLOWED_CLIENT_ID}@clients"},
             "shared-secret-" * 4,
@@ -156,7 +162,8 @@ def credential_log_records() -> Iterator[list[logging.LogRecord]]:
 
 
 def _recording_runtime() -> Mock:
-    runtime = Mock()
+    # Checked against the runtime's own signatures, so a changed call fails.
+    runtime = create_autospec(ObservabilityRuntime, instance=True)
     runtime.begin_request.return_value = "request-id-0001"
     runtime.response_headers.return_value = {}
     runtime.capture_context.return_value = {}
@@ -288,17 +295,19 @@ def test_an_allowed_server_credential_is_served_and_its_client_recorded(
 
 @ROUTE_PATHS
 @pytest.mark.parametrize(
-    "authorization",
+    "build_authorization",
     list(REFUSED_AUTHORIZATION_HEADERS.values()),
     ids=list(REFUSED_AUTHORIZATION_HEADERS),
 )
 @pytest.mark.usefixtures("install_signing_keys")
 def test_a_credential_that_fails_validation_is_refused_before_the_route(
-    path: str, authorization: str
+    path: str, build_authorization: Callable[[], str]
 ) -> None:
     application = _application()
 
-    response = application.client.get(path, headers={"Authorization": authorization})
+    response = application.client.get(
+        path, headers={"Authorization": build_authorization()}
+    )
 
     _assert_refused(response)
     assert _route_calls(application) == 0
@@ -351,6 +360,10 @@ def test_two_authorization_headers_are_refused_even_when_one_is_valid() -> None:
 
     _assert_refused(response)
     assert application.flask_calls == []
+    assert [
+        attributes["refusal_reason"]
+        for _name, _severity, attributes in _credential_events(application.runtime)
+    ] == ["duplicate_authorization_header"]
 
 
 @ROUTE_PATHS
@@ -411,6 +424,41 @@ def test_every_refusal_is_recorded_at_info_with_its_reason_and_request_id() -> N
 
 
 @ROUTE_PATHS
+@pytest.mark.usefixtures("install_signing_keys")
+def test_a_malformed_host_header_still_gets_the_refusal(path: str) -> None:
+    # Starlette builds request.url from Host; "[" makes it raise. The client
+    # returns a server error as a response, so the status is what is checked.
+    application = _application()
+    client = TestClient(application.client.app, raise_server_exceptions=False)
+
+    response = client.get(
+        path, headers={"Host": "[", "Authorization": "Bearer made-up"}
+    )
+
+    _assert_refused(response)
+    ((_severity, attributes),) = [
+        (severity, recorded_attributes)
+        for _name, severity, recorded_attributes in _credential_events(
+            application.runtime
+        )
+    ]
+    assert attributes["url.path"] == path
+
+
+@pytest.mark.usefixtures("install_signing_keys")
+def test_a_refusal_records_the_decoded_path_the_routers_match() -> None:
+    application = _application()
+
+    application.client.get(
+        "/us/metadata%3Fpart",
+        headers={"Host": "api.example.test/v2/me?", "Authorization": "Bearer made-up"},
+    )
+
+    ((_name, _severity, attributes),) = _credential_events(application.runtime)
+    assert attributes["url.path"] == "/us/metadata?part"
+
+
+@ROUTE_PATHS
 def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
     path: str, install_signing_keys
 ) -> None:
@@ -432,6 +480,8 @@ def test_a_bearer_token_is_unavailable_when_signing_keys_cannot_be_fetched(
             "WARNING",
             {
                 "error_type": "CredentialCheckUnavailableError",
+                "http.request.method": "GET",
+                "url.path": path,
                 "request.id": refused.headers[REQUEST_ID_HEADER],
             },
         )
@@ -471,3 +521,36 @@ def test_a_malformed_allow_list_makes_a_bearer_token_unavailable(
     assert refused.status_code == 503
     assert refused.json() == UNAVAILABLE_BODY
     assert served.status_code == 200
+
+
+def test_recorded_attributes_survive_the_runtimes_attribute_rules(
+    install_signing_keys,
+) -> None:
+    """The runtime drops attributes whose names contain parts such as "token".
+
+    A Mock runtime accepts any name, so each recorded name is checked against
+    the configured runtime's own rules.
+    """
+    application = _application()
+    application.client.get(FLASK_PATH, headers=_bearer(server_token()))
+    application.client.get(FLASK_PATH, headers={"Authorization": "Bearer made-up"})
+    application.client.get(
+        FLASK_PATH, headers=_bearer(server_token(UNLISTED_CLIENT_ID))
+    )
+    install_signing_keys(
+        StaticJWKClient(error=jwt.PyJWKClientConnectionError("unreachable"))
+    )
+    application.client.get(NATIVE_PATH, headers=_bearer(server_token()))
+
+    recorded = [
+        attributes
+        for _name, _severity, attributes in _credential_events(application.runtime)
+    ] + [_recorded_caller(application.runtime)]
+    config = get_runtime().config
+    assert len(recorded) == 4
+    for attributes in recorded:
+        normalized, omitted = normalize_attributes(
+            attributes, config, allowed_keys=config.local_attribute_keys
+        )
+        assert omitted == 0
+        assert normalized == attributes

@@ -317,6 +317,8 @@ def test_a_malformed_enforcement_setting_fails_closed(
                 "severity": "WARNING",
                 "attributes": {
                     "error_type": "UserAuthConfigurationError",
+                    "http.request.method": "GET",
+                    "url.path": "/us/metadata",
                     "request.id": refused.headers[REQUEST_ID_HEADER],
                 },
             },
