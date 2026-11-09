@@ -59,12 +59,20 @@ Uppercase, unhyphenated, braced, and `urn:uuid:` forms are rejected.
 Bearer tokens are RS256 Auth0 access tokens for the Public API audience.
 `libs/user_auth.py` validates them against `{issuer}.well-known/jwks.json` and
 checks `iss` and `aud`. The decoder is ported from the Simulation Entrypoint.
-For a bearer token:
+For a bearer token in `Authorization`, the credential check before routing
+answers first (see [Settings](#settings)):
 
-- an invalid token: 401 with `WWW-Authenticate: Bearer error="invalid_token"`
-  (an invalid token never falls back to the header);
-- a machine-to-machine (`…@clients`) token: 403;
+- an invalid token, or another scheme: 401 with `WWW-Authenticate: Bearer`
+  and "Authentication is required" (an invalid token never falls back to the
+  header);
+- a machine-to-machine (`…@clients`) token of a client not in
+  `PUBLIC_API_SERVER_CLIENT_IDS`: the same 401;
+- a listed client's token: 403 on the user routes, which need a user;
 - authentication not configured, or signing keys unreachable: 503.
+
+The user routes' own `WWW-Authenticate: Bearer error="invalid_token"`
+answer remains for a token that passes the check and then fails the routes'
+second validation, for example by expiring in between.
 
 The type alias `AccountPrincipal = UserPrincipal | UnauthenticatedPrincipal`
 flows from the routes through every service.

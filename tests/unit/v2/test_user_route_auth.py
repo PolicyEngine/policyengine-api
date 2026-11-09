@@ -488,6 +488,25 @@ def test_a_bearer_token_without_auth_settings_is_unavailable_beside_the_header(
     assert not services["account"].calls
 
 
+def test_another_scheme_beside_the_unauthenticated_header_is_refused() -> None:
+    # The credential check before routing refuses any Authorization header that
+    # is not a valid credential, so it no longer falls back to the header.
+    services, factories = _services()
+    client, _flask_calls = user_route_client(require_user=None, **factories)
+
+    response = client.get(
+        "/v2/user-policies?country_id=us",
+        headers={
+            "Authorization": "Basic dXNlcjpwYXNzd29yZA==",
+            UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert not services["policy"].calls
+
+
 def test_upgrade_with_only_the_unauthenticated_header_requires_sign_in() -> None:
     services, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
