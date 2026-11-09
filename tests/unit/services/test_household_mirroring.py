@@ -19,6 +19,7 @@ from policyengine_api.services.v2.households.types import (
 )
 from policyengine_api.services.v2.households.validators import (
     LegacyHouseholdTranslationError,
+    LegacyHouseholdTranslationReason,
 )
 
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -138,19 +139,28 @@ def test_logging_failure_does_not_mask_copy_failure() -> None:
 
 
 @pytest.mark.parametrize(
-    ("error", "category"),
+    ("error", "category", "failure_reason"),
     [
-        (LegacyHouseholdTranslationError("private value"), "translation"),
+        (
+            LegacyHouseholdTranslationError(
+                "private value",
+                reason=LegacyHouseholdTranslationReason.PERSON_NOT_OBJECT,
+            ),
+            "translation",
+            "legacy_person_not_object",
+        ),
         (
             OperationalError("statement secret", {}, Exception("credential")),
             "database",
+            None,
         ),
-        (RuntimeError("household content secret"), "unexpected"),
+        (RuntimeError("household content secret"), "unexpected", None),
     ],
 )
 def test_destination_failure_is_secret_safe_and_leaves_event_pending(
     error: Exception,
     category: str,
+    failure_reason: str | None,
 ) -> None:
     mirror = MagicMock()
     mirror.mirror_legacy_household.side_effect = error
@@ -168,6 +178,8 @@ def test_destination_failure_is_secret_safe_and_leaves_event_pending(
 
     payload = logger.log_struct.call_args.args[0]
     assert payload["failure_category"] == category
+    assert payload["error_type"] == type(error).__name__
+    assert payload["failure_reason"] == failure_reason
     assert payload["actual_write_sources"] == ["cloud_sql"]
     assert payload["pending_event"] is True
     assert "secret" not in repr(payload)

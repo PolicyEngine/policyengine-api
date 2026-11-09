@@ -8,8 +8,10 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
+from policyengine_observability.schema import build_record
 from sqlalchemy.exc import OperationalError
 
+from policyengine_api.observability import get_runtime
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
     process_household_event_after_commit,
@@ -250,6 +252,51 @@ def test_household_translation_failure_logs_its_type_and_reason_only(
     assert severity == "ERROR"
     assert "Jane" not in json.dumps(payload)
     assert str(raised.value.__cause__) not in json.dumps(payload)
+
+
+def test_household_translation_failure_reason_reaches_the_log_record() -> None:
+    """The type and reason survive the runtime's attribute filter.
+
+    The runtime drops attributes whose keys name a household or a person, and
+    those that aren't scalars, so the failure's fields must not.
+    """
+    snapshot = _household_snapshot(UNTRANSLATABLE_HOUSEHOLDS["incomplete_memberships"])
+    mirror = MagicMock()
+    mirror.mirror_legacy_household.side_effect = translate_legacy_household
+    runtime = MagicMock()
+
+    with (
+        patch("policyengine_api.gcp_logging.get_runtime", return_value=runtime),
+        pytest.raises(HouseholdMirrorUnavailableError),
+    ):
+        process_household_event_after_commit(
+            "us",
+            42,
+            event_service=_household_event_service(
+                fail_after_destination=False, snapshot=snapshot
+            ),
+            mirror_factory=lambda: mirror,
+        )
+
+    (message,) = runtime.log.call_args.args
+    record = build_record(
+        get_runtime().config,
+        severity=runtime.log.call_args.kwargs["severity"],
+        message=message,
+        attributes=runtime.log.call_args.kwargs["attributes"],
+    )
+    assert record["severity"] == "ERROR"
+    assert record["message"] == "V1 household immediate copy failed"
+    assert {
+        key: record["attributes"].get(key)
+        for key in ("outcome", "failure_category", "error_type", "failure_reason")
+    } == {
+        "outcome": "error",
+        "failure_category": "translation",
+        "error_type": "LegacyHouseholdTranslationError",
+        "failure_reason": "incomplete_memberships",
+    }
+    assert PERSON_NAME not in json.dumps(record)
 
 
 def _policy_snapshot() -> LegacyPolicySnapshot:
