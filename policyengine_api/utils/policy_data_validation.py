@@ -114,7 +114,7 @@ def _invalid_entries_for_parameter(
                 input_type="policy_period",
                 parameter_path=parameter_path,
                 path=parameter_data_path,
-                received=_describe_value(period_values),
+                received=describe_value(period_values),
             )
         ]
     invalid_entries: list[InvalidPolicyEntry] = []
@@ -136,7 +136,7 @@ def _invalid_entries_for_parameter(
                     parameter_path=parameter_path,
                     path=entry_path,
                     period_key=period_key,
-                    received=_describe_value(value),
+                    received=describe_value(value),
                 )
             )
     return invalid_entries
@@ -169,7 +169,7 @@ def is_readable_value(value: object) -> bool:
     return isinstance(value, str) and value in _INFINITE_VALUE_STRINGS
 
 
-def _describe_value(value: object) -> str:
+def describe_value(value: object) -> str:
     """Describe a received JSON value: as JSON writes it, or by type if long."""
     written_value = json.dumps(value)
     if len(written_value) <= _MAX_QUOTED_VALUE_LENGTH:

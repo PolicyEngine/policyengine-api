@@ -47,7 +47,9 @@ class TestEconomyService:
                 "ORM baseline",
                 {},
             )
-            reform = {"gov.example.parameter": {"2026": 1}}
+            # A period key the simulation service reads: a bare year such as
+            # "2026" fails there, so the economy service refuses it with 422.
+            reform = {"gov.example.parameter": {"2026-01-01.2100-12-31": 1}}
             reform_policy_id, _, _ = policy_service.set_policy(
                 "us",
                 "ORM reform",
