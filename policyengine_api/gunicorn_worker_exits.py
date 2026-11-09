@@ -19,9 +19,11 @@ A worker that exits with an exit code writes no record, such as one that
 exits after serving gunicorn's ``max_requests``, nor does one that a signal
 ends normally:
 
-- SIGTERM, SIGINT or SIGQUIT: the signals gunicorn's main process sends to
-  stop a worker, gracefully or at once. Cloud Run stops an instance by sending
+- SIGTERM or SIGQUIT: the signals gunicorn's main process sends to stop a
+  worker, gracefully or at once. Cloud Run stops an instance by sending
   SIGTERM to the main process, which sends it on to the workers.
+- SIGINT, which an interrupt from a shell (Ctrl-C) sends to every process in
+  the group, workers included.
 - SIGKILL that the main process sent, except after the worker's timeout: when
   it shuts down, the main process kills the workers still running once its
   graceful timeout ends.

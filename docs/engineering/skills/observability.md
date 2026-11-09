@@ -201,8 +201,9 @@ first three words, so each signal gets a group of its own, and names the
 operation in the issue's title.
 
 - A worker that exits with an exit code writes no record, nor does one that
-  SIGTERM, SIGINT or SIGQUIT ends (gunicorn's stop signals; Cloud Run's
-  SIGTERM reaches workers through the master), nor one that SIGKILL ends after
+  SIGTERM or SIGQUIT ends (gunicorn's stop signals; Cloud Run's SIGTERM
+  reaches workers through the master) or SIGINT ends (a shell's Ctrl-C reaches
+  every process in the group), nor one that SIGKILL ends after
   the master sent it SIGKILL itself, as it does to workers still running when
   its graceful timeout ends at shutdown. A worker the master killed after its
   timeout (`worker.aborted`) is recorded.
