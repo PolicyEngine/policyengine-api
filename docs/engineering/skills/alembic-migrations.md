@@ -427,7 +427,8 @@ before the usual exact comparison of the stored version, and writes the
 version's parameter tree and search file as it does for a version that has
 none. The rows it writes equal those a first publication of the version
 writes, with the same value IDs. Until then the metadata routes that serve
-the deleted rows answer 503 for that version, with `Cache-Control: no-store`.
+the deleted rows answer 404 for that version, with `Cache-Control: no-store`,
+or 503 when it is the version the serving revision runs.
 
 The catalog writer holds `DELETE` on the three tables and `UPDATE` on
 `tax_benefit_model_versions` for this (`privileges.py`). Pruning runs no DDL;
@@ -458,7 +459,8 @@ version in `policyengine_version` on `/v2/parameter-values`,
 holding no current-law values, `Cache-Control: public, max-age=86400` and an
 `ETag`. The maintainers accepted this for that one release, because nothing
 in production calls these routes with an older version until the v3 switch.
-Later releases' previous revisions read the column and answer 503. The Stage
+Later releases' previous revisions read the column and answer 404 (503
+before issue #4243). The Stage
 9 runbook's "Pre-activation sequence" describes the window.
 
 The maintainers' approval of this exception is the review of the pull request
