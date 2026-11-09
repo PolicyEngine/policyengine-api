@@ -153,11 +153,12 @@ def _route_calls(application: SimpleNamespace) -> int:
     return len(application.flask_calls) + application.country_service.list_calls
 
 
-def _assert_refused(response) -> None:
+def _assert_refused(response, method: str = "GET") -> None:
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
     assert response.headers["content-type"] == "application/json"
-    assert response.content == REFUSAL_BODY
+    # A response to HEAD has the headers of the refusal but no body.
+    assert response.content == (b"" if method == "HEAD" else REFUSAL_BODY)
 
 
 @pytest.mark.parametrize(("method", "path"), NON_PUBLIC_REQUESTS)
@@ -169,7 +170,7 @@ def test_enforcement_refuses_every_request_without_a_credential_before_routing(
 
     response = application.client.request(method, path)
 
-    _assert_refused(response)
+    _assert_refused(response, method)
     assert _route_calls(application) == 0
 
 

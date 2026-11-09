@@ -62,8 +62,10 @@ to the request's runtime record, for Flask and native routes alike:
   client-credentials token) or `user` (a signed-in user's valid token);
 - `caller.client_id`: the server's Auth0 client ID, only for `server`.
 
-A user's subject or email address is never recorded. A request without a
-credential logs nothing of its own. A refused credential is logged at INFO as
+A user's subject or email address is never recorded. While enforcement is
+off, a request without a credential logs nothing of its own; with
+`PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1` its refusal is logged at INFO with
+`refusal_reason=credential_required` and its `caller.kind`. A refused credential is logged at INFO as
 `public_api_credential_refused`, with `refusal_reason`, the method, the path
 and, for a valid token of an unlisted client, `caller.client_id`; a bearer
 token that cannot be checked is logged at WARNING as

@@ -441,6 +441,7 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
+| `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED` | GitHub variable (optional) | `1` refuses every request without a server credential outside the public routes; unset, empty or `0` (what deploys write by default) serves them. `1` needs `PUBLIC_API_SERVER_CLIENT_IDS` |
 | `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs the issuer and audience |
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
@@ -478,6 +479,17 @@ runs; an expired user token is refused there too, so a user route no longer
 answers it with `error="invalid_token"`. A bearer token that cannot be checked
 gets 503. A signed-in user's valid token passes the check and the user route
 checks it again.
+
+With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, the same check, before route
+matching, also refuses every request that has no server credential, a
+signed-in user's own token included, with that 401. `/` and unknown paths are
+refused too; a server gets the normal 404 for an unknown path. Only
+`GET`/`HEAD /health`, `GET /v2/openapi.json` and CORS preflights (`OPTIONS`
+with `Access-Control-Request-Method`) answer without a credential, matched
+exactly on the decoded path. They are exempted in the Public API's own code,
+because Cloud Run's startup probe calls `/health` on the container directly.
+A malformed value, or `1` with no allowed client, answers 503 outside those
+routes and fails readiness.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:

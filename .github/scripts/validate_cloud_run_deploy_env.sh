@@ -150,6 +150,23 @@ if [[ -n "${server_client_ids//[[:space:]]/}" ]]; then
   fi
 fi
 
+# Optional: 1 refuses every request without a server credential outside the
+# public routes. Unset, empty or 0 keeps enforcement off; the deploy writes 0.
+# Switching it on with no allowed client would refuse every request.
+server_credential_required="${PUBLIC_API_SERVER_CREDENTIAL_REQUIRED:-}"
+case "${server_credential_required}" in
+  ""|0|1) ;;
+  *)
+    printf '%s=%s is invalid; expected 0 or 1\n' \
+      "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED" "${server_credential_required}" >&2
+    exit 1
+    ;;
+esac
+if [[ "${server_credential_required}" == "1" && -z "${server_client_ids//[[:space:]]/}" ]]; then
+  echo "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1 requires PUBLIC_API_SERVER_CLIENT_IDS" >&2
+  exit 1
+fi
+
 auth0_management_count=0
 for name in \
   AUTH0_MANAGEMENT_DOMAIN \

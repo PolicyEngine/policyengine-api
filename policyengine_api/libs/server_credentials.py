@@ -24,6 +24,12 @@ A bearer token that cannot be checked, because the signing keys cannot be
 fetched or the settings are missing or malformed, raises
 :class:`CredentialCheckUnavailableError`.
 
+``PUBLIC_API_SERVER_CREDENTIAL_REQUIRED`` switches enforcement on (``1``) or
+off (``0``, empty or unset, the deployed default). With it on, the Public API
+serves only server credentials outside its public routes
+(:func:`load_server_credential_requirement`;
+:mod:`policyengine_api.request_caller` applies it).
+
 This module never logs or returns a token or a user's subject. A client ID is
 returned only from a token whose signature and claims are valid.
 """
@@ -55,6 +61,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 PUBLIC_API_SERVER_CLIENT_IDS_ENV = "PUBLIC_API_SERVER_CLIENT_IDS"
+PUBLIC_API_SERVER_CREDENTIAL_REQUIRED_ENV = "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED"
 # Auth0 client IDs are letters and digits; hyphens and underscores are
 # accepted so that test and future identifiers fit too.
 CLIENT_ID_PATTERN = r"[A-Za-z0-9_-]+"
@@ -74,6 +81,7 @@ class RefusalReason(StrEnum):
     FAILED_VALIDATION = "invalid_token"
     CLIENT_NOT_ALLOWED = "client_not_allowed"
     DUPLICATE_HEADER = "duplicate_authorization_header"
+    CREDENTIAL_REQUIRED = "credential_required"
 
 
 @dataclass(frozen=True)
@@ -135,6 +143,31 @@ def load_server_credential_settings(
         )
         raise UserAuthConfigurationError(msg)
     return ServerCredentialSettings(allowed_client_ids=frozenset(client_ids))
+
+
+def load_server_credential_requirement(
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Return whether every non-public request needs a server credential.
+
+    Raise :class:`UserAuthConfigurationError` for a value other than ``0``,
+    ``1`` or empty, and for ``1`` without an allowed client, which would
+    refuse every request.
+    """
+    values = os.environ if environ is None else environ
+    requirement = values.get(PUBLIC_API_SERVER_CREDENTIAL_REQUIRED_ENV, "").strip()
+    if requirement not in {"", "0", "1"}:
+        msg = f"{PUBLIC_API_SERVER_CREDENTIAL_REQUIRED_ENV} must be 0 or 1"
+        raise UserAuthConfigurationError(msg)
+    if requirement != "1":
+        return False
+    if not load_server_credential_settings(values).allowed_client_ids:
+        msg = (
+            f"{PUBLIC_API_SERVER_CREDENTIAL_REQUIRED_ENV}=1 requires "
+            f"{PUBLIC_API_SERVER_CLIENT_IDS_ENV}"
+        )
+        raise UserAuthConfigurationError(msg)
+    return True
 
 
 def _client_id(subject: str) -> str | None:

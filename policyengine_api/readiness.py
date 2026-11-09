@@ -24,6 +24,7 @@ def validate_policy_runtime_configuration() -> None:
         load_auth0_management_settings,
     )
     from policyengine_api.libs.server_credentials import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
+        load_server_credential_requirement,
         load_server_credential_settings,
     )
     from policyengine_api.libs.user_auth import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
@@ -50,6 +51,9 @@ def validate_policy_runtime_configuration() -> None:
     # A malformed allow list of server clients, or one without the Auth0
     # settings that check their tokens, would make every server's request 503.
     load_server_credential_settings()
+    # Enforcement that is malformed, or on without an allowed client, would
+    # answer every non-public request with 503.
+    load_server_credential_requirement()
     load_auth0_management_settings()
     # A bundle whose measurement configuration this build cannot serve would
     # reject every country request. Report it here, where the deployment is
