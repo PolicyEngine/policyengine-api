@@ -45,6 +45,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.libs.server_credentials import (
+    HTTP_WHITESPACE,
     NO_CREDENTIAL,
     CallerKind,
     CredentialCheckUnavailableError,
@@ -72,7 +73,6 @@ CALLER_CLIENT_ID_ATTRIBUTE = "caller.client_id"
 AUTHENTICATION_REQUIRED_MESSAGE = "Authentication is required"
 AUTHENTICATION_UNAVAILABLE_MESSAGE = "Authentication is unavailable"
 BEARER_CHALLENGE = "Bearer"
-HTTP_WHITESPACE = " \t"
 # The routes that answer without a credential while enforcement is on,
 # matched on the decoded path the routers match, exactly.
 PUBLIC_ROUTES = frozenset(

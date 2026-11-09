@@ -55,5 +55,6 @@ exec env \
   -u PUBLIC_API_AUTH_AUDIENCE \
   -u PUBLIC_API_SERVER_CLIENT_IDS \
   -u PUBLIC_API_SERVER_CREDENTIAL_REQUIRED \
+  -u PUBLIC_API_SERVER_AUTH_ISSUER \
   PYTEST_ADDOPTS="-p tests.release_test_shard_plugin" \
   make test

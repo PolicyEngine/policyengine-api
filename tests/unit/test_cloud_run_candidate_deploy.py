@@ -394,6 +394,7 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
             **_required_runtime_env(),
             CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
             CLOUD_RUN_TAG="stage3-test",
+            PUBLIC_API_SERVER_AUTH_ISSUER="https://server-auth.example.test/",
         ),
     )
 
@@ -406,6 +407,10 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
     assert r"\|PUBLIC_API_SERVER_CLIENT_IDS=\|" in result.stdout
     # Enforcement is deployed switched off unless the variable is 1.
     assert r"\|PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=0\|" in result.stdout
+    assert (
+        r"\|PUBLIC_API_SERVER_AUTH_ISSUER=https://server-auth.example.test/\|"
+        in result.stdout
+    )
     assert "AUTH0_MANAGEMENT_DOMAIN" not in result.stdout
 
     with_management = _run_script(
@@ -434,6 +439,7 @@ def test_deploy_cloud_run_candidate_passes_the_server_client_allow_list():
             **_required_runtime_env(),
             CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
             CLOUD_RUN_TAG="stage3-test",
+            PUBLIC_API_SERVER_AUTH_ISSUER="https://server-auth.example.test/",
             PUBLIC_API_SERVER_CLIENT_IDS="client-a,client-b",
         ),
     )
@@ -450,6 +456,7 @@ def test_deploy_cloud_run_candidate_passes_enforcement_when_it_is_switched_on():
             **_required_runtime_env(),
             CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
             CLOUD_RUN_TAG="stage3-test",
+            PUBLIC_API_SERVER_AUTH_ISSUER="https://server-auth.example.test/",
             PUBLIC_API_SERVER_CLIENT_IDS="client-a",
             PUBLIC_API_SERVER_CREDENTIAL_REQUIRED="1",
         ),

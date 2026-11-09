@@ -24,14 +24,20 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2UserReportResourceService,
     V2UserSimulationResourceService,
 )
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2PermissionDeniedError,
+)
 from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     MetadataResponseCache,
 )
 from policyengine_api.fastapi_routes.v2.user_auth_support import (
+    MACHINE_CLIENT_FORBIDDEN_MESSAGE,
     authenticate_account_request,
 )
+from policyengine_api.libs.server_credentials import CallerKind
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.readiness import is_ready
+from policyengine_api.request_caller import current_request_caller
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
@@ -187,7 +193,15 @@ def _default_require_user(
     ],
     unauthenticated_user: Annotated[str | None, Depends(_unauthenticated_user_scheme)],
 ) -> AccountPrincipal:
-    """Authenticate the request's account; fails closed without a credential."""
+    """Authenticate the request's account; fails closed without a credential.
+
+    A server's own credential is no user, as before: its token comes from the
+    Public API's own tenant, so the users' validation would only call it
+    invalid.
+    """
+    caller = current_request_caller()
+    if caller is not None and caller.kind is CallerKind.SERVER:
+        raise V2PermissionDeniedError(MACHINE_CLIENT_FORBIDDEN_MESSAGE)
     return authenticate_account_request(
         None if credentials is None else f"Bearer {credentials.credentials}",
         unauthenticated_user,
