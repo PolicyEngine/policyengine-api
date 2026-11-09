@@ -10,9 +10,7 @@ application that production serves, with real RS256 tokens.
 
 from __future__ import annotations
 
-import logging
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
@@ -26,6 +24,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.services.v2.countries.types import CountryRead
 from tests.unit.credential_token_support import (
     SERVER_CLIENT_IDS_ENV,
@@ -35,12 +34,8 @@ from tests.unit.credential_token_support import (
     user_token,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
 ENFORCEMENT_ENV = "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED"
 REFUSAL_BODY = b'{"status":"error","message":"Authentication is required"}'
-REQUEST_CALLER_LOGGER = "policyengine_api.request_caller"
 NON_PUBLIC_REQUESTS = [
     ("GET", "/us/metadata"),
     ("POST", "/us/calculate"),
@@ -71,45 +66,13 @@ class FakeCountryService:
         return [CountryRead(id="us", household_enabled=True, society_wide_enabled=True)]
 
 
-class RecordingHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__(level=logging.DEBUG)
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
 @pytest.fixture
 def enforcement_on(monkeypatch: pytest.MonkeyPatch) -> None:
     configure_credentials(monkeypatch)
     monkeypatch.setenv(ENFORCEMENT_ENV, "1")
 
 
-@pytest.fixture
-def refusal_log_records() -> Iterator[list[logging.LogRecord]]:
-    """Record the credential check's log lines.
-
-    Alembic tests run logging.config.fileConfig, which disables loggers that
-    already exist, so the logger is re-enabled while it is recorded.
-    """
-    handler = RecordingHandler()
-    logger = logging.getLogger(REQUEST_CALLER_LOGGER)
-    was_disabled, level = logger.disabled, logger.level
-    logger.disabled = False
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    try:
-        yield handler.records
-    finally:
-        logger.removeHandler(handler)
-        logger.disabled = was_disabled
-        logger.setLevel(level)
-
-
-def _application(
-    health: RouteImplementation = RouteImplementation.FASTAPI_NATIVE,
-) -> SimpleNamespace:
+def _application() -> SimpleNamespace:
     """Build the ASGI application around a Flask app that serves any path."""
     runtime = Mock()
     runtime.begin_request.return_value = "request-id-0002"
@@ -136,7 +99,7 @@ def _application(
         flask_app,
         dependencies=dependencies,
         route_settings=RouteImplementationSettings(
-            health=health,
+            health=RouteImplementation.FASTAPI_NATIVE,
             specification=RouteImplementation.FLASK_FALLBACK,
             metadata=RouteImplementation.FLASK_FALLBACK,
         ),
@@ -144,9 +107,19 @@ def _application(
     )
     return SimpleNamespace(
         client=TestClient(asgi_app),
+        runtime=runtime,
         flask_calls=flask_calls,
         country_service=country_service,
     )
+
+
+def _refusal_events(runtime: Mock) -> list[tuple[str, dict[str, object]]]:
+    """Return the runtime's refusal events as (severity, attributes)."""
+    return [
+        (recorded_call.kwargs["severity"], recorded_call.kwargs["attributes"])
+        for recorded_call in runtime.event.call_args_list
+        if recorded_call.args == ("public_api_credential_refused",)
+    ]
 
 
 def _route_calls(application: SimpleNamespace) -> int:
@@ -174,17 +147,11 @@ def test_enforcement_refuses_every_request_without_a_credential_before_routing(
     assert _route_calls(application) == 0
 
 
-@pytest.mark.parametrize(
-    "health",
-    [RouteImplementation.FASTAPI_NATIVE, RouteImplementation.FLASK_FALLBACK],
-    ids=["native-health", "flask-health"],
-)
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
 @pytest.mark.usefixtures("enforcement_on")
-def test_enforcement_leaves_the_health_check_public(
-    method: str, health: RouteImplementation
-) -> None:
-    application = _application(health)
+def test_enforcement_leaves_the_health_check_public(method: str) -> None:
+    # /health is always a native route (see migration_flags).
+    application = _application()
 
     response = application.client.request(method, "/health")
 
@@ -201,27 +168,37 @@ def test_enforcement_leaves_the_v2_openapi_schema_public() -> None:
     assert response.json()["openapi"].startswith("3.")
 
 
-@pytest.mark.parametrize(
-    "origin_headers",
-    [{"Origin": "https://www.policyengine.org"}, {}],
-    ids=["browser-preflight", "preflight-without-origin"],
-)
 @pytest.mark.usefixtures("enforcement_on")
-def test_enforcement_leaves_cors_preflights_public(
-    origin_headers: dict[str, str],
-) -> None:
+def test_enforcement_leaves_cors_preflights_public() -> None:
     application = _application()
 
     response = application.client.options(
         "/us/calculate",
         headers={
-            **origin_headers,
+            "Origin": "https://www.policyengine.org",
             "Access-Control-Request-Method": "POST",
             "Access-Control-Request-Headers": "authorization,content-type",
         },
     )
 
-    assert response.status_code != 401
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "https://www.policyengine.org"
+    )
+    assert _route_calls(application) == 0
+
+
+@pytest.mark.usefixtures("enforcement_on")
+def test_enforcement_refuses_an_options_request_without_an_origin() -> None:
+    # Without Origin it is not a CORS preflight, so it gets no exemption.
+    application = _application()
+
+    response = application.client.options(
+        "/us/calculate", headers={"Access-Control-Request-Method": "POST"}
+    )
+
+    _assert_refused(response)
     assert _route_calls(application) == 0
 
 
@@ -248,9 +225,7 @@ def test_enforcement_serves_an_allowed_server_credential(
 
 
 @pytest.mark.usefixtures("enforcement_on")
-def test_enforcement_refuses_a_signed_in_users_own_token(
-    refusal_log_records: list[logging.LogRecord],
-) -> None:
+def test_enforcement_refuses_a_signed_in_users_own_token() -> None:
     application = _application()
 
     response = application.client.get(
@@ -259,37 +234,35 @@ def test_enforcement_refuses_a_signed_in_users_own_token(
 
     _assert_refused(response)
     assert _route_calls(application) == 0
-    (refusal,) = refusal_log_records
-    assert refusal.levelno == logging.INFO
-    assert refusal.getMessage() == "public_api_credential_refused"
-    assert refusal.policyengine_attributes == {
-        "refusal_reason": "credential_required",
-        "caller.kind": "user",
-        "http.request.method": "GET",
-        "url.path": "/v2/countries",
-    }
+    assert _refusal_events(application.runtime) == [
+        (
+            "INFO",
+            {
+                "refusal_reason": "credential_required",
+                "caller.kind": "user",
+                "http.request.method": "GET",
+                "url.path": "/v2/countries",
+                "request.id": response.headers[REQUEST_ID_HEADER],
+            },
+        )
+    ]
 
 
 @pytest.mark.usefixtures("enforcement_on")
-def test_enforcement_logs_a_request_without_a_credential_at_info(
-    refusal_log_records: list[logging.LogRecord],
-) -> None:
+def test_enforcement_records_a_refused_request_without_a_credential_at_info() -> None:
     application = _application()
 
-    application.client.post("/us/calculate", json={})
+    response = application.client.post("/us/calculate", json={})
 
-    assert [
-        (record.levelno, record.getMessage(), record.policyengine_attributes)
-        for record in refusal_log_records
-    ] == [
+    assert _refusal_events(application.runtime) == [
         (
-            logging.INFO,
-            "public_api_credential_refused",
+            "INFO",
             {
                 "refusal_reason": "credential_required",
                 "caller.kind": "none",
                 "http.request.method": "POST",
                 "url.path": "/us/calculate",
+                "request.id": response.headers[REQUEST_ID_HEADER],
             },
         )
     ]
