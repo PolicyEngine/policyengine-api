@@ -3,6 +3,7 @@
 import datetime
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 from typing import Any
 
@@ -24,6 +25,7 @@ from policyengine_api.economy_years import (
     ECONOMY_YEARS,
     dataset_year_unavailable_message,
 )
+from policyengine_api.gcp_logging import logger
 from policyengine_api.json_types import JSONValue
 from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
@@ -110,9 +112,32 @@ class SimulationRequestMixin:
 
         Called before a stored failure is replayed. A policy that no longer
         exists, or whose stored JSON is not an object, is left out, so its
-        stored failure is replayed as before.
+        stored failure is replayed as before. So is every policy when they
+        can't be read at all, such as during a database outage: the check
+        must never turn a replay into a failure of its own. That is logged at
+        WARNING.
         """
-        stored_policies: list[tuple[int, dict[str, Any]]] = []
+        try:
+            stored_policies = list(self._stored_policy_objects(setup_options))
+        except Exception as error:  # noqa: BLE001  # the check must not make a stored failure's replay fail; logged below
+            logger.log_struct(
+                {
+                    "message": (
+                        "Could not check the stored policies before replaying a "
+                        "stored economic impact failure"
+                    ),
+                    "error_type": type(error).__name__,
+                },
+                severity="WARNING",
+            )
+            return None
+        return find_unreadable_policies(stored_policies)
+
+    def _stored_policy_objects(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> Iterator[tuple[int, dict[str, Any]]]:
+        """Yield the impact's stored policies that exist as JSON objects."""
         for policy_id in (
             setup_options.reform_policy_id,
             setup_options.baseline_policy_id,
@@ -124,8 +149,7 @@ class SimulationRequestMixin:
                 json.loads(policy_json) if isinstance(policy_json, str) else policy_json
             )
             if isinstance(parsed, dict):
-                stored_policies.append((policy_id, parsed))
-        return find_unreadable_policies(stored_policies)
+                yield policy_id, parsed
 
     @staticmethod
     def _parse_json_object(value: JSONValue) -> dict[str, Any]:

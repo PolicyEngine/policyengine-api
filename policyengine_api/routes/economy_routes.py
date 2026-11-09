@@ -109,6 +109,12 @@ def _policy_not_found_response(error: PolicyNotFoundError) -> Response:
     )
 
 
+def _refused_policies(result: object) -> UnreadablePolicies | None:
+    """Return the stored policies a result was refused for, if it was refused."""
+    refused = getattr(result, "unreadable_policies", None)
+    return refused if isinstance(refused, UnreadablePolicies) else None
+
+
 def _unreadable_policies_response(unreadable_policies: UnreadablePolicies) -> Response:
     """Return 422 naming each stored policy entry that simulations can't read.
 
@@ -199,8 +205,9 @@ def get_economic_impact(
     except SimulationEntrypointConnectionError as error:
         return _simulation_unreachable_response(error, deletable=True)
 
-    if economic_impact_result.unreadable_policies is not None:
-        return _unreadable_policies_response(economic_impact_result.unreadable_policies)
+    refused_policies = _refused_policies(economic_impact_result)
+    if refused_policies is not None:
+        return _unreadable_policies_response(refused_policies)
 
     result_dict: dict[str, str | dict | int | None] = economic_impact_result.to_dict()
 
@@ -329,8 +336,9 @@ def get_budget_window_economic_impact(
     except SimulationEntrypointConnectionError as error:
         return _simulation_unreachable_response(error, deletable=False)
 
-    if economic_impact_result.unreadable_policies is not None:
-        return _unreadable_policies_response(economic_impact_result.unreadable_policies)
+    refused_policies = _refused_policies(economic_impact_result)
+    if refused_policies is not None:
+        return _unreadable_policies_response(refused_policies)
 
     result_dict = economic_impact_result.to_dict()
 
