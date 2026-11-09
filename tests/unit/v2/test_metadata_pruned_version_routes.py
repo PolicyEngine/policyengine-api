@@ -175,6 +175,8 @@ def test_openapi_describes_the_404_of_a_pruned_version() -> None:
         assert unavailable.startswith("The initialized v2 catalog is unavailable"), path
         assert "running PolicyEngine.py version" in unavailable, path
         assert "no-store" in unavailable, path
+        # Only the running version's pruning is a 503; any other is the 404.
+        assert "publication pruned" not in unavailable, path
     for path in ("/v2/parameters", "/v2/variables"):
         responses = schema["paths"][path]["get"]["responses"]
         assert "pruned" not in responses["404"]["description"], path

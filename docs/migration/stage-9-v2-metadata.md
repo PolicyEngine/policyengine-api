@@ -577,7 +577,8 @@ read still answers 503.
 A process keeps each catalog version it has selected, with its
 `catalog_values_pruned_at` as read then (`SelectedCatalogStore`), and the
 whole-version bodies it has built (see "Response caching"), so a process
-running while a version is pruned or restored answers as follows:
+running while a version is pruned or restored answers as follows. Where
+these say 404, the running version gets 503 instead, as above.
 
 - **It selected the version before the pruning.** A read of the deleted rows
   that finds none reads `catalog_values_pruned_at` again and answers 404. A
