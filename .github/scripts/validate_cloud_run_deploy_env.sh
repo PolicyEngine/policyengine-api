@@ -136,8 +136,9 @@ if [[ -n "${PUBLIC_API_AUTH_ISSUER:-}" && "${PUBLIC_API_AUTH_ISSUER}" != https:/
 fi
 
 # Optional: the Auth0 client IDs whose client-credentials tokens are server
-# credentials. Unset or empty allows no client. Each listed client's tokens
-# are checked with the issuer and audience above, so they are required.
+# credentials. Unset or empty allows no client. Listed clients' tokens are
+# checked with the server issuer below and the audience above, so both are
+# required.
 server_client_ids="${PUBLIC_API_SERVER_CLIENT_IDS:-}"
 if [[ -n "${server_client_ids//[[:space:]]/}" ]]; then
   if [[ ! "${server_client_ids}" =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ ]]; then

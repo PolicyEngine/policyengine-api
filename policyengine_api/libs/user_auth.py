@@ -4,8 +4,11 @@ User-owned routes authenticate signed-in users with it, and
 :mod:`policyengine_api.libs.server_credentials` uses it to check the server
 credentials of PolicyEngine's own servers.
 
-The Public API accepts RS256 access tokens issued by the PolicyEngine Auth0
-tenant for the Public API resource server. The decoder is ported from the
+The Public API accepts RS256 access tokens for the Public API resource
+server from two Auth0 tenants: signed-in users' tokens from the tenant in
+``PUBLIC_API_AUTH_ISSUER``, and server tokens from the Public API's own
+tenant, which :mod:`policyengine_api.libs.server_credentials` names. Each is
+verified against its own tenant's settings. The decoder is ported from the
 Simulation Entrypoint (``policyengine_simulation_entry.auth``): the JWKS is
 fetched from ``{issuer}.well-known/jwks.json`` and ``iss``/``aud`` are
 verified. Machine-to-machine tokens (``…@clients`` subjects) are classified
