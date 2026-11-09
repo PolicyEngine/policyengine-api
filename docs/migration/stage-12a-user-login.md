@@ -498,8 +498,9 @@ credential, matched exactly on the decoded path. They are exempted in the
 Public API's own code, because Cloud Run's startup probe calls `/health` on
 the container directly. A malformed value, or `1` with no allowed client,
 fails readiness and the deploy validation; a revision that has one anyway
-answers 503 to every non-public request that is not from a server, and still
-serves servers.
+answers 503 to every non-public request that is not from a server. With a
+malformed value it still serves listed servers; with no allowed client there
+are none.
 
 Before switching it on in an environment, the deploy's own post-deploy tests
 there need the CI server credential (task 3.3 · 1). The staging integration

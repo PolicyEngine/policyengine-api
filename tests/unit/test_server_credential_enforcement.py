@@ -16,6 +16,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
+from starlette.requests import Request
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -24,6 +25,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.request_caller import is_public_request
 from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.services.v2.countries.types import CountryRead
 from tests.unit.credential_token_support import (
@@ -305,6 +307,60 @@ def test_a_malformed_enforcement_setting_fails_closed(
     assert refused.status_code == 503
     assert health.status_code == 200
     assert served.status_code == 200
+    assert [
+        (recorded_call.args, recorded_call.kwargs)
+        for recorded_call in application.runtime.event.call_args_list
+    ] == [
+        (
+            ("public_api_credential_check_unavailable",),
+            {
+                "severity": "WARNING",
+                "attributes": {
+                    "error_type": "UserAuthConfigurationError",
+                    "request.id": refused.headers[REQUEST_ID_HEADER],
+                },
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("method", "headers", "public"),
+    [
+        (
+            "OPTIONS",
+            {"origin": "https://example.test", "access-control-request-method": "POST"},
+            True,
+        ),
+        ("OPTIONS", {"origin": "https://example.test"}, False),
+        ("OPTIONS", {"access-control-request-method": "POST"}, False),
+        ("OPTIONS", {}, False),
+        (
+            "POST",
+            {"origin": "https://example.test", "access-control-request-method": "POST"},
+            False,
+        ),
+    ],
+    ids=["preflight", "origin-only", "method-only", "plain", "not-options"],
+)
+def test_only_a_cors_preflight_is_public_among_options_requests(
+    method: str, headers: dict[str, str], *, public: bool
+) -> None:
+    # The CORS middleware answers browser preflights before the check, so
+    # the preflight branch is tested on the check's own function.
+    request = Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": "/us/calculate",
+            "headers": [
+                (name.encode("latin-1"), value.encode("latin-1"))
+                for name, value in headers.items()
+            ],
+        }
+    )
+
+    assert is_public_request(request) is public
 
 
 def test_enforcement_with_an_empty_allow_list_fails_closed(

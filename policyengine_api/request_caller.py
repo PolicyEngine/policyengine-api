@@ -11,14 +11,16 @@ into their thread.
 
 Both frameworks add :func:`caller_attributes` to the request's observability
 record: ``caller.kind`` (``none``, ``server`` or ``user``) and, for a server,
-``caller.client_id``. A request without a credential is served as before and
-records nothing of its own; its record carries ``caller.kind=none``.
+``caller.client_id``. While enforcement is off, a request without a
+credential is served as before and records nothing of its own; its record
+carries ``caller.kind=none``.
 
 Each refusal is a runtime event at INFO, ``public_api_credential_refused``,
 with its reason, the method, the path and the request ID the response
 returns, never the header. A refused request to a Flask route never reaches
-Flask, so this event is its only record. A token that cannot be checked is a
-WARNING event, ``public_api_credential_check_unavailable``. They are runtime
+Flask, so this event is its only record. A token that cannot be checked, or
+an unreadable enforcement setting, is a WARNING event,
+``public_api_credential_check_unavailable``. They are runtime
 events rather than standard-library log records because the deployed process
 leaves the root logger at WARNING, which drops INFO records.
 

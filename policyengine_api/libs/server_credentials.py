@@ -152,7 +152,8 @@ def load_server_credential_requirement(
 
     Raise :class:`UserAuthConfigurationError` for a value other than ``0``,
     ``1`` or empty, and for ``1`` without an allowed client, which would
-    refuse every request.
+    refuse every request. With ``1`` it also loads the allow list, so a
+    malformed allow list or Auth0 setting raises the same error.
     """
     values = os.environ if environ is None else environ
     requirement = values.get(PUBLIC_API_SERVER_CREDENTIAL_REQUIRED_ENV, "").strip()
