@@ -57,7 +57,18 @@ class CatalogValuesPrunedError(MetadataCatalogUnavailableError):
     current-law parameter values, parameter tree rows and parameter search
     file, which publishing the version again restores. The message names the
     country and the version and is safe to return to the caller.
+
+    ``running_version`` says whether the pruned version is the one this
+    process runs, which a request without ``policyengine_version`` selects.
+    Its data is then missing because of how the service was deployed, such
+    as traffic moved back to a revision older than the kept versions, not
+    because of what the request asked for.
     """
+
+    def __init__(self, message: str, *, running_version: bool = False) -> None:
+        """Keep the message and whether the pruned version is the running one."""
+        super().__init__(message)
+        self.running_version = running_version
 
 
 def parameter_tree_unavailable_error(
@@ -85,13 +96,17 @@ def parameter_search_file_unavailable_error(
 
 
 def require_current_law_values(
-    selected: SelectedCatalog, *, pruned_at: datetime | None
+    selected: SelectedCatalog,
+    *,
+    pruned_at: datetime | None,
+    running_policyengine_version: str,
 ) -> None:
     """Raise CatalogValuesPrunedError if the selected version was pruned.
 
     ``pruned_at`` is the version's ``catalog_values_pruned_at``: when catalog
     publication removed its current-law values, tree rows and search file, or
-    None while they are stored.
+    None while they are stored. The error says whether the version is
+    ``running_policyengine_version``, the one the process runs.
     """
     if pruned_at is None:
         return
@@ -102,7 +117,9 @@ def require_current_law_values(
         "parameter tree and search file; they return when PolicyEngine.py "
         f"{version} is installed again"
     )
-    raise CatalogValuesPrunedError(msg)
+    raise CatalogValuesPrunedError(
+        msg, running_version=version == running_policyengine_version
+    )
 
 
 def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:

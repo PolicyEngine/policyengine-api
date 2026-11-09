@@ -568,7 +568,11 @@ embed current-law values. The other metadata routes, which serve kept rows,
 answer as before. The request names data the catalog no longer holds, so the
 answer is a client error: the Public API records every response of 500 or more
 at ERROR, so a 503 would count as a server error in the daily telemetry error
-report. A catalog that can't be read still answers 503.
+report. The one exception is the version the process runs, which a request
+without `policyengine_version` selects: when it is pruned, the routes answer
+503 with the same message and header, because the deployment, not the
+request, is at fault, and the report should count it. A catalog that can't be
+read still answers 503.
 
 A process keeps each catalog version it has selected, with its
 `catalog_values_pruned_at` as read then (`SelectedCatalogStore`), and the
@@ -745,11 +749,13 @@ runs, also after one failed promotion, so traffic moved back to the preceding
 revision reads a complete snapshot. A revision that runs any other stored
 version may run a pruned one, and what it answers then depends on its code:
 
-- A revision that includes catalog pruning answers 404 (503 before issue
-  #4243) with `Cache-Control: no-store` on `/v2/parameter-values`,
+- A revision that includes catalog pruning answers 503 with
+  `Cache-Control: no-store` on `/v2/parameter-values`,
   `/v2/parameter-values/{value_id}`, `/v2/parameters/children`,
   `/v2/parameters/search-file`, `/v2/model-catalog/variables` and
-  `/v2/model-catalog/parameters`.
+  `/v2/model-catalog/parameters` for its running version, so also for every
+  request without `policyengine_version`. A request that names another pruned
+  version gets 404 with the same header (503 before issue #4243).
 - An older revision, from before catalog pruning, doesn't read
   `catalog_values_pruned_at`. For its running version, so also for every
   request without `policyengine_version`, it answers `/v2/parameter-values`,

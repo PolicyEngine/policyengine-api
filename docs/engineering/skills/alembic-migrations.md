@@ -427,7 +427,8 @@ before the usual exact comparison of the stored version, and writes the
 version's parameter tree and search file as it does for a version that has
 none. The rows it writes equal those a first publication of the version
 writes, with the same value IDs. Until then the metadata routes that serve
-the deleted rows answer 503 for that version, with `Cache-Control: no-store`.
+the deleted rows answer 404 for that version, with `Cache-Control: no-store`,
+or 503 when it is the version the serving revision runs.
 
 The catalog writer holds `DELETE` on the three tables and `UPDATE` on
 `tax_benefit_model_versions` for this (`privileges.py`). Pruning runs no DDL;

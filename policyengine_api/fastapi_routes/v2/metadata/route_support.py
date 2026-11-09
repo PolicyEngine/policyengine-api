@@ -70,11 +70,12 @@ PRUNED_VERSION_NOT_FOUND_RESPONSE: dict[str, Any] = {
     "model": V2ErrorResponse,
     "description": (
         ABSENT_RESOURCE_DESCRIPTION
-        + " A catalog version that catalog publication pruned (it removed the "
-        "version's current-law parameter values, parameter tree and parameter "
-        "search file, which return when that PolicyEngine.py version is "
-        "installed again) also returns 404, with Cache-Control: no-store and a "
-        "message naming the country and version."
+        + " A catalog version other than the running one that catalog "
+        "publication pruned (it removed the version's current-law parameter "
+        "values, parameter tree and parameter search file, which return when "
+        "that PolicyEngine.py version is installed again) also returns 404, "
+        "with Cache-Control: no-store and a message naming the country and "
+        "version."
     ),
 }
 """The 404 of every route that serves data catalog pruning removes.
@@ -83,6 +84,18 @@ The request names data the catalog no longer holds, so it is a client error
 (issue #4243): a 503 would count as a server error in the daily telemetry
 error report. ``Cache-Control: no-store`` keeps any cache from serving it after
 the version's data returns.
+"""
+
+PRUNED_RUNNING_VERSION_DESCRIPTION = (
+    " If catalog pruning removed the data of the running PolicyEngine.py "
+    "version, which a request without policyengine_version selects, it also "
+    "returns 503, with Cache-Control: no-store and a message naming the "
+    "country and version."
+)
+"""The 503 of every route that serves data pruning removes, for the running version.
+
+The service then runs a version whose data is gone, which is its fault, not
+the request's, so it stays a server error the daily report counts.
 """
 
 PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -94,6 +107,7 @@ PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
             "has no parameter tree (publication writes trees only for the "
             "versions it publishes and for the installed version with catalog "
             "format 2); the message then names the version."
+            + PRUNED_RUNNING_VERSION_DESCRIPTION
         ),
     },
 }
@@ -108,6 +122,7 @@ PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
             "has no parameter search file: only catalog format 2 versions that "
             "publication has published, or run with installed, since search files "
             "were added have one. The message then names the version."
+            + PRUNED_RUNNING_VERSION_DESCRIPTION
         ),
     },
 }
@@ -115,8 +130,15 @@ PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 CURRENT_LAW_VALUE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: PRUNED_VERSION_NOT_FOUND_RESPONSE,
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable."
+            + PRUNED_RUNNING_VERSION_DESCRIPTION
+        ),
+    },
 }
-"""The 404 of the other routes that serve current-law parameter values."""
+"""The 404 and 503 of the other routes that serve current-law parameter values."""
 
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 """Keeps any cache from storing a response that changes when a release deploys."""
@@ -417,27 +439,10 @@ def run_metadata_read(
     except (
         MetadataCatalogVersionNotFoundError,
         MetadataResourceNotFoundError,
-        CatalogValuesPrunedError,
     ) as error:
-        # A pruned version's message names the catalog version. Its data
-        # returns when a release installs that version again, so no cache may
-        # keep that answer.
-        headers = (
-            NO_STORE_HEADERS if isinstance(error, CatalogValuesPrunedError) else None
-        )
-        return v2_error_response(404, str(error), headers=headers)
+        return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        # Only a missing parameter tree or search file has a message written
-        # for callers; it names the catalog version.
-        message = (
-            str(error)
-            if isinstance(
-                error,
-                ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
-            )
-            else "V2 metadata catalog is unavailable"
-        )
-        return v2_error_response(503, message)
+        return _catalog_unavailable_response(error)
     except Exception:  # noqa: BLE001  # preview must return typed errors
         return v2_error_response(500, "V2 metadata query failed")
     finally:
@@ -445,3 +450,29 @@ def run_metadata_read(
             # Best-effort close must not replace the typed response.
             with contextlib.suppress(Exception):
                 reader.close()
+
+
+def _catalog_unavailable_response(
+    error: V2ConfigurationError | MetadataCatalogUnavailableError,
+) -> JSONResponse:
+    """Answer a catalog that can't serve the read: 404 or 503.
+
+    A pruned version answers 404 when the request named another version than
+    the running one, and 503 when it is the running one, which the service is
+    at fault for. Either way its data returns when a release installs that
+    version again, so no cache may keep the answer. Only a pruned version or a
+    missing parameter tree or search file has a message written for callers;
+    it names the catalog version.
+    """
+    if isinstance(error, CatalogValuesPrunedError):
+        status = 503 if error.running_version else 404
+        return v2_error_response(status, str(error), headers=NO_STORE_HEADERS)
+    message = (
+        str(error)
+        if isinstance(
+            error,
+            ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
+        )
+        else "V2 metadata catalog is unavailable"
+    )
+    return v2_error_response(503, message)

@@ -88,6 +88,7 @@ class MetadataCatalogSelection:
                     self._database_session.session,
                     model_version_id=kept.model_version.id,
                 ),
+                running_policyengine_version=self._running_policyengine_version,
             )
         selected = read_metadata_catalog(
             self._database_session.session,
@@ -99,7 +100,9 @@ class MetadataCatalogSelection:
             self._selected_catalogs.keep(key, selected)
         if reads_pruned_data:
             require_current_law_values(
-                selected, pruned_at=selected.model_version.catalog_values_pruned_at
+                selected,
+                pruned_at=selected.model_version.catalog_values_pruned_at,
+                running_policyengine_version=self._running_policyengine_version,
             )
         return selected
 
@@ -115,7 +118,11 @@ class MetadataCatalogSelection:
                 self._database_session.session,
                 model_version_id=selected.model_version.id,
             )
-        require_current_law_values(selected, pruned_at=pruned_at)
+        require_current_law_values(
+            selected,
+            pruned_at=pruned_at,
+            running_policyengine_version=self._running_policyengine_version,
+        )
 
     def select_page(
         self,
