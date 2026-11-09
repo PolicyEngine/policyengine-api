@@ -63,13 +63,21 @@ to the request's runtime record, for Flask and native routes alike:
 - `caller.client_id`: the server's Auth0 client ID, only for `server`.
 
 A user's subject or email address is never recorded. A request without a
-credential logs nothing of its own. A refused credential is logged at INFO as
-`public_api_credential_refused`, with `refusal_reason`, the method, the path
-and, for a valid token of an unlisted client, `caller.client_id`; a bearer
-token that cannot be checked is logged at WARNING as
-`public_api_credential_check_unavailable`. Attribute names must avoid the
-runtime's prohibited key parts (such as `authorization`, `credential` and
-`token`), which it drops.
+credential records nothing of its own. A refused credential is a runtime
+event at INFO, `public_api_credential_refused`, with `refusal_reason`, the
+method, the path, `request.id` (the response's `X-PolicyEngine-Request-Id`)
+and, for a valid token of an unlisted client, `caller.client_id`. A refused
+request to a Flask route never reaches Flask, so that event is its only
+record. A bearer token that cannot be checked is a WARNING event,
+`public_api_credential_check_unavailable`, with `error_type` and
+`request.id`.
+
+These are runtime events (`ObservabilityRuntime.event`), not
+standard-library log records. The deployed process leaves the root logger at
+Python's default WARNING, so an INFO record from a module logger without its
+own level is dropped before the runtime's handler sees it. Attribute names
+must avoid the runtime's prohibited key parts (such as `authorization`,
+`credential` and `token`), which it drops.
 
 ## Simulation client transport
 
