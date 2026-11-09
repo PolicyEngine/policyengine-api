@@ -311,7 +311,9 @@ def _calculation_cache_key(*_args: object, **_kwargs: object) -> str:
     country_id = request.view_args["country_id"]
     return hash_object(
         {
-            "schema": 3,
+            # Schema 4 started when only successes were cached: keys of earlier
+            # schemas can hold error responses.
+            "schema": 4,
             "path": request.full_path,
             "payload": request.get_json(),
             "spm": g.spm,
