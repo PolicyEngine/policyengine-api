@@ -72,6 +72,7 @@ CALLER_CLIENT_ID_ATTRIBUTE = "caller.client_id"
 AUTHENTICATION_REQUIRED_MESSAGE = "Authentication is required"
 AUTHENTICATION_UNAVAILABLE_MESSAGE = "Authentication is unavailable"
 BEARER_CHALLENGE = "Bearer"
+HTTP_WHITESPACE = " \t"
 # The routes that answer without a credential while enforcement is on,
 # matched on the decoded path the routers match, exactly.
 PUBLIC_ROUTES = frozenset(
@@ -249,8 +250,8 @@ async def _checked_credential(
 ) -> RequestCaller | Response:
     """Return the caller the request's credential shows, or its refusal.
 
-    A request without ``Authorization``, or with a blank one, has no
-    credential. One with two or more ``Authorization`` headers is refused, so
+    A request without ``Authorization``, or with one of only spaces and tabs,
+    has no credential. One with two or more ``Authorization`` headers is refused, so
     no layer can read a different one from the layer that checked it. A token
     is checked in a worker thread, because fetching signing keys blocks.
     """
@@ -259,7 +260,9 @@ async def _checked_credential(
         _record_refusal(runtime, request, RefusalReason.DUPLICATE_HEADER)
         return authentication_required_response()
     authorization = authorization_values[0] if authorization_values else ""
-    if not authorization.strip():
+    # Only HTTP whitespace (space and tab) makes a header blank; any other
+    # character, such as a no-break space, is a credential to check.
+    if not authorization.strip(HTTP_WHITESPACE):
         return NO_CREDENTIAL
     try:
         return await run_in_threadpool(_identify, authorization)
