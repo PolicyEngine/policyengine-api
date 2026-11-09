@@ -10,7 +10,9 @@ years.
 Each list keeps the order both responses have always used: the US newest
 first, the UK oldest first.
 
-- The US years start in 2024: 2022 and 2023 are no longer offered.
+- The US years start in 2024: 2022 and 2023 are no longer offered. They end
+  with 2036, the last year of the canonical SPM forecast in the bundle
+  (spm-calculator 1.1.0 covers 2022 to 2036).
 - The UK years start with 2024, the data year of the UK dataset
   (microcosm_uk_2024_25), and end with 2032, the last year policyengine-uk
   2.151.0 projects that dataset to (``PROJECTION_END_YEAR``). The simulation
@@ -24,7 +26,7 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-US_ECONOMY_YEARS: Final[tuple[int, ...]] = tuple(range(2035, 2023, -1))
+US_ECONOMY_YEARS: Final[tuple[int, ...]] = tuple(range(2036, 2023, -1))
 UK_ECONOMY_YEARS: Final[tuple[int, ...]] = tuple(range(2024, 2033))
 
 ECONOMY_YEARS: Final[Mapping[str, tuple[int, ...]]] = {
