@@ -6,6 +6,8 @@ the reason, never the message, which can hold a household's names and values.
 
 from __future__ import annotations
 
+import copy
+import pickle
 import re
 
 import pytest
@@ -18,7 +20,9 @@ from policyengine_api.services.v2.households.validators import (
     MAXIMUM_HOUSEHOLD_ENTITIES,
     MAXIMUM_HOUSEHOLD_RECORD_VALUES,
     HouseholdValidationError,
+    HouseholdValidationReason,
     LegacyHouseholdTranslationError,
+    LegacyHouseholdTranslationReason,
     normalize_household_document,
     require_json_value,
 )
@@ -266,9 +270,11 @@ def test_json_values_reject_deep_nesting_and_reference_cycles(require_value) -> 
     assert require_value(document) is document
 
 
-def _snapshot(household_json: object) -> LegacyHouseholdSnapshot:
+def _snapshot(
+    household_json: object, *, country_id: str = "uk"
+) -> LegacyHouseholdSnapshot:
     return LegacyHouseholdSnapshot.model_construct(
-        country_id="uk",
+        country_id=country_id,
         legacy_household_id=42,
         label=None,
         api_version="1.0.0",
@@ -374,6 +380,108 @@ def test_untranslatable_v1_documents_fail_with_their_specific_message_and_reason
     ) as raised:
         translate_legacy_household(_snapshot(household_json))
     assert raised.value.reason == reason
+
+
+def _uk_household_of(people: dict[str, object]) -> dict[str, object]:
+    """Return a v1 UK household with every person in one household and benunit."""
+    return {
+        "people": people,
+        "households": {"home": {"members": list(people)}},
+        "benunits": {"unit": {"members": list(people)}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("country_id", "household_json", "message", "reason"),
+    [
+        (
+            "uk",
+            _uk_household_of(
+                {
+                    f"person {index}": {"age": {"2026": 40}}
+                    for index in range(MAXIMUM_HOUSEHOLD_ENTITIES + 1)
+                }
+            ),
+            f"people must contain at most {MAXIMUM_HOUSEHOLD_ENTITIES} records",
+            "too_many_records",
+        ),
+        (
+            "uk",
+            _uk_household_of(
+                {
+                    "adult": {
+                        f"variable_{index}": {"2026": index}
+                        for index in range(MAXIMUM_HOUSEHOLD_RECORD_VALUES + 1)
+                    }
+                }
+            ),
+            f"people records must contain at most "
+            f"{MAXIMUM_HOUSEHOLD_RECORD_VALUES} variable values",
+            "too_many_values",
+        ),
+        (
+            "uk",
+            _uk_household_of({" ": {"age": {"2026": 40}}}),
+            "people source_name must be a non-empty string of at most 255 characters",
+            "invalid_identifier",
+        ),
+        ("us", {"people": {}, "spm": []}, "spm must be an object", "spm_not_object"),
+        (
+            "us",
+            {"people": {}, "spm": {"unknown": 1}},
+            "spm selection is invalid",
+            "spm_selection_invalid",
+        ),
+    ],
+)
+def test_v1_households_breaking_a_v2_limit_take_its_reason(
+    country_id: str,
+    household_json: dict[str, object],
+    message: str,
+    reason: str,
+) -> None:
+    """A v1 household can break these v2 rules: its size, names and SPM selection.
+
+    The translation builds the rest of the v2 document itself.
+    """
+    with pytest.raises(
+        LegacyHouseholdTranslationError, match=rf"^{re.escape(message)}$"
+    ) as raised:
+        translate_legacy_household(_snapshot(household_json, country_id=country_id))
+    assert raised.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        HouseholdValidationError(
+            "people must be a list",
+            reason=HouseholdValidationReason.COLLECTION_NOT_LIST,
+        ),
+        LegacyHouseholdTranslationError(
+            "legacy people must be an object",
+            reason=LegacyHouseholdTranslationReason.PEOPLE_NOT_OBJECT,
+        ),
+        LegacyHouseholdTranslationError(
+            "people record memberships must identify every country-supported "
+            "entity collection",
+            reason=HouseholdValidationReason.INCOMPLETE_MEMBERSHIPS,
+        ),
+    ],
+)
+def test_errors_keep_their_message_and_reason_when_copied_or_pickled(
+    error: HouseholdValidationError | LegacyHouseholdTranslationError,
+) -> None:
+    rebuilt_errors = [
+        copy.copy(error),
+        copy.deepcopy(error),
+        pickle.loads(pickle.dumps(error)),  # noqa: S301  # round-trips an error this test built
+    ]
+
+    for rebuilt in rebuilt_errors:
+        assert type(rebuilt) is type(error)
+        assert str(rebuilt) == str(error)
+        assert rebuilt.reason == error.reason
 
 
 def test_non_object_v1_document_is_a_type_error() -> None:
