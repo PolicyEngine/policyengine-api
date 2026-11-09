@@ -1,7 +1,7 @@
 """record simulation runs and key results by run
 
 Revision ID: 1356f658347d
-Revises: c614b6bcccfc
+Revises: 334859ef4fec
 Create Date: 2026-11-06 00:33:17.526471
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
@@ -26,7 +26,7 @@ import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 revision: str = "1356f658347d"
-down_revision: Union[str, None] = "c614b6bcccfc"
+down_revision: Union[str, None] = "334859ef4fec"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
