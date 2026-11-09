@@ -1,3 +1,10 @@
+## [5.35.1] - 2026-11-09
+
+### Changed
+
+- API v2's database records each run of a simulation and of a report with the versions it used, keys every result to the run that produced it, and stores household calculation jobs for one household, one year and one policy. Result tables gain the economy output's fields that had no column.
+
+
 ## [5.35.0] - 2026-11-06
 
 ### Added
