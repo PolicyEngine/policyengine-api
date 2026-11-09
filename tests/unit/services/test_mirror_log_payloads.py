@@ -208,6 +208,15 @@ UNTRANSLATABLE_HOUSEHOLDS = {
             "second": {"members": [PERSON_NAME]},
         },
     },
+    # Every period names 2300, outside the default years v2 accepts.
+    "legacy_default_year_out_of_range": {
+        "people": {PERSON_NAME: {"age": {"2300": 40}}},
+        "households": {"home": {"members": [PERSON_NAME]}},
+        "families": {"family": {"members": [PERSON_NAME]}},
+        "tax_units": {"tax_unit": {"members": [PERSON_NAME]}},
+        "spm_units": {"spm_unit": {"members": [PERSON_NAME]}},
+        "marital_units": {"marital_unit": {"members": [PERSON_NAME]}},
+    },
 }
 
 

@@ -270,6 +270,23 @@ def test_json_values_reject_deep_nesting_and_reference_cycles(require_value) -> 
     assert require_value(document) is document
 
 
+def _uk_household_of(people: dict[str, object]) -> dict[str, object]:
+    """Return a v1 UK household with every person in one household and benunit."""
+    return {
+        "people": people,
+        "households": {"home": {"members": list(people)}},
+        "benunits": {"unit": {"members": list(people)}},
+    }
+
+
+def _nested_in_lists(depth: int) -> object:
+    """Return 1 inside ``depth`` nested lists."""
+    value: object = 1
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
 def _snapshot(
     household_json: object, *, country_id: str = "uk"
 ) -> LegacyHouseholdSnapshot:
@@ -363,6 +380,25 @@ def _snapshot(
             "JSON numbers must be finite",
             "value_not_json",
         ),
+        (
+            # Every explicit period names 2300, so that is the default year,
+            # which v2 limits to 1900-2200.
+            _uk_household_of({"adult": {"age": {"2300": 40}}}),
+            "legacy household's default year must be between 1900 and 2200",
+            "legacy_default_year_out_of_range",
+        ),
+        (
+            _uk_household_of({"adult": {"age": {"1800": 40}}}),
+            "legacy household's default year must be between 1900 and 2200",
+            "legacy_default_year_out_of_range",
+        ),
+        (
+            # Shallow enough for each record's values, but the v2 document
+            # holds them three containers deeper than its 100-container limit.
+            _uk_household_of({"adult": {"age": {"2026": _nested_in_lists(97)}}}),
+            "translated household values must be standards-compliant JSON",
+            "value_not_json",
+        ),
     ],
 )
 def test_untranslatable_v1_documents_fail_with_their_specific_message_and_reason(
@@ -380,15 +416,6 @@ def test_untranslatable_v1_documents_fail_with_their_specific_message_and_reason
     ) as raised:
         translate_legacy_household(_snapshot(household_json))
     assert raised.value.reason == reason
-
-
-def _uk_household_of(people: dict[str, object]) -> dict[str, object]:
-    """Return a v1 UK household with every person in one household and benunit."""
-    return {
-        "people": people,
-        "households": {"home": {"members": list(people)}},
-        "benunits": {"unit": {"members": list(people)}},
-    }
 
 
 @pytest.mark.parametrize(
