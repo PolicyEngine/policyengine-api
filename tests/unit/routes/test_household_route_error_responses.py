@@ -10,6 +10,7 @@ from policyengine_core.errors import SituationParsingError
 
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
+from policyengine_api.routes.error_routes import error_bp
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
     HouseholdNotFoundError,
@@ -54,6 +55,17 @@ def client():
     app.config.update(TESTING=True, CACHE_TYPE="NullCache")
     cache.init_app(app)
     app.register_blueprint(household_routes.household_bp)
+    return app.test_client()
+
+
+@pytest.fixture
+def client_with_error_handlers():
+    """Return a client that also has the app's JSON error handlers."""
+    app = Flask(__name__)
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
+    app.register_blueprint(household_routes.household_bp)
+    app.register_blueprint(error_bp)
     return app.test_client()
 
 
@@ -123,19 +135,30 @@ def test_stored_household_calculation_errors_map_to_responses(
         "/us/household/-58725/policy/2",
     ],
 )
-def test_stored_household_calculation_answers_a_non_numeric_id_with_404(
-    client,
+def test_stored_household_calculation_answers_an_id_that_isnt_digits_with_404(
+    client_with_error_handlers,
     calculation_service: MagicMock,
     path: str,
 ) -> None:
+    """An ID that isn't a string of digits matches no route.
+
+    The app's JSON 404 answers it, without running the calculation or logging
+    an error.
+    """
     calculation_service.calculate_stored_household.return_value = (
         HouseholdCalculationResult(household={"people": {}}, warnings=())
     )
 
     with patch.object(household_routes, "module_logger") as module_logger:
-        response = client.get(path)
+        response = client_with_error_handlers.get(path)
 
     assert response.status_code == 404
+    assert response.get_json() == {
+        "status": "error",
+        "message": "404 Not Found: The requested URL was not found on the server. "
+        "If you entered the URL manually please check your spelling and try again.",
+        "result": None,
+    }
     calculation_service.calculate_stored_household.assert_not_called()
     module_logger.exception.assert_not_called()
 
