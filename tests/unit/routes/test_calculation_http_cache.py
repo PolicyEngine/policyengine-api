@@ -9,12 +9,16 @@ import pytest
 from flask import Flask
 from policyengine_core.errors import SituationParsingError
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.extensions import cache
+from policyengine_api.response_factory import _make_error_response
 from policyengine_api.routes import household_routes
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
     InvalidHouseholdInputsError,
 )
+from policyengine_api.spm import SPMValidationError, normalize_spm_selection
+from policyengine_api.utils import hash_object
 from policyengine_api.utils.input_validation import UnrecognizedInput
 
 if TYPE_CHECKING:
@@ -74,6 +78,11 @@ FAILURES: dict[str, tuple[Callable[[MagicMock, Exception], None], Exception, int
                 )
             ]
         ),
+        400,
+    ),
+    "spm settings invalid": (
+        _fail_calculation,
+        SPMValidationError("SPM_SETTINGS_INVALID", "spm is malformed"),
         400,
     ),
 }
@@ -136,3 +145,34 @@ def test_a_repeated_server_error_is_logged_on_every_request(
     assert [response.status_code for response in responses] == [500, 500]
     assert calculation_service.calculate_prepared_household.call_count == 2
     assert module_logger.exception.call_count == 2
+
+
+@pytest.mark.parametrize("path", CALCULATION_PATHS)
+def test_an_error_the_previous_release_cached_is_not_served(
+    client: FlaskClient,
+    calculation_service: MagicMock,
+    path: str,
+) -> None:
+    """The cache key's schema changed with the success-only filter.
+
+    Releases before it cached error responses under schema 3 keys, and while a
+    deploy rolls out their instances share the Redis cache with the new ones.
+    """
+    calculation_service.calculate_prepared_household.return_value = SUCCESS
+    previous_release_key = hash_object(
+        {
+            "schema": 3,
+            "path": f"{path}?",
+            "payload": PAYLOAD,
+            "spm": normalize_spm_selection("us", None),
+            "country_version": COUNTRY_PACKAGE_VERSIONS["us"],
+            "policyengine_version": POLICYENGINE_VERSION,
+        }
+    )
+    with client.application.test_request_context():
+        cache.set(previous_release_key, _make_error_response("engine exploded", 500))
+
+    response = client.post(path, json=PAYLOAD)
+
+    assert response.status_code == 200
+    assert calculation_service.calculate_prepared_household.call_count == 1
