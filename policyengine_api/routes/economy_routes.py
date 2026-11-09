@@ -145,13 +145,15 @@ def get_economic_impact(
     A policy ID of 0 means current law. The result stays ``computing`` until the
     simulation finishes, and while computing the body also carries the stage
     fields the Simulation Entrypoint reports. Invalid query parameters give 400,
-    a policy ID the country does not have gives 404, and a failed calculation,
-    or a request to the simulation service that gets no response (after one
-    retry if its connection broke), gives 502. One request is an exception:
-    for a finished stored impact, the route asks the simulation service which
-    worker app the request resolves to, to check whether the impact is out of
-    date, and if that request gets no response it answers from the stored
-    impact as it is.
+    as does a ``time_period`` outside the country's ``ECONOMY_YEARS``, with
+    the code ``DATASET_YEAR_UNAVAILABLE`` in ``errors``, even when a result for
+    it is stored. A policy ID the country does not have gives 404, and a
+    failed calculation, or a request to the simulation service that gets no
+    response (after one retry if its connection broke), gives 502. One
+    request is an exception: for a finished stored impact, the route asks the
+    simulation service which worker app the request resolves to, to check
+    whether the impact is out of date, and if that request gets no response
+    it answers from the stored impact as it is.
     A 502 body's ``retry_after_seconds`` is how long the Public API keeps
     returning the stored failure before a request starts a new run, or null
     when no failure is stored, the next request would answer from a newer
@@ -263,7 +265,10 @@ def get_budget_window_economic_impact(
 
     The body lists completed, computing and queued years, and the
     ``X-PolicyEngine-Budget-Window-Cache`` header reports the cache outcome when
-    known. Invalid query parameters give 400, a policy ID the country does
+    known. Invalid query parameters give 400, as does a ``start_year``
+    outside the country's ``ECONOMY_YEARS``, with the code
+    ``DATASET_YEAR_UNAVAILABLE`` in ``errors``; a window that starts in those
+    years may end after them. A policy ID the country does
     not have gives 404, and a request to the simulation service that gets no
     response (after one retry if its connection broke) gives 502; a failed
     calculation is reported in the body with status 200.

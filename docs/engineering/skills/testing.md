@@ -7,7 +7,8 @@ Use this skill whenever adding, moving, or reviewing tests.
 Tests run in the environment `uv.lock` defines, on Python 3.12, the same
 versions the Cloud Run image installs (`gcp/cloud_run/Dockerfile`):
 
-- `make install` runs `uv sync --frozen --extra dev`, and `make test` runs
+- `make install` turns on the git hooks in `.githooks` and runs
+  `uv sync --frozen --extra dev`, and `make test` runs
   pytest and coverage through `uv run --frozen --extra dev`. The Makefile sets
   `UV_PYTHON=3.12` unless it is already set, because `.python-version` selects
   3.14.
@@ -444,16 +445,12 @@ avoid depending on specific production data fixtures:
 API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v
 ```
 
-Before committing AI-authored code changes, run repository formatting and lint:
+Before committing AI-authored code changes, run the quality checks, as
+"Commit Hygiene" in the GitHub PRs skill describes:
 
 ```bash
-make format
-ruff check <changed Python files>
+make quality
 ```
-
-Commit only after formatting succeeds and changed Python files pass lint. If a
-broader repo-wide lint command fails on unrelated pre-existing issues, include
-that result in the handoff instead of hiding it.
 
 ## Phase 10 Policy Migration
 

@@ -26,6 +26,7 @@ from scripts.rules.declared_dependencies import (
     unparsed_file_violations,
     unscanned_file_violations,
 )
+from scripts.rules.makefile import job_make_commands
 from scripts.rules.model import RuleException
 from scripts.rules.resolve import workflow_jobs
 
@@ -629,7 +630,13 @@ class TestWorkflows(unittest.TestCase):
             workflow_text = workflow.read_text()
             header = workflow_text.split("\njobs:", 1)[0]
             for job in workflow_jobs(workflow)[0].values():
-                if "run_quality_guards.py" not in job.run_text:
+                # A job may run the guards through a make target, such as
+                # pr.yml's make quality.
+                commands = [
+                    job.run_text,
+                    *job_make_commands(REPO_ROOT, job.run_text),
+                ]
+                if not any("run_quality_guards.py" in command for command in commands):
                     continue
                 guard_jobs.append(f"{workflow.name}:{job.id}")
                 with self.subTest(job=f"{workflow.name}:{job.id}"):
@@ -643,8 +650,11 @@ class TestWorkflows(unittest.TestCase):
                         'UV_PYTHON: "3.12"', _job_text(workflow_text, job.id) + header
                     )
                     self.assertTrue(
-                        "uv sync --frozen --extra dev" in job.run_text
-                        or "uv run --frozen --extra dev" in job.run_text
+                        any(
+                            "uv sync --frozen --extra dev" in command
+                            or "uv run --frozen --extra dev" in command
+                            for command in commands
+                        )
                     )
         self.assertEqual(
             guard_jobs, ["pr.yml:quality-guards", "push.yml:quality-guards"]

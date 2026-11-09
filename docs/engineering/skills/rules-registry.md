@@ -16,7 +16,7 @@ registry, the checkers and the rendered views disagree.
 ```bash
 python -m scripts.rules validate                    # schema and file checks only
 python -m scripts.rules render                      # rewrite rules.md and the AGENTS.md block
-python -m scripts.rules guard --base-ref origin/<default-branch>   # everything CI checks
+python -m scripts.rules guard --base-ref "$(git merge-base HEAD origin/<default-branch>)"   # everything CI checks
 python -m unittest discover -s scripts/rules/tests -t .            # the tool's own tests
 ```
 
@@ -57,7 +57,7 @@ gap is visible, rather than leaving it out.
 | `autofix` | Whether the enforcer can fix violations itself (e.g. ruff format). |
 | `review_by` | Optional date; the guard fails once it passes. |
 | `[rule.enforcer]` | What checks the rule; `kind` plus kind-specific fields. |
-| `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`). |
+| `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`), or in a command of a Makefile target the job runs with `make <target>`, following the targets' prerequisites and the `$(MAKE)` calls in their recipes (`scripts/rules/makefile.py`). |
 | `[rule.proof]` | Optional; see "Proof". |
 | `[rule.baseline]` | Only for `ratcheted` rules: `file` listing tolerated violations, and their `count`. |
 | `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions); for `api.data.sqlalchemy-and-alembic-only`, `match` is the exact construct and `category` is `driver-access`, `schema-change` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#declared-exceptions)). |

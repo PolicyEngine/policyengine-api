@@ -23,6 +23,7 @@ from policyengine_api.country import (
     get_requested_computations,
 )
 from policyengine_api.data import uk_regions as public_api_uk_regions
+from policyengine_api.economy_years import ECONOMY_YEARS, UK_ECONOMY_YEARS
 from policyengine_api.services.economic_impact_request import EconomicImpactRequest
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.policy_parameter_service import PolicyParameterService
@@ -267,6 +268,14 @@ class TestAxisResults:
 UK_DATASET_DATA_YEAR = 2024
 
 
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test__metadata_offers_the_countrys_economy_years_in_their_order(country_id):
+    """US 2024 to 2035 newest first, UK 2024 to 2032 oldest first."""
+    assert COUNTRIES[country_id].metadata["economy_options"]["time_period"] == [
+        {"name": year, "label": str(year)} for year in ECONOMY_YEARS[country_id]
+    ]
+
+
 def uk_model_projected_years(data_year):
     """Return the years policyengine-uk's own projection gives a dataset.
 
@@ -315,11 +324,12 @@ class TestUKCountryMetadata:
     def uk_regions(self, uk_country):
         return uk_country.metadata["economy_options"]["region"]
 
-    def test__uk_years_run_to_the_models_last_projected_year(self, uk_country):
-        """The UK years end where the installed policyengine-uk projects its data.
+    def test__uk_years_are_years_the_model_projects(self, uk_country):
+        """Every UK year offered is one the installed policyengine-uk projects to.
 
-        The simulation service refuses a later year (DATASET_YEAR_UNAVAILABLE),
-        and the app offers no year after the last one listed here.
+        The simulation service refuses any other year (DATASET_YEAR_UNAVAILABLE).
+        The years are a constant (``UK_ECONOMY_YEARS``), so this fails when a
+        policyengine-uk update projects its data to fewer years.
         """
         years = [
             period["name"]
@@ -327,11 +337,8 @@ class TestUKCountryMetadata:
         ]
         projected_years = uk_model_projected_years(UK_DATASET_DATA_YEAR)
 
-        assert years == projected_years
-        assert [
-            period["label"]
-            for period in uk_country.metadata["economy_options"]["time_period"]
-        ] == [str(year) for year in projected_years]
+        assert years == list(UK_ECONOMY_YEARS)
+        assert set(years) <= set(projected_years)
 
     def test__uk_metadata_contains_local_authorities(self, uk_regions):
         """Verify that local authorities are included in UK region options."""

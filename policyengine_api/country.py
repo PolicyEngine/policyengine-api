@@ -37,13 +37,11 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 from policyengine_api.data.uk_regions import uk_areas
-from policyengine_api.economy_years import uk_economy_years
-from policyengine_api.household_years import us_household_years
+from policyengine_api.economy_years import ECONOMY_YEARS
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
     SPM_INPUT_ERROR_CODES,
     calculation_spm_receipt,
-    certified_spm_forecast_years,
     normalize_spm_selection,
     spm_error_detail,
     spm_metadata,
@@ -171,15 +169,13 @@ class PolicyEngineCountry:
 
     def build_metadata(self) -> None:
         """Build the JSON-safe metadata document served by the metadata endpoints."""
-        economy_options = self.build_microsimulation_options()
         self.metadata = self._json_safe(
             {
                 "variables": self.build_variables(),
                 "parameters": self.build_parameters(),
                 "entities": self.build_entities(),
                 "variableModules": self.tax_benefit_system.variable_module_metadata,
-                "economy_options": economy_options,
-                "household_options": self.build_household_options(economy_options),
+                "economy_options": self.build_microsimulation_options(),
                 "current_law_id": get_current_law_policy_id(self.country_id),
                 "basicInputs": self.tax_benefit_system.basic_inputs,
                 "modelled_policies": self.tax_benefit_system.modelled_policies,
@@ -210,7 +206,8 @@ class PolicyEngineCountry:
     def build_microsimulation_options(self) -> dict:
         """Build the regions, time periods and datasets offered for economy runs."""
         # Shape: { region: [{ name: "uk", label: "the UK" }],
-        #   time_period: [{ name: 2022, label: "2022", ... }] }
+        #   time_period: [{ name: 2024, label: "2024", ... }] }
+        # The years are each country's ECONOMY_YEARS, in their order.
         options = {}
         if self.country_id == "uk":
             region = [
@@ -233,8 +230,7 @@ class PolicyEngineCountry:
                 for area in sorted(uk_areas(area_type), key=attrgetter("name"))
             )
             time_period = [
-                {"name": year, "label": str(year)}
-                for year in uk_economy_years(self.tax_benefit_system.parameters)
+                {"name": year, "label": str(year)} for year in ECONOMY_YEARS["uk"]
             ]
             datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region
@@ -298,57 +294,13 @@ class PolicyEngineCountry:
             # Add all 436 congressional districts (435 voting + DC)
             region.extend(build_congressional_district_metadata())
             time_period = [
-                {"name": 2035, "label": "2035"},
-                {"name": 2034, "label": "2034"},
-                {"name": 2033, "label": "2033"},
-                {"name": 2032, "label": "2032"},
-                {"name": 2031, "label": "2031"},
-                {"name": 2030, "label": "2030"},
-                {"name": 2029, "label": "2029"},
-                {"name": 2028, "label": "2028"},
-                {"name": 2027, "label": "2027"},
-                {"name": 2026, "label": "2026"},
-                {"name": 2025, "label": "2025"},
-                {"name": 2024, "label": "2024"},
-                {"name": 2023, "label": "2023"},
-                {"name": 2022, "label": "2022"},
+                {"name": year, "label": str(year)} for year in ECONOMY_YEARS["us"]
             ]
             datasets = [get_bundle_default_dataset_option("us")]
             options["region"] = region
             options["time_period"] = time_period
             options["datasets"] = datasets
         return options
-
-    def build_household_options(self, economy_options: dict) -> dict:
-        """Build the years offered for household calculations.
-
-        Each year has the shape of an ``economy_options`` year. The US years
-        are the certified SPM forecast's years up to the last CPI-U year
-        (``us_household_years``), or the society-wide years when the bundle
-        has no certified SPM forecast. The UK years follow the rule for the
-        UK society-wide years (``uk_economy_years``). Any other country
-        offers its society-wide years.
-        """
-        parameters = self.tax_benefit_system.parameters
-        years = None
-        if self.country_id == "uk":
-            years = uk_economy_years(parameters)
-        elif self.country_id == "us":
-            forecast_years = certified_spm_forecast_years()
-            if forecast_years is None:
-                logger.warning(
-                    "The bundle has no certified SPM forecast; the US household "
-                    "years are the US society-wide years"
-                )
-            else:
-                years = us_household_years(parameters, forecast_years)
-        if years is None:
-            return {
-                "time_period": [
-                    dict(period) for period in economy_options.get("time_period", [])
-                ]
-            }
-        return {"time_period": [{"name": year, "label": str(year)} for year in years]}
 
     def build_variables(self) -> dict:
         """Describe every variable by name; enum variables list their values."""

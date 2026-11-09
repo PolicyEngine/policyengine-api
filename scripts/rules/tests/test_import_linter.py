@@ -331,6 +331,39 @@ class TestImportLinterEnforcer(unittest.TestCase):
                 )
                 self.assertEqual(messages, expected)
 
+    def test_a_make_target_the_job_runs_must_run_every_contract_too(self) -> None:
+        ci = (CiRef(".github/workflows/pr.yml", "quality-guards", "lint-imports"),)
+        self.repo.write(
+            ".github/workflows/pr.yml",
+            "jobs:\n  quality-guards:\n    steps:\n      - run: make quality\n",
+        )
+        for command, accepted in (
+            ("uv run --frozen --extra dev lint-imports --config pyproject.toml", True),
+            ("lint-imports --config pyproject.toml || true", False),
+            # make ignores the failure of a command with the - prefix.
+            ("-lint-imports --config pyproject.toml", False),
+        ):
+            with self.subTest(command=command):
+                self.repo.write(
+                    "Makefile",
+                    "quality:\n\t$(MAKE) quality-check\n\n"
+                    f"quality-check:\n\t{command}\n",
+                )
+                rule = dataclasses.replace(import_linter_rule("pkg-layers"), ci=ci)
+                messages = self.messages(rule)
+                expected = (
+                    []
+                    if accepted
+                    else [
+                        "[ex.r] enforcer: job 'quality-guards' in "
+                        ".github/workflows/pr.yml runs Import Linter as "
+                        f"'{command}', which may skip contracts or ignore failures. "
+                        "Fix: run exactly 'lint-imports --config pyproject.toml', "
+                        "optionally after 'uv run ...'."
+                    ]
+                )
+                self.assertEqual(messages, expected)
+
     def test_a_config_that_is_not_toml_is_reported(self) -> None:
         self.repo.write("setup.cfg", "[importlinter]\nroot_package = pkg\n")
 

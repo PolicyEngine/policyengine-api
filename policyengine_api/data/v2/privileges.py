@@ -108,6 +108,9 @@ def update_columns(*columns: str) -> ColumnPrivilege:
 NO_ACCESS: Final[frozenset[TablePrivilege]] = frozenset()
 READ: Final = frozenset({TablePrivilege.SELECT})
 READ_INSERT: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.INSERT})
+READ_INSERT_DELETE: Final = frozenset(
+    {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
+)
 READ_INSERT_UPDATE: Final = frozenset(
     {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.UPDATE}
 )
@@ -236,13 +239,17 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     ),
     "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
     # Written by catalog publication for each version it publishes, from the
-    # installed packages' catalog; never rewritten.
-    "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT),
-    # Written with each catalog version that publication publishes.
-    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT),
-    # The Public API also inserts a v2 policy's own parameter values.
+    # installed packages' catalog; never rewritten. Catalog pruning deletes an
+    # older version's file, which publishing that version again writes back.
+    "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
+    # Written with each catalog version that publication publishes; catalog
+    # pruning deletes an older version's rows.
+    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
+    # The Public API also inserts a v2 policy's own parameter values. Catalog
+    # pruning deletes an older version's current-law values (those with no
+    # policy or dynamic), never a policy's or a dynamic's.
     "parameter_values": _access(
-        runtime=READ_INSERT, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ_INSERT, catalog_writer=READ_WRITE, **_RUN_INPUT_READS
     ),
     "parameters": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
@@ -250,6 +257,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "regions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
+    # Catalog publication updates a version's time periods and
+    # catalog_last_published_at, and catalog pruning its
+    # catalog_values_pruned_at.
     "tax_benefit_model_versions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),

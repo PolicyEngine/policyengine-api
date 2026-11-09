@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, replace
+from functools import partial
+from typing import TYPE_CHECKING, TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy import Connection, Engine
@@ -18,11 +20,21 @@ from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     assert_parameter_trees_written,
     write_parameter_trees,
 )
+from policyengine_api.data.v2.catalog.publication_pruning import (
+    catalog_versions_to_prune,
+    catalog_versions_to_prune_now,
+    prune_catalog_version,
+    pruning_failure,
+    read_stored_catalog_versions,
+    record_catalog_publication,
+    restore_pruned_catalog_versions,
+)
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
     assert_country_matches,
     count_region_differences,
     count_stored_regions,
+    update_stored_time_periods,
     version_exists,
 )
 from policyengine_api.data.v2.catalog.publication_staging import (
@@ -30,7 +42,9 @@ from policyengine_api.data.v2.catalog.publication_staging import (
     stage_catalog,
 )
 from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPruningFailure,
     CatalogPublicationError,
+    PrunedCatalogVersion,
     PublicationEvidence,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
@@ -42,8 +56,12 @@ from policyengine_api.data.v2.models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
+    from policyengine_api.data.v2.catalog.publication_pruning import (
+        PrunedRows,
+        StoredCatalogVersion,
+    )
     from policyengine_api.data.v2.catalog.records import (
         CountryCatalog,
         NormalizedCatalog,
@@ -64,6 +82,7 @@ PROTECTED_TABLES = (
 )
 
 LOGGER = logging.getLogger(__name__)
+ResultT = TypeVar("ResultT")
 
 __all__ = [
     "CatalogPublicationError",
@@ -128,12 +147,23 @@ def publish_catalog(
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
+    A catalog version that is already stored is compared with the staged one
+    and left as it is, apart from two exceptions: it keeps the regions it was
+    published with, and it takes the staged time periods
+    (``metadata_time_periods``), the years the Public API offers for it.
     In the same transaction it writes the parameter tree and the parameter
     search file of each version in the catalog that has none, built from the
     catalog: the versions it publishes, and the installed version when an
     earlier release stored it with catalog format 2 but without them. Other
     stored versions, and an installed version stored before catalog format 2,
-    keep having none.
+    keep having none. A stored version that pruning removed current-law data
+    from gets its values back from the staged catalog, before the comparison,
+    and its tree and search file from those writers.
+
+    After the transaction commits, it prunes the older stored versions of the
+    catalog's models (``publication_pruning``), at most two per run, one
+    transaction each; a failure of any kind rolls back only that version and
+    is reported in the evidence.
     """
     started = time.monotonic()
     with engine.begin() as connection:
@@ -145,7 +175,11 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_copy", connection)
 
-        existing, kept_region_summaries = _check_stored_versions(connection, catalog)
+        restored_versions = restore_pruned_catalog_versions(
+            connection, catalog.countries
+        )
+        stored_versions = _reconcile_stored_versions(connection, catalog)
+        existing = stored_versions.countries
 
         for country in catalog.countries:
             if country.country_id not in existing:
@@ -154,6 +188,7 @@ def publish_catalog(
         parameter_search_files_written = write_parameter_search_files(
             connection, catalog.countries
         )
+        record_catalog_publication(connection, catalog.countries)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
@@ -172,40 +207,229 @@ def publish_catalog(
         if checkpoint is not None:
             checkpoint("after_validation", connection)
 
-    return _evidence(
-        catalog,
-        kept_region_summaries,
-        parameter_trees_written=parameter_trees_written,
-        parameter_search_files_written=parameter_search_files_written,
-        started=started,
+    pruning = _prune_older_versions(engine, catalog)
+    return replace(
+        _evidence(
+            catalog,
+            stored_versions,
+            parameter_trees_written=parameter_trees_written,
+            parameter_search_files_written=parameter_search_files_written,
+            started=started,
+        ),
+        restored_catalog_versions=restored_versions,
+        pruned_catalog_versions=pruning.pruned,
+        catalog_pruning_failures=pruning.failures,
+        catalog_versions_left_to_prune=pruning.left_to_prune,
     )
 
 
-def _check_stored_versions(
+@dataclass(frozen=True, slots=True)
+class _PruningRun:
+    """What pruning did after a publication committed.
+
+    ``left_to_prune`` counts the chosen versions beyond this run's limit, which
+    the next publications prune.
+    """
+
+    pruned: tuple[PrunedCatalogVersion, ...]
+    failures: tuple[CatalogPruningFailure, ...]
+    left_to_prune: int
+
+
+def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _PruningRun:
+    """Prune the catalog models' older versions, one transaction each.
+
+    Runs after the publication committed, so an exception, of any kind, never
+    fails the command: it is recorded and the next publication retries. Of
+    the chosen versions (``catalog_versions_to_prune``), a run prunes at most
+    ``MAX_CATALOG_VERSIONS_PRUNED_PER_RUN``, oldest first
+    (``catalog_versions_to_prune_now``). Each version's transaction takes the
+    publication lock, so it waits for any other publisher, chooses again from
+    the stored versions it then reads, and deletes and marks the version
+    together (``_prune_if_still_chosen``). An exception rolls back that version
+    alone, and the others are still pruned. An exception reading the stored
+    versions prunes nothing and is recorded for each model, with no version.
+    """
+    installed_versions = {
+        country.model.name: country.model_version.version
+        for country in catalog.countries
+    }
+    country_ids = {
+        country.model.name: country.country_id for country in catalog.countries
+    }
+    stored_versions = _returned_or_raised(
+        partial(_read_stored_versions, engine, installed_versions)
+    )
+    if isinstance(stored_versions, Exception):
+        return _PruningRun(
+            pruned=(),
+            failures=tuple(
+                pruning_failure(country_ids[model_name], None, stored_versions)
+                for model_name in sorted(country_ids)
+            ),
+            left_to_prune=0,
+        )
+    pruned_now, left_to_prune = catalog_versions_to_prune_now(
+        catalog_versions_to_prune(stored_versions, installed_versions)
+    )
+    pruned: list[PrunedCatalogVersion] = []
+    failures: list[CatalogPruningFailure] = []
+    for stored in pruned_now:
+        country_id = country_ids[stored.model_name]
+        deleted = _returned_or_raised(
+            partial(
+                _prune_if_still_chosen,
+                engine,
+                stored,
+                installed_versions[stored.model_name],
+            )
+        )
+        if isinstance(deleted, Exception):
+            failures.append(pruning_failure(country_id, stored.version, deleted))
+        elif deleted is not None:
+            pruned.append(
+                PrunedCatalogVersion(
+                    country_id=country_id,
+                    policyengine_version=stored.version,
+                    parameter_values=deleted.parameter_values,
+                    parameter_tree_children=deleted.parameter_tree_children,
+                    parameter_search_files=deleted.parameter_search_files,
+                )
+            )
+    return _PruningRun(
+        pruned=tuple(pruned), failures=tuple(failures), left_to_prune=left_to_prune
+    )
+
+
+def _read_stored_versions(
+    engine: Engine, installed_versions: Mapping[str, str]
+) -> tuple[StoredCatalogVersion, ...]:
+    with engine.connect() as connection:
+        return read_stored_catalog_versions(connection, installed_versions)
+
+
+def _prune_if_still_chosen(
+    engine: Engine, stored: StoredCatalogVersion, installed_version: str
+) -> PrunedRows | None:
+    """Prune one version in its own transaction, if the rule still chooses it.
+
+    The choice was made from versions read without the publication lock; a
+    publisher that committed since may have changed which versions the rule
+    keeps. Under the lock this reads the model's stored versions again and
+    returns None, deleting nothing, when ``catalog_versions_to_prune`` no
+    longer chooses the version, or when it was pruned meanwhile.
+    """
+    with engine.begin() as connection:
+        _acquire_publication_lock(connection)
+        current_versions = read_stored_catalog_versions(connection, [stored.model_name])
+        chosen = catalog_versions_to_prune(
+            current_versions, {stored.model_name: installed_version}
+        )
+        if all(version.id != stored.id for version in chosen):
+            return None
+        return prune_catalog_version(connection, stored.id)
+
+
+def _returned_or_raised(action: Callable[[], ResultT]) -> ResultT | Exception:
+    """Return what ``action`` returns, or the exception it raised.
+
+    Pruning runs after the publication committed, so an exception while
+    pruning is recorded rather than raised, whatever its kind.
+    """
+    try:
+        return action()
+    except Exception as error:  # noqa: BLE001  # pruning failures are recorded, never raised
+        return error
+
+
+@dataclass(frozen=True, slots=True)
+class _StoredVersions:
+    """The catalog's countries whose version was already stored, and what changed.
+
+    ``kept_region_summaries`` and ``time_period_updates`` take the shapes of
+    the evidence fields of the same names.
+    """
+
+    countries: frozenset[str]
+    kept_region_summaries: tuple[tuple[str, str, int, int], ...]
+    time_period_updates: tuple[tuple[str, str, tuple[int, ...], tuple[int, ...]], ...]
+
+
+def _reconcile_stored_versions(
     connection: Connection,
     catalog: NormalizedCatalog,
-) -> tuple[set[str], tuple[tuple[str, str, int, int], ...]]:
-    """Compare each stored catalog version and return its countries and kept regions.
+) -> _StoredVersions:
+    """Compare each stored catalog version, then give it the staged time periods.
 
-    A stored catalog version never changes. Its regions stay as they were
-    published even when the reference files differ now; every other table
-    must still match exactly.
+    A stored version's regions stay as they were published even when the
+    reference files differ now. Its time periods (``metadata_time_periods``)
+    become the staged ones, which come from the Public API's code. Every other
+    table and column must still match exactly, or CatalogPublicationError is
+    raised before anything is changed.
     """
-    existing: set[str] = set()
+    countries: set[str] = set()
     kept_region_summaries: list[tuple[str, str, int, int]] = []
+    time_period_updates: list[tuple[str, str, tuple[int, ...], tuple[int, ...]]] = []
     for country in catalog.countries:
         if version_exists(connection, country):
             assert_country_matches(connection, country, include_regions=False)
             kept = _kept_region_summary(connection, country)
             if kept is not None:
                 kept_region_summaries.append(kept)
-            existing.add(country.country_id)
-    return existing, tuple(kept_region_summaries)
+            countries.add(country.country_id)
+    for country in catalog.countries:
+        if country.country_id in countries:
+            update = _time_period_update(connection, country)
+            if update is not None:
+                time_period_updates.append(update)
+    return _StoredVersions(
+        countries=frozenset(countries),
+        kept_region_summaries=tuple(kept_region_summaries),
+        time_period_updates=tuple(time_period_updates),
+    )
+
+
+def _time_period_update(
+    connection: Connection,
+    country: CountryCatalog,
+) -> tuple[str, str, tuple[int, ...], tuple[int, ...]] | None:
+    """Give a stored version the staged time periods, and log any change.
+
+    Return the country, the version, and the stored and staged time periods
+    when they differed; there is none when they are the same.
+    """
+    update = update_stored_time_periods(connection, country)
+    if update is None:
+        return None
+    stored, staged = update
+    # The seed command configures no logging handler, so the details are in the
+    # message itself; the attributes serve structured handlers.
+    LOGGER.warning(
+        "replaced the time periods of the stored %s catalog version %s: %s became %s",
+        country.country_id,
+        country.model_version.version,
+        stored,
+        staged,
+        extra={
+            "policyengine_attributes": {
+                "country_id": country.country_id,
+                "policyengine_version": country.model_version.version,
+                "stored_time_periods": stored,
+                "staged_time_periods": staged,
+            }
+        },
+    )
+    return (
+        country.country_id,
+        country.model_version.version,
+        tuple(stored),
+        tuple(staged),
+    )
 
 
 def _evidence(
     catalog: NormalizedCatalog,
-    kept_region_summaries: tuple[tuple[str, str, int, int], ...],
+    stored_versions: _StoredVersions,
     *,
     parameter_trees_written: tuple[tuple[str, str, int], ...],
     parameter_search_files_written: tuple[tuple[str, str, int, int], ...],
@@ -216,9 +440,12 @@ def _evidence(
     Every table of a stored version matches the staged catalog except regions
     that were kept: for those countries the evidence counts the stored region
     rows and reports none of the staged fallbacks or omissions, which describe
-    rows that were not published. It also lists the parameter trees and
-    search files publication wrote.
+    rows that were not published. It lists each stored version whose time
+    periods publication replaced, with the previous and new ones, and the
+    parameter trees and search files publication wrote. The caller adds the
+    pruned versions publication restored and the older versions it pruned.
     """
+    kept_region_summaries = stored_versions.kept_region_summaries
     kept_countries = {country_id for country_id, *_counts in kept_region_summaries}
     entity_counts = catalog.entity_counts()
     entity_counts["regions"] += sum(
@@ -244,6 +471,7 @@ def _evidence(
             for summary in country.omitted_region_summaries
         ),
         kept_region_summaries=kept_region_summaries,
+        time_period_updates=stored_versions.time_period_updates,
         parameter_trees_written=parameter_trees_written,
         parameter_search_files_written=parameter_search_files_written,
     )

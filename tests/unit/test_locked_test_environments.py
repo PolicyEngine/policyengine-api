@@ -17,7 +17,11 @@ from typing import NamedTuple
 
 import pytest
 
-from scripts.rules.locked_installs import executed_lines, makefile_recipes
+from scripts.rules.locked_installs import (
+    classify_command,
+    executed_lines,
+    makefile_recipes,
+)
 from scripts.rules.workflows import parse_jobs
 
 REPO = Path(__file__).resolve().parents[2]
@@ -113,7 +117,15 @@ def test_detects_every_known_test_job():
 
 
 def test_make_install_syncs_the_locked_development_environment():
-    assert makefile_recipes(REPO)["install"] == [LOCKED_SYNC]
+    recipe = makefile_recipes(REPO)["install"]
+
+    assert LOCKED_SYNC in recipe
+    # Its other commands, such as turning on the git hooks, install nothing.
+    assert [
+        command
+        for command in recipe
+        if command != LOCKED_SYNC and classify_command(command) is not None
+    ] == []
 
 
 @pytest.mark.parametrize("target", ["test", "test-env-vars", "debug-test"])

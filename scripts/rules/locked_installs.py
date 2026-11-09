@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.rules.load import load_registry
+from scripts.rules.makefile import make_targets_run, root_makefile_problems
 from scripts.rules.model import RuleException, Violation
 from scripts.rules.workflows import parse_jobs
 
@@ -63,7 +64,6 @@ _TEST_COMMAND = re.compile(
     r"|(?:^|\s)(?:tox|nox)(?:\s|$)"
 )
 _SCRIPT_REFERENCE = re.compile(r"\.github/[\w./-]+\.sh")
-_MAKE_TARGET_REFERENCE = re.compile(r"\bmake ([\w-]+)")
 _MAKE_TARGET_HEADER = re.compile(r"^([\w-]+)\s*:(?!=)")
 _RUN_KEY = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:(?P<value>.*)$")
 _PULL_REQUEST_TRIGGERS = {"pull_request", "pull_request_target"}
@@ -504,7 +504,9 @@ def executed_lines(
 ) -> list[str]:
     """Return the command's lines plus those of the scripts and Make targets it runs."""
     visited = set() if visited is None else visited
-    recipes = makefile_recipes(root)
+    # A Makefile that can hide a failure, or that this reader can't follow,
+    # gives the targets a command runs no commands of theirs.
+    recipes = {} if root_makefile_problems(root) else makefile_recipes(root)
     executed = []
     for command_line in command_text.splitlines():
         if command_line.lstrip().startswith("#"):
@@ -516,7 +518,7 @@ def executed_lines(
             visited.add(script_path)
             script_text = (root / script_path).read_text(encoding="utf-8")
             executed += executed_lines(root, script_text, visited)
-        for target in _MAKE_TARGET_REFERENCE.findall(command_line):
+        for target in make_targets_run(command_line):
             if f"make {target}" in visited or target not in recipes:
                 continue
             visited.add(f"make {target}")
@@ -606,7 +608,8 @@ def lock_violations(root: Path = REPO_ROOT) -> list[Violation]:
         & _PULL_REQUEST_TRIGGERS
         for commands in _workflow_job_commands(root, path).values()
         for command in commands
-        if _LOCK_CHECK.search(command)
+        # make ignores the failure of a recipe command with the - prefix.
+        if _LOCK_CHECK.search(command) and not command.lstrip().startswith("-")
     }
     violations += [
         Violation(

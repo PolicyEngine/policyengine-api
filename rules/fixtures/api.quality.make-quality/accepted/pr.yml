@@ -1,0 +1,15 @@
+# Proof fixture for api.quality.make-quality (accepted), read with
+# accepted/Makefile: the quality-guards job runs make quality, then fails if
+# ruff's fixes changed a file, and no other job runs a check itself.
+jobs:
+  ci-complete:
+    needs:
+      - test
+      - quality-guards
+  test:
+    steps:
+      - run: make test
+  quality-guards:
+    steps:
+      - run: make quality
+      - run: git diff --exit-code HEAD

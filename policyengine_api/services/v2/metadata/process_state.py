@@ -20,10 +20,24 @@ A version of None means the running version, which is fixed for the process.
 class SelectedCatalogStore:
     """Keep each catalog version a request has selected, for the process's life.
 
-    A published catalog version never changes, so once a request has found it,
-    later requests for the same country and version need not query for it
-    again. Only successful selections are kept: an unsupported country, an
-    invalid version or an absent catalog is looked up, and fails, each time.
+    After publication a catalog version's row changes only in its
+    time-period options, which a release's publication replaces before that
+    release's processes start, its ``catalog_last_published_at``, which each
+    publication of it sets and no read uses, and its
+    ``catalog_values_pruned_at``, which pruning sets and restoration clears.
+    So once a request has found the version, later requests for the same
+    country and version need not query for it again; a process of the
+    previous release keeps the time-period options it read.
+
+    A kept ``catalog_values_pruned_at`` can be out of date in either
+    direction, so ``MetadataCatalogSelection`` checks it for the reads of the
+    rows pruning deletes. When the kept selection has it clear and the read
+    finds no rows, the version may have been pruned since: the column is read
+    again. When the kept selection has it set, the version may have been
+    restored since: the column is read again before the read, and once it is
+    clear the version is selected again and the new selection kept. Only
+    successful selections are kept: an unsupported country, an invalid
+    version or an absent catalog is looked up, and fails, each time.
     The kept records are detached, fully loaded rows that are only read.
     """
 

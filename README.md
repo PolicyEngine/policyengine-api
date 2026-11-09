@@ -39,7 +39,11 @@ make install
 make setup-env
 ```
 
-`make install` runs `uv sync --frozen --extra dev`, which creates `.venv` with
+Run `make install` once per clone, and in each new worktree to create its
+`.venv`. It turns on the git hooks in `.githooks/`,
+which run `make quality` before each `git commit` and each merge commit in
+every worktree of the clone (`git config core.hooksPath .githooks`), and runs
+`uv sync --frozen --extra dev`, which creates `.venv` with
 exactly the versions in `uv.lock` on Python 3.12, the version the Cloud Run
 image runs. `make test`, `make test-env-vars`, `make debug-test`, `make debug`,
 `make debug-asgi`, `make typecheck-v2` and the towncrier step of
@@ -210,13 +214,13 @@ We require that you add tests for any new features or bugfixes. Our tests are wr
 
 ### Step 2: Formatting
 
-In addition to the tests, we use [Black](https://github.com/psf/black) to lint our codebase, so before opening a pull request, Step 2 is to lint the code by running
+In addition to the tests, we check the code with ruff, Import Linter, mypy and the repository's quality guards, so before opening a pull request, Step 2 is to run
 
 ```
-make format
+make quality
 ```
 
-This will automatically format the code for you; no need to do anything else.
+This applies ruff's fixes, then runs the checks the pull request's `Quality checks` job runs, apart from the rules registry tool's own tests. Commit the fixes it makes.
 
 ### Step 3: Changelogging
 

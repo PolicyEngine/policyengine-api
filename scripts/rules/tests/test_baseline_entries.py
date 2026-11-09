@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import unittest
+from unittest import mock
 
+from scripts.rules.baseline import default_base_ref
 from scripts.rules.tests.support import Repo
 from scripts.rules.tests.test_guard import RATCHETED_RULE, with_rule
 
@@ -59,6 +62,25 @@ class TestBaselineEntries(unittest.TestCase):
             repo.write(BASELINE, "# Tolerated.\npkg/routes.py\n")
             repo.render()
             self.assertEqual(repo.messages(base_ref="HEAD"), [])
+
+
+class TestDefaultBaseRef(unittest.TestCase):
+    """The ref baselines and rule statuses are compared with, by default."""
+
+    def test_rules_base_ref_is_used_as_given(self) -> None:
+        # make quality-check passes the merge base, a commit, this way.
+        environment = {"RULES_BASE_REF": "4f2960b6", "GITHUB_BASE_REF": "master"}
+        with mock.patch.dict(os.environ, environment):
+            self.assertEqual(default_base_ref(), "4f2960b6")
+
+    def test_the_pull_request_s_base_branch_otherwise(self) -> None:
+        environment = {"RULES_BASE_REF": "", "GITHUB_BASE_REF": "master"}
+        with mock.patch.dict(os.environ, environment):
+            self.assertEqual(default_base_ref(), "origin/master")
+
+    def test_none_without_either(self) -> None:
+        with mock.patch.dict(os.environ, {"RULES_BASE_REF": "", "GITHUB_BASE_REF": ""}):
+            self.assertIsNone(default_base_ref())
 
 
 if __name__ == "__main__":

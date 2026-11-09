@@ -66,8 +66,9 @@ CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 PARAMETER_TREE_REVISION = "3869eb814a90"
-# The parameter search file revision, parent of the simulation runs revision.
-SIMULATION_RUNS_PARENT_REVISION = "c614b6bcccfc"
+PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
+# The catalog pruning revision, parent of the simulation runs revision.
+CATALOG_PRUNING_REVISION = "334859ef4fec"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -249,7 +250,8 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
-        SIMULATION_RUNS_PARENT_REVISION,
+        CATALOG_PRUNING_REVISION,
+        PARAMETER_SEARCH_FILE_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
         CATALOG_FORMAT_2_REVISION,
@@ -996,7 +998,7 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         if revision.down_revision == PARAMETER_TREE_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == SIMULATION_RUNS_PARENT_REVISION
+    assert children[0].revision == PARAMETER_SEARCH_FILE_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1018,14 +1020,57 @@ def test_parameter_search_file_revision_creates_only_the_files_table() -> None:
         assert "op.add_column(" not in body
 
 
+def test_catalog_pruning_revision_adds_only_two_nullable_columns() -> None:
+    """The revision after the search file adds the catalog pruning columns.
+
+    It is generated, adds the nullable, timezone-aware
+    ``catalog_last_published_at`` and ``catalog_values_pruned_at`` columns to
+    ``tax_benefit_model_versions`` and drops them on downgrade, and writes no
+    data: catalog publication sets both.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == PARAMETER_SEARCH_FILE_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == CATALOG_PRUNING_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert upgrade.count("op.add_column(") == 2
+    assert upgrade.count('"tax_benefit_model_versions"') == 2
+    assert downgrade.count("op.drop_column(") == 2
+    for column_name in ("catalog_last_published_at", "catalog_values_pruned_at"):
+        assert re.search(
+            rf'sa\.Column\(\s*"{column_name}",\s*'
+            r"sa\.DateTime\(timezone=True\),\s*nullable=True,?\s*\)",
+            upgrade,
+        ), column_name
+        assert f'"{column_name}"' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body
+
+
 def _simulation_runs_revision_source() -> str:
-    """Return the source of the one revision after the parameter search files."""
+    """Return the source of the one revision after the catalog pruning revision."""
     (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
     return path.read_text(encoding="utf-8")
 
 
 def test_simulation_runs_revision_is_generated_with_documented_corrections() -> None:
-    """One generated revision follows the parameter search file revision.
+    """One generated revision follows the catalog pruning revision.
 
     Its corrections make new columns reuse enum types the baseline created:
     ``simulation_runs.status`` reuses ``simulations.status``'s, and
@@ -1041,10 +1086,7 @@ def test_simulation_runs_revision_is_generated_with_documented_corrections() -> 
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert (
-        f'down_revision: Union[str, None] = "{SIMULATION_RUNS_PARENT_REVISION}"'
-        in revision
-    )
+    assert f'down_revision: Union[str, None] = "{CATALOG_PRUNING_REVISION}"' in revision
     assert revision.count("Dialect correction:") == 3
     assert "reversibility correction" not in revision
     for type_name in (

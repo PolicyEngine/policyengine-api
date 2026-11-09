@@ -63,6 +63,18 @@ named `changelog.d/<name>.<type>.md`, where `<type>` is `breaking`, `added`,
 `changed`, `fixed` or `removed` (see "Changelog fragments" in that skill).
 Agents must never bypass branch rules (for example with `gh pr merge --admin`).
 
+Run `make install` once per clone: it installs the dev environment and turns
+on the git hooks in `.githooks`, which run `make quality` before each
+`git commit` and each merge commit, in every worktree of the clone. In a new
+worktree, run `make install` again to create its `.venv`; the hook stops
+commits until it exists. Stage everything the commit needs first: the hook
+stops a commit while the working tree holds unstaged changes or untracked
+files, because `make quality` would check them instead of what is
+committed. `make quality` applies ruff's fixes, then runs the checks
+pr.yml's `quality-guards` job runs, apart from the rules registry tool's
+own tests (see "Commit Hygiene" in `docs/engineering/skills/github-prs.md`).
+Don't skip the hook with `--no-verify`.
+
 Before creating or sharing a migration PR, run the focused migration guards:
 
 ```bash
@@ -118,7 +130,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Code quality and types
 
-- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.coverage-measured`, `api.quality.diff-coverage`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.mypy-v2`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.suppressions-explained`, `api.quality.tests-assert`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
+- Checked: `api.quality.alembic-revisions-unused-imports`, `api.quality.ci-cd-scripts-ruff-exemptions`, `api.quality.command-line-modules-ruff-exemptions`, `api.quality.command-line-scripts-ruff-exemptions`, `api.quality.coverage-measured`, `api.quality.diff-coverage`, `api.quality.environment-variables-load`, `api.quality.file-length`, `api.quality.make-quality`, `api.quality.mypy-v2`, `api.quality.pre-commit-hook`, `api.quality.ruff-format`, `api.quality.ruff-lint`, `api.quality.runtime-evaluated-models-resolve`, `api.quality.suppressions-explained`, `api.quality.tests-assert`, `api.quality.tests-pass`, `api.quality.tests-ruff-exemptions`, `api.quality.unittest-ruff-exemptions`
 
 ### Observability
 

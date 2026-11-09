@@ -1,0 +1,7 @@
+#!/bin/sh
+# Proof fixture for api.quality.pre-commit-hook (rejected): it runs make
+# quality but lets the commit through whether uv or the dev environment is
+# missing, the working tree holds unstaged changes or untracked files, the
+# checks fail, or ruff's fixes changed a file.
+make quality
+exit 0

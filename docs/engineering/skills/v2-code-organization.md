@@ -126,9 +126,18 @@ services/v2/<resource>/
 
 A resource may also add a `process_state.py` module for process-wide state its
 service reuses across requests, such as the metadata package's (each catalog
-version a request has selected, which never changes once published). Such a module holds plain data, constructs no
+version a request has selected; after publication its row changes only in
+its time-period options, its `catalog_last_published_at`, which no read uses,
+and its `catalog_values_pruned_at`, which the service checks again before or
+after the reads of the rows pruning deletes). Such a module holds plain data, constructs no
 SQL and owns no session; the composition code creates one instance per process
 and injects it into the service.
+
+A service may also hand one group of its work to a class in a subpackage's
+`services.py`, whose files take the same layer names: the metadata service
+builds `MetadataCatalogSelection` from `metadata/catalog_version_selection/services.py`,
+which selects the catalog version each read uses, with the process's kept
+selections and the check for a pruned version.
 
 Only add CRUD connector modules for operations the resource supports. Append a
 specific descriptor when one operation file would become too broad, such as

@@ -31,6 +31,7 @@ from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataResourceSuccessResponse,
 )
 from policyengine_api.services.v2.metadata.validators import (
+    CatalogValuesPrunedError,
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
     ParameterSearchFileUnavailableError,
@@ -62,6 +63,15 @@ PATH_COUNTRY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 """The extra response of the one metadata route that takes the country in its path."""
 
+PRUNED_VERSION_DESCRIPTION = (
+    " A catalog version that catalog publication pruned (it removed the "
+    "version's current-law parameter values, parameter tree and parameter "
+    "search file, which return when that PolicyEngine.py version is installed "
+    "again) also returns 503, with Cache-Control: no-store and a message naming "
+    "the country and version."
+)
+"""The 503 of every route that serves data catalog pruning removes."""
+
 PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: {
         "model": V2ErrorResponse,
@@ -70,6 +80,7 @@ PARAMETER_TREE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
             "has no parameter tree (publication writes trees only for the "
             "versions it publishes and for the installed version with catalog "
             "format 2); the message then names the version."
+            + PRUNED_VERSION_DESCRIPTION
         ),
     },
 }
@@ -83,10 +94,24 @@ PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
             "has no parameter search file: only catalog format 2 versions that "
             "publication has published, or run with installed, since search files "
             "were added have one. The message then names the version."
+            + PRUNED_VERSION_DESCRIPTION
         ),
     },
 }
 """The search file route's 503, which also covers a version without a file."""
+
+CURRENT_LAW_VALUE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    503: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The initialized v2 catalog is unavailable." + PRUNED_VERSION_DESCRIPTION
+        ),
+    },
+}
+"""The 503 of the other routes that serve current-law parameter values."""
+
+NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+"""Keeps any cache from storing a response that changes when a release deploys."""
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
@@ -169,9 +194,14 @@ CatalogResultT = TypeVar("CatalogResultT", bound=CatalogVersionResult)
 EXPLICIT_VERSION_MAX_AGE_SECONDS = 86_400
 """How long a response for a named catalog version may be reused (a day).
 
-A published catalog version never changes, so such a response stays valid
-until its code's response format changes; the ETag lets a client revalidate
-it cheaply after that.
+Of what a response serves, a published catalog version changes only when a
+release's publication replaces its time-period options (no response serves
+``catalog_last_published_at`` or ``catalog_values_pruned_at``), so such a
+response stays valid until then or until its code's response format changes;
+the ETag lets a client revalidate it cheaply after that. Catalog pruning
+deletes a version's current-law values, which publishing it again restores
+identically, and the 503 answered for a pruned version is never stored
+(``Cache-Control: no-store``).
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300
 """How long a response for the running catalog version may be reused.
@@ -381,17 +411,24 @@ def run_metadata_read(
     ) as error:
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        # Only a missing parameter tree or search file has a message written
-        # for callers; it names the catalog version.
+        # Only a missing parameter tree or search file, or a pruned version,
+        # has a message written for callers; it names the catalog version. A
+        # pruned version's values return when a release installs it again, so
+        # no cache may keep that answer.
         message = (
             str(error)
             if isinstance(
                 error,
-                ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
+                ParameterTreeUnavailableError
+                | ParameterSearchFileUnavailableError
+                | CatalogValuesPrunedError,
             )
             else "V2 metadata catalog is unavailable"
         )
-        return v2_error_response(503, message)
+        headers = (
+            NO_STORE_HEADERS if isinstance(error, CatalogValuesPrunedError) else None
+        )
+        return v2_error_response(503, message, headers=headers)
     except Exception:  # noqa: BLE001  # preview must return typed errors
         return v2_error_response(500, "V2 metadata query failed")
     finally:

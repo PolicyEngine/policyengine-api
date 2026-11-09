@@ -1,3 +1,44 @@
+## [5.35.0] - 2026-11-06
+
+### Added
+
+- Catalog publication now records when it last published each v2 catalog version (`tax_benefit_model_versions.catalog_last_published_at`) and, after it commits, prunes older versions: for each country it keeps the installed PolicyEngine.py version and the two most recently published others, and deletes the current-law parameter values, parameter tree rows and parameter search file of at most two other stored versions per run, oldest first, recording when in `catalog_values_pruned_at` and reporting what it deleted, how many versions are left, and any failure, in its evidence. Publishing a pruned version again restores those rows identically from the installed packages. For a pruned version, `/v2/parameter-values`, `/v2/parameter-values/{value_id}`, `/v2/parameters/children`, `/v2/parameters/search-file`, `/v2/model-catalog/variables` and `/v2/model-catalog/parameters` return 503 with `Cache-Control: no-store`; the other metadata routes answer as before.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.16.0.
+
+
+## [5.34.0] - 2026-11-06
+
+### Added
+
+- Added git hooks, turned on by `make install`, that run `make quality` before each `git commit` and each merge commit in every worktree of the clone, and stop the commit when the working tree holds changes the commit doesn't, when a check fails, when ruff's fixes still need staging, or when `uv` or the dev environment is missing.
+
+
+## [5.33.0] - 2026-11-06
+
+### Added
+
+- Added `make quality`, which applies ruff's fixes and then runs every quality check (`uv lock --check`, ruff, Import Linter, mypy and the quality guards); pull request CI now runs the same command in one job and fails if the fixes changed a file.
+
+### Changed
+
+- Catalog publication gives an already-stored catalog version the time-period options (`metadata_time_periods`) of the catalog it stages, instead of failing when they differ, prints a warning naming the country, the version and both lists, and reports them under `updated_time_periods` in its evidence. Every other column and table must still match.
+
+### Removed
+
+- Remove `household_options` from the `/{country}/metadata` response, added in 5.22.0. No client read it, and household and society-wide calculations will offer the same years, from `economy_options.time_period`.
+- US 2022 and 2023 are no longer offered for society-wide calculations: `economy_options.time_period` in `/us/metadata` and the v2 catalog list US 2024 to 2035, and the UK years are 2024 to 2032 in both, each defined once in `policyengine_api/economy_years.py`. A society-wide request for a year outside its country's years (an annual `time_period`, or a budget window's `start_year`) returns 400 with the code `DATASET_YEAR_UNAVAILABLE` in `errors`, even when a result for that year is stored. Household calculations are unchanged.
+
+
+## [5.32.1] - 2026-11-05
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.12.1.
+
+
 ## [5.32.0] - 2026-11-05
 
 ### Added

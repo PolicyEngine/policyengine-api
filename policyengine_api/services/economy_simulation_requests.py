@@ -19,6 +19,11 @@ from policyengine_api.data.uk_regions import (
     describe_accepted_uk_regions,
     resolve_uk_region,
 )
+from policyengine_api.economy_years import (
+    DATASET_YEAR_UNAVAILABLE,
+    ECONOMY_YEARS,
+    dataset_year_unavailable_message,
+)
 from policyengine_api.json_types import JSONValue
 from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.stages import ECONOMY_ANNUAL_STAGES, Stage
@@ -36,6 +41,7 @@ from policyengine_api.services.economy_impact_types import (
     SimulationOptions,
 )
 from policyengine_api.services.policy_service import PolicyNotFoundError
+from policyengine_api.spm import SPMValidationError
 
 
 class SimulationRequestMixin:
@@ -149,6 +155,24 @@ class SimulationRequestMixin:
         accepted = describe_accepted_uk_regions()
         msg = f"Unknown UK region {region!r}. Accepted regions: {accepted}."
         raise ValueError(msg)
+
+    @staticmethod
+    def _validate_economy_year(country_id: str, year: str) -> None:
+        """Reject a society-wide year outside the country's ``ECONOMY_YEARS``.
+
+        ``year`` is an annual request's ``time_period`` or a budget window's
+        start year. Raise SPMValidationError with the code
+        ``DATASET_YEAR_UNAVAILABLE``, which the route returns as 400 with that
+        code in ``errors``. Callers check before they read a stored result or
+        send anything to the simulation service, so a stored result for the
+        year is never returned.
+        """
+        if year.isdigit() and int(year) in ECONOMY_YEARS[country_id]:
+            return
+        raise SPMValidationError(
+            DATASET_YEAR_UNAVAILABLE,
+            dataset_year_unavailable_message(country_id, year),
+        )
 
     def _breakdown_refusal(
         self,
