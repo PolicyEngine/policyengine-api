@@ -178,4 +178,6 @@ def test_openapi_describes_the_404_of_a_pruned_version() -> None:
     for path in ("/v2/parameters", "/v2/variables"):
         responses = schema["paths"][path]["get"]["responses"]
         assert "pruned" not in responses["404"]["description"], path
-        assert "pruned" not in responses["503"]["description"], path
+        assert (
+            "running PolicyEngine.py version" not in (responses["503"]["description"])
+        ), path

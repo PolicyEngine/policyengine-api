@@ -230,8 +230,8 @@ release's publication replaces its time-period options (no response serves
 response stays valid until then or until its code's response format changes;
 the ETag lets a client revalidate it cheaply after that. Catalog pruning
 deletes a version's current-law values, which publishing it again restores
-identically, and the 404 answered for a pruned version is never stored
-(``Cache-Control: no-store``).
+identically, and the 404 answered for a pruned version (503 for the running
+one) is never stored (``Cache-Control: no-store``).
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300
 """How long a response for the running catalog version may be reused.
@@ -364,7 +364,8 @@ def read_resource(
 
     Version, pagination and catalog failures become typed v2 error responses
     (400, 404 or 503, and 500 for anything unexpected; a pruned version is a
-    404 with ``Cache-Control: no-store``), and the reader is closed whatever
+    404 with ``Cache-Control: no-store``, or a 503 with it for the running
+    version), and the reader is closed whatever
     happens.
     """
     return run_metadata_read(
