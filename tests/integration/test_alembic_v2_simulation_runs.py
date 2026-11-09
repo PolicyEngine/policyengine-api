@@ -43,7 +43,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Connection, Engine
 
-SIMULATION_RUNS_PREVIOUS_REVISION = "c614b6bcccfc"
+# The catalog pruning revision, the simulation runs revision's parent.
+SIMULATION_RUNS_PREVIOUS_REVISION = "334859ef4fec"
 NEW_TABLES = frozenset(
     {
         "simulation_runs",
