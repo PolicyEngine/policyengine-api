@@ -8,11 +8,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
-from policyengine_api.data.v2.models.base import (
-    IdentifiedModel,
-    TimestampedModel,
-    enum_type,
-)
+from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
 from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
@@ -25,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class HouseholdJobStatus(StrEnum):
-    """Lifecycle state of a queued household calculation job."""
+    """Lifecycle state of a household calculation job."""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -96,18 +92,39 @@ class Household(TimestampedModel, table=True):
     )
 
 
-class HouseholdJob(IdentifiedModel, table=True):
-    """A queued household calculation request, with its status and result or error.
+class HouseholdJob(TimestampedModel, table=True):
+    """One calculation of one household for one year under one policy.
 
-    Deleting the job's policy or dynamic keeps the job but clears the reference.
+    ``policy_id`` is null for current law. ``request_data`` holds the
+    calculation's options, such as axes. The job records the catalog version
+    and PolicyEngine.py version it ran on, its Modal call, and its status and
+    result or error. The simulation service writes the job and the Public API
+    the rows it names; each service writes only its own tables, and the foreign
+    keys between them stay. The job's household and catalog version can't be
+    deleted while it exists; deleting its policy or dynamic keeps the job but
+    clears the reference.
     """
 
     __tablename__ = "household_jobs"
     __table_args__ = (
+        sa.CheckConstraint(
+            "year BETWEEN 1900 AND 2200",
+            name="ck_household_jobs_year",
+        ),
+        sa.CheckConstraint(
+            "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
+            name="ck_household_jobs_terminal_completion",
+        ),
         sa.Index("ix_household_jobs_status_created_at", "status", "created_at"),
     )
 
     country: str = Field(max_length=16)
+    household_id: UUID = Field(
+        foreign_key="households.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    year: int
     request_data: dict[str, Any] = Field(sa_type=sa.JSON)
     policy_id: UUID | None = Field(
         default=None,
@@ -119,10 +136,18 @@ class HouseholdJob(IdentifiedModel, table=True):
         foreign_key="dynamics.id",
         ondelete="SET NULL",
     )
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    country_package_version: str = Field(max_length=128)
+    policyengine_version: str = Field(max_length=128)
     status: HouseholdJobStatus = Field(
         default=HouseholdJobStatus.PENDING,
         sa_type=enum_type(HouseholdJobStatus, "v2_household_job_status"),
     )
+    modal_call_id: str | None = Field(default=None, max_length=255)
     error_message: str | None = None
     result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
     started_at: datetime | None = Field(

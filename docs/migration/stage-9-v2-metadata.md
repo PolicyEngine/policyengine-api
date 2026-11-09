@@ -765,7 +765,9 @@ expects an older Alembic revision than the database's (see "Catalog
 pruning").
 
 A schema downgrade past revision `334859ef4fec` drops
-`catalog_last_published_at` and `catalog_values_pruned_at`. A pruned version
+`catalog_last_published_at` and `catalog_values_pruned_at`. From the head,
+it first runs revision `1356f658347d`'s downgrade, which needs `simulations`
+empty. A pruned version
 then looks complete, but holds
 no current-law values, parameter tree or search file: the parent revision's
 code has no restoration, so its routes serve that version with empty values,

@@ -1,15 +1,20 @@
-"""Canonical SQLModel tables for stable reports, runs, and run outputs."""
+"""Canonical SQLModel tables for stable reports and their runs.
+
+A report run compares one baseline simulation run with one reform simulation
+run; a budget-window report has a run per year of each calculation. Their
+results are in ``run_results``.
+"""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import (
-    IdentifiedModel,
     TimestampedModel,
     enum_type,
 )
@@ -22,6 +27,25 @@ from policyengine_api.data.v2.models.metadata import (
 from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation
 from policyengine_api.data.v2.models.users import User
+
+if TYPE_CHECKING:
+    from policyengine_api.data.v2.models.run_results import (
+        AggregateOutput,
+        BudgetSummary,
+        ChangeAggregate,
+        CongressionalDistrictImpact,
+        ConstituencyImpact,
+        DecileImpact,
+        IntraDecileImpact,
+        LaborSupplyDecileResponse,
+        LaborSupplyResponse,
+        LocalAuthorityImpact,
+        ProgramStatistics,
+    )
+
+# A budget window compares at most this many years, none after LAST_YEAR.
+MAX_BUDGET_WINDOW_YEARS = 75
+LAST_YEAR = 2200
 
 
 class ReportRunStatus(StrEnum):
@@ -41,38 +65,28 @@ class ReportRunTrigger(StrEnum):
     SYSTEM = "system"
 
 
-class OutputStatus(StrEnum):
-    """Lifecycle state of one computed output row of a report run."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
-class AggregateType(StrEnum):
-    """How an aggregate combines a variable's values."""
-
-    SUM = "sum"
-    MEAN = "mean"
-    COUNT = "count"
-
-
-class DecileType(StrEnum):
-    """Whether deciles rank by income or by wealth."""
-
-    INCOME = "income"
-    WEALTH = "wealth"
-
-
 class Report(TimestampedModel, table=True):
-    """Stable report definition; execution state belongs to ReportRun."""
+    """Stable report definition; execution state belongs to ReportRun.
+
+    The simulation service writes reports, and the Public API the user, model,
+    policy, household, dataset and region a report names; each service writes
+    only its own tables, and the foreign keys between them stay. Deleting the
+    user, policy, dataset or region clears the reference, which for the user
+    is found through ``user_id``'s index; the model and household can't be
+    deleted while a report names them.
+    """
 
     __tablename__ = "reports"
     __table_args__ = (
         sa.CheckConstraint(
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_reports_year",
+        ),
+        sa.CheckConstraint(
+            "budget_window_size IS NULL OR (household_id IS NULL "
+            f"AND budget_window_size BETWEEN 1 AND {MAX_BUDGET_WINDOW_YEARS} "
+            f"AND year IS NOT NULL AND year + budget_window_size - 1 <= {LAST_YEAR})",
+            name="ck_reports_budget_window_size",
         ),
         sa.Index("ix_reports_country_type_created_at", "country", "type", "created_at"),
     )
@@ -85,6 +99,7 @@ class Report(TimestampedModel, table=True):
         default=None,
         foreign_key="users.id",
         ondelete="SET NULL",
+        index=True,
     )
     tax_benefit_model_id: UUID = Field(
         foreign_key="tax_benefit_models.id",
@@ -122,6 +137,7 @@ class Report(TimestampedModel, table=True):
         ondelete="SET NULL",
     )
     year: int | None = None
+    budget_window_size: int | None = None
     inputs: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
 
     user: User | None = Relationship(back_populates="reports")
@@ -142,10 +158,76 @@ class Report(TimestampedModel, table=True):
         back_populates="report",
         cascade_delete=True,
     )
+    budget_window_runs: list["BudgetWindowRun"] = Relationship(
+        back_populates="report",
+        cascade_delete=True,
+    )
+
+
+class BudgetWindowRun(TimestampedModel, table=True):
+    """One calculation of a budget-window report on one catalog version.
+
+    Each year of the window is a report run of the same report that names this
+    row and its year. ``recalculate`` says whether those years calculate their
+    simulations again instead of reusing successful runs. What starts the later
+    years is decided where the simulation service schedules them.
+    """
+
+    __tablename__ = "budget_window_runs"
+    __table_args__ = (
+        sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
+        sa.CheckConstraint(
+            "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
+            name="ck_budget_window_runs_terminal_completion",
+        ),
+        sa.Index(
+            "ix_budget_window_runs_report_id_created_at", "report_id", "created_at"
+        ),
+    )
+
+    report_id: UUID = Field(
+        foreign_key="reports.id",
+        ondelete="CASCADE",
+    )
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    trigger: ReportRunTrigger = Field(
+        default=ReportRunTrigger.INITIAL,
+        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
+    )
+    recalculate: bool = False
+    status: ReportRunStatus = Field(
+        default=ReportRunStatus.PENDING,
+        sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
+    )
+    error_message: str | None = None
+    started_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+
+    report: Report = Relationship(back_populates="budget_window_runs")
 
 
 class ReportRun(TimestampedModel, table=True):
-    """One immutable-version execution attempt for a stable report."""
+    """One immutable-version execution attempt for a stable report.
+
+    It compares ``baseline_simulation_run_id`` with
+    ``reform_simulation_run_id``; a household report with only a baseline has
+    no reform run. A year of a budget window names its ``budget_window_run_id``
+    and ``year``, at most one report run per year of a window run. An economy
+    comparison's cliff impact is the baseline's and reform's cliff gap and
+    share, stored together or not at all; ``spm_provenance`` is the SPM receipt
+    and ``data_version`` the data release it used. Its labour supply response
+    has its own two tables.
+    """
 
     __tablename__ = "report_runs"
     __table_args__ = (
@@ -158,6 +240,33 @@ class ReportRun(TimestampedModel, table=True):
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
             name="ck_report_runs_terminal_completion",
         ),
+        sa.CheckConstraint(
+            "year IS NULL OR year BETWEEN 1900 AND 2200",
+            name="ck_report_runs_year",
+        ),
+        sa.CheckConstraint(
+            "budget_window_run_id IS NULL OR year IS NOT NULL",
+            name="ck_report_runs_budget_window_year",
+        ),
+        sa.UniqueConstraint(
+            "budget_window_run_id",
+            "year",
+            name="uq_report_runs_budget_window_run_id_year",
+        ),
+        # A year's report run belongs to a budget-window run of its own report,
+        # which owns it as the report owns its runs.
+        sa.ForeignKeyConstraint(
+            ["budget_window_run_id", "report_id"],
+            ["budget_window_runs.id", "budget_window_runs.report_id"],
+            name="fk_report_runs_budget_window_run_id_budget_window_runs",
+            ondelete="CASCADE",
+        ),
+        sa.CheckConstraint(
+            "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
+            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
+            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)",
+            name="ck_report_runs_cliff_impact_complete",
+        ),
         sa.Index(
             "ix_report_runs_current_output",
             "report_id",
@@ -167,12 +276,26 @@ class ReportRun(TimestampedModel, table=True):
             "completed_at",
             "id",
         ),
+        sa.Index("ix_report_runs_status_started_at", "status", "started_at"),
     )
 
     report_id: UUID = Field(
         foreign_key="reports.id",
         ondelete="CASCADE",
     )
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    reform_simulation_run_id: UUID | None = Field(
+        default=None,
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    budget_window_run_id: UUID | None = None
+    year: int | None = None
     country_package_version: str = Field(max_length=128)
     policyengine_version: str = Field(max_length=128)
     status: ReportRunStatus = Field(
@@ -184,6 +307,7 @@ class ReportRun(TimestampedModel, table=True):
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
     idempotency_key: UUID | None = Field(default=None)
+    modal_call_id: str | None = Field(default=None, max_length=255)
     started_at: datetime | None = Field(
         default=None,
         sa_type=sa.DateTime(timezone=True),
@@ -194,8 +318,25 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
+    baseline_cliff_gap: float | None = None
+    baseline_cliff_share: float | None = None
+    reform_cliff_gap: float | None = None
+    reform_cliff_share: float | None = None
+    spm_provenance: dict[str, Any] | None = Field(
+        default=None,
+        sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+    )
+    data_version: str | None = Field(default=None, max_length=128)
 
     report: Report = Relationship(back_populates="runs")
+    labor_supply_responses: list["LaborSupplyResponse"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
+    labor_supply_decile_responses: list["LaborSupplyDecileResponse"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
     aggregates: list["AggregateOutput"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
@@ -219,10 +360,6 @@ class ReportRun(TimestampedModel, table=True):
         back_populates="report_run",
         cascade_delete=True,
     )
-    inequalities: list["Inequality"] = Relationship(
-        back_populates="report_run",
-        cascade_delete=True,
-    )
     intra_decile_impacts: list["IntraDecileImpact"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
@@ -231,417 +368,7 @@ class ReportRun(TimestampedModel, table=True):
         back_populates="report_run",
         cascade_delete=True,
     )
-    poverty_results: list["Poverty"] = Relationship(
-        back_populates="report_run",
-        cascade_delete=True,
-    )
     program_statistics: list["ProgramStatistics"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )
-
-
-class AggregateOutput(IdentifiedModel, table=True):
-    """A sum, mean or count of one variable in one simulation of a report run.
-
-    ``filter_config`` optionally restricts which entities are included.
-    """
-
-    __tablename__ = "aggregates"
-    __table_args__ = (
-        sa.Index("ix_aggregates_report_run_status", "report_run_id", "status"),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    variable: str = Field(max_length=512)
-    aggregate_type: AggregateType = Field(
-        sa_type=enum_type(AggregateType, "v2_aggregate_type")
-    )
-    entity: str | None = Field(default=None, max_length=128)
-    filter_config: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
-    status: OutputStatus = Field(
-        default=OutputStatus.PENDING,
-        sa_type=enum_type(OutputStatus, "v2_output_status"),
-    )
-    error_message: str | None = None
-    result: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="aggregates")
-
-
-class ChangeAggregate(IdentifiedModel, table=True):
-    """An aggregate of a variable's change from baseline to reform in a report run.
-
-    ``change_geq`` and ``change_leq`` optionally restrict it to entities whose
-    change falls within those bounds.
-    """
-
-    __tablename__ = "change_aggregates"
-    __table_args__ = (
-        sa.Index(
-            "ix_change_aggregates_report_run_status",
-            "report_run_id",
-            "status",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    variable: str = Field(max_length=512)
-    aggregate_type: AggregateType = Field(
-        sa_type=enum_type(AggregateType, "v2_aggregate_type"),
-    )
-    entity: str | None = Field(default=None, max_length=128)
-    filter_config: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
-    change_geq: float | None = None
-    change_leq: float | None = None
-    status: OutputStatus = Field(
-        default=OutputStatus.PENDING,
-        sa_type=enum_type(OutputStatus, "v2_output_status"),
-    )
-    error_message: str | None = None
-    result: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="change_aggregates")
-
-
-class BudgetSummary(IdentifiedModel, table=True):
-    """Baseline and reform totals of one budget variable for a report run.
-
-    One row per run, variable and entity.
-    """
-
-    __tablename__ = "budget_summary"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "variable_name",
-            "entity",
-            name="uq_budget_summary_run_variable_entity",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    variable_name: str = Field(max_length=512)
-    entity: str = Field(max_length=128)
-    baseline_total: float | None = None
-    reform_total: float | None = None
-    change: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="budget_summaries")
-
-
-class DecileImpact(IdentifiedModel, table=True):
-    """Mean income change and better/worse-off counts in one income quantile.
-
-    ``decile`` runs from 1 to ``quantiles``; there is one row per run, income
-    variable, entity, quantile count and decile.
-    """
-
-    __tablename__ = "decile_impacts"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "income_variable",
-            "entity",
-            "decile",
-            "quantiles",
-            name="uq_decile_impacts_run_measure",
-        ),
-        sa.CheckConstraint("quantiles > 0", name="ck_decile_impacts_quantiles"),
-        sa.CheckConstraint(
-            "decile BETWEEN 1 AND quantiles",
-            name="ck_decile_impacts_decile",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    income_variable: str = Field(max_length=512)
-    entity: str = Field(max_length=128)
-    decile: int
-    quantiles: int = 10
-    baseline_mean: float | None = None
-    reform_mean: float | None = None
-    absolute_change: float | None = None
-    relative_change: float | None = None
-    count_better_off: float | None = None
-    count_worse_off: float | None = None
-    count_no_change: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="decile_impacts")
-
-
-class IntraDecileImpact(IdentifiedModel, table=True):
-    """Shares of one decile whose income rises or falls by more or less than 5%.
-
-    One row per run, decile type and decile, where ``decile`` is 0 to 10.
-    """
-
-    __tablename__ = "intra_decile_impacts"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "decile_type",
-            "decile",
-            name="uq_intra_decile_impacts_run_type_decile",
-        ),
-        sa.CheckConstraint(
-            "decile BETWEEN 0 AND 10",
-            name="ck_intra_decile_impacts_decile",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    decile_type: DecileType = Field(
-        default=DecileType.INCOME,
-        sa_type=enum_type(DecileType, "v2_decile_type"),
-    )
-    decile: int
-    lose_more_than_5pct: float | None = None
-    lose_less_than_5pct: float | None = None
-    no_change: float | None = None
-    gain_less_than_5pct: float | None = None
-    gain_more_than_5pct: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="intra_decile_impacts")
-
-
-class Inequality(IdentifiedModel, table=True):
-    """Gini and top/bottom income shares for one simulation of a report run."""
-
-    __tablename__ = "inequality"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "simulation_id",
-            "income_variable",
-            "entity",
-            name="uq_inequality_run_simulation_measure",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    income_variable: str = Field(max_length=512)
-    entity: str = Field(default="household", max_length=128)
-    gini: float | None = None
-    top_10_share: float | None = None
-    top_1_share: float | None = None
-    bottom_50_share: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="inequalities")
-
-
-class Poverty(IdentifiedModel, table=True):
-    """Poverty headcount and rate of one type for one simulation of a report run."""
-
-    __tablename__ = "poverty"
-    __table_args__ = (
-        sa.Index(
-            "ix_poverty_run_simulation_type",
-            "report_run_id",
-            "simulation_id",
-            "poverty_type",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    poverty_type: str = Field(max_length=128)
-    entity: str = Field(default="person", max_length=128)
-    filter_variable: str | None = Field(default=None, max_length=512)
-    headcount: float | None = None
-    total_population: float | None = None
-    rate: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="poverty_results")
-
-
-class ProgramStatistics(IdentifiedModel, table=True):
-    """Baseline and reform totals, counts, winners and losers for one program.
-
-    One row per run, program and entity; ``is_tax`` marks taxes.
-    """
-
-    __tablename__ = "program_statistics"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "program_name",
-            "entity",
-            name="uq_program_statistics_run_program_entity",
-        ),
-    )
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    program_name: str = Field(max_length=512)
-    entity: str = Field(max_length=128)
-    is_tax: bool = False
-    baseline_total: float | None = None
-    reform_total: float | None = None
-    change: float | None = None
-    baseline_count: float | None = None
-    reform_count: float | None = None
-    winners: float | None = None
-    losers: float | None = None
-
-    report_run: ReportRun = Relationship(back_populates="program_statistics")
-
-
-class GeographicImpactBase(IdentifiedModel):
-    """Shared non-table fields for geographic report-run impacts."""
-
-    report_run_id: UUID = Field(
-        foreign_key="report_runs.id",
-        ondelete="CASCADE",
-    )
-    baseline_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    reform_simulation_id: UUID = Field(
-        foreign_key="simulations.id",
-        ondelete="RESTRICT",
-    )
-    average_household_income_change: float
-    relative_household_income_change: float
-    population: float
-
-
-class CongressionalDistrictImpact(GeographicImpactBase, table=True):
-    """Household income change and population in one US congressional district.
-
-    One row per run and district GEOID.
-    """
-
-    __tablename__ = "congressional_district_impacts"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "district_geoid",
-            name="uq_congressional_district_impacts_run_geoid",
-        ),
-    )
-
-    district_geoid: int
-    state_fips: int
-    district_number: int
-
-    report_run: ReportRun = Relationship(
-        back_populates="congressional_district_impacts"
-    )
-
-
-class ConstituencyImpact(GeographicImpactBase, table=True):
-    """Household income change in one UK constituency.
-
-    One row per run and constituency code.
-    """
-
-    __tablename__ = "constituency_impacts"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "constituency_code",
-            name="uq_constituency_impacts_run_code",
-        ),
-    )
-
-    constituency_code: str = Field(max_length=64)
-    constituency_name: str = Field(max_length=255)
-
-    report_run: ReportRun = Relationship(back_populates="constituency_impacts")
-
-
-class LocalAuthorityImpact(GeographicImpactBase, table=True):
-    """Household income change in one UK local authority.
-
-    One row per run and local authority code.
-    """
-
-    __tablename__ = "local_authority_impacts"
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "report_run_id",
-            "local_authority_code",
-            name="uq_local_authority_impacts_run_code",
-        ),
-    )
-
-    local_authority_code: str = Field(max_length=64)
-    local_authority_name: str = Field(max_length=255)
-
-    report_run: ReportRun = Relationship(back_populates="local_authority_impacts")

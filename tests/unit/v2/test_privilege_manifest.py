@@ -18,14 +18,21 @@ from policyengine_api.data.v2.privilege_requirements import (
 )
 from policyengine_api.data.v2.privileges import (
     CATALOG_WRITER_ROLE,
+    MODAL_WORKER_ROLE,
     NO_ACCESS,
+    READ,
+    READ_INSERT,
     READ_WRITE,
+    ROLES_AWAITING_PROVISIONING,
     RUNTIME_ROLE,
+    SIMULATION_SERVICE_ROLE,
     TABLE_ACCESS,
+    ColumnPrivilege,
     InvalidDeploymentEnvironmentError,
     TablePrivilege,
     declared_privileges,
     stage12_role,
+    update_columns,
 )
 
 PROJECT_ROOT = Path(__file__).parents[3]
@@ -33,6 +40,121 @@ SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declared"
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
 TEST_ENVIRONMENT = "staging"
+# The rows the simulation service creates, and the run tables among them.
+SIMULATION_SERVICE_CREATES = frozenset(
+    {
+        "simulations",
+        "reports",
+        "simulation_runs",
+        "report_runs",
+        "budget_window_runs",
+        "household_jobs",
+    }
+)
+RUN_STATUS_TABLES = frozenset({"simulation_runs", "report_runs", "household_jobs"})
+# The run columns the Modal workers update: a run's state and its results.
+WORKER_RUN_STATE_COLUMNS = frozenset(
+    {
+        "status",
+        "modal_call_id",
+        "error_message",
+        "started_at",
+        "completed_at",
+        "updated_at",
+    }
+)
+WORKER_RESULT_COLUMNS = {
+    "simulation_runs": frozenset({"output_uri", "output_sha256", "household_result"}),
+    "report_runs": frozenset(
+        {
+            "baseline_cliff_gap",
+            "baseline_cliff_share",
+            "reform_cliff_gap",
+            "reform_cliff_share",
+            "spm_provenance",
+            "data_version",
+        }
+    ),
+    "household_jobs": frozenset({"result"}),
+}
+# The run columns the simulation service updates: it records a Modal call's ID
+# when Modal accepts the call, and fails the run when Modal refuses it.
+SERVICE_RUN_STATE_COLUMNS = frozenset(
+    {"status", "modal_call_id", "error_message", "completed_at", "updated_at"}
+)
+# What a run is: no role may change these after the simulation service writes
+# them.
+RUN_DEFINITION_COLUMNS = {
+    "simulation_runs": frozenset(
+        {
+            "simulation_id",
+            "year",
+            "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
+            "dataset_id",
+            "region_id",
+        }
+    ),
+    "report_runs": frozenset(
+        {
+            "report_id",
+            "baseline_simulation_run_id",
+            "reform_simulation_run_id",
+            "budget_window_run_id",
+            "year",
+            "country_package_version",
+            "policyengine_version",
+            "trigger",
+            "idempotency_key",
+        }
+    ),
+    "household_jobs": frozenset(
+        {
+            "country",
+            "household_id",
+            "year",
+            "policy_id",
+            "dynamic_id",
+            "request_data",
+            "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
+        }
+    ),
+}
+# The policy, dynamic, household and catalog rows a run needs.
+RUN_INPUT_TABLES = frozenset(
+    {
+        "policies",
+        "dynamics",
+        "households",
+        "tax_benefit_models",
+        "tax_benefit_model_versions",
+        "regions",
+        "datasets",
+        "parameters",
+        "parameter_values",
+    }
+)
+RESULT_TABLES = frozenset(
+    {
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
+        "budget_summary",
+        "congressional_district_impacts",
+        "constituency_impacts",
+        "decile_impacts",
+        "inequality",
+        "intra_decile_impacts",
+        "local_authority_impacts",
+        "poverty",
+        "program_statistics",
+    }
+)
+WRITE_PRIVILEGES = frozenset(
+    {TablePrivilege.INSERT, TablePrivilege.UPDATE, TablePrivilege.DELETE}
+)
 
 
 def _table_by_model() -> dict[str, str]:
@@ -118,12 +240,99 @@ def test_stage12_role_name_follows_the_deployment_environment() -> None:
             stage12_role(invalid)
 
 
-def test_declared_privileges_name_the_three_managed_roles() -> None:
+def test_declared_privileges_name_the_five_managed_roles() -> None:
     assert set(declared_privileges("production")) == {
         RUNTIME_ROLE,
         CATALOG_WRITER_ROLE,
         "policyengine_stage12_production",
+        "policyengine_v2_simulation_service",
+        "policyengine_v2_modal_worker",
     }
+
+
+def test_only_the_new_simulation_roles_await_provisioning() -> None:
+    declared_roles = set(declared_privileges(TEST_ENVIRONMENT))
+
+    assert {SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE} == ROLES_AWAITING_PROVISIONING
+    assert declared_roles >= ROLES_AWAITING_PROVISIONING
+
+
+def test_simulation_service_creates_simulation_rows_and_reads_run_inputs() -> None:
+    declared = declared_privileges(TEST_ENVIRONMENT)[SIMULATION_SERVICE_ROLE]
+
+    expected = dict.fromkeys(TABLE_ACCESS, NO_ACCESS)
+    expected |= dict.fromkeys(SIMULATION_SERVICE_CREATES, READ_INSERT)
+    expected |= dict.fromkeys(RUN_INPUT_TABLES, READ)
+    for table in RUN_STATUS_TABLES:
+        expected[table] = READ_INSERT | {update_columns(*SERVICE_RUN_STATE_COLUMNS)}
+    assert declared == expected
+
+
+def test_modal_workers_write_only_run_status_and_results() -> None:
+    declared = declared_privileges(TEST_ENVIRONMENT)[MODAL_WORKER_ROLE]
+
+    expected = dict.fromkeys(TABLE_ACCESS, NO_ACCESS)
+    expected |= dict.fromkeys(SIMULATION_SERVICE_CREATES, READ)
+    expected |= dict.fromkeys(RESULT_TABLES, READ_INSERT)
+    expected |= dict.fromkeys(RUN_INPUT_TABLES, READ)
+    for table in RUN_STATUS_TABLES:
+        worker_columns = WORKER_RUN_STATE_COLUMNS | WORKER_RESULT_COLUMNS[table]
+        expected[table] = READ | {update_columns(*worker_columns)}
+    assert declared == expected
+
+
+def test_column_privileges_name_their_tables_columns_alone() -> None:
+    """A whole-table privilege would override the same privilege's column list."""
+    for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
+        for table, privileges in privileges_by_table.items():
+            column_privileges = [
+                privilege
+                for privilege in privileges
+                if isinstance(privilege, ColumnPrivilege)
+            ]
+            kinds = [privilege.privilege for privilege in column_privileges]
+            assert len(kinds) == len(set(kinds)), (role, table)
+            for privilege in column_privileges:
+                assert privilege.columns, (role, table)
+                assert privilege.columns <= set(V2_METADATA.tables[table].c.keys()), (
+                    role,
+                    table,
+                )
+                assert privilege.privilege not in privileges, (role, table)
+
+
+def test_no_role_can_change_what_a_run_is() -> None:
+    for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
+        for table, definition_columns in RUN_DEFINITION_COLUMNS.items():
+            privileges = privileges_by_table[table]
+            assert TablePrivilege.UPDATE not in privileges, (role, table)
+            for privilege in privileges:
+                if isinstance(privilege, ColumnPrivilege):
+                    assert privilege.columns.isdisjoint(definition_columns), (
+                        role,
+                        table,
+                    )
+
+
+def test_public_api_reads_simulations_runs_and_results_without_writing_them() -> None:
+    declared = declared_privileges(TEST_ENVIRONMENT)[RUNTIME_ROLE]
+
+    for table in SIMULATION_SERVICE_CREATES | RESULT_TABLES:
+        assert declared[table] == READ, table
+    for table in ("aggregates", "change_aggregates"):
+        assert declared[table] == NO_ACCESS, table
+
+
+def test_no_new_role_writes_the_public_api_tables() -> None:
+    simulation_tables = SIMULATION_SERVICE_CREATES | RESULT_TABLES
+    for role in (SIMULATION_SERVICE_ROLE, MODAL_WORKER_ROLE):
+        writes = {
+            table
+            for table, privileges in declared_privileges(TEST_ENVIRONMENT)[role].items()
+            if privileges & WRITE_PRIVILEGES
+            or any(isinstance(privilege, ColumnPrivilege) for privilege in privileges)
+        }
+        assert writes <= simulation_tables, role
 
 
 def test_rule_proof_runtime_privileges_declared() -> None:

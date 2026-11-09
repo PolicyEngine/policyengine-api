@@ -15,15 +15,18 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+from policyengine_api.data.v2 import privilege_reconciliation
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_DISPOSABLE_TEST
 from policyengine_api.data.v2.privilege_reconciliation import (
     DEPLOYMENT_ENVIRONMENT,
     PrivilegeEntry,
     apply_declared_privileges,
     check_declared_privileges,
+    check_table_wide_overrides,
     run,
+    skipped_roles,
 )
-from policyengine_api.data.v2.privileges import READ, TablePrivilege
+from policyengine_api.data.v2.privileges import READ, TablePrivilege, update_columns
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 if TYPE_CHECKING:
@@ -70,6 +73,82 @@ def _has_privilege(engine: Engine, role: str, table: str, privilege: str) -> boo
                 {"role": role, "table": f"public.{table}", "privilege": privilege},
             ).scalar_one()
         )
+
+
+def _has_column_privilege(
+    engine: Engine, role: str, table: str, column: str, privilege: str
+) -> bool:
+    with engine.connect() as connection:
+        return bool(
+            connection.execute(
+                text("SELECT has_column_privilege(:role, :table, :column, :privilege)"),
+                {
+                    "role": role,
+                    "table": f"public.{table}",
+                    "column": column,
+                    "privilege": privilege,
+                },
+            ).scalar_one()
+        )
+
+
+def test_apply_grants_declared_columns_alone_and_verify_checks_them(
+    superuser_engine, temporary_role
+) -> None:
+    role = temporary_role()
+    declared = {role: {"regions": READ | {update_columns("label")}}}
+    with superuser_engine.begin() as connection:
+        first_plan, _defaults = apply_declared_privileges(connection, declared)
+    with superuser_engine.begin() as connection:
+        second_plan, _defaults = apply_declared_privileges(connection, declared)
+        missing = check_declared_privileges(connection, declared)
+        overrides = check_table_wide_overrides(connection, declared)
+
+    assert first_plan.grants == (
+        PrivilegeEntry(role, "regions", "SELECT"),
+        PrivilegeEntry(role, "regions", "UPDATE", column="label"),
+    )
+    assert (second_plan.grants, second_plan.undeclared) == ((), ())
+    assert (missing, overrides) == ([], [])
+    assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
+    assert not _has_column_privilege(
+        superuser_engine, role, "regions", "code", "UPDATE"
+    )
+    assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
+
+
+def test_verify_fails_when_a_role_can_update_the_whole_table(
+    disposable_v2_database_url, superuser_engine, temporary_role, monkeypatch, tmp_path
+) -> None:
+    """``UPDATE`` on the whole table would let the role change every column."""
+    role = temporary_role()
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ | {update_columns("label")}}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation, "ROLES_AWAITING_PROVISIONING", frozenset()
+    )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    apply_status = run("apply", environ=environ)
+    with superuser_engine.begin() as connection:
+        connection.execute(text(f'GRANT UPDATE ON TABLE public.regions TO "{role}"'))
+    verify_status = run("verify", environ=environ)
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert (apply_status, verify_status) == (0, 1)
+    assert (
+        f"`{role}` holds UPDATE on the whole of `regions`, which overrides its "
+        "declared columns"
+    ) in summary
 
 
 def test_apply_grants_nothing_the_second_time_and_verify_passes(
@@ -137,3 +216,102 @@ def test_a_missing_role_blocks_every_grant_and_fails_verification(
             PrivilegeEntry(role, "regions", "SELECT"),
         ]
     )
+
+
+def test_a_role_awaiting_creation_is_skipped_until_it_exists(
+    superuser_engine, temporary_role
+) -> None:
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    declared = {role: {"regions": READ}, absent_role: {"regions": READ}}
+    with superuser_engine.begin() as connection:
+        plan, _defaults = apply_declared_privileges(
+            connection, declared, roles_awaiting_creation={absent_role}
+        )
+        skipped = skipped_roles(connection, declared, {absent_role})
+        missing = check_declared_privileges(
+            connection,
+            {name: tables for name, tables in declared.items() if name not in skipped},
+        )
+
+    assert plan.can_apply
+    assert plan.skipped_roles == (absent_role,)
+    assert plan.grants == (PrivilegeEntry(role, "regions", "SELECT"),)
+    assert skipped == (absent_role,)
+    assert missing == []
+    assert _has_privilege(superuser_engine, role, "regions", "SELECT")
+
+
+def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(
+    disposable_v2_database_url, temporary_role, monkeypatch, capsys, tmp_path
+) -> None:
+    """``apply`` and ``verify`` succeed while a role awaiting creation is absent."""
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ}, absent_role: {"regions": READ}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "ROLES_AWAITING_PROVISIONING",
+        frozenset({absent_role}),
+    )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    apply_status = run("apply", environ=environ)
+    apply_report = capsys.readouterr().out
+    verify_status = run("verify", environ=environ)
+    verify_output = capsys.readouterr().out
+
+    assert (apply_status, verify_status) == (0, 0)
+    assert f"`{absent_role}`" in apply_report
+    assert absent_role in verify_output
+    assert "Every other declared v2 table privilege is held." in verify_output
+    assert "Every declared v2 table privilege is held" not in verify_output
+    # Each step names the skipped role in the job summary.
+    assert summary_path.read_text(encoding="utf-8").count(f"`{absent_role}`") == 2
+
+
+def test_verify_fails_once_a_role_awaiting_creation_exists_without_its_privileges(
+    disposable_v2_database_url, temporary_role, monkeypatch, capsys, tmp_path
+) -> None:
+    """A role awaiting creation is checked as soon as it exists."""
+    role = temporary_role()
+    absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "declared_privileges",
+        lambda _environment: {role: {"regions": READ}, absent_role: {"regions": READ}},
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation,
+        "ROLES_AWAITING_PROVISIONING",
+        frozenset({role, absent_role}),
+    )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    verify_status = run("verify", environ=environ)
+    capsys.readouterr()
+    summary = summary_path.read_text(encoding="utf-8")
+
+    assert verify_status == 1
+    assert f"`{role}` lacks SELECT on `regions`" in summary
+    assert (
+        "Declared roles not created yet, skipped until an operator creates them: "
+        f"`{absent_role}`"
+    ) in summary
+    assert summary.count("## v2 table privileges") == 1

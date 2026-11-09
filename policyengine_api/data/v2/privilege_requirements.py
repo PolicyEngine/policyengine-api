@@ -25,7 +25,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.privileges import TablePrivilege
+from policyengine_api.data.v2.privileges import DeclaredPrivilege, TablePrivilege
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
@@ -226,9 +226,13 @@ def required_privileges(
 
 def undeclared_requirements(
     requirements: Iterable[RequiredPrivilege],
-    declared: Mapping[str, frozenset[TablePrivilege]],
+    declared: Mapping[str, frozenset[DeclaredPrivilege]],
 ) -> list[RequiredPrivilege]:
-    """Return the requirements the declared table privileges don't cover, sorted."""
+    """Return the requirements the declared table privileges don't cover, sorted.
+
+    A privilege declared on only some columns doesn't cover a connector's need
+    for it on the whole table.
+    """
     return sorted(
         requirement
         for requirement in requirements

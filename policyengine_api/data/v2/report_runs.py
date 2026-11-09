@@ -1,4 +1,11 @@
-"""Durable report-definition and report-run operations for API v2-alpha."""
+"""Durable report-definition and report-run operations for API v2-alpha.
+
+``set_report_type`` and ``create_report_run`` lock ``reports`` rows with
+``SELECT ... FOR UPDATE``, which needs ``UPDATE`` on ``reports``; no managed
+role holds it, so none can run them. ``complete_report_run`` sets
+``markdown``, which no managed role may update either. The simulation API
+creates and completes reports and report runs with its own code.
+"""
 
 from __future__ import annotations
 
@@ -47,6 +54,25 @@ class ReportRunPackageVersions:
     policyengine_version: str
 
 
+@dataclass(frozen=True)
+class ReportRunSimulationRuns:
+    """The simulation runs one report run compares.
+
+    A household report with only a baseline has no reform run.
+    """
+
+    baseline_simulation_run_id: UUID
+    reform_simulation_run_id: UUID | None
+
+
+@dataclass(frozen=True)
+class ReportRunInputs:
+    """The package versions and simulation runs one report run uses."""
+
+    versions: ReportRunPackageVersions
+    simulation_runs: ReportRunSimulationRuns
+
+
 def _locked_report(session: Session, report_id: UUID) -> Report:
     # SQLModel's select remains the query surface. Row locking is the bounded
     # SQLAlchemy capability needed to serialize first-run/type updates.
@@ -86,21 +112,28 @@ def create_report_run(
     session: Session,
     *,
     report_id: UUID,
-    versions: ReportRunPackageVersions,
+    inputs: ReportRunInputs,
     trigger: ReportRunTrigger,
     idempotency_key: UUID | None = None,
 ) -> ReportRun:
-    """Create one run, or return the run for a retried idempotent request."""
+    """Create one run, or return the run for a retried idempotent request.
+
+    A retried request gets the run its first attempt created, with the
+    simulation runs that attempt named.
+    """
     _locked_report(session, report_id)
     if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
         msg = "manual report reruns require an idempotency key"
         raise ValueError(msg)
+    versions = inputs.versions
     if not versions.country_package_version or not versions.policyengine_version:
         msg = "report run package versions must be non-empty"
         raise ValueError(msg)
 
     run = ReportRun(
         report_id=report_id,
+        baseline_simulation_run_id=inputs.simulation_runs.baseline_simulation_run_id,
+        reform_simulation_run_id=inputs.simulation_runs.reform_simulation_run_id,
         country_package_version=versions.country_package_version,
         policyengine_version=versions.policyengine_version,
         trigger=trigger,

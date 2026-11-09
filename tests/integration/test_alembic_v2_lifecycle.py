@@ -25,6 +25,13 @@ from tests.fixtures.integration.alembic_v2 import (
     disposable_v2_url,
     table_columns,
 )
+from tests.integration.simulation_rows import (
+    RUN_VERSIONS,
+    PublicApiRows,
+    delete_public_api_rows,
+    insert_public_api_rows,
+    insert_row,
+)
 
 BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
@@ -886,19 +893,36 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
             for constraint in inspect(engine).get_check_constraints("report_runs")
         }
 
+    report_id = uuid4()
+    report_run_id = uuid4()
+    simulation_id = uuid4()
+    request_key = uuid4()
+    public_api_rows: PublicApiRows | None = None
     try:
         command.upgrade(config, "head")
         assert isinstance(idempotency_column_type(), postgresql.UUID)
         assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
 
-        model_id = uuid4()
-        report_id = uuid4()
-        report_run_id = uuid4()
-        request_key = uuid4()
         with engine.begin() as connection:
-            connection.execute(
-                text("INSERT INTO tax_benefit_models (id, name) VALUES (:id, :name)"),
-                {"id": model_id, "name": f"uuid-cast-{model_id.hex[:8]}"},
+            public_api_rows = insert_public_api_rows(connection)
+            insert_row(
+                connection,
+                "simulations",
+                id=simulation_id,
+                simulation_type="economy",
+                dataset_id=public_api_rows.dataset_id,
+                tax_benefit_model_version_id=public_api_rows.version_id,
+            )
+            simulation_run_id = uuid4()
+            insert_row(
+                connection,
+                "simulation_runs",
+                id=simulation_run_id,
+                simulation_id=simulation_id,
+                tax_benefit_model_version_id=public_api_rows.version_id,
+                year=2026,
+                status="pending",
+                **RUN_VERSIONS,
             )
             connection.execute(
                 text(
@@ -906,19 +930,21 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
                     "(id, label, country, tax_benefit_model_id, inputs) "
                     "VALUES (:id, 'UUID cast report', 'us', :model_id, '{}')"
                 ),
-                {"id": report_id, "model_id": model_id},
+                {"id": report_id, "model_id": public_api_rows.model_id},
             )
             connection.execute(
                 text(
                     "INSERT INTO report_runs "
-                    "(id, report_id, country_package_version, "
-                    "policyengine_version, status, trigger, idempotency_key) "
-                    "VALUES (:id, :report_id, '1.0', '1.0', 'pending', "
-                    "'manual', :request_key)"
+                    "(id, report_id, baseline_simulation_run_id, "
+                    "country_package_version, policyengine_version, status, "
+                    "trigger, idempotency_key) "
+                    "VALUES (:id, :report_id, :simulation_run_id, '1.0', '1.0', "
+                    "'pending', 'manual', :request_key)"
                 ),
                 {
                     "id": report_run_id,
                     "report_id": report_id,
+                    "simulation_run_id": simulation_run_id,
                     "request_key": str(request_key),
                 },
             )
@@ -941,9 +967,11 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
                 {"report_id": report_id},
             )
             connection.execute(
-                text("DELETE FROM tax_benefit_models WHERE id = :model_id"),
-                {"model_id": model_id},
+                text("DELETE FROM simulations WHERE id = :simulation_id"),
+                {"simulation_id": simulation_id},
             )
+            if public_api_rows is not None:
+                delete_public_api_rows(connection, public_api_rows)
         command.upgrade(config, "head")
         engine.dispose()
 

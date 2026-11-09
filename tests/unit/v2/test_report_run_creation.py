@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -20,8 +20,16 @@ from policyengine_api.data.v2.models import (
 )
 from policyengine_api.data.v2.report_runs import (
     ReportNotFoundError,
+    ReportRunInputs,
     ReportRunPackageVersions,
+    ReportRunSimulationRuns,
     create_report_run,
+)
+
+# The simulation runs each report run compares. SQLite doesn't enforce foreign
+# keys, so these tests store no simulation run rows for them.
+SIMULATION_RUNS = ReportRunSimulationRuns(
+    baseline_simulation_run_id=UUID(int=101), reform_simulation_run_id=UUID(int=102)
 )
 
 
@@ -38,10 +46,13 @@ def engine():
 
 
 def _create_report(session: Session) -> Report:
+    model = TaxBenefitModel(name=f"model-{uuid4()}")
+    session.add(model)
+    session.flush()
     report = Report(
         label="Distributional report",
         country="us",
-        tax_benefit_model=TaxBenefitModel(name=f"model-{uuid4()}"),
+        tax_benefit_model_id=model.id,
         inputs={},
     )
     session.add(report)
@@ -57,9 +68,12 @@ def test_unknown_report_is_rejected_before_any_validation(engine) -> None:
         create_report_run(
             session,
             report_id=uuid4(),
-            versions=ReportRunPackageVersions(
-                country_package_version="",
-                policyengine_version="",
+            inputs=ReportRunInputs(
+                versions=ReportRunPackageVersions(
+                    country_package_version="",
+                    policyengine_version="",
+                ),
+                simulation_runs=SIMULATION_RUNS,
             ),
             trigger=ReportRunTrigger.MANUAL,
         )
@@ -75,9 +89,12 @@ def test_manual_run_without_a_key_is_rejected_before_version_checks(engine) -> N
             create_report_run(
                 session,
                 report_id=report.id,
-                versions=ReportRunPackageVersions(
-                    country_package_version="",
-                    policyengine_version="",
+                inputs=ReportRunInputs(
+                    versions=ReportRunPackageVersions(
+                        country_package_version="",
+                        policyengine_version="",
+                    ),
+                    simulation_runs=SIMULATION_RUNS,
                 ),
                 trigger=ReportRunTrigger.MANUAL,
             )
@@ -101,9 +118,12 @@ def test_empty_package_versions_are_rejected(
             create_report_run(
                 session,
                 report_id=report.id,
-                versions=ReportRunPackageVersions(
-                    country_package_version=country_package_version,
-                    policyengine_version=policyengine_version,
+                inputs=ReportRunInputs(
+                    versions=ReportRunPackageVersions(
+                        country_package_version=country_package_version,
+                        policyengine_version=policyengine_version,
+                    ),
+                    simulation_runs=SIMULATION_RUNS,
                 ),
                 trigger=ReportRunTrigger.SYSTEM,
             )
@@ -116,9 +136,12 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
         run = create_report_run(
             session,
             report_id=report.id,
-            versions=ReportRunPackageVersions(
-                country_package_version="1.2.3",
-                policyengine_version="4.5.6",
+            inputs=ReportRunInputs(
+                versions=ReportRunPackageVersions(
+                    country_package_version="1.2.3",
+                    policyengine_version="4.5.6",
+                ),
+                simulation_runs=SIMULATION_RUNS,
             ),
             trigger=ReportRunTrigger.INITIAL,
         )
@@ -131,6 +154,8 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
         assert run.trigger is ReportRunTrigger.INITIAL
         assert run.idempotency_key is None
         assert run.status is ReportRunStatus.PENDING
+        assert run.baseline_simulation_run_id == UUID(int=101)
+        assert run.reform_simulation_run_id == UUID(int=102)
 
 
 def test_conflict_without_a_matching_keyed_run_reraises(
@@ -152,9 +177,12 @@ def test_conflict_without_a_matching_keyed_run_reraises(
             create_report_run(
                 session,
                 report_id=report.id,
-                versions=ReportRunPackageVersions(
-                    country_package_version="1.2.3",
-                    policyengine_version="4.5.6",
+                inputs=ReportRunInputs(
+                    versions=ReportRunPackageVersions(
+                        country_package_version="1.2.3",
+                        policyengine_version="4.5.6",
+                    ),
+                    simulation_runs=SIMULATION_RUNS,
                 ),
                 trigger=ReportRunTrigger.MANUAL,
                 idempotency_key=uuid4(),

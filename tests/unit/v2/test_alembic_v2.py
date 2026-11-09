@@ -40,6 +40,7 @@ TARGET_ENVIRONMENT = "test-foundation"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
+        "budget_window_runs",
         "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
@@ -47,6 +48,9 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_user_policy_mappings",
         "parameter_search_files",
         "parameter_tree_children",
+        "labor_supply_decile_responses",
+        "labor_supply_responses",
+        "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
@@ -63,6 +67,8 @@ CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 PARAMETER_TREE_REVISION = "3869eb814a90"
 PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
+# The catalog pruning revision, parent of the simulation runs revision.
+CATALOG_PRUNING_REVISION = "334859ef4fec"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -244,6 +250,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        CATALOG_PRUNING_REVISION,
         PARAMETER_SEARCH_FILE_REVISION,
         PARAMETER_TREE_REVISION,
         AREA_IMPACT_COORDINATE_REVISION,
@@ -1028,7 +1035,7 @@ def test_catalog_pruning_revision_adds_only_two_nullable_columns() -> None:
         if revision.down_revision == PARAMETER_SEARCH_FILE_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == CATALOG_PRUNING_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1054,3 +1061,58 @@ def test_catalog_pruning_revision_adds_only_two_nullable_columns() -> None:
         assert "op.bulk_insert(" not in body
         assert "op.create_table(" not in body
         assert "op.drop_table(" not in body
+
+
+def _simulation_runs_revision_source() -> str:
+    """Return the source of the one revision after the catalog pruning revision."""
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    return path.read_text(encoding="utf-8")
+
+
+def test_simulation_runs_revision_is_generated_with_documented_corrections() -> None:
+    """One generated revision follows the catalog pruning revision.
+
+    Its corrections make new columns reuse enum types the baseline created:
+    ``simulation_runs.status`` reuses ``simulations.status``'s, and
+    ``budget_window_runs.status`` and ``trigger`` reuse the report run's.
+    """
+    revision = _simulation_runs_revision_source()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{CATALOG_PRUNING_REVISION}"' in revision
+    assert revision.count("Dialect correction:") == 3
+    assert "reversibility correction" not in revision
+    for type_name in (
+        "v2_simulation_status",
+        "v2_report_run_status",
+        "v2_report_run_trigger",
+    ):
+        assert f'name="{type_name}",\n                create_type=False,' in upgrade
+    for table_name in (
+        "simulation_runs",
+        "budget_window_runs",
+        "labor_supply_responses",
+        "labor_supply_decile_responses",
+    ):
+        assert f'op.create_table(\n        "{table_name}"' in upgrade
+        assert f'op.drop_table("{table_name}")' in downgrade
+    assert upgrade.count("op.drop_table(") == 0
+    for removed_column in (
+        "status",
+        "error_message",
+        "started_at",
+        "completed_at",
+        "household_result",
+        "output_dataset_id",
+    ):
+        assert f'op.drop_column("simulations", "{removed_column}")' in upgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
