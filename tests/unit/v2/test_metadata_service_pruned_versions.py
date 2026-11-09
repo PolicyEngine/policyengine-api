@@ -26,9 +26,13 @@ from policyengine_api.data.v2.models import (
     ParameterValue,
     Variable,
 )
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
+from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.types import ParameterTreeLevel
 from policyengine_api.services.v2.metadata.validators import (
     CatalogValuesPrunedError,
@@ -192,6 +196,33 @@ def test_reads_of_pruned_data_name_the_country_and_version(
         PRUNED_DATA_READS[read_name](catalog_service(catalog_session))
 
     assert str(raised.value) == PRUNED_MESSAGE
+
+
+@pytest.mark.parametrize("read_name", sorted(PRUNED_DATA_READS))
+@pytest.mark.parametrize(
+    ("running_policyengine_version", "is_running_version"),
+    [(POLICYENGINE_VERSION, True), ("99.0.0", False)],
+    ids=["running-version", "other-version"],
+)
+def test_reads_of_pruned_data_say_whether_the_process_runs_the_version(
+    catalog_session: Session,
+    read_name: str,
+    running_policyengine_version: str,
+    is_running_version,
+) -> None:
+    """The routes answer 503 for the running version and 404 for any other."""
+    _add_us_tree_search_file_and_part_variable(catalog_session)
+    _prune_us_version(catalog_session)
+    service = V2MetadataService(
+        MetadataDatabaseSession(catalog_session),
+        running_policyengine_version=running_policyengine_version,
+        selected_catalogs=None,
+    )
+
+    with pytest.raises(CatalogValuesPrunedError) as raised:
+        PRUNED_DATA_READS[read_name](service)
+
+    assert raised.value.running_version is is_running_version
 
 
 def test_a_pruned_version_answers_so_even_where_a_read_needs_no_values(

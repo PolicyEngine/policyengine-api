@@ -5,8 +5,10 @@ the parameter search file answers 404 with ``Cache-Control: no-store`` and the
 service's message, so no cache keeps the answer after the version is installed
 again and its values return. The request names data the catalog no longer
 holds, so the answer is a client error: a 503 would be counted as a server
-error by the daily telemetry error report (issue #4243). An unavailable
-catalog still answers 503.
+error by the daily telemetry error report (issue #4243). When the pruned
+version is the one the process runs, which a request without
+``policyengine_version`` selects, the service is at fault, so it answers 503
+with the same message and header. An unavailable catalog still answers 503.
 """
 
 from __future__ import annotations
@@ -109,6 +111,24 @@ def test_a_kept_whole_version_response_cache_does_not_keep_the_pruned_answer() -
 
 
 @pytest.mark.parametrize(("path", "method_name"), PRUNED_DATA_ROUTES)
+def test_routes_serving_pruned_data_answer_503_when_the_running_version_is_pruned(
+    path: str,
+    method_name: str,
+) -> None:
+    reader = ResourceReader(
+        {method_name: None},
+        error=CatalogValuesPrunedError(PRUNED_MESSAGE, running_version=True),
+    )
+
+    response = metadata_route_client(lambda: reader).get(path)
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "error", "message": PRUNED_MESSAGE}
+    assert response.headers["cache-control"] == "no-store"
+    assert "etag" not in response.headers
+
+
+@pytest.mark.parametrize(("path", "method_name"), PRUNED_DATA_ROUTES)
 def test_routes_serving_pruned_data_still_answer_503_when_the_catalog_is_unavailable(
     path: str,
     method_name: str,
@@ -153,7 +173,8 @@ def test_openapi_describes_the_404_of_a_pruned_version() -> None:
         }, path
         unavailable = responses["503"]["description"]
         assert unavailable.startswith("The initialized v2 catalog is unavailable"), path
-        assert "pruned" not in unavailable, path
+        assert "running PolicyEngine.py version" in unavailable, path
+        assert "no-store" in unavailable, path
     for path in ("/v2/parameters", "/v2/variables"):
         responses = schema["paths"][path]["get"]["responses"]
         assert "pruned" not in responses["404"]["description"], path
