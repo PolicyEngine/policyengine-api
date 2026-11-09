@@ -11,6 +11,11 @@ A signed-out browser instead sends ``PolicyEngine-Unauthenticated-User``: a
 random UUID it generates once and keeps. That UUID is a bearer credential for
 the browser's unauthenticated user; it needs no Auth0 configuration.
 
+A credentialed server (see :mod:`policyengine_api.libs.server_credentials`)
+sends its own token in ``Authorization``, so it forwards a signed-in user's
+token in ``PolicyEngine-User-Authorization`` instead, and a signed-out
+browser's UUID in the same unauthenticated-user header.
+
 This module never logs a token, subject, email address, or browser UUID.
 """
 
@@ -41,6 +46,9 @@ PUBLIC_API_AUTH_ENV_VARS = (
 )
 
 UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
+# A credentialed server, whose own token is in Authorization, forwards the
+# signed-in user it acts for here, as "Bearer <user access token>".
+FORWARDED_USER_AUTHORIZATION_HEADER = "PolicyEngine-User-Authorization"
 # The canonical lowercase, hyphenated form that crypto.randomUUID() produces.
 CANONICAL_UUID_PATTERN = (
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

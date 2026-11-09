@@ -479,6 +479,16 @@ answers it with `error="invalid_token"`. A bearer token that cannot be checked
 gets 503. A signed-in user's valid token passes the check and the user route
 checks it again.
 
+A PolicyEngine server whose token passes that check acts for a user by
+forwarding the user's credential: a signed-in user's token in
+`PolicyEngine-User-Authorization: Bearer <token>`, or a signed-out browser's
+`PolicyEngine-Unauthenticated-User`. The user routes authenticate that user
+exactly as they authenticate a direct request with the same credential
+(`fastapi_routes.v2.user_auth_support`), including `POST /v2/me/upgrade`.
+`PolicyEngine-User-Authorization` is read only from a server; on any other
+request it is ignored. It is not in the OpenAPI schema, because only servers
+send it.
+
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:
 
