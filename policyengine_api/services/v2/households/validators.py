@@ -68,7 +68,10 @@ class LegacyHouseholdTranslationReason(StrEnum):
     PERSON_IN_MULTIPLE_GROUPS = "legacy_person_in_multiple_groups"
     PERSON_NOT_OBJECT = "legacy_person_not_object"
     AMBIGUOUS_DEFAULT_YEAR = "legacy_ambiguous_default_year"
-    # A value that is not standards-compliant JSON (require_json_value).
+    # The year the explicit periods give is outside the years v2 accepts.
+    DEFAULT_YEAR_OUT_OF_RANGE = "legacy_default_year_out_of_range"
+    # A value that is not standards-compliant JSON (require_json_value), or
+    # that the translated document nests too deeply.
     VALUE_NOT_JSON = "value_not_json"
 
 

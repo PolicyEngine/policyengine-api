@@ -384,12 +384,12 @@ def _snapshot(
             # Every explicit period names 2300, so that is the default year,
             # which v2 limits to 1900-2200.
             _uk_household_of({"adult": {"age": {"2300": 40}}}),
-            "legacy household's default year must be between 1900 and 2200",
+            "legacy household's default year is outside the years v2 accepts",
             "legacy_default_year_out_of_range",
         ),
         (
             _uk_household_of({"adult": {"age": {"1800": 40}}}),
-            "legacy household's default year must be between 1900 and 2200",
+            "legacy household's default year is outside the years v2 accepts",
             "legacy_default_year_out_of_range",
         ),
         (

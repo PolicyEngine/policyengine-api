@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.households.types import (
     CanonicalHouseholdContent,
@@ -253,11 +254,48 @@ def translate_legacy_household(
         raise LegacyHouseholdTranslationError(
             str(error), reason=LegacyHouseholdTranslationReason.VALUE_NOT_JSON
         ) from error
-    return HouseholdCreationInput(
-        country_id=snapshot.country_id,
-        default_year=_derive_default_year(translation.all_values),
-        household_data=normalized,
-    )
+    default_year = _derive_default_year(translation.all_values)
+    try:
+        return HouseholdCreationInput(
+            country_id=snapshot.country_id,
+            default_year=default_year,
+            household_data=normalized,
+        )
+    except ValidationError as error:
+        refusal = _creation_input_refusal(error)
+        if refusal is None:
+            raise
+        raise refusal from error
+
+
+# The creation input fields a translated v1 household can fail, with the
+# message and reason each failure records. Unlike pydantic's messages, which
+# quote the refused input, these hold nothing from the household.
+_CREATION_INPUT_REFUSALS: dict[str, tuple[str, LegacyHouseholdTranslationReason]] = {
+    "default_year": (
+        "legacy household's default year is outside the years v2 accepts",
+        LegacyHouseholdTranslationReason.DEFAULT_YEAR_OUT_OF_RANGE,
+    ),
+    "household_data": (
+        "translated household values must be standards-compliant JSON",
+        LegacyHouseholdTranslationReason.VALUE_NOT_JSON,
+    ),
+}
+
+
+def _creation_input_refusal(
+    error: ValidationError,
+) -> LegacyHouseholdTranslationError | None:
+    """Return the translation error for a creation input pydantic refused.
+
+    Return None for a refusal of another field, which no translation causes.
+    """
+    for detail in error.errors():
+        field = detail["loc"][0] if detail["loc"] else None
+        if isinstance(field, str) and field in _CREATION_INPUT_REFUSALS:
+            message, reason = _CREATION_INPUT_REFUSALS[field]
+            return LegacyHouseholdTranslationError(message, reason=reason)
+    return None
 
 
 def _require_supported_legacy_collections(

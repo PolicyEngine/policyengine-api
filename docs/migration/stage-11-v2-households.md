@@ -153,15 +153,15 @@ v2 household document rule records that rule's reason:
 
 | Source | `failure_reason` |
 | --- | --- |
-| The v1 household | `legacy_unsupported_collections` (a top-level key other than `people`, the country's group collections and, for the US, `spm`), `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give) |
+| The v1 household | `legacy_unsupported_collections` (a top-level key other than `people`, the country's group collections and, for the US, `spm`), `legacy_people_not_object`, `legacy_groups_not_object`, `legacy_group_not_object`, `legacy_members_not_named_people`, `legacy_person_in_multiple_groups`, `legacy_person_not_object`, `legacy_ambiguous_default_year` (values without periods and no single year the others give), `legacy_default_year_out_of_range` (the year the periods give is outside the years v2 accepts), `value_not_json` (values nested deeper than the v2 document allows) |
 | The translated v2 document | `incomplete_memberships` (a person in no record of one of the country's entity collections), `invalid_identifier` (a person or group name that is blank or longer than 255 characters), `too_many_records`, `too_many_values`, `spm_not_object`, `spm_selection_invalid` |
 
 The other `HouseholdValidationReason` codes name rules that the translation's
 own output always meets, such as `duplicate_record_id` or
 `absent_membership_target`; they apply to documents sent to the v2 household
-routes, not to copies. `value_not_json` marks a value that isn't standards-compliant
-JSON, but a stored copy event is validated when it is read, so such a value
-fails there, as an `integrity` failure with no `failure_reason`.
+routes, not to copies. A value that isn't standards-compliant JSON in other
+ways, such as a number that isn't finite, fails when the stored copy event is
+read, as an `integrity` failure with no `failure_reason`.
 
 ## Exact-Event Operator
 
