@@ -66,8 +66,8 @@ A user's subject or email address is never recorded. While enforcement is
 off, a request without a credential records nothing of its own. A refused
 credential is a runtime event at INFO, `public_api_credential_refused`, with
 `refusal_reason`, the method, the path, `request.id` (the response's
-`X-PolicyEngine-Request-Id`) and, for a valid token of an unlisted client,
-`caller.client_id`. With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, a request
+`X-PolicyEngine-Request-Id`) and, for a validly signed client token of an
+unlisted client or from the users' tenant, `caller.client_id`. With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, a request
 refused for having no server credential is the same event, with
 `refusal_reason=credential_required` and its `caller.kind`. A refused request
 to a Flask route never reaches Flask, so that event is its only record. A

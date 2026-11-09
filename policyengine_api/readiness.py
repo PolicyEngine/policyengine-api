@@ -48,8 +48,9 @@ def validate_policy_runtime_configuration() -> None:
     # User-owned routes fail closed without these settings; an inconsistent
     # or required-but-missing configuration must stop the deployment here.
     load_user_auth_settings()
-    # A malformed allow list of server clients, or one without the Auth0
-    # settings that check their tokens, would make every server's request 503.
+    # A malformed server issuer or allow list, or one without the Auth0
+    # settings that check their tokens, would make every bearer request 503,
+    # signed-in users' included.
     load_server_credential_settings()
     # Enforcement that is malformed, or on without an allowed client, would
     # answer every non-public request with 503.

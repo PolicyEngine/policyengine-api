@@ -135,7 +135,11 @@ class CredentialRefusedError(Exception):
     """Raised for an ``Authorization`` header that is not a valid credential."""
 
     def __init__(self, reason: RefusalReason, *, client_id: str | None = None) -> None:
-        """Record the reason, and the client ID of a valid but unlisted client."""
+        """Record the reason, and the client ID of a validly signed client token.
+
+        The client ID is set for an unlisted client and for a client token
+        from the users' tenant.
+        """
         super().__init__(reason.value)
         self.reason = reason
         self.client_id = client_id

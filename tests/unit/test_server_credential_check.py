@@ -109,6 +109,18 @@ REFUSED_AUTHORIZATION_HEADERS: dict[str, Callable[[], str]] = {
     "users-issuer-claimed-with-the-server-key": lambda: bearer(
         user_token(signing_key=SERVER_SIGNING_KEY)
     ),
+    # A server-signed token whose issuer claim isn't the server issuer exactly
+    # is verified with the users' settings, and fails there.
+    "server-signed-token-without-an-issuer": lambda: bearer(server_token(iss=None)),
+    "server-issuer-without-its-trailing-slash": lambda: bearer(
+        server_token(iss=SERVER_ISSUER.rstrip("/"))
+    ),
+    "server-issuer-in-another-case": lambda: bearer(
+        server_token(iss=SERVER_ISSUER.upper())
+    ),
+    "users-key-signed-token-from-another-issuer": lambda: bearer(
+        user_token(iss="https://other-tenant.example.test/")
+    ),
     "user-subject-ending-in-clients": lambda: bearer(
         signed_token(sub="auth0|someone@clients")
     ),
@@ -477,6 +489,23 @@ def test_a_refusal_records_the_decoded_path_the_routers_match() -> None:
 
     ((_name, _severity, attributes),) = _credential_events(application.runtime)
     assert attributes["url.path"] == "/us/metadata?part"
+
+
+@ROUTE_PATHS
+def test_a_users_token_is_unavailable_when_the_users_keys_cannot_be_fetched(
+    path: str, install_signing_keys
+) -> None:
+    # Each tenant's keys are fetched separately; the users' tenant failing
+    # makes a signed-in user's token 503 too.
+    install_signing_keys(
+        StaticJWKClient(error=jwt.PyJWKClientConnectionError("unreachable"))
+    )
+    application = _application()
+
+    refused = application.client.get(path, headers=_bearer(user_token()))
+
+    assert refused.status_code == 503
+    assert refused.json() == UNAVAILABLE_BODY
 
 
 @ROUTE_PATHS
