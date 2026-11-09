@@ -441,6 +441,8 @@ which serves it with no current-law values and fails the exact comparison if
 it publishes that version, with nothing to restore it. Downgrading past the
 revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
+From the head, such a downgrade first runs revision `1356f658347d`'s
+downgrade, which needs `simulations` empty (see "API v2 simulation runs").
 Otherwise restore the versions the target code may install or serve first, by
 publishing each with this revision's code, as the Stage 9 runbook's rollback
 section describes. Production downgrades are never automatic in any case.

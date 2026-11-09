@@ -10,6 +10,10 @@ made: simulation_runs.status reuses the existing v2_simulation_status type,
 and budget_window_runs.status and trigger reuse the existing
 v2_report_run_status and v2_report_run_trigger types.
 
+It was generated on c614b6bcccfc. When master gained the catalog pruning
+revision 334859ef4fec on the same parent, down_revision moved to
+334859ef4fec; generating it again from there gives the same operations.
+
 The upgrade adds required columns without server defaults to household_jobs,
 report_runs and the result tables, so it needs those tables empty, as they are
 while no managed role can write them. The downgrade restores required columns

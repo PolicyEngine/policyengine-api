@@ -1,6 +1,6 @@
 """Check the simulation runs revision against disposable Postgres.
 
-One revision follows the parameter search file revision. It adds simulation
+One revision follows the catalog pruning revision. It adds simulation
 runs, one per simulation and year; has each report run name its baseline and
 reform simulation runs; keys every result table by run; types a report run's
 cliff impact and labour supply; adds the budget-window tables; gives household
