@@ -52,6 +52,7 @@ from policyengine_api.services.v2.user_types.types import AdminUserSearch
 from policyengine_api.services.v2.user_types.validators import (
     LastAdminDeletionError,
     UserTypeBelowMinimumError,
+    UserTypeChangedError,
 )
 
 if TYPE_CHECKING:
@@ -380,3 +381,51 @@ def test_a_deletion_after_a_demotion_is_allowed_while_another_admin_remains(
     assert outcomes.get("error") is None
     assert outcomes.get("deleted") is True
     assert _admin_ids(sessions) == [xavier_id]
+
+
+def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> None:
+    """Carol read Bob as standard; Alice makes him an author while Carol waits."""
+    alice = _principal(sessions, "alice")
+    carol = _principal(sessions, "carol")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    carol_id = accounts.get_account(principal=carol, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    for user_id in (alice_id, carol_id):
+        _store_type_as_superuser(user_id, UserType.ADMIN)
+    outcomes: dict[str, object] = {}
+    finished = threading.Event()
+
+    def carol_promotes_bob() -> None:
+        try:
+            outcomes["result"] = _user_types(sessions).change_user_type(
+                principal=carol,
+                user_id=bob_id,
+                user_type=UserType.ADMIN,
+                expected_user_type=UserType.STANDARD,
+            )
+        except Exception as error:  # noqa: BLE001  # the test inspects the failure
+            outcomes["error"] = error
+        finally:
+            finished.set()
+
+    held = sessions()
+    try:
+        held.begin()
+        # Alice's change holds the user-type change lock and makes Bob an author.
+        _lock_and_read_admins(held)
+        bob_row = read_signed_in_user(held, bob_id, for_update=True)
+        assert bob_row is not None
+        update_user_type(held, bob_row, user_type=UserType.AUTHOR)
+        waiting_change = threading.Thread(target=carol_promotes_bob)
+        waiting_change.start()
+        assert not finished.wait(LOCK_WAIT_SECONDS)
+        held.commit()
+    finally:
+        held.close()
+    waiting_change.join(timeout=10)
+
+    assert isinstance(outcomes.get("error"), UserTypeChangedError)
+    assert _stored_types(sessions, [bob_id]) == ["author"]
+    assert _history(sessions, bob_id) == []

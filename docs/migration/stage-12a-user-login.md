@@ -105,7 +105,7 @@ type first, and each operation checks it again in its own transaction.
 | --- | --- |
 | `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's email, ignoring case, with `%` and `_` matching themselves. |
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
-| `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change; the same type changes and records nothing. `expected_user_type` is the type the admin last read: when the stored type differs, the change is refused with 409, so it can't overwrite a change made since. |
+| `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
@@ -125,7 +125,8 @@ admin's `DELETE /v2/me`. Every change, and every signed-in account deletion,
 first takes one transaction-scoped advisory lock
 (`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
 statement of its own and checks the caller, or the deleted user, against
-them. Concurrent changes and deletions therefore run one at a time, and each
+them; a change then locks the user's row and compares its type with
+`expected_user_type`. Concurrent changes and deletions therefore run one at a time, and each
 reads the admins the ones before it committed; an admin demoted by an earlier
 change is then refused with 403. Locking the admins' rows instead would miss
 a user promoted while the lock was awaited, since a waiting query rechecks

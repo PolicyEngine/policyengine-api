@@ -78,6 +78,18 @@ class UserTypeChangeRead:
 
 
 @dataclass(frozen=True)
+class RequestedUserType:
+    """The type a change asks for, and the type its requester last read.
+
+    ``expected_user_type`` is None for the type script, which changes the
+    user whatever its type is.
+    """
+
+    user_type: UserType
+    expected_user_type: UserType | None
+
+
+@dataclass(frozen=True)
 class UserTypeChangeOrigin:
     """Who changed a user's type, and through what."""
 

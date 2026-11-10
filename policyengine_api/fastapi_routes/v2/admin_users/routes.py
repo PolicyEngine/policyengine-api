@@ -160,12 +160,13 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         response_model=AdminUserResponse,
         summary="Change a signed-in user's type",
         description=(
-            "Admins only. Records the change in the user's type history; setting "
-            "the type the user already has changes and records nothing. "
-            "expected_user_type is the user's type as the admin last read it: when "
-            "the stored type differs, the change is refused (409), so it can't "
-            "overwrite a change made since. Demoting the last admin is refused "
-            "(409) too."
+            "Admins only. Records the change in the user's type history. Setting "
+            "the type the user already has changes and records nothing, whatever "
+            "expected_user_type is. Otherwise expected_user_type, the user's type "
+            "as the admin last read it, must still be the stored type: when it "
+            "differs, the change is refused (409) and nothing is written. Only "
+            "the type is compared, so a type changed and changed back since the "
+            "read is not detected. Demoting the last admin is refused (409) too."
         ),
     )
     def change_user_type(

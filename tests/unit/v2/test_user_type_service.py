@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -466,7 +467,7 @@ def test_a_change_is_refused_once_the_type_differs_from_the_expected_one(
 ) -> None:
     """Carol read Bob as standard, but Alice made him an author since."""
     alice_id = _signed_in_admin(store, ALICE)
-    carol_id = _signed_in_admin(store, CAROL)
+    _signed_in_admin(store, CAROL)
     bob_id = _sign_in(store, BOB)
     user_types = _user_types(store)
     user_types.change_user_type(
@@ -476,7 +477,12 @@ def test_a_change_is_refused_once_the_type_differs_from_the_expected_one(
         expected_user_type=UserType.STANDARD,
     )
 
-    with pytest.raises(UserTypeChangedError, match="now author, not standard"):
+    with pytest.raises(
+        UserTypeChangedError,
+        match=re.escape(
+            "This user's type is now author, not standard. Nothing was changed."
+        ),
+    ):
         user_types.change_user_type(
             principal=CAROL,
             user_id=bob_id,
@@ -498,4 +504,3 @@ def test_a_change_is_refused_once_the_type_differs_from_the_expected_one(
         (change.changed_by_user_id, change.new_user_type)
         for change in _history_rows(store)
     ] == [(alice_id, "author")]
-    assert carol_id != alice_id

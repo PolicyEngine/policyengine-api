@@ -487,9 +487,10 @@ class V2UserTypeResourceService(Protocol):
     ) -> AdminUserRead:
         """Change a signed-in user's type for an admin, recording the change.
 
-        Raise ``UserTypeChangedError`` when the stored type is no longer
-        ``expected_user_type``, and ``LastAdminDemotionError`` when the change
-        would leave no admin.
+        The type the user already has changes nothing, whatever
+        ``expected_user_type`` is. Otherwise raise ``UserTypeChangedError`` when
+        the stored type is no longer ``expected_user_type``, and
+        ``LastAdminDemotionError`` when the change would leave no admin.
         """
         ...
 

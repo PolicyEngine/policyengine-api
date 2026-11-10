@@ -5,7 +5,9 @@ yet is standard, and a signed-out browser is unauthenticated. Checking a
 caller's type only reads: it never provisions a user.
 
 Only admins list signed-in users, read one, change a user's type or read a
-user's recorded type changes. Unauthenticated users are never listed or
+user's recorded type changes. An admin's change names the type the admin last
+read; when the user's type is no longer that one, the change is refused rather
+than overwriting a change made since. Unauthenticated users are never listed or
 changed, since their IDs are their browsers' credentials. Each change records
 the previous and new type, who made it and how. A change that would leave no
 admin is refused.
@@ -52,6 +54,7 @@ from policyengine_api.services.v2.user_types.types import (
     AdminUserPage,
     AdminUserRead,
     AdminUserSearch,
+    RequestedUserType,
     ScriptedUserTypeChange,
     UserTypeChangeOrigin,
     UserTypeChangeRead,
@@ -139,10 +142,11 @@ class V2UserTypeService:
     ) -> AdminUserRead:
         """Change a signed-in user's type for an admin, recording the change.
 
-        Setting the type the user already has changes and records nothing.
-        Otherwise the user's stored type must still be ``expected_user_type``,
-        the type the admin last read; raise UserTypeChangedError if it isn't,
-        so the change can't overwrite one made since.
+        Setting the type the user already has changes and records nothing,
+        whatever ``expected_user_type`` is. Otherwise the user's stored type
+        must still be ``expected_user_type``, the type the admin last read;
+        raise UserTypeChangedError if it isn't. The check compares types only,
+        so a type changed and changed back since the read is not detected.
         """
         with self._database_session.transaction() as session:
             caller = find_principal_user_in_session(session, principal)
@@ -153,16 +157,12 @@ class V2UserTypeService:
             user = require_signed_in_user(
                 read_signed_in_user(session, user_id, for_update=True)
             )
-            current_user_type = UserType(user.user_type)
-            if current_user_type is not user_type:
-                require_expected_user_type(
-                    current_user_type=current_user_type,
-                    expected_user_type=expected_user_type,
-                )
             _change_type_in_session(
                 session,
                 user,
-                user_type=user_type,
+                requested=RequestedUserType(
+                    user_type=user_type, expected_user_type=expected_user_type
+                ),
                 admin_user_ids=admin_user_ids,
                 origin=UserTypeChangeOrigin(
                     changed_by_user_id=caller_user_id,
@@ -225,7 +225,9 @@ class V2UserTypeService:
             _change_type_in_session(
                 session,
                 user,
-                user_type=user_type,
+                requested=RequestedUserType(
+                    user_type=user_type, expected_user_type=None
+                ),
                 admin_user_ids=admin_user_ids,
                 origin=UserTypeChangeOrigin(
                     changed_by_user_id=None, source=UserTypeChangeSource.SCRIPT
@@ -272,13 +274,24 @@ def _change_type_in_session(
     session: Session,
     user: User,
     *,
-    user_type: UserType,
+    requested: RequestedUserType,
     admin_user_ids: list[UUID],
     origin: UserTypeChangeOrigin,
 ) -> None:
+    """Change the type, unless the user already has it, and record the change.
+
+    When ``requested`` names the type its requester last read, the user's
+    stored type must still be that one.
+    """
     previous_user_type = UserType(user.user_type)
+    user_type = requested.user_type
     if previous_user_type is user_type:
         return
+    if requested.expected_user_type is not None:
+        require_expected_user_type(
+            current_user_type=previous_user_type,
+            expected_user_type=requested.expected_user_type,
+        )
     require_another_admin(
         previous_user_type=previous_user_type,
         new_user_type=user_type,

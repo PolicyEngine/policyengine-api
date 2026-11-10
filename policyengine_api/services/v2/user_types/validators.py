@@ -82,7 +82,7 @@ def require_expected_user_type(
     if current_user_type is not expected_user_type:
         msg = (
             f"This user's type is now {current_user_type.value}, not "
-            f"{expected_user_type.value}: read the user again before changing it"
+            f"{expected_user_type.value}. Nothing was changed."
         )
         raise UserTypeChangedError(msg)
 
