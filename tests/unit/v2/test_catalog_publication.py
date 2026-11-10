@@ -323,7 +323,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         catalog_versions_left_to_prune=3,
         spm_availability=publication_types.SPMAvailabilityRecording(
             recorded=(("uk", "2.50.0", False),),
-            left_unknown=(("us", "1.450.0"),),
+            not_recorded=(("us", "1.450.0"),),
         ),
     ).as_dict()
 
@@ -401,7 +401,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         "catalog_versions_left_to_prune": 3,
         "spm_availability": {
             "recorded": [{"country_id": "uk", "version": "2.50.0", "available": False}],
-            "left_unknown": [{"country_id": "us", "version": "1.450.0"}],
+            "not_recorded": [{"country_id": "us", "version": "1.450.0"}],
             "versions_unreadable": None,
         },
         "elapsed_seconds": 2.346,

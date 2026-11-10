@@ -233,8 +233,8 @@ deletes a version's current-law values, which publishing it again restores
 identically, and the 404 answered for a pruned version (503 for the running
 one) is never stored (``Cache-Control: no-store``). A version's SPM
 availability in ``/v2/model-catalog`` is recorded once after publication:
-until a publication run records it, a response says the version offers no
-SPM settings, a process keeps saying so until it restarts, and a client may
+until a publication run records it, a response reports it as unknown, a
+process keeps reporting so until it restarts, and a client may
 reuse such a response for up to this long after that.
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300

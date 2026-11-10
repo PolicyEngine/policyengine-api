@@ -362,12 +362,15 @@ class MetadataSPMAvailability(StrictResponseModel):
     When ``available``, ``settings_schema`` is the JSON schema of a
     household's ``spm`` selection and ``defaults`` the certified selection
     that applies to every field a household leaves out. A version without
-    them (any country but the US, a bundle without certified SPM support, or
-    a version whose availability publication has not recorded yet) is not
-    available, and both are null.
+    them (any country but the US, or a bundle without certified SPM
+    support) is not available, and both are null. ``available`` is null
+    while catalog publication has not recorded the version's availability,
+    because the simulation service didn't serve its PolicyEngine.py version
+    or its versions couldn't be read: whether it offers SPM settings is not
+    known yet.
     """
 
-    available: bool
+    available: bool | None
     settings_schema: dict[str, JsonValue] | None = None
     defaults: dict[str, JsonValue] | None = None
 

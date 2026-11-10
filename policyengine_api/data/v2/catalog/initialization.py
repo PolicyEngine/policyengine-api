@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine, create_engine
@@ -41,6 +41,9 @@ from policyengine_api.data.v2.settings import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from policyengine_api.data.v2.catalog.publication_types import (
+        SPMAvailabilityRecording,
+    )
     from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 
@@ -118,7 +121,8 @@ class PublicationSteps:
         publish_catalog
     )
     record_spm_availability: Callable[
-        [Engine, NormalizedCatalog, Mapping[str, str] | None], None
+        [Engine, NormalizedCatalog, Mapping[str, str] | None],
+        SPMAvailabilityRecording,
     ] = record_published_spm_availability
 
 
@@ -131,8 +135,9 @@ def initialize_catalog(
 ) -> PublicationEvidence:
     """Load only row-write settings, extract fully, verify, then publish explicitly.
 
-    After publishing, record each version's SPM availability. The simulation
-    service's URL, which that needs, is checked before anything else.
+    After publishing, record each version's SPM availability, which the
+    evidence returned reports. The simulation service's URL, which that
+    needs, is checked before anything else.
     """
     selected_steps = steps or PublicationSteps()
     settings = load_v2_data_write_database_settings(environ)
@@ -142,8 +147,8 @@ def initialize_catalog(
     try:
         selected_steps.verify_region_data(engine, catalog, environ)
         evidence = selected_steps.publish(engine, catalog)
-        selected_steps.record_spm_availability(engine, catalog, environ)
-        return evidence
+        recording = selected_steps.record_spm_availability(engine, catalog, environ)
+        return replace(evidence, spm_availability=recording)
     finally:
         engine.dispose()
 
@@ -172,9 +177,10 @@ def _error_payload(error: Exception) -> dict[str, object]:
 def main() -> int:
     """Run explicit initialization and return a shell-compatible status.
 
-    A failure to prune an older catalog version leaves the status successful,
-    since the publication had committed; each one is in the evidence and is
-    also printed to stderr.
+    A failure to prune an older catalog version, or to read the simulation
+    service's versions to record SPM availability, leaves the status
+    successful, since the publication had committed; each one is in the
+    evidence and is also printed to stderr.
     """
     try:
         evidence = initialize_catalog()
@@ -191,6 +197,15 @@ def main() -> int:
         print(
             f"catalog pruning failed for {country_and_version}: "
             f"{failure.error_type}: {failure.message}",
+            file=sys.stderr,
+        )
+    spm_recording = evidence.spm_availability
+    if spm_recording is not None and spm_recording.versions_unreadable is not None:
+        print(
+            "SPM availability was not recorded: "
+            f"{spm_recording.versions_unreadable}; /v2/model-catalog reports a "
+            "version without a recorded availability as unknown until a "
+            "publication records it",
             file=sys.stderr,
         )
     return 0

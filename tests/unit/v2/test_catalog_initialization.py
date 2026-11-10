@@ -420,9 +420,9 @@ def test_main_says_on_stderr_when_spm_availability_could_not_be_recorded(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The evidence names the versions left unknown, and stderr says why."""
+    """The evidence names the versions not recorded, and stderr says why."""
     recording = publication_types.SPMAvailabilityRecording(
-        left_unknown=(("us", "1.450.0"),),
+        not_recorded=(("us", "1.450.0"),),
         versions_unreadable="the simulation service's versions could not be read",
     )
     evidence = replace(_evidence(), spm_availability=recording)
@@ -433,11 +433,11 @@ def test_main_says_on_stderr_when_spm_availability_could_not_be_recorded(
     output = capsys.readouterr()
     assert json.loads(output.out)["spm_availability"] == {
         "recorded": [],
-        "left_unknown": [{"country_id": "us", "version": "1.450.0"}],
+        "not_recorded": [{"country_id": "us", "version": "1.450.0"}],
         "versions_unreadable": ("the simulation service's versions could not be read"),
     }
     assert output.err.splitlines() == [
         "SPM availability was not recorded: the simulation service's versions "
-        "could not be read; /v2/model-catalog reports it as unknown until a "
-        "publication records it"
+        "could not be read; /v2/model-catalog reports a version without a "
+        "recorded availability as unknown until a publication records it"
     ]

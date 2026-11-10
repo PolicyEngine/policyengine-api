@@ -817,7 +817,8 @@ version offers SPM settings, from the simulation service's public
 schema and the certified defaults. A US version the simulation service does
 not serve yet, and every version when its answer cannot be read, stays
 unrecorded for the next publication run. `/v2/model-catalog` serves it as
-`spm`, and a version without it offers none. The catalog writer role already
+`spm`, and a version without it reports `available` null, unknown, which a
+recorded absence (`available` false) is not. The catalog writer role already
 holds `UPDATE` on the table, so no privilege changes.
 
 The revision writes no data, and the previous Public API revision, which

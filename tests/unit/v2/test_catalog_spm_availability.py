@@ -169,7 +169,7 @@ def test_publication_records_only_what_is_known(
 
     assert recorded == [("policyengine-uk", {"available": False})]
     assert recording == SPMAvailabilityRecording(
-        recorded=(("uk", "1.0.0", False),), left_unknown=(("us", "1.0.0"),)
+        recorded=(("uk", "1.0.0", False),), not_recorded=(("us", "1.0.0"),)
     )
 
 
@@ -260,6 +260,6 @@ def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
 
     assert recorded == []
     assert recording == SPMAvailabilityRecording(
-        left_unknown=(("uk", "1.0.0"), ("us", "1.0.0")),
+        not_recorded=(("uk", "1.0.0"), ("us", "1.0.0")),
         versions_unreadable="the simulation service's versions could not be read",
     )

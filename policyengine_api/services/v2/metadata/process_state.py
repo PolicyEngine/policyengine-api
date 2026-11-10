@@ -30,7 +30,7 @@ class SelectedCatalogStore:
     for the same country and version need not query for it again; a process
     of the previous release keeps the time-period options it read, and a
     process that found a version before its SPM availability was recorded
-    offers no SPM settings for it until it restarts.
+    reports its SPM availability as unknown until it restarts.
 
     A kept ``catalog_values_pruned_at`` can be out of date in either
     direction, so ``MetadataCatalogSelection`` checks it for the reads of the

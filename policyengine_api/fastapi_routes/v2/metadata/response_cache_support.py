@@ -87,7 +87,8 @@ class MetadataResponseCache:
     that release's processes start, when pruning deletes its current-law
     values, which restoration writes back identically, or when publication
     records its SPM availability once after publishing it, so a body built
-    before then offers no SPM settings for the life of the process;
+    before then reports its SPM availability as unknown for the life of the
+    process;
     publication also sets
     the version's ``catalog_last_published_at`` and pruning its
     ``catalog_values_pruned_at``, which no body holds. So a body built for a
