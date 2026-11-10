@@ -768,7 +768,7 @@ after their change or merge has committed. Give those types only once no
 deployment, rollback included, runs the previous revision. The downgrade restores the check that
 allows only `unauthenticated` and `standard`, so it fails while any user is an
 author or an admin. `test_user_types_revision_changes_only_the_user_type_check` in
-`tests/integration/test_alembic_v2_lifecycle.py` checks that nothing else
+`tests/integration/test_alembic_v2_user_types.py` checks that nothing else
 changes, and
 `test_user_types_revision_accepts_authors_and_admins_until_downgraded` that
 the downgrade refuses while either type is stored.
