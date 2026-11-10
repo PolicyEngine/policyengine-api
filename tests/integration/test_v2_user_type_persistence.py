@@ -3,8 +3,8 @@
 These prove what SQLite cannot: the runtime role's declared privileges cover
 the changes and their history, the user-type change lock makes concurrent
 changes and deletions run one at a time so the last admin is never demoted or
-deleted, and account deletion cascades through the history or keeps a change
-without its admin.
+deleted and a change from a type changed meanwhile is refused, and account
+deletion cascades through the history or keeps a change without its admin.
 """
 
 from __future__ import annotations
@@ -413,7 +413,8 @@ def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> No
     held = sessions()
     try:
         held.begin()
-        # Alice's change holds the user-type change lock and makes Bob an author.
+        # The held session stands in for Alice's change: it holds the
+        # user-type change lock and makes Bob an author.
         _lock_and_read_admins(held)
         bob_row = read_signed_in_user(held, bob_id, for_update=True)
         assert bob_row is not None

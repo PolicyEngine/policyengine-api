@@ -5,9 +5,11 @@ yet is standard, and a signed-out browser is unauthenticated. Checking a
 caller's type only reads: it never provisions a user.
 
 Only admins list signed-in users, read one, change a user's type or read a
-user's recorded type changes. An admin's change names the type the admin last
-read; when the user's type is no longer that one, the change is refused rather
-than overwriting a change made since. Unauthenticated users are never listed or
+user's recorded type changes. An admin's change also names the type the admin
+last read: a change to another type is refused when the stored type is no
+longer that one. Only the type is compared, so a type changed and changed back
+since the read is not detected, and asking for the type the user already has
+changes nothing whatever was expected. Unauthenticated users are never listed or
 changed, since their IDs are their browsers' credentials. Each change records
 the previous and new type, who made it and how. A change that would leave no
 admin is refused.

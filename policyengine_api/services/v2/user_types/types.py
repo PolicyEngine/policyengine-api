@@ -81,8 +81,8 @@ class UserTypeChangeRead:
 class RequestedUserType:
     """The type a change asks for, and the type its requester last read.
 
-    ``expected_user_type`` is None for the type script, which changes the
-    user whatever its type is.
+    ``expected_user_type`` is None for the type script, which skips the
+    comparison with a type read earlier; the last-admin rule still applies.
     """
 
     user_type: UserType

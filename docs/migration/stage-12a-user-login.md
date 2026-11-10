@@ -121,14 +121,15 @@ types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
 with no admin.
 
 A change that would leave no admin is refused with 409, and so is the last
-admin's `DELETE /v2/me`. Every change, and every signed-in account deletion,
-first takes one transaction-scoped advisory lock
+admin's `DELETE /v2/me`. Every change, the script's included, and every
+signed-in account deletion first takes one transaction-scoped advisory lock
 (`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
 statement of its own and checks the caller, or the deleted user, against
-them; a change then locks the user's row and compares its type with
-`expected_user_type`. Concurrent changes and deletions therefore run one at a time, and each
-reads the admins the ones before it committed; an admin demoted by an earlier
-change is then refused with 403. Locking the admins' rows instead would miss
+them. Because of that lock, concurrent changes and deletions run one at a
+time, and each reads the admins the ones before it committed; an admin
+demoted by an earlier change is then refused with 403. An admin's change to
+another type then also compares the user's locked row with
+`expected_user_type`, as the route table says; the script's changes don't. Locking the admins' rows instead would miss
 a user promoted while the lock was awaited, since a waiting query rechecks
 only the rows its snapshot matched.
 
