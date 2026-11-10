@@ -122,7 +122,11 @@ def test_each_caller_requests_its_environments_token_once(
     _step_index, token_step = _token_step(job)
     # The command alone: ::add-mask:: must reach the log, not a redirect.
     assert token_step["run"] == TOKEN_STEP_COMMAND
-    assert token_step["env"] == TOKEN_STEP_ENV
+    # The CI client's settings reach this step only, never the job's env.
+    for name, source in TOKEN_STEP_ENV.items():
+        assert token_step["env"].get(name) == source, name
+    assert set(token_step["env"]) <= {*TOKEN_STEP_ENV, *DEPLOYMENT_AUTH_ENV}
+    assert not any(name.startswith("CI_SERVER_") for name in job.get("env") or {})
     token_step_env = _step_env(job, token_step)
     for name, source in DEPLOYMENT_AUTH_ENV.items():
         assert token_step_env.get(name) == source, name

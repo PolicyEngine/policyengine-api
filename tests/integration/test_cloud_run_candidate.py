@@ -61,18 +61,25 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
     }
 
 
-def test_cloud_run_candidate_user_routes_fail_closed_without_a_token(api_client):
-    """User-owned routes must never become readable without a credential."""
-    for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
-        for headers in ({}, {"PolicyEngine-Unauthenticated-User": "not-a-uuid"}):
-            response = api_client.get(
-                path,
-                params={
-                    "country_id": "us",
-                    "user_id": "00000000-0000-0000-0000-000000000000",
-                },
-                headers=headers,
-            )
-            assert response.status_code == 401, (path, response.text)
-            assert response.headers["www-authenticate"].startswith("Bearer")
-            assert response.json()["status"] == "error"
+def test_cloud_run_candidate_user_routes_fail_closed_without_a_token(
+    api_client, uncredentialed_api_client
+):
+    """User-owned routes must never become readable without a user's credential.
+
+    Neither for a credentialed server that forwards no user nor for a caller
+    with no credential at all, whether or not a server credential is required.
+    """
+    for client in (api_client, uncredentialed_api_client):
+        for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
+            for headers in ({}, {"PolicyEngine-Unauthenticated-User": "not-a-uuid"}):
+                response = client.get(
+                    path,
+                    params={
+                        "country_id": "us",
+                        "user_id": "00000000-0000-0000-0000-000000000000",
+                    },
+                    headers=headers,
+                )
+                assert response.status_code == 401, (path, response.text)
+                assert response.headers["www-authenticate"].startswith("Bearer")
+                assert response.json()["status"] == "error"

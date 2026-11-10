@@ -529,12 +529,29 @@ answers 503 to every non-public request that is not from a server. With a
 malformed value it still serves listed servers; with no allowed client there
 are none.
 
-Before switching it on in an environment, the deploy's own post-deploy tests
-there need the CI server credential (task 3.3 · 1). The staging integration
-tests (`test_cloud_run_candidate`, `test_live_v2_metadata`,
-`test_live_v2_policies`) and the live simulation tests call non-public
-routes with no credential or with a user's token, which enforcement
-refuses; only the health polling uses a public route.
+The deploy's own tests of each candidate send the CI server credential, so
+they pass with enforcement on or off. Each push.yml job that calls a deployed
+Public API (the staging integration tests, the live simulation tests and the
+production smoke tests) requests one Auth0 client-credentials token with
+`.github/scripts/request_ci_server_token.sh`, from the CI client of its own
+GitHub environment, and passes it to its test step as
+`CI_SERVER_ACCESS_TOKEN`. The tests send it in `Authorization: Bearer` on
+every request (`tests/integration/deployed_api_credentials.py`), and forward
+the signed-in test user's token in `PolicyEngine-User-Authorization`. Only
+the health polling, on a public route, sends no credential. The CI client's
+settings are in both the `staging` and `production` environments:
+
+| Setting | Kind |
+| --- | --- |
+| `CI_SERVER_AUTH0_DOMAIN` | variable; the tenant's host, whose issuer `https://<host>/` must equal the environment's `PUBLIC_API_SERVER_AUTH_ISSUER` |
+| `CI_SERVER_AUTH0_CLIENT_ID` | variable; must be in the environment's `PUBLIC_API_SERVER_CLIENT_IDS` |
+| `CI_SERVER_AUTH0_CLIENT_SECRET` | secret |
+| `CI_SERVER_AUTH0_AUDIENCE` | variable; equals the environment's `PUBLIC_API_AUTH_AUDIENCE` |
+
+The script checks those three conditions before it requests a token, so one
+environment's token never reaches the other environment's candidate. A
+missing setting fails the job; so does a test run without
+`CI_SERVER_ACCESS_TOKEN`, rather than skipping.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:

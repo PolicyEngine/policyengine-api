@@ -569,6 +569,18 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Install jq
         run: sudo apt-get install -y jq
+      # One CI server token for this job's tests of the staging candidate,
+      # from the staging environment's own Auth0 tenant. Only the test step
+      # reads it (CI_SERVER_ACCESS_TOKEN). Requested before the deploy, so a
+      # missing credential stops the run before a candidate exists.
+      - name: Request the CI server credential for the staging candidate tests
+        id: ci_server_token
+        run: bash .github/scripts/request_ci_server_token.sh
+        env:
+          CI_SERVER_AUTH0_DOMAIN: ${{ vars.CI_SERVER_AUTH0_DOMAIN }}
+          CI_SERVER_AUTH0_CLIENT_ID: ${{ vars.CI_SERVER_AUTH0_CLIENT_ID }}
+          CI_SERVER_AUTH0_CLIENT_SECRET: ${{ secrets.CI_SERVER_AUTH0_CLIENT_SECRET }}
+          CI_SERVER_AUTH0_AUDIENCE: ${{ vars.CI_SERVER_AUTH0_AUDIENCE }}
       # The staging database password is managed independently in Secret Manager
       # and differs from the repository-level production database password.
       - name: Synchronize shared Cloud Run runtime secrets
@@ -616,6 +628,7 @@ jobs:
         run: uv run --frozen --extra dev python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py -v
         env:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
+          CI_SERVER_ACCESS_TOKEN: ${{ steps.ci_server_token.outputs.token }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
           # Staging-only Auth0 CI application (password grant) and test user.
@@ -637,10 +650,14 @@ jobs:
       && (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
       && needs.deploy-cloud-run-staging.result == 'success'
+    # The staging environment holds the CI client the tests' token comes from.
+    environment: staging
     env:
       # uv installs uv.lock on the Cloud Run image's Python, not the 3.14
       # that .python-version selects.
       UV_PYTHON: "3.12"
+    permissions:
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -652,12 +669,28 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install locked live test dependencies
         run: make install
+      # One CI server token for this job's tests of the staging candidate,
+      # from the staging environment's own Auth0 tenant. Only the test step
+      # reads it (CI_SERVER_ACCESS_TOKEN).
+      - name: Request the CI server credential for the staging candidate tests
+        id: ci_server_token
+        run: bash .github/scripts/request_ci_server_token.sh
+        env:
+          CI_SERVER_AUTH0_DOMAIN: ${{ vars.CI_SERVER_AUTH0_DOMAIN }}
+          CI_SERVER_AUTH0_CLIENT_ID: ${{ vars.CI_SERVER_AUTH0_CLIENT_ID }}
+          CI_SERVER_AUTH0_CLIENT_SECRET: ${{ secrets.CI_SERVER_AUTH0_CLIENT_SECRET }}
+          CI_SERVER_AUTH0_AUDIENCE: ${{ vars.CI_SERVER_AUTH0_AUDIENCE }}
+          # The staging candidate's settings, which the client must match.
+          PUBLIC_API_SERVER_AUTH_ISSUER: ${{ vars.PUBLIC_API_SERVER_AUTH_ISSUER }}
+          PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}
+          PUBLIC_API_SERVER_CLIENT_IDS: ${{ vars.PUBLIC_API_SERVER_CLIENT_IDS }}
       - name: Wait for Cloud Run staging candidate health before live tests
         run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/health"
       - name: Run live staging tests, one pytest worker per test
         run: bash .github/scripts/run_live_staging_tests.sh
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
+          CI_SERVER_ACCESS_TOKEN: ${{ steps.ci_server_token.outputs.token }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   promote-cloud-run-staging:
@@ -868,6 +901,19 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Install jq
         run: sudo apt-get install -y jq
+      # One CI server token for this job's tests of the production candidate,
+      # from the production environment's own Auth0 tenant. Only the smoke
+      # test step reads it (CI_SERVER_ACCESS_TOKEN). Requested before the
+      # deploy, so a missing credential stops the run before a candidate
+      # exists.
+      - name: Request the CI server credential for the production candidate tests
+        id: ci_server_token
+        run: bash .github/scripts/request_ci_server_token.sh
+        env:
+          CI_SERVER_AUTH0_DOMAIN: ${{ vars.CI_SERVER_AUTH0_DOMAIN }}
+          CI_SERVER_AUTH0_CLIENT_ID: ${{ vars.CI_SERVER_AUTH0_CLIENT_ID }}
+          CI_SERVER_AUTH0_CLIENT_SECRET: ${{ secrets.CI_SERVER_AUTH0_CLIENT_SECRET }}
+          CI_SERVER_AUTH0_AUDIENCE: ${{ vars.CI_SERVER_AUTH0_AUDIENCE }}
       - name: Synchronize complete Cloud Run runtime secret batch
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
@@ -911,6 +957,7 @@ jobs:
         run: uv run --frozen --extra dev python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py -v
         env:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
+          CI_SERVER_ACCESS_TOKEN: ${{ steps.ci_server_token.outputs.token }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
       - name: Verify exact tested Cloud Run production candidate
         run: bash .github/scripts/resolve_cloud_run_candidate_state.sh

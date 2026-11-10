@@ -1,11 +1,14 @@
 """Live staging checks for native v2 policies and user-owned resources.
 
 The staging deployment runs this module against the tagged Cloud Run
-candidate. Signed-in routes use a dedicated staging Auth0 test user whose
-access token is obtained through the staging-only CI application's password
-grant. Signed-out checks send a fresh random UUID per run in the
-``PolicyEngine-Unauthenticated-User`` header and need no credential. Every
-credential comes from the GitHub ``staging`` environment:
+candidate. Every request carries the CI server credential in
+``Authorization`` (the ``api_client`` fixture), so the signed-in and
+signed-out users are forwarded as a PolicyEngine server forwards them.
+Signed-in routes use a dedicated staging Auth0 test user whose access token is
+obtained through the staging-only CI application's password grant and sent in
+``PolicyEngine-User-Authorization``. Signed-out checks send a fresh random
+UUID per run in the ``PolicyEngine-Unauthenticated-User`` header. Every
+user credential comes from the GitHub ``staging`` environment:
 
 - ``STAGING_AUTH0_TEST_DOMAIN``: Auth0 domain issuing tokens whose ``iss``
   matches the staging ``PUBLIC_API_AUTH_ISSUER`` (variable);
@@ -35,6 +38,7 @@ import httpx
 import pytest
 
 from policyengine_api.query_parameters import MAXIMUM_QUERY_LIMIT
+from tests.integration.deployed_api_credentials import forwarded_user_headers
 
 AUTH0_ENVIRONMENT = (
     "STAGING_AUTH0_TEST_DOMAIN",
@@ -86,8 +90,10 @@ def _staging_user_token() -> str:
 @pytest.fixture
 def user_headers(api_base_url: str) -> dict[str, str]:
     # Depending on api_base_url skips local runs before any token request.
+    # Authorization holds the CI server credential, so the user's token is
+    # forwarded beside it.
     del api_base_url
-    return {"Authorization": f"Bearer {_staging_user_token()}"}
+    return forwarded_user_headers(_staging_user_token())
 
 
 def _one_catalog_item(api_client, resource: str) -> dict:
