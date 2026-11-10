@@ -15,6 +15,8 @@ calculation as a household job:
   failing; a household function that runs out of memory fails it.
 
 The measured times are reported as a warning, so the job log keeps them.
+They need the simulation service's household calculation route on staging,
+so the change that adds them merges only after that route is deployed there.
 """
 
 from __future__ import annotations

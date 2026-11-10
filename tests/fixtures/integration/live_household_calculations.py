@@ -2,6 +2,12 @@
 
 They need only httpx and the standard library, because the parallel live test
 job installs nothing else.
+
+The checks call the simulation service's household calculation route through
+the staging candidate, so they pass only once that route (``POST
+/household-calculations``, answering ``job_id`` and accepting ``axes``) is
+deployed to staging. Every staging promotion waits on them, so the change that
+adds them merges only after that deployment.
 """
 
 from __future__ import annotations
@@ -13,10 +19,10 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    import httpx
 
 CALCULATION_PATH = "/v2/household-calculations"
 CALCULATION_TIMEOUT_SECONDS = float(
@@ -25,13 +31,18 @@ CALCULATION_TIMEOUT_SECONDS = float(
 POLL_INTERVAL_SECONDS = float(
     os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
 )
-# A 502, 503 or 504 can be a short outage, such as the simulation service
-# failing to read its database or version manifest for a moment, or the
-# Public API failing to read household_jobs; a
-# calculation's submission and each poll are sent again while such answers
-# last at most TRANSIENT_LIMIT_SECONDS in a row. Any other failure, and a
-# longer run of such answers, fails the check with the answer's body.
-TRANSIENT_STATUS_CODES = {502, 503, 504}
+# A short outage, such as the simulation service failing to read its database
+# or version manifest for a moment, or the Public API failing to read
+# household_jobs, is sent through again while it lasts at most
+# TRANSIENT_LIMIT_SECONDS in a row. A submission is sent again only after a
+# 503 or a failed connection: the Public API answers 502 when the simulation
+# service accepted the calculation but its answer could not be read, so the
+# job exists, and sending it again would create another. A read is sent again
+# after a 502, 503 or 504 or a failed connection, since reading creates
+# nothing. Any other failure, and a longer outage, fails the check with the
+# answer's body.
+SUBMISSION_RETRY_STATUS_CODES = frozenset({503})
+READ_RETRY_STATUS_CODES = frozenset({502, 503, 504})
 TRANSIENT_LIMIT_SECONDS = float(
     os.environ.get("STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS", "90")
 )
@@ -179,19 +190,27 @@ def store_reform(client: httpx.Client, household: LiveHousehold) -> str | None:
     return response.json()["result"]["item"]["id"]
 
 
-def _send_through_short_outages(send: Callable[[], httpx.Response]) -> httpx.Response:
-    """Send the request again while it gets 502, 503 or 504 for a short time."""
+def _send_through_short_outages(
+    send: Callable[[], httpx.Response], retry_status_codes: frozenset[int]
+) -> httpx.Response:
+    """Send the request again while it fails to connect or gets one of the codes.
+
+    Raise AssertionError once that has lasted TRANSIENT_LIMIT_SECONDS.
+    """
     outage_started: float | None = None
     while True:
-        response = send()
-        if response.status_code not in TRANSIENT_STATUS_CODES:
-            return response
-        outage_started = outage_started or time.monotonic()
+        try:
+            response = send()
+        except httpx.TransportError as error:
+            failure = f"{type(error).__name__}: {error}"
+        else:
+            if response.status_code not in retry_status_codes:
+                return response
+            failure = f"HTTP {response.status_code}: {response.text[:500]}"
+        if outage_started is None:
+            outage_started = time.monotonic()
         if time.monotonic() - outage_started >= TRANSIENT_LIMIT_SECONDS:
-            msg = (
-                f"HTTP {response.status_code} for {TRANSIENT_LIMIT_SECONDS:.0f} s: "
-                f"{response.text[:500]}"
-            )
+            msg = f"{failure}, for {TRANSIENT_LIMIT_SECONDS:.0f} s"
             raise AssertionError(msg)
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -214,7 +233,8 @@ def calculate(
         body["axes"] = household.axes
     deadline = started + CALCULATION_TIMEOUT_SECONDS
     response = _send_through_short_outages(
-        lambda: client.post(CALCULATION_PATH, json=body)
+        lambda: client.post(CALCULATION_PATH, json=body),
+        SUBMISSION_RETRY_STATUS_CODES,
     )
     submit_seconds = time.monotonic() - started
     assert response.status_code == 202, response.text
@@ -224,7 +244,9 @@ def calculate(
     # The submission answers with the new job only; its result is read from
     # household_jobs, so the calculation is read at least once.
     while True:
-        polled = _send_through_short_outages(partial(client.get, calculation_path))
+        polled = _send_through_short_outages(
+            partial(client.get, calculation_path), READ_RETRY_STATUS_CODES
+        )
         assert polled.status_code == 200, polled.text
         item = polled.json()["result"]["item"]
         if item["status"] in FINISHED_STATUSES:

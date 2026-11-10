@@ -6,7 +6,8 @@ household function on Modal) and, as the same situation and policy, through
 the Public API's in-process ``/calculate`` (``/calculate-full`` when it adds
 missing variables) on the same candidate. Every calculated value must match,
 axes, reforms and added variables included. A run-specific input makes each
-stored household new.
+stored household new. Like the other household calculation checks, these need
+the simulation service's household calculation route on staging.
 """
 
 from __future__ import annotations
