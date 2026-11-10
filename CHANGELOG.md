@@ -1,3 +1,25 @@
+## [5.37.1] - 2026-11-10
+
+### Changed
+
+- Cloud Armor's policy lets requests to the metadata and calculate paths that carry a well-formed bearer token skip the per-address limits, so the Public API's own server routes aren't throttled as a few Vercel addresses; the Public API refuses any such token that isn't valid.
+
+
+## [5.37.0] - 2026-11-10
+
+### Added
+
+- The Public API has a setting, PUBLIC_API_SERVER_CREDENTIAL_REQUIRED, that refuses every request without a server credential with 401 before route matching, except GET and HEAD /health, GET /v2/openapi.json and CORS preflights. Deploys keep it switched off (0) unless the GitHub variable is 1.
+
+
+## [5.36.0] - 2026-11-10
+
+### Added
+
+- The Public API checks the Auth0 server credential a request sends in Authorization: a client-credentials token from the Public API's own Auth0 tenant (PUBLIC_API_SERVER_AUTH_ISSUER), from a client listed in PUBLIC_API_SERVER_CLIENT_IDS; signed-in users' tokens keep their own issuer. A credential that fails validation gets 401 before any route runs, while requests that send none are still served, and each request records its caller.
+- A PolicyEngine server whose credential the Public API accepts can act for a user on the signed-in user routes: it forwards the signed-in user's token in PolicyEngine-User-Authorization: Bearer, or a signed-out browser's PolicyEngine-Unauthenticated-User header, and the routes authenticate that user with the same checks as a direct request.
+
+
 ## [5.35.3] - 2026-11-09
 
 ### Changed

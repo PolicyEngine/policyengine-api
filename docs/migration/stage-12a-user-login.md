@@ -55,7 +55,8 @@ body that is not parseable JSON is rejected, with 422, by FastAPI first):
 
 | Request | Principal or response |
 | --- | --- |
-| `Authorization: Bearer <token>` | Validated as below; a valid user token is a `UserPrincipal`. The unauthenticated-user header is ignored. |
+| `Authorization: Bearer <token>`, not a server's | Validated as below; a valid user token is a `UserPrincipal`. The unauthenticated-user header is ignored. |
+| A server's token in `Authorization` | The user the server forwards: `PolicyEngine-User-Authorization: Bearer <token>` takes the place of `Authorization` in this table, and `PolicyEngine-Unauthenticated-User` works as below (see [Settings](#settings)). |
 | No bearer token, `PolicyEngine-Unauthenticated-User: <canonical UUID>` | `UnauthenticatedPrincipal(user_id)`. Needs no Auth0 configuration. |
 | No bearer token and no header, or a header that is not a canonical UUID | 401 with `WWW-Authenticate: Bearer` |
 
@@ -66,12 +67,24 @@ Uppercase, unhyphenated, braced, and `urn:uuid:` forms are rejected.
 Bearer tokens are RS256 Auth0 access tokens for the Public API audience.
 `libs/user_auth.py` validates them against `{issuer}.well-known/jwks.json` and
 checks `iss` and `aud`. The decoder is ported from the Simulation Entrypoint.
-For a bearer token:
+For a bearer token in `Authorization`, the credential check before routing
+answers first (see [Settings](#settings)):
 
-- an invalid token: 401 with `WWW-Authenticate: Bearer error="invalid_token"`
-  (an invalid token never falls back to the header);
-- a machine-to-machine (`…@clients`) token: 403;
+- an invalid token, or another scheme: 401 with `WWW-Authenticate: Bearer`
+  and "Authentication is required" (an invalid token never falls back to the
+  header);
+- a machine-to-machine (`…@clients`) token from the users' tenant, or from
+  the Public API's own tenant (`PUBLIC_API_SERVER_AUTH_ISSUER`) but of a
+  client not in `PUBLIC_API_SERVER_CLIENT_IDS`: the same 401, as is any
+  token from the Public API's own tenant without a client subject;
+- a listed client's token from the Public API's own tenant: the request is
+  from a server, so the user routes read the user it forwards (below), and
+  answer 401 when it forwards none;
 - authentication not configured, or signing keys unreachable: 503.
+
+The user routes' own `WWW-Authenticate: Bearer error="invalid_token"`
+answer remains for a token that passes the check and then fails the routes'
+second validation, for example by expiring in between.
 
 The type alias `AccountPrincipal = UserPrincipal | UnauthenticatedPrincipal`
 flows from the routes through every service.
@@ -512,6 +525,9 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
+| `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED` | GitHub variable (optional) | `1` refuses every request without a server credential outside the public routes; unset, empty or `0` (what deploys write by default) serves them. `1` needs `PUBLIC_API_SERVER_CLIENT_IDS` |
+| `PUBLIC_API_SERVER_AUTH_ISSUER` | GitHub variable (optional) | Issuer of server tokens: the Public API's own Auth0 tenant (decision 1.1 · 5), for example `https://policyengine-api.uk.auth0.com/` in production and `https://policyengine-api-staging.uk.auth0.com/` in staging. Normalized to a trailing `/`; HTTPS; needs `PUBLIC_API_AUTH_AUDIENCE` and must differ from `PUBLIC_API_AUTH_ISSUER`. Set it to the new tenant's issuer exactly as its OpenID configuration publishes it: the check can't tell that another domain of the users' tenant, such as `policyengine.uk.auth0.com`, names the same tenant. Unset accepts no server token |
+| `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs in that tenant, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs `PUBLIC_API_SERVER_AUTH_ISSUER` |
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
@@ -527,14 +543,69 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 > identities automatically.
 
 `readiness.validate_policy_runtime_configuration` validates the
-`PUBLIC_API_AUTH_*` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
+`PUBLIC_API_AUTH_*`, `PUBLIC_API_SERVER_AUTH_ISSUER`,
+`PUBLIC_API_SERVER_CLIENT_IDS` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
 readiness, which is the deploy gate. Request handling reads the
 `PUBLIC_API_AUTH_*` settings only for a bearer token, so nothing in them
 blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
 `PUBLIC_API_AUTH_REQUIRED` (`0` or `1`) and checks the issuer, audience, and
 all-or-none Management settings, and it rejects Management settings outside
-production. `deploy_cloud_run_candidate.sh` writes them to
-the revision. The release test step unsets them.
+production and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
+`deploy_cloud_run_candidate.sh` writes them to the revision. The release test
+step unsets them.
+
+Every request's `Authorization` header is checked before route matching
+(`policyengine_api.request_caller`), so a bearer token sent to any route, not
+only a user route, is validated. A token that fails validation, an
+unlisted client's token and two `Authorization` headers get the Public API's
+plain 401 (`WWW-Authenticate: Bearer`,
+`{"status":"error","message":"Authentication is required"}`) before the route
+runs; an expired user token is refused there too, so a user route no longer
+answers it with `error="invalid_token"`. A bearer token that cannot be checked
+gets 503. A signed-in user's valid token passes the check and the user route
+checks it again.
+
+A PolicyEngine server whose token passes that check acts for a user by
+forwarding the user's credential: a signed-in user's token in
+`PolicyEngine-User-Authorization: Bearer <token>`, or a signed-out browser's
+`PolicyEngine-Unauthenticated-User`. The user routes authenticate that user
+with the same code as a direct request's credential
+(`fastapi_routes.v2.user_auth_support`), including `POST /v2/me/upgrade`.
+Two differences, both still refusals, because a forwarded token is not
+checked before routing:
+
+- an expired or invalid one gets the user routes' own 401 with
+  `WWW-Authenticate: Bearer error="invalid_token"` and "The bearer access
+  token is invalid", where a direct one now gets the plain 401 above; two
+  forwarded headers get that `invalid_token` 401 too;
+- a machine-to-machine token from the users' tenant gets 403 whether or not
+  its client is in `PUBLIC_API_SERVER_CLIENT_IDS`, where a direct one gets
+  401; a forwarded token from the Public API's own tenant is no user token,
+  so it gets the `invalid_token` 401.
+`PolicyEngine-User-Authorization` is read only from a server; on any other
+request it is ignored. It is not in the OpenAPI schema, because only servers
+send it.
+
+With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, the same check, before route
+matching, also refuses every request that has no server credential, a
+signed-in user's own token included, with that 401. `/` and unknown paths are
+refused too; a server gets the normal 404 for an unknown path. Only
+`GET`/`HEAD /health`, `GET /v2/openapi.json` and CORS preflights (`OPTIONS`
+with `Origin` and `Access-Control-Request-Method`) answer without a
+credential, matched exactly on the decoded path. They are exempted in the
+Public API's own code, because Cloud Run's startup probe calls `/health` on
+the container directly. A malformed value, or `1` with no allowed client,
+fails readiness and the deploy validation; a revision that has one anyway
+answers 503 to every non-public request that is not from a server. With a
+malformed value it still serves listed servers; with no allowed client there
+are none.
+
+Before switching it on in an environment, the deploy's own post-deploy tests
+there need the CI server credential (task 3.3 · 1). The staging integration
+tests (`test_cloud_run_candidate`, `test_live_v2_metadata`,
+`test_live_v2_policies`) and the live simulation tests call non-public
+routes with no credential or with a user's token, which enforcement
+refuses; only the health polling uses a public route.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:
