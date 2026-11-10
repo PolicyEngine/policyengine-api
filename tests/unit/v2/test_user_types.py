@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import User, UserType
+from policyengine_api.fastapi_routes.v2.me.response_models import MeItem
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
     resolve_principal_user_for_read_in_session,
@@ -81,6 +82,12 @@ def test_user_types_run_from_unauthenticated_to_admin() -> None:
         "author",
         "admin",
     ]
+
+
+def test_account_responses_allow_every_user_type() -> None:
+    allowed = get_args(MeItem.model_fields["user_type"].annotation)
+
+    assert allowed == tuple(user_type.value for user_type in UserType)
 
 
 @pytest.mark.parametrize(

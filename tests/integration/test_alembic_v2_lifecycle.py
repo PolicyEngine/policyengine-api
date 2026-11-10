@@ -44,6 +44,8 @@ COUNTRIES_REVISION = "fb1a3e40d3d6"
 # The catalog format 2 revision, the parent of the area impact coordinate removal.
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
+# The simulation runs revision, the parent of the user types revision.
+USER_TYPES_PREVIOUS_REVISION = "1356f658347d"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
@@ -189,8 +191,10 @@ def _assert_stage_12a_association_shape(engine) -> None:
         constraint["name"]
         for constraint in inspect(engine).get_check_constraints("users")
     }
+    # The user types revision renamed the type check when it added author and
+    # admin.
     assert {
-        "ck_users_user_type",
+        "ck_users_user_type_allowed",
         "ck_users_standard_primary_country",
     } <= user_checks
 
@@ -1322,4 +1326,111 @@ def test_a_household_only_country_row_lets_records_name_that_country() -> None:
             finally:
                 transaction.rollback()
     finally:
+        engine.dispose()
+
+
+def _schema_shape(engine: Engine) -> dict[str, object]:
+    """Reflect every table's columns, keys, indexes and checks, by name."""
+    inspector = inspect(engine)
+    return {
+        table_name: (
+            [
+                (column["name"], str(column["type"]), column["nullable"])
+                for column in inspector.get_columns(table_name)
+            ],
+            inspector.get_pk_constraint(table_name),
+            sorted(
+                (key["name"], key["constrained_columns"], key["referred_table"])
+                for key in inspector.get_foreign_keys(table_name)
+            ),
+            sorted(
+                (unique["name"], unique["column_names"])
+                for unique in inspector.get_unique_constraints(table_name)
+            ),
+            sorted(
+                (index["name"], index["column_names"])
+                for index in inspector.get_indexes(table_name)
+            ),
+            sorted(
+                (check["name"], check["sqltext"])
+                for check in inspector.get_check_constraints(table_name)
+            ),
+        )
+        for table_name in inspector.get_table_names(schema="public")
+        if table_name != "alembic_version"
+    }
+
+
+def test_user_types_revision_changes_only_the_user_type_check() -> None:
+    """Only the users type check differs, so the previous release keeps working."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
+        parent_checks = _check_names(engine, "users")
+        parent = _schema_shape(engine)
+        command.upgrade(config, "head")
+        head_checks = _check_names(engine, "users")
+        head = _schema_shape(engine)
+
+        assert parent_checks - head_checks == {"ck_users_user_type"}
+        assert head_checks - parent_checks == {"ck_users_user_type_allowed"}
+        changed_tables = sorted(
+            table_name for table_name in head if head[table_name] != parent[table_name]
+        )
+        assert changed_tables == ["users"]
+        # Columns, keys and indexes of users are unchanged; only a check differs.
+        assert head["users"][:5] == parent["users"][:5]
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_user_types_revision_accepts_authors_and_admins_until_downgraded() -> None:
+    """Authors and admins are stored, and the downgrade refuses while any exist."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+    user_ids = {user_type: uuid4() for user_type in ("author", "admin")}
+
+    def insert_user(user_id: UUID, user_type: str) -> None:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, user_type, primary_country) "
+                    "VALUES (:user_id, :user_type, 'us')"
+                ),
+                {"user_id": user_id, "user_type": user_type},
+            )
+
+    try:
+        command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
+        with pytest.raises(sa.exc.IntegrityError):
+            insert_user(user_ids["author"], "author")
+
+        command.upgrade(config, "head")
+        for user_type, user_id in user_ids.items():
+            insert_user(user_id, user_type)
+        with pytest.raises(sa.exc.IntegrityError):
+            insert_user(uuid4(), "editor")
+        with pytest.raises(sa.exc.IntegrityError):
+            command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == V2_ALEMBIC_HEAD_REVISION
+            stored_types = connection.execute(
+                text("SELECT user_type FROM users WHERE id IN (:author, :admin)"),
+                {"author": user_ids["author"], "admin": user_ids["admin"]},
+            ).scalars()
+            assert sorted(stored_types) == ["admin", "author"]
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM users WHERE id IN (:author, :admin)"),
+                {"author": user_ids["author"], "admin": user_ids["admin"]},
+            )
+        command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
+        command.upgrade(config, "head")
         engine.dispose()

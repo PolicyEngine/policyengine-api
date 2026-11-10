@@ -39,12 +39,15 @@ class StrictAccountAPIModel(BaseModel):
 class MeItem(StrictAccountAPIModel):
     """The current user: a signed-in account or a browser's unauthenticated user.
 
-    ``user_type`` says which. An unauthenticated user has no primary country, and
-    only a signed-in user can set its names or primary country.
+    ``user_type`` says which: ``unauthenticated``, or the signed-in user's
+    stored type, ``standard``, ``author`` or ``admin``, where each type has
+    every permission of the types before it. An unauthenticated user has no
+    primary country, and only a signed-in user can set its names or primary
+    country.
     """
 
     id: UUID
-    user_type: Literal["unauthenticated", "standard"]
+    user_type: Literal["unauthenticated", "standard", "author", "admin"]
     # Null only for an unauthenticated user.
     primary_country: CountryId | None
     first_name: str | None

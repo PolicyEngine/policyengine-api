@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from sqlmodel import Session
 
-    from policyengine_api.data.v2.models import UserType
+    from policyengine_api.data.v2.models import UserIdentity, UserType
 
 
 IdentityText = Annotated[str, StringConstraints(min_length=1)]
@@ -54,6 +54,14 @@ class ResolvedUser:
     user_id: UUID = field(repr=False)
     email: str | None
     user_type: UserType
+
+
+@dataclass(frozen=True)
+class StoredIdentity:
+    """A stored sign-in identity and its user's stored type."""
+
+    identity: UserIdentity
+    user_type: str
 
 
 class AccountProvisioningStrategy(Protocol):

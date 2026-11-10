@@ -377,7 +377,7 @@ def test_standard_users_require_a_supported_primary_country() -> None:
     }
     # The countries table, not a check, lists the countries a user may choose.
     assert checks == {
-        "ck_users_user_type": (
+        "ck_users_user_type_allowed": (
             "user_type IN ('unauthenticated', 'standard', 'author', 'admin')"
         ),
         "ck_users_standard_primary_country": (

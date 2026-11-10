@@ -33,11 +33,17 @@ routes. The legacy builder stays browser-only, signed in or not.
 
 ## User types and credentials
 
-`users.user_type` is `standard` or `unauthenticated`.
+`users.user_type` is `unauthenticated`, `standard`, `author` or `admin`, in
+that order: each type has every permission of the types before it, and
+`user_type_meets_minimum` in `policyengine_api/services/v2/identity/validators.py`
+checks a type against a minimum.
 
-- A **standard** user is backed by one or more verified sign-in identities.
-  Every user that existed before this revision, including the Stage 10
-  legacy-mapping users, is standard.
+- A **signed-in** user, of type `standard`, `author` or `admin`, is backed by
+  one or more verified sign-in identities. Every user that existed before this
+  revision, including the Stage 10 legacy-mapping users, is standard, and so is
+  every user a first sign-in provisions. Signing in again, and moving a
+  browser's records into the account at sign-in, never changes a stored type:
+  every request resolves a signed-in user with the type stored in `users`.
 - An **unauthenticated** user belongs to one signed-out browser. Its `id` is
   the browser's UUID, and every other user column (`first_name`, `last_name`,
   `email`, `primary_country`) is NULL. Its timestamps work as usual.
@@ -265,7 +271,8 @@ last_run_at, created_at, updated_at}`:
   owner-scoped.
 
 `MeItem` is `{id, user_type, primary_country, first_name, last_name, email,
-created_at}`; `user_type` is `standard` or `unauthenticated`, and
+created_at}`; `user_type` is `unauthenticated` or the signed-in user's stored
+type (`standard`, `author` or `admin`), and
 `primary_country` is null only for an unauthenticated user. The upgrade
 response is
 `{"status": "ok", "message": null, "result": {"item": <MeItem of the signed-in

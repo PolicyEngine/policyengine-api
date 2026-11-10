@@ -69,6 +69,8 @@ PARAMETER_TREE_REVISION = "3869eb814a90"
 PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 # The catalog pruning revision, parent of the simulation runs revision.
 CATALOG_PRUNING_REVISION = "334859ef4fec"
+# The simulation runs revision, parent of the user types revision.
+SIMULATION_RUNS_REVISION = "1356f658347d"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -250,6 +252,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SIMULATION_RUNS_REVISION,
         CATALOG_PRUNING_REVISION,
         PARAMETER_SEARCH_FILE_REVISION,
         PARAMETER_TREE_REVISION,
@@ -1065,8 +1068,76 @@ def test_catalog_pruning_revision_adds_only_two_nullable_columns() -> None:
 
 def _simulation_runs_revision_source() -> str:
     """Return the source of the one revision after the catalog pruning revision."""
-    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{SIMULATION_RUNS_REVISION}_*.py")
     return path.read_text(encoding="utf-8")
+
+
+def _user_types_revision_source() -> str:
+    """Return the source of the one revision after the simulation runs revision."""
+    config = Config(str(REPO / "alembic-v2.ini"))
+    script = ScriptDirectory.from_config(config)
+    (revision,) = [
+        candidate
+        for candidate in script.walk_revisions()
+        if candidate.down_revision == SIMULATION_RUNS_REVISION
+    ]
+    return Path(revision.path).read_text(encoding="utf-8")
+
+
+def test_user_types_revision_only_replaces_the_user_type_check() -> None:
+    """The generated revision swaps the users type check for one allowing four types.
+
+    Alembic compares a check constraint's condition with the database's
+    rewritten form only by name, so the check that allows author and admin has
+    a new name, which autogenerate turns into a drop and an add.
+    """
+    revision = _user_types_revision_source()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{SIMULATION_RUNS_REVISION}"' in revision
+    assert "correction" not in revision.lower()
+    for body in (upgrade, downgrade):
+        assert sorted(re.findall(r"op\.\w+", body)) == [
+            "op.create_check_constraint",
+            "op.drop_constraint",
+            "op.f",
+            "op.f",
+        ]
+    assert re.search(
+        r'op\.drop_constraint\(\s*op\.f\("ck_users_user_type"\),\s*"users",'
+        r'\s*type_="check"',
+        upgrade,
+    )
+    assert re.search(
+        r'op\.create_check_constraint\(\s*op\.f\("ck_users_user_type_allowed"\),'
+        r"\s*\"users\",\s*\"user_type IN \('unauthenticated', 'standard', "
+        r"'author', 'admin'\)\"",
+        upgrade,
+    )
+    assert re.search(
+        r'op\.drop_constraint\(\s*op\.f\("ck_users_user_type_allowed"\),\s*"users",'
+        r'\s*type_="check"',
+        downgrade,
+    )
+    # The restored check allows only the two types the parent revision knew.
+    restored_check = re.search(
+        r'op\.create_check_constraint\(\s*op\.f\("ck_users_user_type"\),'
+        r'\s*"users",\s*(".*?")\s*,?\s*\)',
+        downgrade,
+        flags=re.DOTALL,
+    )
+    assert restored_check is not None
+    assert re.findall(r"'(\w+)'::character varying", restored_check.group(1)) == [
+        "unauthenticated",
+        "standard",
+    ]
 
 
 def test_simulation_runs_revision_is_generated_with_documented_corrections() -> None:

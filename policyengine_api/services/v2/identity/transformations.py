@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import User, UserIdentity, UserType
-from policyengine_api.services.v2.identity.types import ResolvedUser
+from policyengine_api.services.v2.identity.types import ResolvedUser, StoredIdentity
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -35,9 +35,20 @@ def identity_refresh_required(
     return _aware(now) - _aware(identity.last_seen_at) >= LAST_SEEN_REFRESH_INTERVAL
 
 
-def standard_resolved_user(user_id: UUID, *, email: str | None) -> ResolvedUser:
-    """Describe a signed-in identity's standard user and its verified email."""
-    return ResolvedUser(user_id=user_id, email=email, user_type=UserType.STANDARD)
+def signed_in_resolved_user(
+    user_id: UUID, *, email: str | None, user_type: str
+) -> ResolvedUser:
+    """Describe a signed-in identity's user, its stored type and verified email."""
+    return ResolvedUser(user_id=user_id, email=email, user_type=UserType(user_type))
+
+
+def stored_identity_resolved_user(stored: StoredIdentity) -> ResolvedUser:
+    """Describe the user of a stored identity, with the identity's email."""
+    return signed_in_resolved_user(
+        stored.identity.user_id,
+        email=stored.identity.email,
+        user_type=stored.user_type,
+    )
 
 
 def unauthenticated_resolved_user(user: User) -> ResolvedUser:
