@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 90,
+    "request_count": 92,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 16
+    "workflow_count": 17
   },
   "route_groups": [
     {
@@ -62,6 +62,7 @@
       "path_segments": [
         "household",
         "households",
+        "household-calculations",
         "user-household",
         "user-households",
         "calculate",
@@ -480,6 +481,55 @@
             "result.offset",
             "result.limit",
             "result.has_more"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Stored-household calculations through the simulation service",
+      "name": "household_calculations_v2",
+      "requests": [
+        {
+          "expected_status": 202,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/household-calculations",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.calculation_id",
+            "result.item.status",
+            "result.item.country_id",
+            "result.item.household_id",
+            "result.item.policy_id",
+            "result.item.year"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/household-calculations/{calculation_id}",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.calculation_id",
+            "result.item.country_id",
+            "result.item.household_id",
+            "result.item.policy_id",
+            "result.item.year",
+            "result.item.catalog_version_id",
+            "result.item.country_package_version",
+            "result.item.policyengine_version",
+            "result.item.status",
+            "result.item.created_at",
+            "result.item.started_at",
+            "result.item.completed_at",
+            "result.item.result",
+            "result.item.error"
           ]
         }
       ]
