@@ -56,6 +56,9 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.identity.types import (
         AccountPrincipal,
     )
+    from policyengine_api.services.v2.simulation_service.types import (
+        SimulationServiceClient,
+    )
 
 __all__ = [
     "MetadataReader",
@@ -186,6 +189,22 @@ def _current_package_versions(country_id: str) -> PackageVersions:
     )
 
 
+def _default_simulation_submissions() -> SimulationServiceClient:
+    """Check submissions, then send them to the configured simulation service."""
+    from policyengine_api.libs.simulation_reports import (
+        process_simulation_service_client,
+    )
+    from policyengine_api.services.v2.simulation_service.services import (
+        SimulationSubmissionService,
+    )
+
+    return SimulationSubmissionService(
+        countries=_default_v2_country_service_factory(),
+        policies=_default_v2_policy_service_factory(),
+        client_factory=process_simulation_service_client,
+    )
+
+
 def _default_v2_stored_report_service_factory() -> V2StoredReportResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -200,6 +219,7 @@ def _default_v2_stored_report_service_factory() -> V2StoredReportResourceService
     return V2StoredReportService(
         StoredReportDatabaseSession(get_v2_session_factory()),
         current_versions=_current_package_versions,
+        submissions=_default_simulation_submissions(),
     )
 
 
@@ -219,6 +239,7 @@ def _default_v2_stored_simulation_service_factory() -> (
     return V2StoredSimulationService(
         StoredSimulationDatabaseSession(get_v2_session_factory()),
         current_versions=_current_package_versions,
+        submissions=_default_simulation_submissions(),
     )
 
 

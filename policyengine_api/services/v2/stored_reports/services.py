@@ -27,6 +27,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import ReportRunStatus
+from policyengine_api.services.v2.simulation_service.types import (
+    SimulationServiceUnavailableError,
+)
 from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_results as result_reads,
 )
@@ -43,6 +46,7 @@ from policyengine_api.services.v2.stored_reports.transformations import (
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
+    StoredReportNotFoundError,
     require_economy_report,
     require_reform_run,
     require_report,
@@ -53,7 +57,9 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.simulation_service.types import (
+        EconomyReportCreationInput,
         PackageVersions,
+        SimulationServiceClient,
     )
     from policyengine_api.services.v2.stored_reports.database_session import (
         StoredReportDatabaseSession,
@@ -62,6 +68,10 @@ if TYPE_CHECKING:
         ReportRead,
         ReportSummaryRead,
     )
+
+
+class SubmissionsNotConfiguredError(SimulationServiceUnavailableError):
+    """The service was built without a way to submit to the simulation service."""
 
 
 @contextmanager
@@ -75,21 +85,25 @@ def _storage_failures() -> Iterator[None]:
 
 
 class V2StoredReportService:
-    """Read v2 reports and their results."""
+    """Read v2 reports and their results, and create economy reports."""
 
     def __init__(
         self,
         database_session: StoredReportDatabaseSession,
         *,
         current_versions: Callable[[str], PackageVersions],
+        submissions: SimulationServiceClient | None = None,
     ) -> None:
-        """Read through ``database_session``.
+        """Read through ``database_session``; create through ``submissions``.
 
         ``current_versions`` returns the country package and PolicyEngine.py
-        versions the Public API runs for a country.
+        versions the Public API runs for a country. ``submissions`` is the
+        checking ``SimulationSubmissionService``; without it, creating a
+        report raises SubmissionsNotConfiguredError.
         """
         self._database_session = database_session
         self._current_versions = current_versions
+        self._submissions = submissions
 
     def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
         """Return the country's economy report, its newest run and that run's result.
@@ -149,3 +163,26 @@ class V2StoredReportService:
                 report_summary_read(stored, current_versions=current_versions)
                 for stored in listed_economy_reports(rows, report_ids=report_ids)
             )
+
+    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+        """Create the report through the simulation service and return it as stored.
+
+        Raise the submission's errors (see ``SimulationSubmissionService``),
+        SimulationServiceUnavailableError when the report the simulation
+        service names cannot be read back in the country, and the read's own
+        errors.
+        """
+        if self._submissions is None:
+            msg = "The simulation service is not configured here"
+            raise SubmissionsNotConfiguredError(msg)
+        submitted = self._submissions.submit_report(report_input)
+        try:
+            return self.get_report(
+                country_id=report_input.country_id, report_id=submitted.report_id
+            )
+        except StoredReportNotFoundError as error:
+            msg = (
+                f"The simulation service answered with report {submitted.report_id}, "
+                f"which is not stored in country {report_input.country_id!r}"
+            )
+            raise SimulationServiceUnavailableError(msg) from error

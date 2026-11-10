@@ -5,9 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from policyengine_api.services.v2.simulation_service.validators import (
-    EconomyCalculationsUnsupportedError,
-)
 
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_service.types import (
@@ -15,6 +12,9 @@ from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceInternalError,
     SimulationServiceRefusalError,
     SimulationServiceUnavailableError,
+)
+from policyengine_api.services.v2.simulation_service.validators import (
+    EconomyCalculationsUnsupportedError,
 )
 from tests.unit.v2.stored_report_support import (
     POLICY_ID,

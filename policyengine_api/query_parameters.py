@@ -416,6 +416,10 @@ class UserReportCollectionQuery(CountryQuery, PaginationQuery):
     legacy_report_id: LegacyResourceId | None = None
 
 
+class ReportCreateQuery(CountryQuery):
+    """Query contract for creating a report; the body names the same country."""
+
+
 class ReportDetailQuery(CountryQuery):
     """Query contract for reading one report in a country."""
 
@@ -431,6 +435,10 @@ class ReportCollectionQuery(CountryQuery):
         max_length=MAXIMUM_LISTED_REPORTS,
         description="A report to list; repeat the key for each report",
     )
+
+
+class SimulationCreateQuery(CountryQuery):
+    """Query contract for creating a simulation; the body names the same country."""
 
 
 class SimulationDetailQuery(CountryQuery):

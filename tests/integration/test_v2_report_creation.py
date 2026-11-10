@@ -17,9 +17,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from policyengine_api.services.v2.simulation_service.services import (
-    SimulationSubmissionService,
-)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -40,6 +37,9 @@ from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from policyengine_api.services.v2.simulation_service.services import (
+    SimulationSubmissionService,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     PackageVersions,
     SubmittedReport,

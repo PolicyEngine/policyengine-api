@@ -3,6 +3,8 @@
 The routes need no user credential: a user keeps a simulation through
 ``/v2/user-simulations``. Simulations and their runs are read from the
 detailed-save tables the simulation service writes; reading never calls it.
+Creating a simulation checks it, has the simulation service create and start
+it, and reads it back.
 """
 
 from __future__ import annotations
@@ -18,18 +20,33 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_stored_simulation_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorMapping
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorMapping,
+    v2_error_response,
+)
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
+    SUBMISSION_ERROR_MAPPINGS,
+    SUBMISSION_REFUSALS,
     simulation_resource_operation,
 )
+from policyengine_api.fastapi_routes.v2.simulations.request_models import (
+    SimulationCreateRequest,
+)
 from policyengine_api.fastapi_routes.v2.simulations.response_models import (
+    CREATE_RESPONSES,
     READ_RESPONSES,
     SIMULATION_ERROR_RESPONSES,
     SimulationDetailResponse,
     SimulationDetailResult,
     SimulationItem,
 )
-from policyengine_api.query_parameters import SimulationDetailQuery
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
+    request_size_limit,
+)
+from policyengine_api.query_parameters import (
+    SimulationCreateQuery,
+    SimulationDetailQuery,
+)
 from policyengine_api.services.v2.stored_simulations.validators import (
     SimulationStorageError,
     StoredSimulationNotFoundError,
@@ -43,14 +60,25 @@ if TYPE_CHECKING:
         V2StoredSimulationResourceService,
     )
 
+MAXIMUM_SIMULATION_REQUEST_BYTES = 16 * 1024
+enforce_simulation_request_size = request_size_limit(
+    MAXIMUM_SIMULATION_REQUEST_BYTES, label="16 KiB"
+)
+SimulationCreateQueryDependency = Annotated[
+    SimulationCreateQuery, Depends(query_dependency(SimulationCreateQuery))
+]
 SimulationDetailQueryDependency = Annotated[
     SimulationDetailQuery, Depends(query_dependency(SimulationDetailQuery))
 ]
 
 # Refusals a caller can act on carry their own message and are not logged.
-SIMULATION_REFUSALS: tuple[type[Exception], ...] = (StoredSimulationNotFoundError,)
+SIMULATION_REFUSALS: tuple[type[Exception], ...] = (
+    StoredSimulationNotFoundError,
+    *SUBMISSION_REFUSALS,
+)
 SIMULATION_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredSimulationNotFoundError,), 404),
+    *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (V2ConfigurationError, SimulationStorageError),
         503,
@@ -85,6 +113,36 @@ def build_v2_simulation_router(dependencies: NativeRouteDependencies) -> APIRout
     """Build the simulation routes without opening a connection."""
     router = APIRouter(prefix="/v2", responses=SIMULATION_ERROR_RESPONSES)
     service_factory = _service_factory(dependencies)
+
+    @router.post(
+        "/simulations",
+        response_model=SimulationDetailResponse,
+        status_code=201,
+        responses=CREATE_RESPONSES,
+        summary="Create an economy simulation",
+        description=(
+            "Checks that the country has economy calculations and stores the "
+            "named policy, then has the simulation service create the "
+            "simulation and its first run on its default worker's "
+            "PolicyEngine.py version, and start the run. Answers the simulation "
+            "as stored, with its pending run."
+        ),
+    )
+    def create_simulation(
+        body: SimulationCreateRequest,
+        query: SimulationCreateQueryDependency,
+        _size: Annotated[None, Depends(enforce_simulation_request_size)],
+    ) -> SimulationDetailResponse | JSONResponse:
+        if body.country_id != query.country_id:
+            return v2_error_response(400, "Body country_id must match query country_id")
+
+        def create() -> SimulationDetailResponse:
+            simulation = service_factory().create_simulation(body)
+            return SimulationDetailResponse(
+                result=SimulationDetailResult(item=SimulationItem.from_read(simulation))
+            )
+
+        return _simulation_operation(create)
 
     @router.get(
         "/simulations/{simulation_id}",

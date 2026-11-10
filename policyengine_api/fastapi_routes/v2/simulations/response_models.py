@@ -97,3 +97,20 @@ SIMULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response("No simulation of this country's model has this ID."),
 }
+CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: error_response("The body and query name different countries."),
+    404: error_response(
+        "The policy the simulation names is not stored in the country."
+    ),
+    413: error_response("The request body exceeds 16 KiB."),
+    422: error_response(
+        "The request does not match the schema, the country has no economy "
+        "calculations, or the simulation service cannot run the simulation; "
+        "the message says which."
+    ),
+    500: error_response(
+        "The simulation service failed, or created the simulation but answered "
+        "unreadably."
+    ),
+    503: error_response("The simulation service or the v2 database is unavailable."),
+}

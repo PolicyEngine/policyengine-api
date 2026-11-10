@@ -26,6 +26,10 @@ if TYPE_CHECKING:
         NativePolicyCreation,
         NativePolicyCreationInput,
     )
+    from policyengine_api.services.v2.simulation_service.types import (
+        EconomyReportCreationInput,
+        EconomySimulationCreationInput,
+    )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportRead,
         ReportSummaryRead,
@@ -171,6 +175,15 @@ class V2StoredReportResourceService(Protocol):
         """Return the country's economy reports among ``report_ids``, in that order."""
         ...
 
+    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+        """Create the report through the simulation service; return it as stored.
+
+        Raise ``EconomyCalculationsUnsupportedError`` for a country without
+        economy reports, ``PolicyNotFoundError`` for a policy the country
+        does not store, and the simulation service's errors.
+        """
+        ...
+
 
 class V2StoredSimulationResourceService(Protocol):
     """Route-independent simulation operations for one request."""
@@ -179,6 +192,15 @@ class V2StoredSimulationResourceService(Protocol):
         """Return the country's simulation and its newest run.
 
         Raise ``StoredSimulationNotFoundError`` when there is none.
+        """
+        ...
+
+    def create_simulation(
+        self, simulation_input: EconomySimulationCreationInput
+    ) -> SimulationRead:
+        """Create the simulation through the simulation service; return it as stored.
+
+        Raise as ``V2StoredReportResourceService.create_report`` does.
         """
         ...
 

@@ -159,3 +159,22 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
         "operation could not be completed."
     ),
 }
+CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: error_response("The body and query name different countries."),
+    404: error_response("A policy the report names is not stored in the country."),
+    413: error_response("The request body exceeds 16 KiB."),
+    422: error_response(
+        "The request does not match the schema, the country has no economy "
+        "reports (such as a household-only country), or the simulation service "
+        "cannot run the report (for example, no such region, dataset or "
+        "dynamic); the message says which."
+    ),
+    500: error_response(
+        "The simulation service failed, or created the report but answered "
+        "unreadably; do not submit again before reading the saved reports."
+    ),
+    503: error_response(
+        "The simulation service or the v2 database is unavailable, or the "
+        "simulation service answered with a report the Public API cannot read."
+    ),
+}

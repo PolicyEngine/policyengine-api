@@ -13,9 +13,22 @@ import logging
 import traceback
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorMapping,
     V2ErrorResponse,
     run_v2_operation,
+)
+from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
+from policyengine_api.services.v2.simulation_service.types import (
+    SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
+    SimulationServiceRefusalError,
+    SimulationServiceUnavailableError,
+)
+from policyengine_api.services.v2.simulation_service.validators import (
+    EconomyCalculationsUnsupportedError,
+    SubmissionStorageError,
 )
 
 if TYPE_CHECKING:
@@ -23,9 +36,34 @@ if TYPE_CHECKING:
 
     from starlette.responses import JSONResponse
 
-    from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorMapping
 
 logger = logging.getLogger(__name__)
+
+# A submission's refusals a caller can act on carry their own message and are
+# not logged.
+SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
+    PolicyNotFoundError,
+    EconomyCalculationsUnsupportedError,
+    SimulationServiceRefusalError,
+)
+# How the simulation service's answers and the submission checks are answered.
+# An internal error or an unreadable created answer is a 500, not a 503: the
+# record may exist, so the caller must not be invited to submit again.
+SUBMISSION_ERROR_MAPPINGS = (
+    V2ErrorMapping((PolicyNotFoundError,), 404),
+    V2ErrorMapping(
+        (EconomyCalculationsUnsupportedError, SimulationServiceRefusalError), 422
+    ),
+    V2ErrorMapping(
+        (SimulationServiceInternalError, SimulationServiceAnswerUnreadableError), 500
+    ),
+    V2ErrorMapping((SimulationServiceUnavailableError,), 503),
+    V2ErrorMapping(
+        (V2ConfigurationError, SubmissionStorageError),
+        503,
+        "V2 storage is unavailable",
+    ),
+)
 
 OperationT = TypeVar("OperationT")
 

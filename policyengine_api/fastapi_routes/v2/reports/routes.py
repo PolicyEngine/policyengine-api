@@ -3,7 +3,9 @@
 The routes need no user credential: a user keeps a report through
 ``/v2/user-reports``. Reports, their runs and results are read from the
 detailed-save tables the simulation service and its Modal workers write;
-reading never calls the simulation service and never starts a run.
+reading never calls the simulation service and never starts a run. Creating
+a report checks it, has the simulation service create and start it, and
+reads it back.
 """
 
 from __future__ import annotations
@@ -19,8 +21,15 @@ from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_stored_report_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
-from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorMapping
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorMapping,
+    v2_error_response,
+)
+from policyengine_api.fastapi_routes.v2.reports.request_models import (
+    ReportCreateRequest,
+)
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    CREATE_RESPONSES,
     READ_RESPONSES,
     REPORT_ERROR_RESPONSES,
     ReportDetailResponse,
@@ -31,10 +40,16 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     ReportSummaryItem,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
+    SUBMISSION_ERROR_MAPPINGS,
+    SUBMISSION_REFUSALS,
     simulation_resource_operation,
+)
+from policyengine_api.fastapi_routes.v2.user_resources_support import (
+    request_size_limit,
 )
 from policyengine_api.query_parameters import (
     ReportCollectionQuery,
+    ReportCreateQuery,
     ReportDetailQuery,
 )
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
@@ -54,6 +69,13 @@ if TYPE_CHECKING:
         V2StoredReportResourceService,
     )
 
+MAXIMUM_REPORT_REQUEST_BYTES = 16 * 1024
+enforce_report_request_size = request_size_limit(
+    MAXIMUM_REPORT_REQUEST_BYTES, label="16 KiB"
+)
+ReportCreateQueryDependency = Annotated[
+    ReportCreateQuery, Depends(query_dependency(ReportCreateQuery))
+]
 ReportCollectionQueryDependency = Annotated[
     ReportCollectionQuery, Depends(query_dependency(ReportCollectionQuery))
 ]
@@ -65,10 +87,12 @@ ReportDetailQueryDependency = Annotated[
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
     ReportKindUnsupportedError,
+    *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError,), 404),
     V2ErrorMapping((ReportKindUnsupportedError,), 422),
+    *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (EconomyResultUnreadableError,),
         500,
@@ -109,6 +133,36 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     """Build the report routes without opening a connection."""
     router = APIRouter(prefix="/v2", responses=REPORT_ERROR_RESPONSES)
     service_factory = _service_factory(dependencies)
+
+    @router.post(
+        "/reports",
+        response_model=ReportDetailResponse,
+        status_code=201,
+        responses=CREATE_RESPONSES,
+        summary="Create an economy report",
+        description=(
+            "Checks that the country has economy reports and stores each named "
+            "policy, then has the simulation service create the report, its two "
+            "simulations and their runs on its default worker's PolicyEngine.py "
+            "version, and start the run. Answers the report as stored, with its "
+            "pending run; read it again to follow the run."
+        ),
+    )
+    def create_report(
+        body: ReportCreateRequest,
+        query: ReportCreateQueryDependency,
+        _size: Annotated[None, Depends(enforce_report_request_size)],
+    ) -> ReportDetailResponse | JSONResponse:
+        if body.country_id != query.country_id:
+            return v2_error_response(400, "Body country_id must match query country_id")
+
+        def create() -> ReportDetailResponse:
+            report = service_factory().create_report(body)
+            return ReportDetailResponse(
+                result=ReportDetailResult(item=ReportItem.from_read(report))
+            )
+
+        return _report_operation(create)
 
     @router.get(
         "/reports",
