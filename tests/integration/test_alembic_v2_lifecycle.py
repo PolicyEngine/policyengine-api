@@ -48,6 +48,8 @@ AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 # The simulation runs revision, the parent of the user types revision.
 USER_TYPES_PREVIOUS_REVISION = "1356f658347d"
 USER_TYPES_REVISION = "617f531f1506"
+# The user type changes revision, on the user types revision.
+USER_TYPE_CHANGES_REVISION = "e990c2d6b08b"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
@@ -1393,6 +1395,33 @@ def test_user_types_revision_changes_only_the_user_type_check() -> None:
         )
         # The users table's other checks, conditions included, are unchanged.
         assert revision_checks == parent_checks
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_user_type_changes_revision_adds_only_its_table() -> None:
+    """The revision adds user_type_changes, and its downgrade drops only that."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, USER_TYPES_REVISION)
+        parent = _schema_shape(engine)
+        command.upgrade(config, USER_TYPE_CHANGES_REVISION)
+        revision = _schema_shape(engine)
+
+        assert set(revision) - set(parent) == {"user_type_changes"}
+        assert {table_name: revision[table_name] for table_name in parent} == parent
+        changes = revision["user_type_changes"]
+        assert {foreign_key[2] for foreign_key in changes["foreign_keys"]} == {"users"}
+        assert set(changes["checks"]) == {
+            "ck_user_type_changes_previous_user_type",
+            "ck_user_type_changes_new_user_type",
+            "ck_user_type_changes_changed_type",
+            "ck_user_type_changes_source",
+        }
     finally:
         command.upgrade(config, "head")
         engine.dispose()

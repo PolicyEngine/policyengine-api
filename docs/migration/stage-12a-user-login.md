@@ -88,6 +88,53 @@ cross-origin; a unit test covers the preflight. OpenAPI publishes the header as
 the `UnauthenticatedUser` API-key security scheme, an alternative to
 `UserAccessToken`.
 
+## Minimum user types and admins
+
+A route can require a minimum user type with a dependency from
+`policyengine_api/fastapi_routes/v2/user_type_support.py`
+(`minimum_user_type_dependency`). It reads the caller's stored type without
+provisioning a user: a signed-in caller with no user yet counts as standard,
+and a signed-out browser as unauthenticated. Below the minimum the route
+answers 403; when the type can't be read, 503.
+
+Only admins use the routes under `/v2/admin`. The router checks the caller's
+type first, and each operation checks it again in its own transaction.
+
+| Route | What it does |
+| --- | --- |
+| `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's email, ignoring case, with `%` and `_` matching themselves. |
+| `GET /v2/admin/users/{user_id}` | One signed-in user. |
+| `PATCH /v2/admin/users/{user_id}` `{"user_type": "standard" \| "author" \| "admin"}` | Changes the type and records the change; the same type changes and records nothing. |
+| `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
+
+An admin user item is `{id, user_type, email, first_name, last_name,
+primary_country, created_at, last_seen_at}`: `email` is that of the user's
+most recently seen identity that has one, else the user's own, and
+`last_seen_at` is when that identity was last seen. Unauthenticated users are
+never listed, read or changed (404), since their IDs are their browsers'
+credentials.
+
+Each change is a row of `user_type_changes`: the user, the previous and new
+types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
+`script`. Deleting the user deletes its changes; deleting the admin keeps them
+with no admin.
+
+A change that would leave no admin is refused with 409. Every change first
+locks all admins' `users` rows, in ID order, and checks the caller against
+them, so concurrent changes run one at a time and each counts the admins the
+ones before it left; an admin demoted by an earlier change is then refused
+with 403.
+
+`scripts/set_v2_user_type.py --email <address> --user-type <type>` sets the
+type of the one signed-in user whose own or any identity's email is exactly
+that address, ignoring case, and records the change with `source = script`
+and no admin. It connects as the runtime role with the deployed Public API's
+settings (`V2_RUNTIME_DATABASE_URL` or
+`V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE`, `V2_SUPABASE_PROJECT_REF`,
+`V2_SUPABASE_ENVIRONMENT`), and refuses an address with no signed-in user, or
+several, and the last admin's demotion. A person's user exists only after
+their first signed-in request to the detailed-save routes.
+
 ## Provisioning strategies
 
 `services/v2/identity` selects an `AccountProvisioningStrategy` from the
