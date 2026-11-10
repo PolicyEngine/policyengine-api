@@ -99,9 +99,7 @@ def test_a_calculated_household_keeps_the_key_order_it_was_stored_in() -> None:
 
 def test_a_country_without_spm_reads_back_no_spm_choice_or_receipt() -> None:
     document = succeeded_document(
-        country="uk",
-        spm_config=None,
-        results=[{"policy_key": "baseline", "household": CALCULATED_HOUSEHOLD}],
+        country="uk", spm_config=None, warnings=None, spm_provenance=None
     )
 
     calculation = _read(_job(HouseholdJobStatus.SUCCEEDED, result=document))
@@ -185,21 +183,14 @@ def test_a_document_with_fields_the_public_api_does_not_read_is_still_read() -> 
     [
         pytest.param(None, id="no-document"),
         pytest.param(failed_document(), id="a-failure-document"),
-        pytest.param(succeeded_document(results=[]), id="no-result"),
+        pytest.param({"status": "succeeded"}, id="no-output"),
+        pytest.param(succeeded_document(household=None), id="no-household"),
         pytest.param(
-            succeeded_document(
-                results=[
-                    {"policy_key": "baseline", "household": CALCULATED_HOUSEHOLD},
-                    {"policy_key": "reform", "household": CALCULATED_HOUSEHOLD},
-                ]
-            ),
-            id="two-results",
+            succeeded_document(household="not a household"),
+            id="malformed-household",
         ),
         pytest.param(
-            succeeded_document(
-                results=[{"policy_key": "reform", "household": "not a household"}]
-            ),
-            id="malformed-household",
+            succeeded_document(warnings="not a list"), id="malformed-warnings"
         ),
     ],
 )

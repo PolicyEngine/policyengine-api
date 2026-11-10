@@ -1,10 +1,11 @@
 """Household job rows' result documents, as the v2 household functions write them.
 
 A succeeded job's ``result`` is the simulation contract's
-``HouseholdExecutionResult``: the calculated household for its one policy,
-with its warnings, SPM receipt and the SPM selection applied. A failed job's
-is ``HouseholdExecutionFailure``, with a one-line summary in
-``error_message``; a job that failed unexpectedly has a null ``result``.
+``HouseholdExecutionResult``. The contract names exactly one policy, so its
+``output`` holds that policy's calculated household, warnings and SPM receipt
+beside the SPM selection applied. A failed job's is
+``HouseholdExecutionFailure``, with a one-line summary in ``error_message``;
+a job that failed unexpectedly has a null ``result``.
 """
 
 from __future__ import annotations
@@ -63,21 +64,17 @@ FAILURE_SUMMARY = "invalid_inputs: The household names a variable the model lack
 
 
 def succeeded_document(**output_changes: object) -> dict[str, Any]:
-    """Return a succeeded job's result document."""
+    """Return a succeeded job's result document; ``None`` changes drop a field."""
     output: dict[str, Any] = {
         "country": "us",
         "bundle": BUNDLE,
         "spm_config": SPM_CONFIG,
-        "results": [
-            {
-                "policy_key": "reform",
-                "household": CALCULATED_HOUSEHOLD,
-                "warnings": [WARNING],
-                "spm_provenance": SPM_PROVENANCE,
-            }
-        ],
+        "household": CALCULATED_HOUSEHOLD,
+        "warnings": [WARNING],
+        "spm_provenance": SPM_PROVENANCE,
     }
     output.update(output_changes)
+    output = {name: value for name, value in output.items() if value is not None}
     return {
         "status": "succeeded",
         "schema_version": 1,
@@ -97,7 +94,6 @@ def failed_document() -> dict[str, Any]:
             "code": "invalid_inputs",
             "message": "The household names a variable the model lacks.",
             "input_errors": [INPUT_ERROR],
-            "policy_key": "reform",
         },
         "worker": WORKER,
     }
