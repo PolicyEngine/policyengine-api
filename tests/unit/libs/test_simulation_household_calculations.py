@@ -303,17 +303,46 @@ def test_an_accepted_answer_that_cannot_be_read_is_not_unavailable(body) -> None
     )
 
 
-def test_an_unreachable_service_is_unavailable() -> None:
-    def refuse(request: httpx.Request) -> httpx.Response:
-        msg = "connection refused"
-        raise httpx.ConnectError(msg, request=request)
+def _client_raising(error_type: type[httpx.TransportError]):
+    def fail(request: httpx.Request) -> httpx.Response:
+        msg = "the transport failed"
+        raise error_type(msg, request=request)
 
-    client = SimulationHouseholdCalculationClient.from_environment(
-        transport=httpx.MockTransport(refuse)
+    return SimulationHouseholdCalculationClient.from_environment(
+        transport=httpx.MockTransport(fail)
     )
 
+
+@pytest.mark.parametrize(
+    "error_type", [httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout]
+)
+def test_a_connection_never_made_is_unavailable(error_type) -> None:
     with pytest.raises(SimulationServiceUnavailableError, match="could not be reached"):
-        client.submit(calculation_input())
+        _client_raising(error_type).submit(calculation_input())
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        httpx.ReadTimeout,
+        httpx.WriteTimeout,
+        httpx.ReadError,
+        httpx.WriteError,
+        httpx.RemoteProtocolError,
+    ],
+)
+def test_an_answer_lost_after_sending_is_not_unavailable(error_type) -> None:
+    # The service may have received the submission and created the job, so
+    # the caller is not invited to submit again.
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        _client_raising(error_type).submit(calculation_input())
+
+    assert not isinstance(lost.value, SimulationServiceUnavailableError)
+    assert str(lost.value) == (
+        "The simulation service may have received the submission, but its "
+        f"answer did not arrive ({error_type.__name__}). Check whether it "
+        "created the job before submitting again."
+    )
 
 
 def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:

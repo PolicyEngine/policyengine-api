@@ -441,3 +441,21 @@ def test_main_says_on_stderr_when_spm_availability_could_not_be_recorded(
         "could not be read; /v2/model-catalog reports a version without a "
         "recorded availability as unknown until a publication records it"
     ]
+
+
+def test_main_says_nothing_when_no_version_needed_recording(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every version had its availability from an earlier publication."""
+    recording = publication_types.SPMAvailabilityRecording(
+        versions_unreadable="the simulation service's versions could not be read"
+    )
+    evidence = replace(_evidence(), spm_availability=recording)
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["spm_availability"]["not_recorded"] == []
+    assert output.err == ""

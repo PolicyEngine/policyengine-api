@@ -7,6 +7,7 @@ simulation service is a stand-in.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -261,14 +262,20 @@ GATEWAY_AND_ENTRYPOINT_VARIABLES = (
 
 
 class SimulationRecorder:
-    """The simulation service, answering every submission 202 and recording it."""
+    """The simulation service, answering every submission as scripted.
+
+    It answers 202 with the new job unless ``status_code`` and ``content``
+    say otherwise, and records each request.
+    """
 
     def __init__(self) -> None:
         self.requests: list[httpx.Request] = []
+        self.status_code = 202
+        self.content = json.dumps({"job_id": str(JOB_ID), "status": "pending"})
 
     def answer(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
-        return httpx.Response(202, json={"job_id": str(JOB_ID), "status": "pending"})
+        return httpx.Response(self.status_code, content=self.content)
 
 
 @pytest.fixture
@@ -357,13 +364,62 @@ def test_a_submission_without_an_observability_id_is_given_one(
     )
 
 
-def test_a_refused_submission_returns_no_observability_id(
+def test_a_refusal_before_sim_is_called_echoes_no_observability_id(
     client_with_simulation_client, stored, simulation_recorder
 ) -> None:
+    # As the Flask household routes do, a refused request binds no ID, so even
+    # the caller's is not returned.
     body = {**_body(stored, None), "household_id": str(uuid4())}
 
-    response = client_with_simulation_client.post(CALCULATIONS, json=body)
+    response = client_with_simulation_client.post(
+        CALCULATIONS, json=body, headers={OBSERVABILITY_ID_HEADER: str(uuid4())}
+    )
 
     assert response.status_code == 404
     assert simulation_recorder.requests == []
     assert OBSERVABILITY_ID_HEADER not in response.headers
+
+
+@pytest.mark.parametrize(
+    ("simulation_answer", "status_code"),
+    [
+        pytest.param(
+            (
+                422,
+                {"detail": [{"loc": ["body", "spm"], "msg": "refused", "type": "x"}]},
+            ),
+            422,
+            id="refused-data",
+        ),
+        pytest.param(
+            (503, {"code": "database_unavailable", "detail": "down"}),
+            503,
+            id="unavailable",
+        ),
+        pytest.param(
+            (500, {"code": "internal_error", "detail": "failed"}), 502, id="failed"
+        ),
+        pytest.param((202, {"unexpected": True}), 502, id="unreadable-202"),
+    ],
+)
+def test_an_answer_after_sim_was_called_returns_the_observability_id(
+    client_with_simulation_client,
+    stored,
+    simulation_recorder,
+    simulation_answer,
+    status_code,
+) -> None:
+    simulation_status, simulation_body = simulation_answer
+    simulation_recorder.status_code = simulation_status
+    simulation_recorder.content = json.dumps(simulation_body)
+
+    response = client_with_simulation_client.post(
+        CALCULATIONS, json=_body(stored, None)
+    )
+
+    assert response.status_code == status_code
+    (sent,) = simulation_recorder.requests
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == (sent.headers[OBSERVABILITY_ID_HEADER])
+    )
