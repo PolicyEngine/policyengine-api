@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from policyengine_api.data.v2.models import HouseholdJobStatus
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationFailure,
-    HouseholdCalculationOutput,
     HouseholdCalculationRead,
     HouseholdCalculationSubmitted,
     StoredExecutionFailure,
@@ -33,32 +32,16 @@ STATUS_NAMES: dict[HouseholdJobStatus, HouseholdJobStatusName] = {
 }
 
 
-def _calculation_output(document: StoredExecutionResult) -> HouseholdCalculationOutput:
-    (policy_result,) = document.output.results
-    return HouseholdCalculationOutput(
-        household=policy_result.household,
-        warnings=tuple(policy_result.warnings),
-        spm_config=document.output.spm_config,
-        spm_provenance=policy_result.spm_provenance,
-    )
-
-
 def _calculation_failure(
     document: StoredExecutionFailure | None, error_message: str | None
 ) -> HouseholdCalculationFailure:
-    if document is None:
-        return HouseholdCalculationFailure(
-            code=None,
-            message=error_message or UNEXPLAINED_FAILURE,
-            input_errors=(),
-            spm_error=None,
-        )
-    error = document.error
+    if document is not None:
+        return document.calculation_failure()
     return HouseholdCalculationFailure(
-        code=error.code,
-        message=error.message,
-        input_errors=tuple(error.input_errors),
-        spm_error=error.spm_error,
+        code=None,
+        message=error_message or UNEXPLAINED_FAILURE,
+        input_errors=(),
+        spm_error=None,
     )
 
 
@@ -69,8 +52,8 @@ def household_calculation_read(
     """Return the calculation a household job records.
 
     ``outcome`` is the job's result document, already read as its status says
-    (``stored_household_outcome``). A succeeded job's result is its one policy
-    result; a failed job's error is its failure document's error, or else its
+    (``stored_household_outcome``). A succeeded job's result is its document's
+    output; a failed job's error is its failure document's error, or else its
     error message.
     """
     status = STATUS_NAMES[HouseholdJobStatus(job.status)]
@@ -88,7 +71,7 @@ def household_calculation_read(
         started_at=job.started_at,
         completed_at=job.completed_at,
         result=(
-            _calculation_output(outcome)
+            outcome.calculation_output()
             if status == "succeeded" and isinstance(outcome, StoredExecutionResult)
             else None
         ),

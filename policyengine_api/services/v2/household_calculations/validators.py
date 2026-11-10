@@ -70,8 +70,8 @@ def stored_household_outcome(
 ) -> StoredExecutionResult | StoredExecutionFailure | None:
     """Return a job's stored result document, read as its status says.
 
-    An unfinished job's result is not read. A succeeded job must hold one
-    ``HouseholdExecutionResult`` with exactly one policy result, or
+    An unfinished job's result is not read. A succeeded job must hold a
+    ``HouseholdExecutionResult`` with its policy's calculated household, or
     HouseholdCalculationResultUnreadableError is raised. A failed job holds a
     ``HouseholdExecutionFailure``, or None when it failed without one; any
     other document is read as none, since the job's error message still

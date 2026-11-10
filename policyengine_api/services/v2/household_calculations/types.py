@@ -201,29 +201,33 @@ class HouseholdCalculationRead:
     error: HouseholdCalculationFailure | None
 
 
+# The result documents the household functions store in household_jobs.result.
+# The simulation service's household contract owns their shape; these models
+# and their two conversions are the only code that names its fields.
+
+
 class StoredDocumentModel(BaseModel):
     """Base for the result documents the household functions store.
 
-    The simulation service owns their shape, so fields the Public API does
-    not read are ignored, and a later contract may add some.
+    Fields the Public API does not read are ignored, so a later contract may
+    add some.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
 
-class StoredPolicyResult(StoredDocumentModel):
-    """The calculated household under the job's one policy."""
+class StoredCalculationOutput(StoredDocumentModel):
+    """A finished calculation of the job's one policy.
+
+    ``household`` is the calculated household, ``warnings`` the inputs the
+    country model ignored, ``spm_provenance`` the SPM receipt and
+    ``spm_config`` the SPM selection applied, both absent or null without SPM.
+    """
 
     household: dict[str, JsonValue]
     warnings: list[str] = Field(default_factory=list)
-    spm_provenance: dict[str, JsonValue] | None = None
-
-
-class StoredCalculationOutput(StoredDocumentModel):
-    """A finished calculation: one result, for the job's one policy."""
-
     spm_config: dict[str, JsonValue] | None = None
-    results: Annotated[list[StoredPolicyResult], Field(min_length=1, max_length=1)]
+    spm_provenance: dict[str, JsonValue] | None = None
 
 
 class StoredExecutionResult(StoredDocumentModel):
@@ -231,6 +235,15 @@ class StoredExecutionResult(StoredDocumentModel):
 
     status: Literal["succeeded"]
     output: StoredCalculationOutput
+
+    def calculation_output(self) -> HouseholdCalculationOutput:
+        """Return the calculated household and its notes."""
+        return HouseholdCalculationOutput(
+            household=self.output.household,
+            warnings=tuple(self.output.warnings),
+            spm_config=self.output.spm_config,
+            spm_provenance=self.output.spm_provenance,
+        )
 
 
 class StoredCalculationError(StoredDocumentModel):
@@ -247,6 +260,15 @@ class StoredExecutionFailure(StoredDocumentModel):
 
     status: Literal["failed"]
     error: StoredCalculationError
+
+    def calculation_failure(self) -> HouseholdCalculationFailure:
+        """Return the household function's error."""
+        return HouseholdCalculationFailure(
+            code=self.error.code,
+            message=self.error.message,
+            input_errors=tuple(self.error.input_errors),
+            spm_error=self.error.spm_error,
+        )
 
 
 class CountrySource(Protocol):
