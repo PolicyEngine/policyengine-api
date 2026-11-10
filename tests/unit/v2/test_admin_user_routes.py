@@ -384,7 +384,7 @@ def test_admins_delete_a_signed_in_users_account() -> None:
         ),
         (
             AccountIdentityDeletionError(
-                "find them in Auth0 by the person's email",
+                "find them in Auth0 by the email the admin user routes showed",
                 undeleted_auth0_user_count=1,
             ),
             502,
@@ -445,5 +445,9 @@ def test_the_admin_account_deletion_route_documents_its_responses() -> None:
     assert "Auth0" in operation["description"]
     assert "own account" in operation["responses"]["409"]["description"]
     assert "404" in operation["responses"]["502"]["description"]
-    assert "email" in operation["responses"]["502"]["description"]
+    assert "Auth0 tenant" in operation["responses"]["502"]["description"]
+    assert (
+        "the email the admin user routes showed for the user before the deletion"
+        in operation["responses"]["502"]["description"]
+    )
     assert "nothing was deleted" in operation["responses"]["503"]["description"]

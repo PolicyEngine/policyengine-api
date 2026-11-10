@@ -80,6 +80,17 @@ ABSENT_USER_ID = UUID("00000000-0000-0000-0000-0000000000a1")
 ADMIN_DELETION_EVENT = "admin_deleted_v2_user_account"
 
 
+def _admin_auth0_failure_message(undeleted_count: int, subject_count: int) -> str:
+    """Build the admin route's message for Auth0 users left after a deletion."""
+    return (
+        f"The account's data was deleted, but {undeleted_count} of the "
+        f"{subject_count} Auth0 users of its sign-in identities from this "
+        "Public API's Auth0 tenant could not be deleted; find them in Auth0 by "
+        "the email the admin user routes showed for this user before the "
+        "deletion, and delete them there"
+    )
+
+
 class RecordingAuth0Users:
     """Stand in for the Auth0 deleter: count preparations, record deletions.
 
@@ -384,8 +395,7 @@ def test_a_failed_auth0_deletion_after_an_admin_deletion_is_reported(
         accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
 
     assert failure.value.undeleted_auth0_user_count == 1
-    assert "remain (1 of 1)" in str(failure.value)
-    assert "by the person's email" in str(failure.value)
+    assert str(failure.value) == _admin_auth0_failure_message(1, 1)
     # The data is gone, so the deletion is recorded.
     assert _user_type_of(store, bob_id) is None
     assert runtime.events == [
@@ -484,8 +494,7 @@ def test_every_auth0_user_is_tried_before_a_failure_is_reported(
             "removed; retry the request"
         )
     else:
-        assert "remain (1 of 2)" in str(failure.value)
-        assert "by the person's email" in str(failure.value)
+        assert str(failure.value) == _admin_auth0_failure_message(1, 2)
     assert _user_type_of(store, bob_id) is None
     assert _account_service_warnings(caplog) == [
         (

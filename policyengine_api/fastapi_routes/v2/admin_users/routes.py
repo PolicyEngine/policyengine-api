@@ -109,10 +109,12 @@ ADMIN_ACCOUNT_DELETION_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The account's data was deleted, but some Auth0 users of its "
-            "sign-in identities could not be removed; every one was tried. "
-            "The message says how many remain. A retry answers 404, since the "
-            "user is gone: find the remaining Auth0 users in Auth0 by the "
-            "person's email and delete them there."
+            "sign-in identities from this Public API's Auth0 tenant could not "
+            "be deleted; every one was tried. The message says how many of "
+            "them remain. It names no email, subject or token. A retry answers "
+            "404, since the user is gone: find the remaining Auth0 users in "
+            "Auth0 by the email the admin user routes showed for the user "
+            "before the deletion, and delete them there."
         ),
     },
     503: {

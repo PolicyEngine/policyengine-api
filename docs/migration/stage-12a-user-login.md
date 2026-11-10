@@ -169,8 +169,12 @@ by user ID with `delete_account`):
    Public API's issuer, oldest first, trying every one even after one fails,
    since the identities that named them are already gone. If any fails it
    answers 502. Unlike `DELETE /v2/me`, a retry finds no user and answers
-   404, so the message says how many Auth0 users remain and tells the admin to
-   find them in Auth0 by the person's email and delete them there. Without
+   404, so the message says how many of the Auth0 users of the account's
+   identities from the Public API's Auth0 tenant remain, and tells the admin
+   to find them in Auth0 by the email the admin user routes showed for the
+   user before the deletion, and delete them there. The response names no
+   email, subject or token, and the user's row, with its email, is gone.
+   Without
    Auth0 Management the Auth0 users are kept, as for `DELETE /v2/me`, and so
    they are when none of the user's identities is from the Public API's
    issuer; each case logs a WARNING record

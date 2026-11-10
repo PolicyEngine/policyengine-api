@@ -91,10 +91,14 @@ OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE = (
     "retry the request"
 )
 # A retry finds no user (404), so the admin is told what remains to remove.
+# The counts cover only the identities from the Public API's Auth0 tenant, and
+# the response has no email: the user's row, with its email, is gone.
 ADMIN_DELETION_AUTH0_FAILURE_MESSAGE = (
-    "The account's data was deleted, but Auth0 users of its sign-in identities "
-    "remain ({undeleted_count} of {subject_count}); find them in Auth0 by the "
-    "person's email and delete them there"
+    "The account's data was deleted, but {undeleted_count} of the "
+    "{subject_count} Auth0 users of its sign-in identities from this Public "
+    "API's Auth0 tenant could not be deleted; find them in Auth0 by the email "
+    "the admin user routes showed for this user before the deletion, and "
+    "delete them there"
 )
 
 
@@ -324,8 +328,10 @@ class V2AccountService:
         LastAdminDeletionError when that user is the only admin, each with
         nothing deleted. Raise AccountDeletionUnavailableError and
         AccountIdentityDeletionError as ``delete_account`` does; since a retry
-        finds no user, the latter's message says how many Auth0 users remain
-        and to find them in Auth0 by the person's email.
+        finds no user, the latter's message says how many of the Auth0 users
+        of the user's identities from the Public API's Auth0 tenant remain, and
+        to find them in Auth0 by the email the admin user routes showed for the
+        user before the deletion.
         """
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
