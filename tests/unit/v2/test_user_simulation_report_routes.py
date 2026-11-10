@@ -157,7 +157,7 @@ def _clients():
     return client, simulations, reports
 
 
-def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None:
+def test_simulation_routes_take_either_reference_and_scope_to_the_user() -> None:
     client, simulations, _reports = _clients()
 
     created = client.post(
@@ -189,18 +189,23 @@ def test_simulation_routes_require_v1_references_and_scope_to_the_user() -> None
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:01Z",
     }
-    assert v2_reference.status_code == 422
+    assert v2_reference.status_code == 201
     assert listed.status_code == 200
     assert patched.status_code == 200
     assert deleted.status_code == 204
     assert [call[0] for call in simulations.calls] == [
+        "create_user_simulation",
         "create_user_simulation",
         "list_user_simulations",
         "patch_user_simulation",
         "delete_user_simulation",
     ]
     assert all(call[1]["principal"] == PRINCIPAL for call in simulations.calls)
-    assert simulations.calls[1][1]["legacy_simulation_id"] == 613
+    assert (
+        simulations.calls[1][1]["association_input"].simulation_id
+        == SIMULATION_ASSOCIATION_ID
+    )
+    assert simulations.calls[2][1]["legacy_simulation_id"] == 613
 
 
 def test_report_routes_round_trip_v3_fields() -> None:
@@ -243,7 +248,6 @@ def test_report_routes_round_trip_v3_fields() -> None:
 @pytest.mark.parametrize(
     "changes",
     [
-        {"report_id": str(REPORT_ASSOCIATION_ID)},
         {"legacy_report_id": None},
         {"user_id": str(OWNER_ID)},
         {"last_run_at": "2026-02-01T12:00:00"},
