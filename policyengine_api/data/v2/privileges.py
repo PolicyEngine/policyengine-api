@@ -32,16 +32,24 @@ Roles and what decides their privileges:
   jobs, and reads the policy, dynamic, household and catalog rows a run needs.
   It starts the Modal calls of runs and household jobs, so it may update their
   status, Modal call ID, error and completion columns: it records a call's ID
-  once Modal accepts the call, and fails the run when Modal refuses it.
+  once Modal accepts the call, and fails the run when Modal refuses it. It
+  starts a budget-window run's first years at submit, so it may update the
+  window run's status, error and completion columns, to fail it at once when
+  Modal refuses those years' calls.
 - ``policyengine_v2_modal_worker``: the simulation API's Modal workers. They
   write the status of the runs and household jobs they were given, and their
-  results, and read the rows a run needs.
+  results, and read the rows a run needs. They also write a budget-window
+  run's status, error and times: each year's coordinator starts the window's
+  next unstarted year when its own year finishes, the last year to finish
+  marks the window succeeded, and a failed year fails it.
 
 Both simulation API roles update only the columns ``update_columns`` names, so
 the database refuses any change to what a run is (its simulation or report,
-versions, dataset, region, year, simulation runs or budget-window run). It
-doesn't limit a worker to its own run; the workers' code does. Their code lives
-in the simulation API's repository, so the deploy check covers them here.
+versions, dataset, region, year, simulation runs or budget-window run) or to
+what a budget-window run is (its report, catalog version, trigger or whether
+it calculates again). It doesn't limit a worker to its own run; the workers'
+code does. Their code lives in the simulation API's repository, so the deploy
+check covers them here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 
@@ -175,6 +183,28 @@ _CALL_START_COLUMNS: Final = (
 )
 
 
+# A budget-window run's state, which the Modal workers write. A window run has
+# no Modal call of its own: the workers record when it started, each year's
+# coordinator starts the window's next unstarted year when its own year
+# finishes, the last year to finish marks the window succeeded, and a failed
+# year fails it.
+_WINDOW_RUN_STATE_COLUMNS: Final = (
+    "status",
+    "error_message",
+    "started_at",
+    "completed_at",
+    "updated_at",
+)
+# The state the simulation service writes for a budget-window run whose first
+# years' Modal calls it starts at submit: the failure when Modal refuses them.
+_WINDOW_FAILURE_COLUMNS: Final = (
+    "status",
+    "error_message",
+    "completed_at",
+    "updated_at",
+)
+
+
 def _run_table(
     *result_columns: str, catalog_writer: frozenset[DeclaredPrivilege] = NO_ACCESS
 ) -> TableAccess:
@@ -204,7 +234,11 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "dynamics": _access(**_RUN_INPUT_READS),
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.
-    "budget_window_runs": _SIMULATION_DEFINITION,
+    "budget_window_runs": _access(
+        runtime=READ,
+        simulation_service=READ_INSERT | {update_columns(*_WINDOW_FAILURE_COLUMNS)},
+        modal_worker=READ | {update_columns(*_WINDOW_RUN_STATE_COLUMNS)},
+    ),
     "household_jobs": _run_table("result"),
     "report_runs": _run_table(
         "baseline_cliff_gap",
