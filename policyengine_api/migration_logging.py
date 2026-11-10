@@ -13,10 +13,13 @@ import flask
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     ExplicitDatabaseSources,
+    MigrationContext,
     RouteImplementation,
     get_migration_log_context,
+    get_route_impl,
     infer_route_group,
 )
+from policyengine_api.migration_registry import ROUTE_GROUP_CONFIG_BY_NAME
 from policyengine_api.observability.identifiers import (
     OBSERVABILITY_ID_HEADER,
     normalize_observability_id,
@@ -71,6 +74,15 @@ V2_USER_RESOURCE_SEGMENTS = frozenset(
         "admin",
     }
 )
+# /v2/reports and /v2/simulations read only Supabase, and create only through
+# the Cloud Run simulation service's v2 routes, whatever the report and
+# simulation route groups' database, entrypoint and compute flags select: a
+# read reads the tables and calls nothing, and a create checks the country
+# and policies and sends the request there. They read none of those flags, so
+# none of them is checked for their log records.
+V2_SIMULATION_SERVICE_SEGMENTS = frozenset({"reports", "simulations"})
+V2_SIMULATION_SERVICE_ENTRYPOINT = "cloud_run_simulation_entrypoint"
+V2_SIMULATION_SERVICE_COMPUTE = "v2_primary"
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 # A v2 resource path has at least the "v2" segment and the resource segment.
 V2_RESOURCE_PATH_MINIMUM_SEGMENTS = 2
@@ -254,6 +266,28 @@ def log_migration_request(served_request: ServedRequest) -> None:
     )
 
 
+def _simulation_service_context(
+    route_group: str, *, method: str, route_impl: RouteImplementation | None
+) -> dict[str, str | None]:
+    """Return a v2 report's or simulation's log record from what it uses."""
+    try:
+        selected_route_impl = route_impl or get_route_impl(route_group)
+    except ValueError as error:
+        return {"route_group": route_group, "migration_flag_error": str(error)}
+    route_config = ROUTE_GROUP_CONFIG_BY_NAME[route_group]
+    creates = method == "POST"
+    return MigrationContext(
+        route_group=route_group,
+        route_impl=selected_route_impl,
+        db_entity=route_config.db_entity,
+        db_write=None,
+        db_read="supabase",
+        sim_flow=route_config.sim_flow if creates else None,
+        sim_entrypoint=V2_SIMULATION_SERVICE_ENTRYPOINT,
+        sim_compute=V2_SIMULATION_SERVICE_COMPUTE if creates else None,
+    ).to_log_dict()
+
+
 def _migration_context(
     *,
     method: str,
@@ -261,6 +295,10 @@ def _migration_context(
     route_impl: RouteImplementation | None,
 ) -> dict[str, str | None]:
     route_group = infer_route_group(path)
+    if _v2_resource_segment(path) in V2_SIMULATION_SERVICE_SEGMENTS:
+        return _simulation_service_context(
+            route_group, method=method, route_impl=route_impl
+        )
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     is_v2_supabase_resource = _is_v2_supabase_resource(method, path)
     uses_explicit_v2_source = is_v2_metadata_read or is_v2_supabase_resource

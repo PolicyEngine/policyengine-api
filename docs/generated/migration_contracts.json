@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 90,
+    "request_count": 95,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 16
+    "workflow_count": 17
   },
   "route_groups": [
     {
@@ -92,6 +92,7 @@
       "name": "report",
       "path_segments": [
         "report",
+        "reports",
         "user-reports",
         "shared-reports"
       ],
@@ -750,6 +751,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.simulation_id",
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
@@ -839,6 +841,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.simulation_id",
             "result.item.legacy_simulation_id",
             "result.item.name",
             "result.item.description",
@@ -949,6 +952,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.description",
@@ -1059,6 +1063,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.description",
@@ -1093,6 +1098,7 @@
             "message",
             "result.item.id",
             "result.item.country_id",
+            "result.item.report_id",
             "result.item.legacy_report_id",
             "result.item.name",
             "result.item.source_note",
@@ -1312,6 +1318,89 @@
             "status",
             "message",
             "result.items"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "C1 \u00b7 8: v2 simulations and economy reports",
+      "name": "detailed_save_reports_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.kind",
+            "result.item.status",
+            "result.item.run",
+            "result.item.current_versions",
+            "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports?country_id=us&report_id={report_id}",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.status",
+            "result.item.run",
+            "result.item.current_versions",
+            "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/simulations?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.kind",
+            "result.item.status",
+            "result.item.run"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/simulations/{simulation_id}?country_id=us",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.status",
+            "result.item.run",
+            "result.item.current_versions"
           ]
         }
       ]

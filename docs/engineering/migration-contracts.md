@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 16 |
-| request count | 90 |
+| workflow count | 17 |
+| request count | 95 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -23,7 +23,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
-| `report` | `report`, `user-reports`, `shared-reports` | `report` | `report` |
+| `report` | `report`, `reports`, `user-reports`, `shared-reports` | `report` | `report` |
 | `user_profile` | `user-profile`, `me`, `admin` | `user` | `none` |
 
 ## App V2 Workflow Contracts
@@ -116,12 +116,12 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/user-simulations?country_id=us` | 201 | `simulation` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-simulations?country_id=us` | 200 | `simulation` | `Authorization` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
-| `PATCH` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
+| `PATCH` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-simulations/{association_id}?country_id=us` | 204 | `simulation` | `Authorization` |  |
 | `POST` | `/v2/user-simulations?country_id=us` | 201 | `simulation` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-simulations?country_id=us` | 200 | `simulation` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
-| `PATCH` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
+| `PATCH` | `/v2/user-simulations/{association_id}?country_id=us` | 200 | `simulation` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.simulation_id`, `result.item.legacy_simulation_id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-simulations/{association_id}?country_id=us` | 204 | `simulation` | `PolicyEngine-Unauthenticated-User` |  |
 
 ### `user_report_associations_v2`
@@ -134,14 +134,14 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/user-reports?country_id=us` | 201 | `report` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-reports?country_id=us` | 200 | `report` | `Authorization` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
-| `PATCH` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.updated_at` |
+| `PATCH` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-reports/{association_id}?country_id=us` | 204 | `report` | `Authorization` |  |
 | `POST` | `/v2/user-reports?country_id=us` | 201 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-reports?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
-| `PATCH` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.updated_at` |
+| `PATCH` | `/v2/user-reports/{association_id}?country_id=us` | 200 | `report` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.description`, `result.item.user_policy_id`, `result.item.baseline_user_policy_id`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.last_run_at`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-reports/{association_id}?country_id=us` | 204 | `report` | `PolicyEngine-Unauthenticated-User` |  |
-| `GET` | `/v2/shared-reports/{association_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.baseline_reform`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
+| `GET` | `/v2/shared-reports/{association_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.report_id`, `result.item.legacy_report_id`, `result.item.name`, `result.item.source_note`, `result.item.provisions`, `result.item.validation`, `result.item.budget_window_years`, `result.item.baseline_reform`, `result.item.last_run_at`, `result.item.created_at`, `result.item.updated_at` |
 
 ### `user_account_v2`
 
@@ -186,6 +186,19 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
 | `GET` | `/v2/countries` | 200 | `metadata` | none | `status`, `message`, `result.items` |
+
+### `detailed_save_reports_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: C1 · 8: v2 simulations and economy reports
+
+| Method | Path | Status | Route group | Required headers | Stable response fields |
+| --- | --- | ---: | --- | --- | --- |
+| `POST` | `/v2/reports?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.kind`, `result.item.status`, `result.item.run`, `result.item.current_versions`, `result.item.result` |
+| `GET` | `/v2/reports?country_id=us&report_id={report_id}` | 200 | `report` | none | `status`, `message`, `result.items` |
+| `GET` | `/v2/reports/{report_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.status`, `result.item.run`, `result.item.current_versions`, `result.item.result` |
+| `POST` | `/v2/simulations?country_id=us` | 201 | `simulation` | none | `status`, `message`, `result.item.id`, `result.item.kind`, `result.item.status`, `result.item.run` |
+| `GET` | `/v2/simulations/{simulation_id}?country_id=us` | 200 | `simulation` | none | `status`, `message`, `result.item.id`, `result.item.status`, `result.item.run`, `result.item.current_versions` |
 
 ### `metadata_resources_v2_preview`
 
