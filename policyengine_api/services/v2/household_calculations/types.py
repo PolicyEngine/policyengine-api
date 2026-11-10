@@ -210,8 +210,10 @@ class HouseholdCalculationRead:
 class StoredDocumentModel(BaseModel):
     """Base for the result documents the household functions store.
 
-    Fields the Public API does not read are ignored, so a later contract may
-    add some.
+    The documents are read only at the household contract's version 1
+    (``schema_version``); one of another version, or of none, is refused
+    rather than read as version 1. Fields the Public API does not read are
+    ignored, so the contract may add some within its version.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -235,6 +237,7 @@ class StoredExecutionResult(StoredDocumentModel):
     """A succeeded job's result document (``HouseholdExecutionResult``)."""
 
     status: Literal["succeeded"]
+    schema_version: Literal[1]
     output: StoredCalculationOutput
 
     def calculation_output(self) -> HouseholdCalculationOutput:
@@ -260,6 +263,7 @@ class StoredExecutionFailure(StoredDocumentModel):
     """A refused job's result document (``HouseholdExecutionFailure``)."""
 
     status: Literal["failed"]
+    schema_version: Literal[1]
     error: StoredCalculationError
 
     def calculation_failure(self) -> HouseholdCalculationFailure:
