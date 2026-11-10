@@ -102,6 +102,60 @@ cross-origin; a unit test covers the preflight. OpenAPI publishes the header as
 the `UnauthenticatedUser` API-key security scheme, an alternative to
 `UserAccessToken`.
 
+## Minimum user types and admins
+
+A route can require a minimum user type with a dependency from
+`policyengine_api/fastapi_routes/v2/user_type_support.py`
+(`minimum_user_type_dependency`). It reads the caller's stored type without
+provisioning a user: a signed-in caller with no user yet counts as standard,
+and a signed-out browser as unauthenticated. Below the minimum the route
+answers 403; when the type can't be read, 503.
+
+Only admins use the routes under `/v2/admin`. The router checks the caller's
+type first, and each operation checks it again in its own transaction.
+
+| Route | What it does |
+| --- | --- |
+| `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's email, ignoring case, with `%` and `_` matching themselves. |
+| `GET /v2/admin/users/{user_id}` | One signed-in user. |
+| `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
+| `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
+
+An admin user item is `{id, user_type, email, first_name, last_name,
+primary_country, created_at, last_seen_at}`: `email` is that of the most
+recently seen of the user's identities that has one, else the user's own, and
+`last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
+never listed, read or changed (404), since their IDs are their browsers'
+credentials.
+
+Each change is a row of `user_type_changes`: the user, the previous and new
+types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
+`script`. Deleting the user deletes its changes; deleting the admin keeps them
+with no admin.
+
+A change that would leave no admin is refused with 409, and so is the last
+admin's `DELETE /v2/me`. Every change, the script's included, and every
+signed-in account deletion first takes one transaction-scoped advisory lock
+(`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
+statement of its own and checks the caller, or the deleted user, against
+them. Because of that lock, concurrent changes and deletions run one at a
+time, and each reads the admins the ones before it committed; an admin
+demoted by an earlier change is then refused with 403. An admin's change to
+another type then also compares the user's locked row with
+`expected_user_type`, as the route table says; the script's changes don't. Locking the admins' rows instead would miss
+a user promoted while the lock was awaited, since a waiting query rechecks
+only the rows its snapshot matched.
+
+`scripts/set_v2_user_type.py --email <address> --user-type <type>` sets the
+type of the one signed-in user whose own or any identity's email is exactly
+that address, ignoring case, and records the change with `source = script`
+and no admin. It connects as the runtime role with the deployed Public API's
+settings (`V2_RUNTIME_DATABASE_URL` or
+`V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE`, `V2_SUPABASE_PROJECT_REF`,
+`V2_SUPABASE_ENVIRONMENT`), and refuses an address with no signed-in user, or
+several, and the last admin's demotion. A person's user exists only after
+their first signed-in request to the detailed-save routes.
+
 ## Provisioning strategies
 
 `services/v2/identity` selects an `AccountProvisioningStrategy` from the
@@ -263,7 +317,7 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 | `PATCH /v2/me` | Updates `first_name`, `last_name`, `primary_country` | 403 |
 | `GET /v2/me/export` | The user and every association, all countries | The same; `user: null` and empty lists before the first saved record |
 | `POST /v2/me/upgrade?country_id=` | Requires the header too (422 without it); `{"item": MeItem, "outcome": ...}` | 401 (a bearer token is required) |
-| `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured | 204; deletes data, never calls Auth0 |
+| `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured; 409 for the last admin, deleting nothing | 204; deletes data, never calls Auth0 |
 | `/v2/user-policies`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
 | `GET /v2/shared-reports/{id}?country_id=` | No credential: any user's saved report in that country, without its owner (404 when none) | The same |
 
@@ -375,6 +429,11 @@ caller can list a user's saved items by `user_id`, read, rename or delete one
 by record ID, and create rows for any user. Rolling the application back
 would therefore hand users' saved work to anyone.
 
+While any instance runs a revision older than the admin routes (during a
+deploy, or after an application rollback), the last admin's `DELETE /v2/me`
+there is neither refused nor serialized with type changes, so it can leave no
+admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
+
 - **Before any user-owned record exists, an application rollback is safe
   without a database downgrade.** Signed-out saving needs no configuration, so
   treat user-owned records as existing from the moment this revision serves
@@ -415,7 +474,8 @@ would therefore hand users' saved work to anyone.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the user types revision (`617f531f1506`) needs no
+  downgrades run first: the user type changes revision (`970be5d29283`) drops
+  every recorded change, the user types revision (`617f531f1506`) needs no
   author or admin, and the simulation runs revision (`1356f658347d`) needs
   `simulations` empty.
 

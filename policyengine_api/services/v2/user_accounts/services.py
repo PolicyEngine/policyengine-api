@@ -8,7 +8,8 @@ exporting, or deleting an absent one finds nothing. Only signed-in principals
 edit account details.
 
 Upgrading moves a browser's unauthenticated user into the signed-in account
-at sign-in. Deleting a signed-in account removes the user's legacy mappings,
+at sign-in. Deleting the last admin's account is refused. Deleting a
+signed-in account removes the user's legacy mappings,
 then the user (identities and associations cascade), and finally the Auth0
 user when the Management API is configured; deleting an unauthenticated
 account removes only its user and associations. Only signed-in user UUIDs
@@ -262,6 +263,16 @@ class V2AccountService:
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
+            if owner is not None:
+                # Imported here: the user-type service is loaded only when
+                # used, like this one.
+                from policyengine_api.services.v2.user_types.services import (
+                    require_admin_remains_after_deletion_in_session,
+                )
+
+                require_admin_remains_after_deletion_in_session(
+                    session, user_id=owner.user_id
+                )
             if owner is None:
                 subjects: tuple[str, ...] = (principal.subject,)
             else:

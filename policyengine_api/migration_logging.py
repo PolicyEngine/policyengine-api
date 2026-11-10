@@ -43,8 +43,8 @@ V2_METADATA_RESOURCE_SEGMENTS = frozenset(
     }
 )
 # Native v2 resources served from Supabase. The signed-in user resources
-# (/v2/me*, /v2/user-*) keep their data only in Supabase, whatever the route
-# group's configured v1 database flags say.
+# (/v2/me*, /v2/user-*) and admins' user routes (/v2/admin/*) keep their data
+# only in Supabase, whatever the route group's configured v1 database flags say.
 V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
     {
         "policies",
@@ -54,13 +54,22 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
         "user-simulations",
         "user-reports",
         "me",
+        "admin",
     }
 )
-# Signed-in user resources only store and read saved work. Their route groups
-# (household, simulation, report, user_profile) also compute, but these
-# requests never do, so they log no simulation flow or compute selection.
+# Signed-in user resources only store and read saved work, and admins' user
+# routes only read and change users' types. Their route groups (household,
+# simulation, report, user_profile) also compute, but these requests never do,
+# so they log no simulation flow or compute selection.
 V2_USER_RESOURCE_SEGMENTS = frozenset(
-    {"user-policies", "user-households", "user-simulations", "user-reports", "me"}
+    {
+        "user-policies",
+        "user-households",
+        "user-simulations",
+        "user-reports",
+        "me",
+        "admin",
+    }
 )
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 # A v2 resource path has at least the "v2" segment and the resource segment.

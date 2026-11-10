@@ -43,6 +43,25 @@ class UserType(StrEnum):
 
 
 _ALLOWED_USER_TYPES_SQL = ", ".join(f"'{user_type.value}'" for user_type in UserType)
+# The types a signed-in user can have, which admins and the type script set.
+SIGNED_IN_USER_TYPES = (UserType.STANDARD, UserType.AUTHOR, UserType.ADMIN)
+_SIGNED_IN_USER_TYPES_SQL = ", ".join(
+    f"'{user_type.value}'" for user_type in SIGNED_IN_USER_TYPES
+)
+
+
+class UserTypeChangeSource(StrEnum):
+    """What changed a signed-in user's type."""
+
+    # An admin, through the Public API's admin routes.
+    ADMIN_ROUTE = "admin_route"
+    # An operator, through scripts/set_v2_user_type.py.
+    SCRIPT = "script"
+
+
+_USER_TYPE_CHANGE_SOURCES_SQL = ", ".join(
+    f"'{source.value}'" for source in UserTypeChangeSource
+)
 
 
 class User(IdentifiedModel, table=True):
@@ -136,3 +155,44 @@ class UserIdentity(IdentifiedModel, table=True):
     )
 
     user: User = Relationship(back_populates="identities")
+
+
+class UserTypeChange(IdentifiedModel, table=True):
+    """One change of a signed-in user's type; together, the user's type history.
+
+    ``created_at`` is when the type changed. ``changed_by_user_id`` names the
+    admin who changed it through the admin routes. It is empty for a change the
+    type script made, and becomes empty if that admin's account is deleted.
+    Deleting the user deletes its history.
+    """
+
+    __tablename__ = "user_type_changes"
+    __table_args__ = (
+        sa.CheckConstraint(
+            f"previous_user_type IN ({_SIGNED_IN_USER_TYPES_SQL})",
+            name="ck_user_type_changes_previous_user_type",
+        ),
+        sa.CheckConstraint(
+            f"new_user_type IN ({_SIGNED_IN_USER_TYPES_SQL})",
+            name="ck_user_type_changes_new_user_type",
+        ),
+        sa.CheckConstraint(
+            "previous_user_type <> new_user_type",
+            name="ck_user_type_changes_changed_type",
+        ),
+        sa.CheckConstraint(
+            f"source IN ({_USER_TYPE_CHANGE_SOURCES_SQL})",
+            name="ck_user_type_changes_source",
+        ),
+        sa.Index("ix_user_type_changes_user_id_created_at", "user_id", "created_at"),
+        # Deleting any user sets its changes' admin to NULL, which searches here.
+        sa.Index("ix_user_type_changes_changed_by_user_id", "changed_by_user_id"),
+    )
+
+    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
+    changed_by_user_id: UUID | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    previous_user_type: str = Field(max_length=16)
+    new_user_type: str = Field(max_length=16)
+    source: str = Field(max_length=16)

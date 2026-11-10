@@ -3,7 +3,8 @@
 Revision 617f531f1506 replaces the users type check with one that also allows
 author and admin, and changes nothing else; its downgrade restores the check
 that allows only unauthenticated and standard, so it fails while any user is
-an author or an admin.
+an author or an admin. Revision 970be5d29283, on it, adds user_type_changes and
+changes nothing else.
 """
 
 import re
@@ -24,6 +25,8 @@ from tests.fixtures.integration.alembic_v2 import (
 # The saved-item keys revision, the parent of the user types revision.
 USER_TYPES_PREVIOUS_REVISION = "81b728a088e7"
 USER_TYPES_REVISION = "617f531f1506"
+# The user type changes revision, on the user types revision.
+USER_TYPE_CHANGES_REVISION = "970be5d29283"
 
 
 def _check_names(engine: Engine, table_name: str) -> set[str]:
@@ -159,5 +162,36 @@ def test_user_types_revision_accepts_authors_and_admins_until_downgraded(
                 text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id}
             )
         command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_user_type_changes_revision_adds_only_its_table() -> None:
+    """The revision adds user_type_changes, and its downgrade drops only that."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, USER_TYPES_REVISION)
+        parent = _schema_shape(engine)
+        command.upgrade(config, USER_TYPE_CHANGES_REVISION)
+        revision = _schema_shape(engine)
+
+        assert set(revision) - set(parent) == {"user_type_changes"}
+        assert {table_name: revision[table_name] for table_name in parent} == parent
+        changes = revision["user_type_changes"]
+        assert {foreign_key[2] for foreign_key in changes["foreign_keys"]} == {"users"}
+        assert sorted(changes["indexes"]) == [
+            ("ix_user_type_changes_changed_by_user_id", ["changed_by_user_id"]),
+            ("ix_user_type_changes_user_id_created_at", ["user_id", "created_at"]),
+        ]
+        assert set(changes["checks"]) == {
+            "ck_user_type_changes_previous_user_type",
+            "ck_user_type_changes_new_user_type",
+            "ck_user_type_changes_changed_type",
+            "ck_user_type_changes_source",
+        }
+    finally:
         command.upgrade(config, "head")
         engine.dispose()

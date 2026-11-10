@@ -160,6 +160,13 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         status_code=204,
         response_class=Response,
         responses={
+            409: {
+                "model": V2ErrorResponse,
+                "description": (
+                    "The caller is the last admin; make another user an admin "
+                    "first. Nothing was deleted."
+                ),
+            },
             502: {
                 "model": V2ErrorResponse,
                 "description": (

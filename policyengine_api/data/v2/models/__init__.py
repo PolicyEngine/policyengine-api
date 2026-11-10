@@ -97,15 +97,19 @@ from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     SimulationType,
 )
 from policyengine_api.data.v2.models.users import (  # noqa: E402
+    SIGNED_IN_USER_TYPES,
     User,
     UserIdentity,
     UserType,
+    UserTypeChange,
+    UserTypeChangeSource,
 )
 
 V2_METADATA = SQLModel.metadata
 validate_v2_metadata_table_names(V2_METADATA.tables)
 
 __all__ = [
+    "SIGNED_IN_USER_TYPES",
     "V2_METADATA",
     "AggregateOutput",
     "AggregateType",
@@ -168,5 +172,7 @@ __all__ = [
     "UserReportAssociation",
     "UserSimulationAssociation",
     "UserType",
+    "UserTypeChange",
+    "UserTypeChangeSource",
     "Variable",
 ]

@@ -54,6 +54,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+        "user_type_changes",
     }
 )
 POOLER_URL = (
@@ -75,6 +76,8 @@ SIMULATION_RUNS_REVISION = "1356f658347d"
 SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
 # The user types revision, on the saved-item keys revision.
 USER_TYPES_REVISION = "617f531f1506"
+# The user type changes revision, on the user types revision.
+USER_TYPE_CHANGES_REVISION = "970be5d29283"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -256,6 +259,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        USER_TYPES_REVISION,
         SAVED_ITEM_KEYS_REVISION,
         SIMULATION_RUNS_REVISION,
         CATALOG_PRUNING_REVISION,
@@ -1081,6 +1085,38 @@ def _user_types_revision_source() -> str:
     """Return the source of the one revision after the simulation runs revision."""
     (path,) = (REPO / "migrations/v2/versions").glob(f"{USER_TYPES_REVISION}_*.py")
     return path.read_text(encoding="utf-8")
+
+
+def test_user_type_changes_revision_only_adds_the_history_table() -> None:
+    """The generated revision after the user types revision adds one table."""
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{USER_TYPE_CHANGES_REVISION}_*.py"
+    )
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{USER_TYPES_REVISION}"' in revision
+    assert "correction" not in revision.lower()
+    assert sorted(set(re.findall(r"op\.\w+", upgrade))) == [
+        "op.create_index",
+        "op.create_table",
+        "op.f",
+    ]
+    assert upgrade.count("op.create_table(") == 1
+    assert upgrade.count("op.create_index(") == 2
+    assert 'op.create_table(\n        "user_type_changes"' in upgrade
+    assert sorted(set(re.findall(r"op\.\w+", downgrade))) == [
+        "op.drop_index",
+        "op.drop_table",
+    ]
+    assert 'op.drop_table("user_type_changes")' in downgrade
 
 
 def test_user_types_revision_only_replaces_the_user_type_check() -> None:
