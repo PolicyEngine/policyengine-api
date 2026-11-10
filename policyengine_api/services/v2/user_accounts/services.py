@@ -323,9 +323,9 @@ class V2AccountService:
         SignedInUserNotFoundError when no signed-in user has ``user_id``, and
         LastAdminDeletionError when that user is the only admin, each with
         nothing deleted. Raise AccountDeletionUnavailableError and
-        AccountIdentityDeletionError as ``delete_account`` does; the latter's
-        message says to remove the remaining Auth0 users in Auth0, since a
-        retry finds no user.
+        AccountIdentityDeletionError as ``delete_account`` does; since a retry
+        finds no user, the latter's message says how many Auth0 users remain
+        and to find them in Auth0 by the person's email.
         """
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:

@@ -181,10 +181,16 @@ Since the caller must be an admin, the deleted user can be the only admin only
 when admins delete their own account. That is allowed while another admin
 exists: the account is deleted exactly as by `DELETE /v2/me`, its Auth0 users
 included, and the admin's next request has no user, so the admin routes
-answer 403 (other routes provision a new standard user for a still-valid
-token). The only admin's own deletion is refused with 409 and deletes nothing.
-Two admins deleting each other at once leave one: the second deletion to get
-the lock finds its caller deleted and is refused with 403.
+answer 403. The only admin's own deletion is refused with 409 and deletes
+nothing. Two admins deleting each other at once leave one: the second deletion
+to get the lock finds its caller deleted and is refused with 403.
+
+Deleting an account, by `DELETE /v2/me` or by an admin, doesn't end the
+deleted user's access tokens. Until a token expires, a request with it to a
+route that provisions users, such as `GET /v2/me` or a saved-records route,
+creates a new, empty standard account for its identity. Likewise, an Auth0
+user left in Auth0 after a 502 can still sign in, and its first request gets
+a new, empty standard account.
 
 Each deletion is recorded, once the data is deleted and before the Auth0
 users are removed, as the INFO runtime event `admin_deleted_v2_user_account`

@@ -1,6 +1,8 @@
 """Optional Auth0 Management API access for account deletion.
 
-``DELETE /v2/me`` removes the Auth0 user only when a Management API
+Account deletion, by ``DELETE /v2/me`` for the caller's own account or by
+``DELETE /v2/admin/users/{user_id}`` for an admin, removes the Auth0 users of
+the account's sign-in identities only when a Management API
 machine-to-machine client with the ``delete:users`` permission is configured.
 The configuration is all-or-none: a domain, a client ID, and exactly one
 client-secret source (a direct value or a Secret Manager resource, matching
@@ -216,8 +218,9 @@ class Auth0ManagementClient:
     def prepare_deletion(self) -> None:
         """Load the client secret and obtain a token before any data changes.
 
-        Callers run this before deleting their own records, so a credential or
-        Secret Manager failure stops the deletion with nothing removed.
+        Account deletion runs this before it deletes any Public API data, so a
+        credential or Secret Manager failure stops the deletion with nothing
+        removed.
         """
         self._access_token()
 
