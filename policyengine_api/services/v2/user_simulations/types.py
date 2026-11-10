@@ -77,7 +77,8 @@ class UserSimulationRead:
     """A stored user-simulation association as the service returns it to routes.
 
     Stage 12A saves only v1 simulations, so ``legacy_simulation_id`` names the
-    simulation and ``simulation_id`` is a logical reference with no foreign key.
+    simulation. ``simulation_id``, when set, names a stored v2 simulation (a
+    foreign key).
     """
 
     id: UUID

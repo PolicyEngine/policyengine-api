@@ -7,7 +7,7 @@ from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Annotated, Protocol
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from policyengine_api.fastapi_routes.metadata_protocols import (
@@ -29,9 +29,15 @@ from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
 )
 from policyengine_api.fastapi_routes.v2.user_auth_support import (
     authenticate_account_request,
+    forwarded_user_credential,
 )
-from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
+from policyengine_api.libs.server_credentials import CallerKind
+from policyengine_api.libs.user_auth import (
+    FORWARDED_USER_AUTHORIZATION_HEADER,
+    UNAUTHENTICATED_USER_HEADER,
+)
 from policyengine_api.readiness import is_ready
+from policyengine_api.request_caller import current_request_caller
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
@@ -182,16 +188,29 @@ _unauthenticated_user_scheme = APIKeyHeader(
 
 
 def _default_require_user(
+    request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(_user_bearer_scheme)
     ],
     unauthenticated_user: Annotated[str | None, Depends(_unauthenticated_user_scheme)],
 ) -> AccountPrincipal:
-    """Authenticate the request's account; fails closed without a credential."""
-    return authenticate_account_request(
-        None if credentials is None else f"Bearer {credentials.credentials}",
-        unauthenticated_user,
-    )
+    """Authenticate the request's account; fails closed without a credential.
+
+    When the credential check before routing found a server credential, the
+    account is the user that server forwards (see ``user_auth_support``).
+    """
+    caller = current_request_caller()
+    if caller is not None and caller.kind is CallerKind.SERVER:
+        # Authorization carries the server's own token; the user is the one
+        # the server forwards.
+        user_authorization = forwarded_user_credential(
+            request.headers.getlist(FORWARDED_USER_AUTHORIZATION_HEADER)
+        )
+    elif credentials is not None:
+        user_authorization = f"Bearer {credentials.credentials}"
+    else:
+        user_authorization = None
+    return authenticate_account_request(user_authorization, unauthenticated_user)
 
 
 def _build_v1_legacy_reference_service() -> LegacyReferenceChecker:

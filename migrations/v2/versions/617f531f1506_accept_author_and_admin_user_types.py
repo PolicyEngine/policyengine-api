@@ -1,7 +1,7 @@
 """accept author and admin user types
 
 Revision ID: 617f531f1506
-Revises: 1356f658347d
+Revises: 81b728a088e7
 Create Date: 2026-11-10 18:22:24.522810
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
@@ -9,6 +9,11 @@ users.user_type also accepts author and admin. Alembic compares check
 constraints by name only, not by condition, so the check that allows the four
 types has a new name, ck_users_user_type_allowed, which autogenerate detects
 as one check removed and one added. The operations are exactly as generated.
+
+It was generated on 1356f658347d. When master gained the saved-item keys
+revision 81b728a088e7 on the same parent, down_revision moved to
+81b728a088e7; the two revisions change different tables, so generating it
+again from there gives the same operations.
 
 The upgrade only widens what the check allows. The previous Public API
 revision keeps working until a user is given the author or admin type: its
@@ -28,7 +33,7 @@ import sqlmodel
 
 
 revision: str = "617f531f1506"
-down_revision: Union[str, None] = "1356f658347d"
+down_revision: Union[str, None] = "81b728a088e7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

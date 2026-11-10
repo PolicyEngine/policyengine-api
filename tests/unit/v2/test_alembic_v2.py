@@ -69,9 +69,11 @@ PARAMETER_TREE_REVISION = "3869eb814a90"
 PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 # The catalog pruning revision, parent of the simulation runs revision.
 CATALOG_PRUNING_REVISION = "334859ef4fec"
-# The simulation runs revision, parent of the user types revision.
+# The simulation runs revision, parent of the saved-item keys revision.
 SIMULATION_RUNS_REVISION = "1356f658347d"
-# The user types revision, on the simulation runs revision.
+# The saved-item keys revision, parent of the user types revision.
+SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
+# The user types revision, on the saved-item keys revision.
 USER_TYPES_REVISION = "617f531f1506"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
@@ -254,6 +256,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SAVED_ITEM_KEYS_REVISION,
         SIMULATION_RUNS_REVISION,
         CATALOG_PRUNING_REVISION,
         PARAMETER_SEARCH_FILE_REVISION,
@@ -1097,7 +1100,7 @@ def test_user_types_revision_only_replaces_the_user_type_check() -> None:
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert f'down_revision: Union[str, None] = "{SIMULATION_RUNS_REVISION}"' in revision
+    assert f'down_revision: Union[str, None] = "{SAVED_ITEM_KEYS_REVISION}"' in revision
     assert "correction" not in revision.lower()
     for body in (upgrade, downgrade):
         assert sorted(re.findall(r"op\.\w+", body)) == [
@@ -1183,3 +1186,61 @@ def test_simulation_runs_revision_is_generated_with_documented_corrections() -> 
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
+
+
+def test_saved_item_keys_revision_adds_only_two_foreign_keys() -> None:
+    """The revision after the simulation runs revision keys saved items.
+
+    It is generated, adds ``RESTRICT`` foreign keys from
+    ``user_report_associations.report_id`` to ``reports`` and from
+    ``user_simulation_associations.simulation_id`` to ``simulations``, drops
+    them on downgrade, and changes nothing else.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == SIMULATION_RUNS_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == SAVED_ITEM_KEYS_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert upgrade.count("op.create_foreign_key(") == 2
+    assert downgrade.count("op.drop_constraint(") == 2
+    for key_name, source_table, target_table, column_name in (
+        (
+            "fk_user_report_associations_report_id_reports",
+            "user_report_associations",
+            "reports",
+            "report_id",
+        ),
+        (
+            "fk_user_simulation_associations_simulation_id_simulations",
+            "user_simulation_associations",
+            "simulations",
+            "simulation_id",
+        ),
+    ):
+        assert re.search(
+            rf'op\.create_foreign_key\(\s*op\.f\("{key_name}"\),\s*'
+            rf'"{source_table}",\s*"{target_table}",\s*'
+            rf'\["{column_name}"\],\s*\["id"\],\s*ondelete="RESTRICT",?\s*\)',
+            upgrade,
+        ), key_name
+        assert f'op.f("{key_name}")' in downgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body
+        assert "op.add_column(" not in body
+        assert "op.drop_column(" not in body

@@ -1,7 +1,14 @@
-"""Inbound authentication for user-owned Public API routes.
+"""Inbound bearer-token authentication for the Public API.
 
-The Public API accepts RS256 access tokens issued by the PolicyEngine Auth0
-tenant for the Public API resource server. The decoder is ported from the
+User-owned routes authenticate signed-in users with it, and
+:mod:`policyengine_api.libs.server_credentials` uses it to check the server
+credentials of PolicyEngine's own servers.
+
+The Public API accepts RS256 access tokens for the Public API resource
+server from two Auth0 tenants: signed-in users' tokens from the tenant in
+``PUBLIC_API_AUTH_ISSUER``, and server tokens from the Public API's own
+tenant, which :mod:`policyengine_api.libs.server_credentials` names. Each is
+verified against its own tenant's settings. The decoder is ported from the
 Simulation Entrypoint (``policyengine_simulation_entry.auth``): the JWKS is
 fetched from ``{issuer}.well-known/jwks.json`` and ``iss``/``aud`` are
 verified. Machine-to-machine tokens (``…@clients`` subjects) are classified
@@ -10,6 +17,11 @@ as client principals so user routes can refuse them.
 A signed-out browser instead sends ``PolicyEngine-Unauthenticated-User``: a
 random UUID it generates once and keeps. That UUID is a bearer credential for
 the browser's unauthenticated user; it needs no Auth0 configuration.
+
+A credentialed server (see :mod:`policyengine_api.libs.server_credentials`)
+sends its own token in ``Authorization``, so it forwards a signed-in user's
+token in ``PolicyEngine-User-Authorization`` instead, and a signed-out
+browser's UUID in the same unauthenticated-user header.
 
 This module never logs a token, subject, email address, or browser UUID.
 """
@@ -41,6 +53,9 @@ PUBLIC_API_AUTH_ENV_VARS = (
 )
 
 UNAUTHENTICATED_USER_HEADER = "PolicyEngine-Unauthenticated-User"
+# A credentialed server, whose own token is in Authorization, forwards the
+# signed-in user it acts for here, as "Bearer <user access token>".
+FORWARDED_USER_AUTHORIZATION_HEADER = "PolicyEngine-User-Authorization"
 # The canonical lowercase, hyphenated form that crypto.randomUUID() produces.
 CANONICAL_UUID_PATTERN = (
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -126,7 +141,8 @@ def _normalized_issuer(value: str) -> str:
     return f"{value.rstrip('/')}/" if value else ""
 
 
-def _validate_issuer_url(value: str) -> None:
+def validate_issuer_url(value: str, setting_name: str) -> None:
+    """Raise unless ``value`` is an absolute HTTPS URL fit to be a token issuer."""
     parsed = urlparse(value)
     if (
         parsed.scheme != "https"
@@ -138,7 +154,7 @@ def _validate_issuer_url(value: str) -> None:
         or parsed.fragment
     ):
         msg = (
-            f"{PUBLIC_API_AUTH_ISSUER_ENV} must be an absolute HTTPS URL without "
+            f"{setting_name} must be an absolute HTTPS URL without "
             "credentials, parameters, a query string, or a fragment"
         )
         raise UserAuthConfigurationError(msg)
@@ -169,7 +185,7 @@ def load_user_auth_settings(
         )
         raise UserAuthConfigurationError(msg)
     if issuer:
-        _validate_issuer_url(issuer)
+        validate_issuer_url(issuer, PUBLIC_API_AUTH_ISSUER_ENV)
     return UserAuthSettings(required=required, issuer=issuer, audience=audience)
 
 
@@ -199,8 +215,9 @@ class JWTDecoder:
     def decode(self, token: str) -> Mapping[str, Any]:
         """Verify the signature, issuer, audience and required claims; return claims.
 
-        Raise ``jwt.PyJWKClientConnectionError`` when the signing keys cannot be
-        fetched, and another ``jwt.PyJWTError`` when the token is invalid.
+        Raise ``jwt.PyJWKClientConnectionError``, or an ``OSError`` that urllib
+        leaves unwrapped, when the signing keys cannot be fetched, and another
+        ``jwt.PyJWTError`` when the token is invalid.
         """
         signing_key = self.jwks_client.get_signing_key_from_jwt(token).key
         return jwt.decode(
@@ -290,7 +307,10 @@ def authenticate_bearer(
     selected_decoder = decoder or _decoder(settings.issuer, settings.audience)
     try:
         claims = selected_decoder.decode(token)
-    except jwt.PyJWKClientConnectionError as error:
+    # urllib leaves errors raised while reading the JWKS response unwrapped (a
+    # reset connection, a TLS error), and PyJWT converts only some of them to
+    # PyJWKClientConnectionError; either way the keys could not be fetched.
+    except (jwt.PyJWKClientConnectionError, OSError) as error:
         logger.warning(
             "public_api_user_auth_unavailable",
             extra={"policyengine_attributes": {"error_type": type(error).__name__}},

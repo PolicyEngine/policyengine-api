@@ -46,8 +46,8 @@ COUNTRIES_REVISION = "fb1a3e40d3d6"
 # The catalog format 2 revision, the parent of the area impact coordinate removal.
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
-# The simulation runs revision, the parent of the user types revision.
-USER_TYPES_PREVIOUS_REVISION = "1356f658347d"
+# The saved-item keys revision, the parent of the user types revision.
+USER_TYPES_PREVIOUS_REVISION = "81b728a088e7"
 USER_TYPES_REVISION = "617f531f1506"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
@@ -170,12 +170,22 @@ def _assert_stage_12a_association_shape(engine) -> None:
             constraint["column_names"]
             for constraint in inspect(engine).get_unique_constraints(table_name)
         ] == [["id", "country_id"]]
-    for table_name in ("user_simulation_associations", "user_report_associations"):
-        referred_tables = {
-            foreign_key["referred_table"]
+    # At head, a saved simulation or report names a stored v2 simulation or
+    # report through one RESTRICT key (revision 81b728a088e7).
+    for table_name, column_name, referred_table in (
+        ("user_simulation_associations", "simulation_id", "simulations"),
+        ("user_report_associations", "report_id", "reports"),
+    ):
+        v2_record_keys = [
+            (
+                foreign_key["constrained_columns"],
+                foreign_key["referred_table"],
+                foreign_key["options"].get("ondelete"),
+            )
             for foreign_key in inspect(engine).get_foreign_keys(table_name)
-        }
-        assert {"simulations", "reports"}.isdisjoint(referred_tables)
+            if foreign_key["referred_table"] in {"simulations", "reports"}
+        ]
+        assert v2_record_keys == [([column_name], referred_table, "RESTRICT")]
     report_policy_key = next(
         foreign_key
         for foreign_key in inspect(engine).get_foreign_keys("user_report_associations")

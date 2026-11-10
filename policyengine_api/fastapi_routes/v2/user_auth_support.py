@@ -10,6 +10,17 @@ authenticates as:
   ``PolicyEngine-Unauthenticated-User`` header, which needs no Auth0
   configuration.
 
+A request from a credentialed server, whose own client-credentials token is in
+``Authorization``, authenticates the user it forwards instead: the signed-in
+user's token in ``PolicyEngine-User-Authorization: Bearer``, which takes the
+place of ``Authorization`` above, or the same unauthenticated-user header.
+That user is then authenticated by the same code as a direct request's
+credential. A forwarded token is not checked before routing, so an invalid
+one gets the ``invalid_token`` challenge below (a token from the Public
+API's own tenant included, since that tenant signs no users), and a forwarded
+client token from the users' tenant gets 403 even from an unlisted client.
+Without a server credential the forwarded header is ignored.
+
 Failures map to the shared API v2 error envelope:
 
 - no credential, an invalid token, or a malformed unauthenticated-user
@@ -20,6 +31,8 @@ Failures map to the shared API v2 error envelope:
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from policyengine_api.fastapi_routes.v2.errors_support import (
     V2AuthenticationRequiredError,
@@ -44,6 +57,15 @@ from policyengine_api.services.v2.identity.types import (
     UserPrincipal,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+REJECTED_BEARER_MESSAGE = "The bearer access token is invalid"
+
+MACHINE_CLIENT_FORBIDDEN_MESSAGE = (
+    "This resource requires a signed-in user; machine clients are not permitted"
+)
+
 
 def authenticate_user_request(authorization: str | None) -> UserPrincipal:
     """Return the signed-in user principal or raise a typed HTTP failure."""
@@ -58,7 +80,7 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
         msg = "Authentication is required"
         raise V2AuthenticationRequiredError(msg) from error
     except InvalidBearerTokenError as error:
-        msg = "The bearer access token is invalid"
+        msg = REJECTED_BEARER_MESSAGE
         raise V2AuthenticationRequiredError(
             msg,
             invalid_token=True,
@@ -67,15 +89,27 @@ def authenticate_user_request(authorization: str | None) -> UserPrincipal:
         msg = "User authentication is unavailable"
         raise V2AuthenticationUnavailableError(msg) from error
     if principal.kind is PrincipalKind.CLIENT:
-        msg = (
-            "This resource requires a signed-in user; machine clients are not permitted"
-        )
-        raise V2PermissionDeniedError(msg)
+        raise V2PermissionDeniedError(MACHINE_CLIENT_FORBIDDEN_MESSAGE)
     return UserPrincipal(
         issuer=principal.issuer,
         subject=principal.subject,
         email=principal.email,
     )
+
+
+def forwarded_user_credential(header_values: Sequence[str]) -> str | None:
+    """Return the one forwarded user credential, or None when none is sent.
+
+    A value of only spaces and tabs counts as none, as for ``Authorization``
+    in the credential check before routing. Two or more values are refused as
+    an invalid token, so no layer can read a different one from the layer
+    that checked it.
+    """
+    if len(header_values) > 1:
+        raise V2AuthenticationRequiredError(REJECTED_BEARER_MESSAGE, invalid_token=True)
+    if not header_values or not header_values[0].strip(" \t"):
+        return None
+    return header_values[0]
 
 
 def authenticate_account_request(
@@ -84,9 +118,11 @@ def authenticate_account_request(
 ) -> AccountPrincipal:
     """Return the request's account principal or raise a typed HTTP failure.
 
-    A bearer token is validated as for any signed-in request and the
-    unauthenticated-user header is then ignored. Without one, the header
-    selects the browser's unauthenticated user.
+    ``authorization`` is the user's bearer credential: the request's
+    ``Authorization`` header, or for a credentialed server the forwarded
+    ``PolicyEngine-User-Authorization`` header. It is validated as for any
+    signed-in request and the unauthenticated-user header is then ignored.
+    Without one, the header selects the browser's unauthenticated user.
     """
     if authorization is None and unauthenticated_user is not None:
         try:
