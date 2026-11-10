@@ -51,6 +51,40 @@ default URLs (`*.run.app`) bypass it entirely. This is
 acceptable while ingress must stay open for CI smoke tests; revisit when
 ingress is locked down to the LB.
 
+## Requests that carry a bearer token (rule 900)
+
+Since 2026-11-10, rule 900 lets requests to the metadata and calculate path
+families skip the per-IP throttles in rules 1000 and 1100 when their
+`Authorization` header is one well-formed bearer value
+(`^[Bb]earer [A-Za-z0-9._~+/-]+=*$`). It exists because PolicyEngine's own
+server routes on Vercel (www.policyengine.org's dashboard API and
+app.policyengine.org's route) send every browser's request to the Public
+API from a few Vercel addresses, which per-IP limits would count as one
+client. Those routes apply their own per-browser limits on Vercel.
+
+- **Why it is safe to skip the throttle:** the Public API checks every
+  `Authorization` header before routing (PolicyEngine/policyengine-api#4237)
+  and answers any that is not a valid credential with a small 401, so a
+  made-up token is not served. Apply rule 900 only while that check is
+  deployed.
+- **Why the exact pattern:** the Public API treats a blank `Authorization`
+  header as no credential and serves it, so a rule that only checked the
+  header's presence would let blank headers skip the throttle and still be
+  served. Two headers reach Cloud Armor joined by a comma, which the pattern
+  rejects.
+- **What it gives up:** until the Public API refuses requests without a
+  server credential, a signed-in user's own valid token in `Authorization`
+  skips the throttle and is served; requests with made-up tokens are not
+  capped at the load balancer, though each costs the Public API one
+  signature check.
+
+Check it with requests of your own: 40 requests a minute to
+`/us/metadata` with `Authorization: Bearer made-up` should all get 401 and
+none 429, and the load balancer log should show
+`jsonPayload.enforcedSecurityPolicy.priority=900`. Roll it back with
+`gcloud compute security-policies rules update 900 --preview` (back to
+log-only) or `rules delete 900`, then export a snapshot.
+
 ## Procedures
 
 Set once per shell:
