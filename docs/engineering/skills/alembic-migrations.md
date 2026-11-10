@@ -721,8 +721,8 @@ name in the same way.
 The upgrade only widens what the check allows. The previous Public API
 revision keeps working until a user is given the `author` or `admin` type: its
 `/v2/me` responses allow only `unauthenticated` and `standard`, so they fail
-with 500 for such a user, and `/v2/me/upgrade` fails only after its merge has
-committed. Give those types only once no deployment, rollback included, runs
+with 500 for such a user, and `PATCH /v2/me` and `/v2/me/upgrade` fail only
+after their change or merge has committed. Give those types only once no deployment, rollback included, runs
 the previous revision. The downgrade restores the check that
 allows only `unauthenticated` and `standard`, so it fails while any user is an
 author or an admin. `test_user_types_revision_changes_only_the_user_type_check` in
@@ -730,3 +730,8 @@ author or an admin. `test_user_types_revision_changes_only_the_user_type_check` 
 changes, and
 `test_user_types_revision_accepts_authors_and_admins_until_downgraded` that
 the downgrade refuses while either type is stored.
+
+The resolved user's type is converted to `UserType` on every signed-in
+request. A later revision that adds a type must say that rolling the
+application back below it fails every signed-in request of a user with the new
+type, not only `/v2/me`.
