@@ -1,9 +1,9 @@
-"""Native FastAPI routes for admins to find users and change their types.
+"""Native FastAPI routes for admins to find users, change types and read saved items.
 
 Every route requires an admin: the router checks the caller's stored type
 before any route runs (403 below admin), and each service operation checks it
-again inside its own transaction. Unauthenticated users are never listed or
-changed, since their IDs are their browsers' credentials.
+again inside its own transaction. Unauthenticated users are never listed, read
+or changed, since their IDs are their browsers' credentials.
 """
 
 from collections.abc import Callable
@@ -29,11 +29,13 @@ from policyengine_api.fastapi_routes.v2.admin_users.response_models import (
     AdminUserPageResult,
     AdminUserResponse,
     AdminUserResult,
+    AdminUserSavedItemsResponse,
     UserTypeChangeItem,
     UserTypeChangeListResponse,
     UserTypeChangeListResult,
 )
 from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.me.response_models import MeExportResult
 from policyengine_api.fastapi_routes.v2.user_resources_support import (
     enforce_user_write_request_size,
     user_resource_operation,
@@ -99,8 +101,26 @@ def _service_factory(
     return _default_v2_user_type_service_factory
 
 
+def _read_user_saved_items(
+    service_factory: Callable[[], V2UserTypeResourceService],
+    principal: AccountPrincipal,
+    user_id: UUID,
+) -> AdminUserSavedItemsResponse | JSONResponse:
+    """Return a signed-in user's saved items to an admin, as its own export does."""
+
+    def read() -> AdminUserSavedItemsResponse:
+        saved_items = service_factory().get_user_saved_items(
+            principal=principal, user_id=user_id
+        )
+        return AdminUserSavedItemsResponse(
+            result=MeExportResult.from_export(saved_items)
+        )
+
+    return user_resource_operation(read)
+
+
 def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRouter:
-    """Build admins' user-type routes without opening a connection."""
+    """Build admins' user routes without opening a connection."""
     require_user = dependencies.require_user
     service_factory = _service_factory(dependencies)
     require_admin = minimum_user_type_dependency(
@@ -209,5 +229,26 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
             )
 
         return user_resource_operation(read)
+
+    @router.get(
+        "/users/{user_id}/saved-items",
+        response_model=AdminUserSavedItemsResponse,
+        summary=(
+            "Read a signed-in user's saved policies, households, simulations and "
+            "reports"
+        ),
+        description=(
+            "Admins only; read-only. Returns what the user's own GET /v2/me/export "
+            "returns, in every country: the user, with the email admins see for "
+            "it, and every saved policy, household, simulation and report. An "
+            "unauthenticated user's ID is not found (404). Each read is recorded "
+            "with the admin's and the user's IDs."
+        ),
+    )
+    def get_user_saved_items(
+        user_id: UUID,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
+    ) -> AdminUserSavedItemsResponse | JSONResponse:
+        return _read_user_saved_items(service_factory, principal, user_id)
 
     return router

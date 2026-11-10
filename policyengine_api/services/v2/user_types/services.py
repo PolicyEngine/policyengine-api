@@ -4,15 +4,17 @@ A caller's type is its stored user's type. A signed-in caller with no user
 yet is standard, and a signed-out browser is unauthenticated. Checking a
 caller's type only reads: it never provisions a user.
 
-Only admins list signed-in users, read one, change a user's type or read a
-user's recorded type changes. An admin's change also names the type the admin
-last read: a change to another type is refused when the stored type is no
-longer that one. Only the type is compared, so a type changed and changed back
-since the read is not detected, and asking for the type the user already has
-changes nothing whatever was expected. Unauthenticated users are never listed or
-changed, since their IDs are their browsers' credentials. Each change records
-the previous and new type, who made it and how. A change that would leave no
-admin is refused.
+Only admins list signed-in users, read one, change a user's type, read a
+user's recorded type changes or read a user's saved items. An admin's change
+also names the type the admin last read: a change to another type is refused
+when the stored type is no longer that one. Only the type is compared, so a
+type changed and changed back since the read is not detected, and asking for
+the type the user already has changes nothing whatever was expected.
+Unauthenticated users are never listed, read or changed, since their IDs are
+their browsers' credentials. Each change records the previous and new type,
+who made it and how. A change that would leave no admin is refused. An
+admin's read of a user's saved items returns what the user's own export
+returns, and is recorded with the admin's and the user's IDs.
 
 Every change, and every signed-in account deletion, first takes one
 transaction-scoped advisory lock, then reads the admins and checks the caller
@@ -22,11 +24,13 @@ no admin.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
+from policyengine_api.observability import get_runtime
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
 )
@@ -50,6 +54,7 @@ from policyengine_api.services.v2.user_types.transformations import (
     admin_user_read,
     caller_user_type,
     identities_by_user,
+    known_email,
     user_type_change_read,
 )
 from policyengine_api.services.v2.user_types.types import (
@@ -64,6 +69,7 @@ from policyengine_api.services.v2.user_types.types import (
 from policyengine_api.services.v2.user_types.validators import (
     UserTypeCheckUnavailableError,
     require_admin_after_deletion,
+    require_admin_caller,
     require_another_admin,
     require_expected_user_type,
     require_listed_admin,
@@ -79,9 +85,13 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import User, UserIdentity, UserTypeChange
     from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.user_accounts.types import AccountExport
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
     )
+
+# The runtime event recorded for each admin's read of a user's saved items.
+ADMIN_SAVED_ITEMS_READ_EVENT = "admin_read_v2_user_saved_items"
 
 
 class V2UserTypeService:
@@ -206,6 +216,31 @@ class V2UserTypeService:
                 user_type_change_read(change, *admin_of(change)) for change in changes
             )
 
+    def get_user_saved_items(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> AccountExport:
+        """Return a signed-in user's account and saved items, in every country.
+
+        Only an admin may read them. The result is what the user's own export
+        returns, with the email admins see for the user. Each read is recorded
+        with the admin's and the user's IDs, never with what the user saved.
+        """
+        # Imported here: v2 services load only when used (ruff's
+        # banned-module-level-imports in pyproject.toml).
+        from policyengine_api.services.v2.user_accounts.services import (
+            export_user_in_session,
+        )
+
+        with self._database_session.read() as session:
+            admin_user_id = require_admin_caller(
+                find_principal_user_in_session(session, principal)
+            )
+            user = require_signed_in_user(read_signed_in_user(session, user_id))
+            email = known_email(user, read_identities_newest_first(session, [user_id]))
+            saved_items = export_user_in_session(session, user_id=user_id, email=email)
+        _record_saved_items_read(admin_user_id=admin_user_id, user_id=user_id)
+        return saved_items
+
     def set_user_type_by_email(
         self, *, email: str, user_type: UserType
     ) -> ScriptedUserTypeChange:
@@ -256,6 +291,25 @@ def require_admin_remains_after_deletion_in_session(
     require_admin_after_deletion(
         user_id=user_id, admin_user_ids=read_admin_user_ids(session)
     )
+
+
+def _record_saved_items_read(*, admin_user_id: UUID, user_id: UUID) -> None:
+    """Record that an admin read a signed-in user's saved items, by their IDs.
+
+    It is a runtime event rather than a log record because the deployed
+    process leaves the root logger at WARNING, which drops a module logger's
+    INFO records (docs/engineering/skills/observability.md).
+    """
+    # Telemetry must never fail the request.
+    with contextlib.suppress(Exception):
+        get_runtime().event(
+            ADMIN_SAVED_ITEMS_READ_EVENT,
+            severity="INFO",
+            attributes={
+                "admin_v2_user_id": str(admin_user_id),
+                "v2_user_id": str(user_id),
+            },
+        )
 
 
 def _require_caller_type(

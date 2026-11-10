@@ -499,3 +499,13 @@ class V2UserTypeResourceService(Protocol):
     ) -> tuple[UserTypeChangeRead, ...]:
         """Return a signed-in user's recorded type changes, newest first."""
         ...
+
+    def get_user_saved_items(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> AccountExport:
+        """Return a signed-in user's account and saved items, in every country.
+
+        The result is what the user's own export returns. Raise
+        ``SignedInUserNotFoundError`` when no signed-in user has the ID.
+        """
+        ...

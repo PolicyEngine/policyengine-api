@@ -120,6 +120,7 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
+| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
 primary_country, created_at, last_seen_at}`: `email` is that of the most
@@ -127,6 +128,17 @@ recently seen of the user's identities that has one, else the user's own, and
 `last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
 never listed, read or changed (404), since their IDs are their browsers'
 credentials.
+
+An admin's read of saved items and the user's own export run the same code,
+`export_user_in_session` in `services/v2/user_accounts/services.py`, which
+reads the user and its saved items by user ID. Each successful read is
+recorded as the runtime event `admin_read_v2_user_saved_items`, with
+`admin_v2_user_id` and `v2_user_id` (both signed-in users' IDs) and nothing
+the user saved. A refused read (403 or 404) records nothing, so an
+unauthenticated user's ID is never recorded. It is a runtime event
+(`ObservabilityRuntime.event`) rather than a log record because the deployed
+process leaves the root logger at WARNING, which drops a module logger's INFO
+records (see `docs/engineering/skills/observability.md`).
 
 Each change is a row of `user_type_changes`: the user, the previous and new
 types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
