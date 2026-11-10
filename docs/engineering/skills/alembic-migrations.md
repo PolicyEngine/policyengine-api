@@ -442,10 +442,12 @@ which serves it with no current-law values and fails the exact comparison if
 it publishes that version, with nothing to restore it. Downgrading past the
 revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
-From the head, such a downgrade first runs revision `617f531f1506`'s
-downgrade, which needs no user to be an author or an admin (see "API v2 user
-types"), then revision `1356f658347d`'s, which needs `simulations` empty (see
-"API v2 simulation runs").
+From the head, such a downgrade first runs revision `970be5d29283`'s
+downgrade, which drops `user_type_changes` with every recorded change (see
+"API v2 user type changes"), then revision `617f531f1506`'s, which needs no
+user to be an author or an admin (see "API v2 user types"), then revision
+`1356f658347d`'s, which needs `simulations` empty (see "API v2 simulation
+runs").
 Otherwise restore the versions the target code may install or serve first, by
 publishing each with this revision's code, as the Stage 9 runbook's rollback
 section describes. Production downgrades are never automatic in any case.

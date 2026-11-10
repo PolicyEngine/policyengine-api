@@ -779,9 +779,10 @@ pruning").
 
 A schema downgrade past revision `334859ef4fec` drops
 `catalog_last_published_at` and `catalog_values_pruned_at`. From the head,
-it first runs revision `617f531f1506`'s downgrade, which needs no user to be
-an author or an admin, then revision `1356f658347d`'s, which needs
-`simulations` empty. A pruned version
+it first runs revision `970be5d29283`'s downgrade, which drops
+`user_type_changes` with every recorded change, then revision
+`617f531f1506`'s, which needs no user to be an author or an admin, then
+revision `1356f658347d`'s, which needs `simulations` empty. A pruned version
 then looks complete, but holds
 no current-law values, parameter tree or search file: the parent revision's
 code has no restoration, so its routes serve that version with empty values,

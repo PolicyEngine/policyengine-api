@@ -87,10 +87,10 @@ def require_another_admin(
 
 
 def require_admin_after_deletion(
-    *, user_type: UserType, admin_user_ids: Collection[UUID]
+    *, user_id: UUID, admin_user_ids: Collection[UUID]
 ) -> None:
-    """Refuse to delete the account of the only admin."""
-    if user_type is UserType.ADMIN and len(admin_user_ids) <= 1:
+    """Refuse to delete the account of the only admin among the locked admins."""
+    if user_id in admin_user_ids and len(admin_user_ids) <= 1:
         msg = (
             "The last admin's account can't be deleted; make another user an "
             "admin first"

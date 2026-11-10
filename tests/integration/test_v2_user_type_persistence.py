@@ -36,7 +36,8 @@ from policyengine_api.services.v2.user_accounts.database_session import (
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
 from policyengine_api.services.v2.user_types.database_connectors.reads import (
-    read_admin_user_ids_for_update,
+    acquire_user_type_change_lock,
+    read_admin_user_ids,
     read_signed_in_user,
 )
 from policyengine_api.services.v2.user_types.database_connectors.updates import (
@@ -48,6 +49,7 @@ from policyengine_api.services.v2.user_types.database_session import (
 from policyengine_api.services.v2.user_types.services import V2UserTypeService
 from policyengine_api.services.v2.user_types.types import AdminUserSearch
 from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDeletionError,
     UserTypeBelowMinimumError,
 )
 
@@ -224,10 +226,8 @@ def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
     held = sessions()
     try:
         held.begin()
-        # Alice's change holds every admin's lock, as the service's change does.
-        assert sorted(read_admin_user_ids_for_update(held)) == sorted(
-            [alice_id, bob_id]
-        )
+        # Alice's change holds the user-type change lock, as the service's does.
+        assert sorted(_lock_and_read_admins(held)) == sorted([alice_id, bob_id])
         waiting_change = threading.Thread(target=bob_demotes_alice)
         waiting_change.start()
         assert not finished.wait(LOCK_WAIT_SECONDS)
@@ -270,3 +270,103 @@ def test_deleting_accounts_removes_or_keeps_their_recorded_changes(sessions) -> 
         "admin",
         None,
     )
+
+
+def _lock_and_read_admins(session: Session) -> list[UUID]:
+    """Take the user-type change lock, as a change in progress does."""
+    acquire_user_type_change_lock(session)
+    return read_admin_user_ids(session)
+
+
+def _delete_account_in_thread(sessions, principal, outcomes) -> threading.Thread:
+    finished = threading.Event()
+    outcomes["finished"] = finished
+
+    def delete_account() -> None:
+        try:
+            _accounts(sessions).delete_account(principal=principal)
+            outcomes["deleted"] = True
+        except Exception as error:  # noqa: BLE001  # the test inspects the failure
+            outcomes["error"] = error
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=delete_account)
+    thread.start()
+    return thread
+
+
+def _admin_ids(sessions) -> list[UUID]:
+    with sessions() as session:
+        return list(
+            session.execute(
+                select(User.id).where(User.user_type == UserType.ADMIN.value)
+            ).scalars()
+        )
+
+
+def test_a_deletion_waits_for_a_promotion_and_never_removes_the_last_admin(
+    sessions,
+) -> None:
+    """Olivia, standard, deletes her account while Xavier makes her the only admin."""
+    olivia = _principal(sessions, "olivia")
+    xavier = _principal(sessions, "xavier")
+    accounts = _accounts(sessions)
+    olivia_id = accounts.get_account(principal=olivia, country_id="us").id
+    xavier_id = accounts.get_account(principal=xavier, country_id="us").id
+    _store_type_as_superuser(xavier_id, UserType.ADMIN)
+    outcomes: dict[str, object] = {}
+
+    held = sessions()
+    try:
+        held.begin()
+        # Xavier's change holds the user-type change lock and promotes Olivia.
+        assert _lock_and_read_admins(held) == [xavier_id]
+        olivia_row = read_signed_in_user(held, olivia_id, for_update=True)
+        assert olivia_row is not None
+        update_user_type(held, olivia_row, user_type=UserType.ADMIN)
+        deletion = _delete_account_in_thread(sessions, olivia, outcomes)
+        assert not outcomes["finished"].wait(LOCK_WAIT_SECONDS)
+        # Then Xavier gives up his own admin type, leaving Olivia the only one.
+        xavier_row = read_signed_in_user(held, xavier_id, for_update=True)
+        assert xavier_row is not None
+        update_user_type(held, xavier_row, user_type=UserType.STANDARD)
+        held.commit()
+    finally:
+        held.close()
+    deletion.join(timeout=10)
+
+    assert isinstance(outcomes.get("error"), LastAdminDeletionError)
+    assert _admin_ids(sessions) == [olivia_id]
+
+
+def test_a_deletion_after_a_demotion_is_allowed_while_another_admin_remains(
+    sessions,
+) -> None:
+    """Xavier demotes Olivia while her deletion waits; she is then deleted."""
+    olivia = _principal(sessions, "olivia")
+    xavier = _principal(sessions, "xavier")
+    accounts = _accounts(sessions)
+    olivia_id = accounts.get_account(principal=olivia, country_id="us").id
+    xavier_id = accounts.get_account(principal=xavier, country_id="us").id
+    for user_id in (olivia_id, xavier_id):
+        _store_type_as_superuser(user_id, UserType.ADMIN)
+    outcomes: dict[str, object] = {}
+
+    held = sessions()
+    try:
+        held.begin()
+        assert sorted(_lock_and_read_admins(held)) == sorted([olivia_id, xavier_id])
+        olivia_row = read_signed_in_user(held, olivia_id, for_update=True)
+        assert olivia_row is not None
+        update_user_type(held, olivia_row, user_type=UserType.STANDARD)
+        deletion = _delete_account_in_thread(sessions, olivia, outcomes)
+        assert not outcomes["finished"].wait(LOCK_WAIT_SECONDS)
+        held.commit()
+    finally:
+        held.close()
+    deletion.join(timeout=10)
+
+    assert outcomes.get("error") is None
+    assert outcomes.get("deleted") is True
+    assert _admin_ids(sessions) == [xavier_id]

@@ -19,20 +19,39 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 
-def read_admin_user_ids_for_update(session: Session) -> list[UUID]:
-    """Lock every admin's row, in ID order, and return their IDs.
+# Stable application-defined PostgreSQL lock ID that every change of a user's
+# type, and every signed-in account deletion, takes.
+USER_TYPE_CHANGE_ADVISORY_LOCK_KEY = 8_629_020_026_100_001
 
-    Every change of a type, and every admin's account deletion, locks the
-    admins first, in the same order, so they run one at a time and each counts
-    the admins the ones before it left. The lock (``FOR NO KEY UPDATE``)
-    doesn't hold up inserts whose foreign keys name an admin.
+
+def acquire_user_type_change_lock(session: Session) -> None:
+    """Hold the user-type change lock until the transaction ends.
+
+    Every change of a type and every signed-in account deletion takes it
+    before reading the admins, so they run one at a time and each reads the
+    admins the ones before it committed. Locking the admins' rows instead
+    would miss a user promoted while the lock was awaited, since a waiting
+    query rechecks only the rows its snapshot matched. SQLite, which runs one
+    writing transaction at a time, has no advisory locks and takes none.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    session.execute(
+        select(func.pg_advisory_xact_lock(USER_TYPE_CHANGE_ADVISORY_LOCK_KEY))
+    ).scalar_one()
+
+
+def read_admin_user_ids(session: Session) -> list[UUID]:
+    """Return every admin's ID, in ID order.
+
+    Read after ``acquire_user_type_change_lock``, in a statement of its own,
+    it sees every change committed before the lock was granted.
     """
     return list(
         session.exec(
             select(User.id)
             .where(User.user_type == UserType.ADMIN.value)
             .order_by(col(User.id))
-            .with_for_update(key_share=True)
         ).all()
     )
 

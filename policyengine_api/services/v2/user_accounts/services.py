@@ -66,12 +66,6 @@ from policyengine_api.services.v2.user_accounts.validators import (
     require_editable_account,
     require_resolved_account,
 )
-from policyengine_api.services.v2.user_types.database_connectors.reads import (
-    read_admin_user_ids_for_update,
-)
-from policyengine_api.services.v2.user_types.validators import (
-    require_admin_after_deletion,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -269,12 +263,15 @@ class V2AccountService:
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
-            if owner is not None and owner.user_type is UserType.ADMIN:
-                # Lock the admins as a type change does, so a concurrent
-                # demotion or deletion can't leave no admin either.
-                require_admin_after_deletion(
-                    user_type=owner.user_type,
-                    admin_user_ids=read_admin_user_ids_for_update(session),
+            if owner is not None:
+                # Imported here: the user-type service is loaded only when
+                # used, like this one.
+                from policyengine_api.services.v2.user_types.services import (
+                    require_admin_remains_after_deletion_in_session,
+                )
+
+                require_admin_remains_after_deletion_in_session(
+                    session, user_id=owner.user_id
                 )
             if owner is None:
                 subjects: tuple[str, ...] = (principal.subject,)

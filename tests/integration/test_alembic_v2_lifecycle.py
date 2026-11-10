@@ -1428,6 +1428,10 @@ def test_user_type_changes_revision_adds_only_its_table() -> None:
         assert {table_name: revision[table_name] for table_name in parent} == parent
         changes = revision["user_type_changes"]
         assert {foreign_key[2] for foreign_key in changes["foreign_keys"]} == {"users"}
+        assert sorted(changes["indexes"]) == [
+            ("ix_user_type_changes_changed_by_user_id", ["changed_by_user_id"]),
+            ("ix_user_type_changes_user_id_created_at", ["user_id", "created_at"]),
+        ]
         assert set(changes["checks"]) == {
             "ck_user_type_changes_previous_user_type",
             "ck_user_type_changes_new_user_type",

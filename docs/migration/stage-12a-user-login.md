@@ -121,12 +121,15 @@ types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
 with no admin.
 
 A change that would leave no admin is refused with 409, and so is the last
-admin's `DELETE /v2/me`. Every change, and an admin's account deletion, first
-locks all admins' `users` rows (`FOR NO KEY UPDATE`, which doesn't hold up
-inserts whose foreign keys name an admin), in ID order, and a change checks
-the caller against them. Concurrent changes and deletions therefore run one at
-a time, and each counts the admins the ones before it left; an admin demoted
-by an earlier change is then refused with 403.
+admin's `DELETE /v2/me`. Every change, and every signed-in account deletion,
+first takes one transaction-scoped advisory lock
+(`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
+statement of its own and checks the caller, or the deleted user, against
+them. Concurrent changes and deletions therefore run one at a time, and each
+reads the admins the ones before it committed; an admin demoted by an earlier
+change is then refused with 403. Locking the admins' rows instead would miss
+a user promoted while the lock was awaited, since a waiting query rechecks
+only the rows its snapshot matched.
 
 `scripts/set_v2_user_type.py --email <address> --user-type <type>` sets the
 type of the one signed-in user whose own or any identity's email is exactly
@@ -299,7 +302,7 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 | `PATCH /v2/me` | Updates `first_name`, `last_name`, `primary_country` | 403 |
 | `GET /v2/me/export` | The user and every association, all countries | The same; `user: null` and empty lists before the first saved record |
 | `POST /v2/me/upgrade?country_id=` | Requires the header too (422 without it); `{"item": MeItem, "outcome": ...}` | 401 (a bearer token is required) |
-| `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured | 204; deletes data, never calls Auth0 |
+| `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured; 409 for the last admin, deleting nothing | 204; deletes data, never calls Auth0 |
 | `/v2/user-policies`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
 | `GET /v2/shared-reports/{id}?country_id=` | No credential: any user's saved report in that country, without its owner (404 when none) | The same |
 
@@ -451,7 +454,8 @@ would therefore hand users' saved work to anyone.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the user types revision (`617f531f1506`) needs no
+  downgrades run first: the user type changes revision (`970be5d29283`) drops
+  every recorded change, the user types revision (`617f531f1506`) needs no
   author or admin, and the simulation runs revision (`1356f658347d`) needs
   `simulations` empty.
 

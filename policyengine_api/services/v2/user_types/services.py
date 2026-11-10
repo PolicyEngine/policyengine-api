@@ -10,9 +10,10 @@ changed, since their IDs are their browsers' credentials. Each change records
 the previous and new type, who made it and how. A change that would leave no
 admin is refused.
 
-Every change locks all admins' rows first, in ID order, and checks the caller
-against them, so concurrent changes run one at a time and none can demote the
-last admin.
+Every change, and every signed-in account deletion, first takes one
+transaction-scoped advisory lock, then reads the admins and checks the caller
+or the deleted user against them, so they run one at a time and none can leave
+no admin.
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from policyengine_api.services.v2.user_types.database_connectors.creates import 
     create_user_type_change,
 )
 from policyengine_api.services.v2.user_types.database_connectors.reads import (
-    read_admin_user_ids_for_update,
+    acquire_user_type_change_lock,
+    read_admin_user_ids,
     read_identities_newest_first,
     read_signed_in_user,
     read_signed_in_users,
@@ -56,6 +58,7 @@ from policyengine_api.services.v2.user_types.types import (
 )
 from policyengine_api.services.v2.user_types.validators import (
     UserTypeCheckUnavailableError,
+    require_admin_after_deletion,
     require_another_admin,
     require_listed_admin,
     require_minimum_user_type,
@@ -139,7 +142,8 @@ class V2UserTypeService:
         with self._database_session.transaction() as session:
             caller = find_principal_user_in_session(session, principal)
             caller_user_id = None if caller is None else caller.user_id
-            admin_user_ids = read_admin_user_ids_for_update(session)
+            acquire_user_type_change_lock(session)
+            admin_user_ids = read_admin_user_ids(session)
             require_listed_admin(caller_user_id, admin_user_ids)
             user = require_signed_in_user(
                 read_signed_in_user(session, user_id, for_update=True)
@@ -198,7 +202,8 @@ class V2UserTypeService:
         whole email address. The change is recorded with no admin.
         """
         with self._database_session.transaction() as session:
-            admin_user_ids = read_admin_user_ids_for_update(session)
+            acquire_user_type_change_lock(session)
+            admin_user_ids = read_admin_user_ids(session)
             matched = require_one_user_with_email(
                 read_signed_in_users_with_email(session, email), email
             )
@@ -219,6 +224,23 @@ class V2UserTypeService:
             return ScriptedUserTypeChange(
                 user=read, previous_user_type=previous_user_type
             )
+
+
+def require_admin_remains_after_deletion_in_session(
+    session: Session, *, user_id: UUID
+) -> None:
+    """Lock the admins, then refuse to delete the account of the only admin.
+
+    Account deletion calls this for every signed-in user before deleting it.
+    It takes the user-type change lock, as a type change does, and checks the
+    user against the admins read after it, not against a type read earlier,
+    so a deletion and a concurrent change or deletion can't together leave no
+    admin.
+    """
+    acquire_user_type_change_lock(session)
+    require_admin_after_deletion(
+        user_id=user_id, admin_user_ids=read_admin_user_ids(session)
+    )
 
 
 def _require_caller_type(
