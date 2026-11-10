@@ -987,3 +987,45 @@ def test_catalog_publication_time_is_a_nullable_timezone_aware_timestamp() -> No
     assert column.default is None
     assert isinstance(column.type, sa.DateTime)
     assert column.type.timezone is True
+
+
+def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> None:
+    changes = V2_METADATA.tables["user_type_changes"]
+
+    assert {column.name for column in changes.columns} == {
+        "id",
+        "created_at",
+        "user_id",
+        "changed_by_user_id",
+        "previous_user_type",
+        "new_user_type",
+        "source",
+    }
+    assert not changes.c.user_id.nullable
+    assert changes.c.changed_by_user_id.nullable
+    foreign_keys = {
+        key.parent.name: (key.column.table.name, key.ondelete)
+        for key in changes.foreign_keys
+    }
+    # A user's history goes with the user; an admin's deletion keeps the change.
+    assert foreign_keys == {
+        "user_id": ("users", "CASCADE"),
+        "changed_by_user_id": ("users", "SET NULL"),
+    }
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in changes.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    signed_in_types = "('standard', 'author', 'admin')"
+    assert checks == {
+        "ck_user_type_changes_previous_user_type": (
+            f"previous_user_type IN {signed_in_types}"
+        ),
+        "ck_user_type_changes_new_user_type": f"new_user_type IN {signed_in_types}",
+        "ck_user_type_changes_changed_type": "previous_user_type <> new_user_type",
+        "ck_user_type_changes_source": "source IN ('admin_route', 'script')",
+    }
+    assert {
+        tuple(column.name for column in index.columns) for index in changes.indexes
+    } == {("user_id", "created_at")}
