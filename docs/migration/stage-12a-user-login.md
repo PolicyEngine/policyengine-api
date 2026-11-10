@@ -134,8 +134,10 @@ An admin's read of saved items and the user's own export run the same code,
 reads the user and its saved items by user ID. Each successful read is
 recorded as the runtime event `admin_read_v2_user_saved_items`, with
 `admin_v2_user_id` and `v2_user_id` (both signed-in users' IDs) and nothing
-the user saved. A refused read (403 or 404) records nothing, so an
-unauthenticated user's ID is never recorded. It is a runtime event
+the user saved. A refused read (403 or 404) emits no event, so the event
+never names an unauthenticated user's ID; the request log and Cloud Run's own
+request logs still record every request's path, which holds the requested ID,
+as they do for the other admin routes. It is a runtime event
 (`ObservabilityRuntime.event`) rather than a log record because the deployed
 process leaves the root logger at WARNING, which drops a module logger's INFO
 records (see `docs/engineering/skills/observability.md`).

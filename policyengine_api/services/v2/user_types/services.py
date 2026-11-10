@@ -30,7 +30,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
-from policyengine_api.observability import get_runtime
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
 )
@@ -302,7 +301,11 @@ def _record_saved_items_read(*, admin_user_id: UUID, user_id: UUID) -> None:
     """
     # Telemetry must never fail the request.
     with contextlib.suppress(Exception):
-        get_runtime().event(
+        from policyengine_api import (  # noqa: PLC0415  # importing it builds the process-wide runtime, which the user-type script must not
+            observability,
+        )
+
+        observability.get_runtime().event(
             ADMIN_SAVED_ITEMS_READ_EVENT,
             severity="INFO",
             attributes={

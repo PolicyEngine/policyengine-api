@@ -8,6 +8,7 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api import observability
 from policyengine_api.data.v2.models import User, UserType
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
@@ -42,7 +43,6 @@ from policyengine_api.services.v2.user_simulations.services import (
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
 )
-from policyengine_api.services.v2.user_types import services as user_type_services
 from policyengine_api.services.v2.user_types.database_session import (
     UserTypeDatabaseSession,
 )
@@ -133,7 +133,7 @@ def services() -> Iterator[Services]:
 @pytest.fixture
 def recorded_events(monkeypatch: pytest.MonkeyPatch) -> RecordedEvents:
     recorder = RecordedEvents()
-    monkeypatch.setattr(user_type_services, "get_runtime", lambda: recorder)
+    monkeypatch.setattr(observability, "get_runtime", lambda: recorder)
     return recorder
 
 
