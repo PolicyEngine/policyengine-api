@@ -481,6 +481,8 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
             "PUBLIC_API_AUTH_REQUIRED: ${{ vars.PUBLIC_API_AUTH_REQUIRED }}",
             "PUBLIC_API_AUTH_ISSUER: ${{ vars.PUBLIC_API_AUTH_ISSUER }}",
             "PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}",
+            "PUBLIC_API_SERVER_CLIENT_IDS: ${{ vars.PUBLIC_API_SERVER_CLIENT_IDS }}",
+            "PUBLIC_API_SERVER_AUTH_ISSUER: ${{ vars.PUBLIC_API_SERVER_AUTH_ISSUER }}",
         ):
             assert line in job
     # Management API deletion is production-only: the staging live test
@@ -505,6 +507,8 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
         "PUBLIC_API_AUTH_REQUIRED",
         "PUBLIC_API_AUTH_ISSUER",
         "PUBLIC_API_AUTH_AUDIENCE",
+        "PUBLIC_API_SERVER_CLIENT_IDS",
+        "PUBLIC_API_SERVER_AUTH_ISSUER",
     ):
         assert f"-u {name} " in release_tests
 

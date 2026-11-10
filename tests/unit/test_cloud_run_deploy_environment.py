@@ -366,6 +366,48 @@ def test_deployment_validation_rejects_shared_staging_database_targets(
         ),
         ({"PUBLIC_API_AUTH_ISSUER": "http://auth.example.test/"}, "HTTPS"),
         ({"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"}, "or none"),
+        (
+            {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a,"},
+            "PUBLIC_API_SERVER_CLIENT_IDS must be",
+        ),
+        (
+            {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a client-b"},
+            "PUBLIC_API_SERVER_CLIENT_IDS must be",
+        ),
+        (
+            {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a;client-b"},
+            "PUBLIC_API_SERVER_CLIENT_IDS must be",
+        ),
+        (
+            {
+                "PUBLIC_API_AUTH_REQUIRED": "0",
+                "PUBLIC_API_AUTH_ISSUER": None,
+                "PUBLIC_API_AUTH_AUDIENCE": None,
+                "PUBLIC_API_SERVER_CLIENT_IDS": "client-a",
+            },
+            "PUBLIC_API_SERVER_CLIENT_IDS requires",
+        ),
+        (
+            {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a"},
+            "PUBLIC_API_SERVER_CLIENT_IDS requires PUBLIC_API_SERVER_AUTH_ISSUER",
+        ),
+        (
+            {"PUBLIC_API_SERVER_AUTH_ISSUER": "http://server-auth.example.test/"},
+            "PUBLIC_API_SERVER_AUTH_ISSUER must be an absolute HTTPS URL",
+        ),
+        (
+            {"PUBLIC_API_SERVER_AUTH_ISSUER": "https://auth.example.test"},
+            "PUBLIC_API_SERVER_AUTH_ISSUER must differ from PUBLIC_API_AUTH_ISSUER",
+        ),
+        (
+            {
+                "PUBLIC_API_AUTH_REQUIRED": "0",
+                "PUBLIC_API_AUTH_ISSUER": None,
+                "PUBLIC_API_AUTH_AUDIENCE": None,
+                "PUBLIC_API_SERVER_AUTH_ISSUER": "https://server-auth.example.test/",
+            },
+            "PUBLIC_API_SERVER_AUTH_ISSUER requires PUBLIC_API_AUTH_AUDIENCE",
+        ),
     ],
 )
 def test_validate_cloud_run_deploy_env_rejects_unsafe_user_auth_settings(
@@ -410,6 +452,19 @@ def test_validate_cloud_run_deploy_env_accepts_disabled_user_auth():
     env["PUBLIC_API_AUTH_REQUIRED"] = "0"
     env.pop("PUBLIC_API_AUTH_ISSUER")
     env.pop("PUBLIC_API_AUTH_AUDIENCE")
+
+    result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("allow_list", ["", "client-a", "client-a,client_B9"])
+def test_validate_cloud_run_deploy_env_accepts_a_server_client_allow_list(
+    allow_list,
+):
+    env = _script_env(**_required_runtime_env())
+    env["PUBLIC_API_SERVER_CLIENT_IDS"] = allow_list
+    env["PUBLIC_API_SERVER_AUTH_ISSUER"] = "https://server-auth.example.test/"
 
     result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
 

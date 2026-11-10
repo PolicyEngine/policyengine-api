@@ -164,6 +164,38 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
         {"PUBLIC_API_AUTH_REQUIRED": "true"},
         {"PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/"},
         {"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"},
+        # An allow list of server clients needs the Auth0 settings that check
+        # their tokens, and must be a comma-separated list of client IDs.
+        {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a"},
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_CLIENT_IDS": "client-a,",
+        },
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_CLIENT_IDS": "client-a client-b",
+        },
+        # Server tokens come from the Public API's own tenant: an allow list
+        # needs its issuer, which is HTTPS, needs the audience, and differs
+        # from the signed-in users' issuer.
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_CLIENT_IDS": "client-a",
+        },
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_AUTH_ISSUER": "http://server-auth.example.test/",
+        },
+        {"PUBLIC_API_SERVER_AUTH_ISSUER": "https://server-auth.example.test/"},
+        {
+            "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+            "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+            "PUBLIC_API_SERVER_AUTH_ISSUER": "https://auth.example.test",
+        },
     ],
 )
 def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment):
@@ -171,6 +203,8 @@ def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment
         "PUBLIC_API_AUTH_REQUIRED",
         "PUBLIC_API_AUTH_ISSUER",
         "PUBLIC_API_AUTH_AUDIENCE",
+        "PUBLIC_API_SERVER_CLIENT_IDS",
+        "PUBLIC_API_SERVER_AUTH_ISSUER",
         "AUTH0_MANAGEMENT_DOMAIN",
         "AUTH0_MANAGEMENT_CLIENT_ID",
         "AUTH0_MANAGEMENT_CLIENT_SECRET",
@@ -192,6 +226,10 @@ def test_required_user_auth_settings_pass_readiness(monkeypatch):
     monkeypatch.setenv("PUBLIC_API_AUTH_REQUIRED", "1")
     monkeypatch.setenv("PUBLIC_API_AUTH_ISSUER", "https://auth.example.test")
     monkeypatch.setenv("PUBLIC_API_AUTH_AUDIENCE", "https://api.policyengine.org/")
+    monkeypatch.setenv(
+        "PUBLIC_API_SERVER_AUTH_ISSUER", "https://server-auth.example.test"
+    )
+    monkeypatch.setenv("PUBLIC_API_SERVER_CLIENT_IDS", "client-a,client_B9")
 
     with patch(
         "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
