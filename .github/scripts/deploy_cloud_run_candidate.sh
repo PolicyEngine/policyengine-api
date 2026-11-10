@@ -53,6 +53,8 @@ env_vars=(
   "PUBLIC_API_AUTH_AUDIENCE=${PUBLIC_API_AUTH_AUDIENCE:-}"
   # Empty allows no server client (see validate_cloud_run_deploy_env.sh).
   "PUBLIC_API_SERVER_CLIENT_IDS=${PUBLIC_API_SERVER_CLIENT_IDS:-}"
+  # Enforcement stays off unless the GitHub variable is 1.
+  "PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=${PUBLIC_API_SERVER_CREDENTIAL_REQUIRED:-0}"
   # Empty accepts no server token (see validate_cloud_run_deploy_env.sh).
   "PUBLIC_API_SERVER_AUTH_ISSUER=${PUBLIC_API_SERVER_AUTH_ISSUER:-}"
 )

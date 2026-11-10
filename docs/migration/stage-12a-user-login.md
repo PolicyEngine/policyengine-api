@@ -454,6 +454,7 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
 | `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
+| `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED` | GitHub variable (optional) | `1` refuses every request without a server credential outside the public routes; unset, empty or `0` (what deploys write by default) serves them. `1` needs `PUBLIC_API_SERVER_CLIENT_IDS` |
 | `PUBLIC_API_SERVER_AUTH_ISSUER` | GitHub variable (optional) | Issuer of server tokens: the Public API's own Auth0 tenant (decision 1.1 · 5), for example `https://policyengine-api.uk.auth0.com/` in production and `https://policyengine-api-staging.uk.auth0.com/` in staging. Normalized to a trailing `/`; HTTPS; needs `PUBLIC_API_AUTH_AUDIENCE` and must differ from `PUBLIC_API_AUTH_ISSUER`. Set it to the new tenant's issuer exactly as its OpenID configuration publishes it: the check can't tell that another domain of the users' tenant, such as `policyengine.uk.auth0.com`, names the same tenant. Unset accepts no server token |
 | `PUBLIC_API_SERVER_CLIENT_IDS` | GitHub variable (optional) | Auth0 client IDs in that tenant, separated by commas, whose client-credentials tokens are server credentials (`policyengine_api.libs.server_credentials`); unset or empty allows none, and a list needs `PUBLIC_API_SERVER_AUTH_ISSUER` |
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
@@ -513,6 +514,27 @@ checked before routing:
 `PolicyEngine-User-Authorization` is read only from a server; on any other
 request it is ignored. It is not in the OpenAPI schema, because only servers
 send it.
+
+With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, the same check, before route
+matching, also refuses every request that has no server credential, a
+signed-in user's own token included, with that 401. `/` and unknown paths are
+refused too; a server gets the normal 404 for an unknown path. Only
+`GET`/`HEAD /health`, `GET /v2/openapi.json` and CORS preflights (`OPTIONS`
+with `Origin` and `Access-Control-Request-Method`) answer without a
+credential, matched exactly on the decoded path. They are exempted in the
+Public API's own code, because Cloud Run's startup probe calls `/health` on
+the container directly. A malformed value, or `1` with no allowed client,
+fails readiness and the deploy validation; a revision that has one anyway
+answers 503 to every non-public request that is not from a server. With a
+malformed value it still serves listed servers; with no allowed client there
+are none.
+
+Before switching it on in an environment, the deploy's own post-deploy tests
+there need the CI server credential (task 3.3 · 1). The staging integration
+tests (`test_cloud_run_candidate`, `test_live_v2_metadata`,
+`test_live_v2_policies`) and the live simulation tests call non-public
+routes with no credential or with a user's token, which enforcement
+refuses; only the health polling uses a public route.
 
 The staging deploy gate (`tests/integration/test_live_v2_policies.py`) also
 needs the following in the GitHub `staging` environment:

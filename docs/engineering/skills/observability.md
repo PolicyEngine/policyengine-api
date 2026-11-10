@@ -62,17 +62,20 @@ and adds to the request's runtime record, for Flask and native routes alike:
   client-credentials token) or `user` (a signed-in user's valid token);
 - `caller.client_id`: the server's Auth0 client ID, only for `server`.
 
-A user's subject or email address is never recorded. A request without a
-credential records nothing of its own. A refused credential is a runtime
-event at INFO, `public_api_credential_refused`, with `refusal_reason`, the
-method, the path, `request.id` (the response's `X-PolicyEngine-Request-Id`)
-and, for a validly signed client token of an unlisted client or from the
-users' tenant, `caller.client_id`. A refused
-request to a Flask route never reaches Flask, so that event is its only
-record. A bearer token that cannot be checked is a WARNING event,
-`public_api_credential_check_unavailable`, with `error_type`, the method,
-the path and `request.id`. A refused request's records carry no `caller.*`
-attributes; its event says why it was refused.
+A user's subject or email address is never recorded. While enforcement is
+off, a request without a credential records nothing of its own. A refused
+credential is a runtime event at INFO, `public_api_credential_refused`, with
+`refusal_reason`, the method, the path, `request.id` (the response's
+`X-PolicyEngine-Request-Id`) and, for a validly signed client token of an
+unlisted client or from the users' tenant, `caller.client_id`. With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, a request
+refused for having no server credential is the same event, with
+`refusal_reason=credential_required` and its `caller.kind`. A refused request
+to a Flask route never reaches Flask, so that event is its only record. A
+bearer token that cannot be checked, or an unreadable enforcement setting, is
+a WARNING event, `public_api_credential_check_unavailable`, with
+`error_type`, the method, the path and `request.id`. A refused request's
+runtime records carry no `caller.*` attributes; its event says why it was
+refused.
 
 These are runtime events (`ObservabilityRuntime.event`), not
 standard-library log records. The deployed process leaves the root logger at

@@ -11,17 +11,28 @@ into their thread.
 
 Both frameworks add :func:`caller_attributes` to the request's observability
 record: ``caller.kind`` (``none``, ``server`` or ``user``) and, for a server,
-``caller.client_id``. A request without a credential is served as before and
-records nothing of its own; its record carries ``caller.kind=none``.
+``caller.client_id``. While enforcement is off, a request without a
+credential is served as before and records nothing of its own; its record
+carries ``caller.kind=none``.
 
 Each refusal is a runtime event at INFO, ``public_api_credential_refused``,
 with its reason, the method, the routed path and the request ID the
-response returns, never the header. A refused request to a Flask route never reaches
-Flask, so this event is its only record. A token that cannot be checked is a
-WARNING event, ``public_api_credential_check_unavailable``, with the same
-method, path and request ID. They are runtime
+response returns, never the header. A refused request to a Flask route never
+reaches Flask, so this event is its only record. A token that cannot be
+checked, or an unreadable enforcement setting, is a WARNING event,
+``public_api_credential_check_unavailable``, with the same method, path and
+request ID. They are runtime
 events rather than standard-library log records because the deployed process
 leaves the root logger at WARNING, which drops INFO records.
+
+With enforcement on (``PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1``), every
+request that is not from a server is refused here too, before route
+matching, so ``/`` and unknown paths are refused as well, unless
+:func:`is_public_request`: ``GET`` and ``HEAD /health``, ``GET
+/v2/openapi.json`` and CORS preflights. They are exempted here, not only at
+the load balancer, because Cloud Run's startup probe calls ``/health`` on the
+container directly. Each such refusal is the same INFO event, with
+``refusal_reason=credential_required`` and the caller's kind.
 """
 
 from __future__ import annotations
@@ -36,11 +47,13 @@ from starlette.responses import JSONResponse, Response
 from policyengine_api.libs.server_credentials import (
     HTTP_WHITESPACE,
     NO_CREDENTIAL,
+    CallerKind,
     CredentialCheckUnavailableError,
     CredentialRefusedError,
     RefusalReason,
     RequestCaller,
     identify_caller,
+    load_server_credential_requirement,
     load_server_credential_settings,
 )
 from policyengine_api.libs.user_auth import (
@@ -60,6 +73,13 @@ CALLER_CLIENT_ID_ATTRIBUTE = "caller.client_id"
 AUTHENTICATION_REQUIRED_MESSAGE = "Authentication is required"
 AUTHENTICATION_UNAVAILABLE_MESSAGE = "Authentication is unavailable"
 BEARER_CHALLENGE = "Bearer"
+# The routes that answer without a credential while enforcement is on,
+# matched on the decoded path the routers match, exactly.
+PUBLIC_ROUTES = frozenset(
+    {("GET", "/health"), ("HEAD", "/health"), ("GET", "/v2/openapi.json")}
+)
+CORS_PREFLIGHT_METHOD = "OPTIONS"
+CORS_PREFLIGHT_HEADERS = ("origin", "access-control-request-method")
 REFUSAL_EVENT = "public_api_credential_refused"
 UNAVAILABLE_EVENT = "public_api_credential_check_unavailable"
 
@@ -109,6 +129,24 @@ def current_request_caller() -> RequestCaller | None:
     return _request_caller.get()
 
 
+def is_public_request(request: Request) -> bool:
+    """Return whether ``request`` may be served without a credential.
+
+    A CORS preflight is an ``OPTIONS`` request with ``Origin`` that names the
+    method it precedes in ``Access-Control-Request-Method``, as the CORS
+    middleware defines one; it carries no credential. The middleware answers
+    those before this check, so the exemption only keeps that answer from
+    depending on the middleware's position. An ``OPTIONS`` request without
+    either header is refused like any other.
+    """
+    method = request.method
+    if method == CORS_PREFLIGHT_METHOD and all(
+        header in request.headers for header in CORS_PREFLIGHT_HEADERS
+    ):
+        return True
+    return (method, request.scope["path"]) in PUBLIC_ROUTES
+
+
 def _identify(authorization: str) -> RequestCaller:
     """Load the settings and classify ``authorization``; may fetch signing keys."""
     return identify_caller(
@@ -154,11 +192,14 @@ def _record_refusal(
     reason: RefusalReason,
     *,
     client_id: str | None = None,
+    caller_kind: CallerKind | None = None,
 ) -> None:
     def attributes() -> dict[str, str]:
         refusal = {"refusal_reason": reason.value}
         if client_id is not None:
             refusal[CALLER_CLIENT_ID_ATTRIBUTE] = client_id
+        if caller_kind is not None:
+            refusal[CALLER_KIND_ATTRIBUTE] = caller_kind.value
         return refusal | _request_attributes(request)
 
     _record_event(runtime, REFUSAL_EVENT, severity="INFO", attributes=attributes)
@@ -176,7 +217,38 @@ def _record_unavailable(
 async def check_request_caller(
     request: Request, runtime: ObservabilityRuntime
 ) -> RequestCaller | Response:
-    """Return the request's caller, or the response that refuses its credential.
+    """Return the request's caller, or the response that refuses it.
+
+    A credential that fails validation is refused whether or not enforcement
+    is on; with enforcement on, so is any non-public request that is not from
+    a server.
+    """
+    caller = await _checked_credential(request, runtime)
+    if isinstance(caller, Response) or caller.kind is CallerKind.SERVER:
+        return caller
+    if is_public_request(request):
+        return caller
+    try:
+        required = load_server_credential_requirement()
+    except UserAuthConfigurationError as error:
+        # Without a valid setting, whether to refuse is unknown: fail closed.
+        _record_unavailable(runtime, request, error)
+        return authentication_unavailable_response()
+    if required:
+        _record_refusal(
+            runtime,
+            request,
+            RefusalReason.CREDENTIAL_REQUIRED,
+            caller_kind=caller.kind,
+        )
+        return authentication_required_response()
+    return caller
+
+
+async def _checked_credential(
+    request: Request, runtime: ObservabilityRuntime
+) -> RequestCaller | Response:
+    """Return the caller the request's credential shows, or its refusal.
 
     A request without ``Authorization``, or with one of only spaces and tabs,
     has no credential. One with two or more ``Authorization`` headers is refused, so

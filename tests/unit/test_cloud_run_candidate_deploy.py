@@ -405,6 +405,8 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
     # No server client is allowed until the variable is set. The command
     # trace escapes the list's separators.
     assert r"\|PUBLIC_API_SERVER_CLIENT_IDS=\|" in result.stdout
+    # Enforcement is deployed switched off unless the variable is 1.
+    assert r"\|PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=0\|" in result.stdout
     assert (
         r"\|PUBLIC_API_SERVER_AUTH_ISSUER=https://server-auth.example.test/\|"
         in result.stdout
@@ -445,3 +447,20 @@ def test_deploy_cloud_run_candidate_passes_the_server_client_allow_list():
     assert result.returncode == 0, result.stderr
     # The command trace escapes the list's separators and the comma.
     assert r"\|PUBLIC_API_SERVER_CLIENT_IDS=client-a\,client-b\|" in result.stdout
+
+
+def test_deploy_cloud_run_candidate_passes_enforcement_when_it_is_switched_on():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            PUBLIC_API_SERVER_AUTH_ISSUER="https://server-auth.example.test/",
+            PUBLIC_API_SERVER_CLIENT_IDS="client-a",
+            PUBLIC_API_SERVER_CREDENTIAL_REQUIRED="1",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert r"\|PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1\|" in result.stdout
