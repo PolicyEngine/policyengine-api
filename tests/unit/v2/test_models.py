@@ -625,7 +625,7 @@ def test_associations_are_v1_anchored_without_client_refs() -> None:
         } == {("id", "country_id")}
 
 
-def test_saved_simulations_and_reports_name_stored_detailed_save_rows() -> None:
+def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
     """A saved simulation or report names a stored simulation or report.
 
     ``simulation_id`` and ``report_id`` are foreign keys to ``simulations`` and

@@ -49,6 +49,8 @@ SAVED_ITEM_KEYS = {
 
 @pytest.fixture
 def engine() -> Iterator[Engine]:
+    """Yield an engine on a database at head, and leave it at head."""
+    command.upgrade(alembic_v2_config(), "head")
     database_engine = create_engine(disposable_v2_url())
     try:
         yield database_engine
@@ -69,7 +71,9 @@ def connection(engine: Engine) -> Iterator[Connection]:
             transaction.rollback()
 
 
-def _saved_item_keys(engine: Engine) -> dict[str, tuple[str, list[str], str, str]]:
+def _saved_item_keys(
+    engine: Engine,
+) -> dict[str, tuple[str | None, list[str], str, str | None]]:
     """Return each association table's keys to ``reports`` or ``simulations``."""
     inspector = inspect(engine)
     return {
@@ -205,9 +209,11 @@ def test_the_revision_adds_the_keys_and_drops_them_on_downgrade(
 
 def _current_revision(engine: Engine) -> str:
     with engine.connect() as connection:
-        return connection.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
+        return str(
+            connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+        )
 
 
 @pytest.mark.parametrize(

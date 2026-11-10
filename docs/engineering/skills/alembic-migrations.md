@@ -711,8 +711,9 @@ runs", the keys between the two services' tables stay: the database refuses a sa
 simulation that names a missing one, and a report or simulation that a saved
 item names can't be deleted. A saved item that names only its v1 report or
 simulation is unaffected. No role needs a new privilege: PostgreSQL checks a
-foreign key with the privileges of the referenced table's owner, and the
-migration role owns every table.
+saved item's insert or update as the owner of `reports` or `simulations`,
+and a delete from those tables as the owner of the saved-item table, and the
+migration role owns all four.
 
 Adding a key checks every existing row, so the upgrade fails inside its
 transaction, changing nothing, while a saved item names a missing report or
@@ -728,9 +729,10 @@ WHERE link.simulation_id IS NOT NULL
 ```
 
 Both were 0 in staging and production on 2026-11-10. The downgrade drops the
-two keys and nothing else. While a saved item names a report or simulation,
-that row can't be deleted, so emptying `simulations` for a downgrade past
-`1356f658347d` means downgrading this revision first or clearing the saved
-items' `report_id` and `simulation_id`.
+two keys and nothing else. While a saved simulation names a simulation, that
+row can't be deleted, so emptying `simulations` for a downgrade past
+`1356f658347d` means downgrading this revision first, or clearing the saved
+simulations' `simulation_id` (deleting a saved simulation that has no
+`legacy_simulation_id`, which its check requires).
 `tests/integration/test_alembic_v2_saved_item_keys.py` checks the refused
 inserts and deletes, the refused upgrade and the downgrade.

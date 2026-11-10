@@ -165,13 +165,13 @@ def _assert_stage_12a_association_shape(engine) -> None:
             constraint["column_names"]
             for constraint in inspect(engine).get_unique_constraints(table_name)
         ] == [["id", "country_id"]]
-    # At head, a saved simulation or report names a stored detailed-save
-    # simulation or report through one RESTRICT key (revision 81b728a088e7).
+    # At head, a saved simulation or report names a stored v2 simulation or
+    # report through one RESTRICT key (revision 81b728a088e7).
     for table_name, column_name, referred_table in (
         ("user_simulation_associations", "simulation_id", "simulations"),
         ("user_report_associations", "report_id", "reports"),
     ):
-        detailed_save_keys = [
+        v2_record_keys = [
             (
                 foreign_key["constrained_columns"],
                 foreign_key["referred_table"],
@@ -180,7 +180,7 @@ def _assert_stage_12a_association_shape(engine) -> None:
             for foreign_key in inspect(engine).get_foreign_keys(table_name)
             if foreign_key["referred_table"] in {"simulations", "reports"}
         ]
-        assert detailed_save_keys == [([column_name], referred_table, "RESTRICT")]
+        assert v2_record_keys == [([column_name], referred_table, "RESTRICT")]
     report_policy_key = next(
         foreign_key
         for foreign_key in inspect(engine).get_foreign_keys("user_report_associations")
