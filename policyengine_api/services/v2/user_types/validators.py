@@ -61,10 +61,14 @@ def require_minimum_user_type(user_type: UserType, minimum: UserType) -> UserTyp
 
 def require_listed_admin(
     caller_user_id: UUID | None, admin_user_ids: Collection[UUID]
-) -> None:
-    """Refuse a caller who isn't among the admins read in this transaction."""
+) -> UUID:
+    """Return the caller's ID if it is among the admins read in this transaction.
+
+    Raise UserTypeBelowMinimumError otherwise.
+    """
     if caller_user_id is None or caller_user_id not in admin_user_ids:
         raise UserTypeBelowMinimumError(BELOW_MINIMUM_MESSAGES[UserType.ADMIN])
+    return caller_user_id
 
 
 def require_signed_in_user(user: User | None) -> User:

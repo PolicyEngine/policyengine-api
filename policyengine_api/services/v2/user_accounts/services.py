@@ -1,6 +1,6 @@
-"""Account services for ``/v2/me``.
+"""Account services for ``/v2/me``, and admins' deletion of users' accounts.
 
-Each operation finds or provisions the caller's v2 user through the
+Each ``/v2/me`` operation finds or provisions the caller's v2 user through the
 principal's provisioning strategy. A signed-in principal's user is
 provisioned, as a standard user, on first use; a signed-out browser's
 unauthenticated user exists only after its first write, so reading,
@@ -9,19 +9,22 @@ edit account details.
 
 Upgrading moves a browser's unauthenticated user into the signed-in account
 at sign-in. Deleting the last admin's account is refused. Deleting a
-signed-in account removes the user's legacy mappings,
-then the user (identities and associations cascade), and finally the Auth0
-user when the Management API is configured; deleting an unauthenticated
-account removes only its user and associations. Only signed-in user UUIDs
-are logged.
+signed-in account, one's own or, for an admin, another user's by ID, removes
+the user's legacy mappings, then the user (identities and associations
+cascade), and finally the Auth0 users of its sign-in identities when the
+Management API is configured; deleting an unauthenticated account removes
+only its user and associations. Only signed-in user UUIDs are logged, and
+each admin's deletion is recorded with the admin's and the user's.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
+from policyengine_api.observability import get_runtime
 from policyengine_api.services.v2.identity.database_connectors.deletes import (
     delete_unauthenticated_user,
 )
@@ -71,11 +74,25 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from uuid import UUID
 
+    from sqlmodel import Session
+
     from policyengine_api.services.v2.user_accounts.database_session import (
         AccountDatabaseSession,
     )
 
 logger = logging.getLogger(__name__)
+
+# The runtime event recording each admin's deletion of a user's account.
+ADMIN_ACCOUNT_DELETION_EVENT = "admin_deleted_v2_user_account"
+OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE = (
+    "Account data was deleted but the sign-in account could not be removed; "
+    "retry the request"
+)
+# A retry finds no user (404), so the admin is told what remains to remove.
+ADMIN_DELETION_AUTH0_FAILURE_MESSAGE = (
+    "The account's data was deleted but its Auth0 users could not all be "
+    "removed; remove them in Auth0"
+)
 
 
 class V2AccountService:
@@ -263,7 +280,9 @@ class V2AccountService:
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
-            if owner is not None:
+            if owner is None:
+                subjects: tuple[str, ...] = (principal.subject,)
+            else:
                 # Imported here: the user-type service is loaded only when
                 # used, like this one.
                 from policyengine_api.services.v2.user_types.services import (
@@ -273,57 +292,132 @@ class V2AccountService:
                 require_admin_remains_after_deletion_in_session(
                     session, user_id=owner.user_id
                 )
-            if owner is None:
-                subjects: tuple[str, ...] = (principal.subject,)
-            else:
-                subjects = tuple(
-                    read_identity_subjects(
-                        session, user_id=owner.user_id, issuer=principal.issuer
-                    )
+                subjects = _delete_signed_in_user_in_session(
+                    session, user_id=owner.user_id, issuer=principal.issuer
                 ) or (principal.subject,)
-                delete_account_legacy_user_mappings(session, user_id=owner.user_id)
-                delete_account_user(session, user_id=owner.user_id)
         deleted_user_id = owner.user_id if owner is not None else None
         if deleted_user_id is not None:
             logger.info(
                 "deleted_v2_user_account",
                 extra={"policyengine_attributes": {"v2_user_id": str(deleted_user_id)}},
             )
+        return _delete_auth0_users(
+            auth0_user_deleter,
+            subjects,
+            deleted_user_id=deleted_user_id,
+            failure_message=OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE,
+        )
 
-        if auth0_user_deleter is None:
-            logger.warning(
-                "auth0_user_deletion_skipped_not_configured",
-                extra={
-                    "policyengine_attributes": {
-                        "v2_user_id": (
-                            str(deleted_user_id)
-                            if deleted_user_id is not None
-                            else None
-                        )
-                    }
-                },
+    def delete_user_account_as_admin(
+        self, *, principal: UserPrincipal, user_id: UUID
+    ) -> AccountDeletion:
+        """Delete a signed-in user's account for an admin, as for one's own.
+
+        The Auth0 deleter is prepared, the account deleted and its sign-in
+        identities' Auth0 users removed exactly as ``delete_account`` does for
+        the caller's own account; an admin may delete their own account this
+        way too. Raise UserTypeBelowMinimumError unless the caller is an admin,
+        SignedInUserNotFoundError when no signed-in user has ``user_id``, and
+        LastAdminDeletionError when that user is the only admin, each with
+        nothing deleted. Raise AccountDeletionUnavailableError and
+        AccountIdentityDeletionError as ``delete_account`` does; the latter's
+        message says to remove the remaining Auth0 users in Auth0, since a
+        retry finds no user.
+        """
+        auth0_user_deleter = self._prepared_auth0_user_deleter()
+        with self._database_session.transaction() as session:
+            # Imported here: the user-type service is loaded only when used,
+            # like this one.
+            from policyengine_api.services.v2.user_types.services import (
+                require_admin_may_delete_user_in_session,
             )
-            return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
-        try:
-            for subject in subjects:
-                auth0_user_deleter.delete_user(subject)
-        except Exception as error:
-            logger.warning(
-                "auth0_user_deletion_failed",
-                extra={
-                    "policyengine_attributes": {
-                        "v2_user_id": (
-                            str(deleted_user_id)
-                            if deleted_user_id is not None
-                            else None
-                        ),
-                        "error_type": type(error).__name__,
-                    }
-                },
+
+            admin_user_id = require_admin_may_delete_user_in_session(
+                session, principal=principal, user_id=user_id
             )
-            msg = (
-                "Account data was deleted but the sign-in account could not be "
-                "removed; retry the request"
+            subjects = _delete_signed_in_user_in_session(
+                session, user_id=user_id, issuer=principal.issuer
             )
-            raise AccountIdentityDeletionError(msg) from error
-        return AccountDeletion(user_id=deleted_user_id, auth0_subjects=subjects)
+        _record_admin_account_deletion(
+            admin_user_id=admin_user_id, deleted_user_id=user_id
+        )
+        return _delete_auth0_users(
+            auth0_user_deleter,
+            subjects,
+            deleted_user_id=user_id,
+            failure_message=ADMIN_DELETION_AUTH0_FAILURE_MESSAGE,
+        )
+
+
+def _delete_signed_in_user_in_session(
+    session: Session, *, user_id: UUID, issuer: str
+) -> tuple[str, ...]:
+    """Delete a signed-in user's legacy mappings and the user; return Auth0 subjects.
+
+    The subjects are those of the user's identities from ``issuer``, the
+    tenant whose tokens the Public API accepts, oldest first. They are read
+    before the identities cascade away with the user.
+    """
+    subjects = tuple(read_identity_subjects(session, user_id=user_id, issuer=issuer))
+    delete_account_legacy_user_mappings(session, user_id=user_id)
+    delete_account_user(session, user_id=user_id)
+    return subjects
+
+
+def _delete_auth0_users(
+    auth0_user_deleter: Auth0UserDeleter | None,
+    subjects: tuple[str, ...],
+    *,
+    deleted_user_id: UUID | None,
+    failure_message: str,
+) -> AccountDeletion:
+    """Delete a deleted account's Auth0 users, after its data is gone.
+
+    Without a deleter the Auth0 users are kept and the skip is logged. Raise
+    AccountIdentityDeletionError, with ``failure_message``, when one can't be
+    deleted.
+    """
+    logged_user_id = str(deleted_user_id) if deleted_user_id is not None else None
+    if auth0_user_deleter is None:
+        logger.warning(
+            "auth0_user_deletion_skipped_not_configured",
+            extra={"policyengine_attributes": {"v2_user_id": logged_user_id}},
+        )
+        return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
+    try:
+        for subject in subjects:
+            auth0_user_deleter.delete_user(subject)
+    except Exception as error:
+        logger.warning(
+            "auth0_user_deletion_failed",
+            extra={
+                "policyengine_attributes": {
+                    "v2_user_id": logged_user_id,
+                    "error_type": type(error).__name__,
+                }
+            },
+        )
+        raise AccountIdentityDeletionError(failure_message) from error
+    return AccountDeletion(user_id=deleted_user_id, auth0_subjects=subjects)
+
+
+def _record_admin_account_deletion(
+    *, admin_user_id: UUID, deleted_user_id: UUID
+) -> None:
+    """Record which admin deleted which user's account, by v2 user IDs only.
+
+    It is a runtime event at INFO, not a standard-library log record, because
+    the deployed process keeps the root logger at WARNING, which drops INFO
+    records. It is recorded once the data is deleted, before the Auth0 users
+    are removed. Recording never changes the response.
+    """
+    # Telemetry must never fail a deletion that has already happened.
+    with contextlib.suppress(Exception):
+        get_runtime().event(
+            ADMIN_ACCOUNT_DELETION_EVENT,
+            severity="INFO",
+            attributes={
+                "admin_v2_user_id": str(admin_user_id),
+                "v2_user_id": str(deleted_user_id),
+            },
+        )

@@ -120,13 +120,14 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
+| `DELETE /v2/admin/users/{user_id}` | Deletes the user's account and saved records, and the Auth0 users of its sign-in identities, as `DELETE /v2/me` deletes the caller's own (see [Admins' account deletions](#admins-account-deletions)). 204. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
 primary_country, created_at, last_seen_at}`: `email` is that of the most
 recently seen of the user's identities that has one, else the user's own, and
 `last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
-never listed, read or changed (404), since their IDs are their browsers'
-credentials.
+never listed, read, changed or deleted (404), since their IDs are their
+browsers' credentials.
 
 Each change is a row of `user_type_changes`: the user, the previous and new
 types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
@@ -134,17 +135,59 @@ types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
 with no admin.
 
 A change that would leave no admin is refused with 409, and so is the last
-admin's `DELETE /v2/me`. Every change, the script's included, and every
-signed-in account deletion first takes one transaction-scoped advisory lock
+admin's `DELETE /v2/me` and the last admin's deletion of their own account
+through `DELETE /v2/admin/users/{user_id}`. Every change, the script's
+included, and every signed-in account deletion, an admin's included, first
+takes one transaction-scoped advisory lock
 (`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
-statement of its own and checks the caller, or the deleted user, against
+statement of its own and checks the caller and the deleted user against
 them. Because of that lock, concurrent changes and deletions run one at a
 time, and each reads the admins the ones before it committed; an admin
-demoted by an earlier change is then refused with 403. An admin's change to
+demoted or deleted by an earlier change or deletion is then refused with
+403. An admin's change to
 another type then also compares the user's locked row with
 `expected_user_type`, as the route table says; the script's changes don't. Locking the admins' rows instead would miss
 a user promoted while the lock was awaited, since a waiting query rechecks
 only the rows its snapshot matched.
+
+### Admins' account deletions
+
+`DELETE /v2/admin/users/{user_id}` deletes another signed-in user's account
+the way `DELETE /v2/me` deletes the caller's own, through the same code
+(`V2AccountService.delete_user_account_as_admin`, which shares the deletion
+by user ID with `delete_account`):
+
+1. When Auth0 Management is configured, it reads the client secret and
+   obtains a Management token first; if either fails it answers 503 with
+   nothing deleted.
+2. In one transaction it takes the user-type change lock, reads the admins,
+   and refuses a caller who isn't one of them (403), an ID with no signed-in
+   user, including an unauthenticated user's (404), and the only admin (409).
+   It then deletes the user's `legacy_user_mappings` rows and the user, whose
+   identities, saved records and type changes cascade.
+3. It deletes the Auth0 user of each of the user's sign-in identities from the
+   Public API's issuer, oldest first. If one fails after the data is gone it
+   answers 502. Unlike `DELETE /v2/me`, a retry finds no user and answers
+   404, so the message tells the admin to remove the remaining Auth0 users in
+   Auth0. Without Auth0 Management the Auth0 users are kept, as for
+   `DELETE /v2/me`.
+
+Since the caller must be an admin, the deleted user can be the only admin only
+when admins delete their own account. That is allowed while another admin
+exists: the account is deleted exactly as by `DELETE /v2/me`, its Auth0 users
+included, and the admin's next request has no user, so the admin routes
+answer 403 (other routes provision a new standard user for a still-valid
+token). The only admin's own deletion is refused with 409 and deletes nothing.
+Two admins deleting each other at once leave one: the second deletion to get
+the lock finds its caller deleted and is refused with 403.
+
+Each deletion is recorded, once the data is deleted and before the Auth0
+users are removed, as the INFO runtime event `admin_deleted_v2_user_account`
+with `admin_v2_user_id` and `v2_user_id`, the admin's and the deleted user's
+v2 user UUIDs. It is a runtime event rather than a standard-library log record
+because the deployed process keeps the root logger at WARNING, which drops
+INFO records. Neither it nor the Auth0 warnings record an email, a subject or
+a token.
 
 `scripts/set_v2_user_type.py --email <address> --user-type <type>` sets the
 type of the one signed-in user whose own or any identity's email is exactly
@@ -295,7 +338,10 @@ Concurrency on Postgres:
   Auth0 user. A 401 from Auth0 drops the cached token and retries once with a
   fresh one. If the Auth0 call still fails after the data is gone, the route
   returns 502 and a retry is safe. The Management settings are read only for
-  this route. For an unauthenticated user, `DELETE /v2/me` deletes the user and
+  this route and admins' `DELETE /v2/admin/users/{user_id}` (see
+  [Admins' account deletions](#admins-account-deletions)), which deletes
+  another user's account the same way. For an unauthenticated user,
+  `DELETE /v2/me` deletes the user and
   its associations, never builds the Auth0 client, and returns 204 even when
   the user does not exist.
 - **Removed before release: browser imports.** The earlier design kept
@@ -700,7 +746,8 @@ uv run pytest tests/unit/v2 tests/unit/libs tests/unit/test_readiness.py \
 V2_ALEMBIC_DISPOSABLE_TEST=1 \
 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
   uv run pytest tests/integration/test_alembic_v2_lifecycle.py \
-  tests/integration/test_v2_user_identity_persistence.py -q
+  tests/integration/test_v2_user_identity_persistence.py \
+  tests/integration/test_v2_user_type_persistence.py -q
 python scripts/export_migration_contracts.py
 python scripts/run_quality_guards.py
 ```
@@ -722,6 +769,10 @@ The disposable-Postgres suite proves the following:
 - named `ON CONFLICT` targets work;
 - `MATCH SIMPLE` composite keys accept NULL v2 references;
 - account deletion cascades after removing legacy mappings;
+- the runtime role deletes another user's account for an admin;
+- an admin's deletion of their own account waits for a concurrent demotion
+  of the other admin and is then refused as the last admin's;
+- two admins deleting each other at once leave one admin;
 - NaN and Infinity never reach JSONB;
 - the parent revision's table usage works against the Stage 12A schema (see
   "Schema compatibility");

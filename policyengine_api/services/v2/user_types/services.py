@@ -4,20 +4,21 @@ A caller's type is its stored user's type. A signed-in caller with no user
 yet is standard, and a signed-out browser is unauthenticated. Checking a
 caller's type only reads: it never provisions a user.
 
-Only admins list signed-in users, read one, change a user's type or read a
-user's recorded type changes. An admin's change also names the type the admin
-last read: a change to another type is refused when the stored type is no
-longer that one. Only the type is compared, so a type changed and changed back
-since the read is not detected, and asking for the type the user already has
-changes nothing whatever was expected. Unauthenticated users are never listed or
-changed, since their IDs are their browsers' credentials. Each change records
-the previous and new type, who made it and how. A change that would leave no
-admin is refused.
+Only admins list signed-in users, read one, change a user's type, read a
+user's recorded type changes or delete a user's account; the account service
+deletes the account after the check here. An admin's change also names the
+type the admin last read: a change to another type is refused when the stored
+type is no longer that one. Only the type is compared, so a type changed and
+changed back since the read is not detected, and asking for the type the user
+already has changes nothing whatever was expected. Unauthenticated users are
+never listed, changed or deleted by admins, since their IDs are their
+browsers' credentials. Each change records the previous and new type, who made
+it and how. A change or deletion that would leave no admin is refused.
 
-Every change, and every signed-in account deletion, first takes one
-transaction-scoped advisory lock, then reads the admins and checks the caller
-or the deleted user against them, so they run one at a time and none can leave
-no admin.
+Every change, and every signed-in account deletion, an admin's included,
+first takes one transaction-scoped advisory lock, then reads the admins and
+checks the caller and the deleted user against them, so they run one at a time
+and none can leave no admin.
 """
 
 from __future__ import annotations
@@ -246,16 +247,40 @@ def require_admin_remains_after_deletion_in_session(
 ) -> None:
     """Take the user-type change lock, then refuse to delete the only admin.
 
-    Account deletion calls this for every signed-in user before deleting it.
-    It takes the user-type change lock, as a type change does, and checks the
-    user against the admins read after it, not against a type read earlier,
-    so a deletion and a concurrent change or deletion can't together leave no
-    admin.
+    Deleting one's own account calls this for every signed-in user before
+    deleting it. It takes the user-type change lock, as a type change does, and
+    checks the user against the admins read after it, not against a type read
+    earlier, so a deletion and a concurrent change or deletion can't together
+    leave no admin.
     """
     acquire_user_type_change_lock(session)
     require_admin_after_deletion(
         user_id=user_id, admin_user_ids=read_admin_user_ids(session)
     )
+
+
+def require_admin_may_delete_user_in_session(
+    session: Session, *, principal: AccountPrincipal, user_id: UUID
+) -> UUID:
+    """Take the user-type change lock, then check an admin's account deletion.
+
+    Return the admin's user ID. Raise UserTypeBelowMinimumError unless the
+    caller is among the admins read after the lock, SignedInUserNotFoundError
+    unless a signed-in user has ``user_id``, and LastAdminDeletionError when
+    that user is the only admin, which happens only when admins delete their
+    own account. As for a type change, the caller and the user are checked
+    against the admins read after the lock, so a deletion and a concurrent
+    change or deletion can't together leave no admin.
+    """
+    caller = find_principal_user_in_session(session, principal)
+    acquire_user_type_change_lock(session)
+    admin_user_ids = read_admin_user_ids(session)
+    admin_user_id = require_listed_admin(
+        None if caller is None else caller.user_id, admin_user_ids
+    )
+    require_signed_in_user(read_signed_in_user(session, user_id))
+    require_admin_after_deletion(user_id=user_id, admin_user_ids=admin_user_ids)
+    return admin_user_id
 
 
 def _require_caller_type(

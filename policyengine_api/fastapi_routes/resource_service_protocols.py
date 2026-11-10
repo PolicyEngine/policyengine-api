@@ -454,6 +454,17 @@ class V2AccountResourceService(Protocol):
         """
         ...
 
+    def delete_user_account_as_admin(
+        self, *, principal: UserPrincipal, user_id: UUID
+    ) -> AccountDeletion:
+        """Delete a signed-in user's account for an admin, as for one's own.
+
+        Raise ``UserTypeBelowMinimumError`` unless the caller is an admin,
+        ``SignedInUserNotFoundError`` when no signed-in user has the ID, and
+        ``LastAdminDeletionError`` when that user is the only admin.
+        """
+        ...
+
 
 class V2UserTypeResourceService(Protocol):
     """Route-independent minimum user types and admins' changes to users' types."""
