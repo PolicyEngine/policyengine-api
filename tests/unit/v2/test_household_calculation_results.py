@@ -200,3 +200,31 @@ def test_a_document_with_fields_the_public_api_does_not_read_is_still_read() -> 
 def test_a_succeeded_job_without_one_readable_result_is_unreadable(document) -> None:
     with pytest.raises(HouseholdCalculationResultUnreadableError, match=str(JOB_ID)):
         _read(_job(HouseholdJobStatus.SUCCEEDED, result=document))
+
+
+@pytest.mark.parametrize(
+    "schema_version", [2, None, "1"], ids=["later", "missing", "a-string"]
+)
+def test_a_succeeded_document_of_another_contract_version_is_unreadable(
+    schema_version,
+) -> None:
+    document = succeeded_document()
+    if schema_version is None:
+        del document["schema_version"]
+    else:
+        document["schema_version"] = schema_version
+
+    with pytest.raises(HouseholdCalculationResultUnreadableError):
+        _read(_job(HouseholdJobStatus.SUCCEEDED, result=document))
+
+
+def test_a_failure_document_of_another_contract_version_is_not_read() -> None:
+    document = {**failed_document(), "schema_version": 2}
+
+    calculation = _read(
+        _job(HouseholdJobStatus.FAILED, result=document, error_message=FAILURE_SUMMARY)
+    )
+
+    assert calculation.error is not None
+    assert calculation.error.code is None
+    assert calculation.error.message == FAILURE_SUMMARY
