@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
+from policyengine_api.data.v2.models import (
+    Report,
+    UserPolicy,
+    UserReportAssociation,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -123,6 +127,18 @@ def read_owned_user_policy_exists(
                 UserPolicy.id == user_policy_id,
                 UserPolicy.user_id == user_id,
                 UserPolicy.country_id == country_id,
+            )
+        ).one_or_none()
+        is not None
+    )
+
+
+def read_report_exists(session: Session, *, country_id: str, report_id: UUID) -> bool:
+    """Return whether a detailed-save report with this id is stored in the country."""
+    return (
+        session.exec(
+            select(Report.id).where(
+                Report.id == report_id, Report.country == country_id
             )
         ).one_or_none()
         is not None

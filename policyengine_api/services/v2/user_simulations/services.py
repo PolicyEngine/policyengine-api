@@ -1,18 +1,30 @@
 """Application services for native v2 user-simulation associations.
 
-Stage 12A anchors saved simulations on v1 simulation IDs. The owner always
-comes from the verified session principal (a signed-in user or a signed-out
-browser), and v1 references are checked in a short read-only v1 transaction
-before the v2 transaction opens. Reads never provision a browser's
-unauthenticated user; one that does not exist yet owns no records.
+A saved simulation names a detailed-save simulation (``simulation_id``) or a
+v1 simulation (``legacy_simulation_id``), never both; only the production
+migration writes saved simulations holding both. A detailed-save simulation
+is checked with a SELECT in the write's own transaction; one deleted before
+the write commits is refused by the ``RESTRICT`` foreign key, which is
+answered as not found too. The owner always comes from the verified session
+principal (a signed-in user or a signed-out browser), and v1 references are
+checked in a short read-only v1 transaction before the v2 transaction opens.
+Reads never provision a browser's unauthenticated user; one that does not
+exist yet owns no records.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
+
+from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
+)
+from policyengine_api.services.v2.associations.validators import (
+    require_one_reference,
+    violates_foreign_key,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -28,6 +40,7 @@ from policyengine_api.services.v2.user_simulations.database_connectors.deletes i
 from policyengine_api.services.v2.user_simulations.database_connectors.reads import (
     read_all_user_simulation_rows,
     read_owned_user_simulation_row,
+    read_simulation_exists,
     read_user_simulation_rows,
 )
 from policyengine_api.services.v2.user_simulations.database_connectors.updates import (
@@ -40,10 +53,14 @@ from policyengine_api.services.v2.user_simulations.transformations import (
 )
 from policyengine_api.services.v2.user_simulations.types import UserSimulationListing
 from policyengine_api.services.v2.user_simulations.validators import (
+    SAVED_SIMULATION_FOREIGN_KEY,
+    require_stored_simulation,
     require_user_simulation,
+    simulation_not_found,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from uuid import UUID
 
     from sqlmodel import Session
@@ -80,6 +97,73 @@ def read_owned_user_simulation(
             association_id=association_id,
         ),
         association_id=association_id,
+    )
+
+
+def validate_stored_simulation(
+    session: Session, *, country_id: str, simulation_id: UUID | None
+) -> None:
+    """Check, in the write's transaction, that a named simulation is the country's.
+
+    A None ``simulation_id`` passes; otherwise raise
+    AssociationSimulationNotFoundError.
+    """
+    if simulation_id is None:
+        return
+    require_stored_simulation(
+        stored=read_simulation_exists(
+            session, country_id=country_id, simulation_id=simulation_id
+        ),
+        simulation_id=simulation_id,
+        country_id=country_id,
+    )
+
+
+@contextmanager
+def _simulation_still_stored(
+    *, country_id: str, simulation_id: UUID | None
+) -> Iterator[None]:
+    """Answer the simulation's foreign key refusing the write as it not found.
+
+    The simulation was checked in the same transaction, so the key refuses
+    the write only when the simulation was deleted in between.
+    """
+    try:
+        yield
+    except IntegrityError as error:
+        if simulation_id is not None and violates_foreign_key(
+            error, SAVED_SIMULATION_FOREIGN_KEY
+        ):
+            raise simulation_not_found(
+                simulation_id=simulation_id, country_id=country_id
+            ) from error
+        raise
+
+
+def require_one_simulation_after_update(
+    association: UserSimulationAssociation,
+    association_input: UserSimulationUpdateInput,
+) -> None:
+    """Raise AssociationReferenceConflictError if the update leaves both references.
+
+    Only an update that names a reference is checked, so a record the
+    production migration saved with both can still be renamed.
+    """
+    supplied = association_input.model_fields_set
+    if not supplied.intersection({"simulation_id", "legacy_simulation_id"}):
+        return
+    require_one_reference(
+        "simulation",
+        detailed_save_id=(
+            association_input.simulation_id
+            if "simulation_id" in supplied
+            else association.simulation_id
+        ),
+        legacy_id=(
+            association_input.legacy_simulation_id
+            if "legacy_simulation_id" in supplied
+            else association.legacy_simulation_id
+        ),
     )
 
 
@@ -126,31 +210,48 @@ class V2UserSimulationService:
         principal: AccountPrincipal,
         association_input: UserSimulationCreateFields,
     ) -> UserSimulationRead:
-        """Save a v1 simulation for the principal, provisioning its v2 user if needed.
+        """Save a simulation for the principal, provisioning its v2 user if needed.
 
-        The v1 simulation is checked first, in a read-only v1 transaction, and
-        LegacyReferenceNotFoundError is raised if it does not exist in the
-        country.
+        A request naming both a simulation_id and a legacy_simulation_id
+        raises AssociationReferenceConflictError. A v1 simulation is checked
+        first, in a read-only v1 transaction, and LegacyReferenceNotFoundError
+        is raised if it does not exist in the country; a detailed-save
+        simulation is checked in the write's transaction, and
+        AssociationSimulationNotFoundError is raised if the country's model
+        has none.
         """
-        self._require_legacy_simulation(
-            country_id=association_input.country_id,
-            legacy_simulation_id=association_input.legacy_simulation_id,
+        country_id = association_input.country_id
+        simulation_id = association_input.simulation_id
+        require_one_reference(
+            "simulation",
+            detailed_save_id=simulation_id,
+            legacy_id=association_input.legacy_simulation_id,
         )
+        if association_input.legacy_simulation_id is not None:
+            self._require_legacy_simulation(
+                country_id=country_id,
+                legacy_simulation_id=association_input.legacy_simulation_id,
+            )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session,
                 principal,
-                country_id=association_input.country_id,
+                country_id=country_id,
             )
-            return user_simulation_read(
-                create_user_simulation(
+            validate_stored_simulation(
+                session, country_id=country_id, simulation_id=simulation_id
+            )
+            with _simulation_still_stored(
+                country_id=country_id, simulation_id=simulation_id
+            ):
+                created = create_user_simulation(
                     session,
                     owned_user_simulation_input(
                         association_input,
                         user_id=owner.user_id,
                     ),
                 )
-            )
+            return user_simulation_read(created)
 
     def get_user_simulation(
         self,
@@ -220,10 +321,17 @@ class V2UserSimulationService:
     ) -> UserSimulationRead:
         """Update the supplied fields of one of the principal's associations.
 
-        A new ``legacy_simulation_id`` is checked in v1 first, as on create. Raise
-        UserSimulationNotFoundError if the principal has no such association in
-        this country.
+        A new ``legacy_simulation_id`` is checked in v1 first and a new
+        ``simulation_id`` in the write's transaction, as on create. Raise
+        AssociationReferenceConflictError when the update would leave the
+        saved simulation naming both, and UserSimulationNotFoundError if the
+        principal has no such association in this country.
         """
+        require_one_reference(
+            "simulation",
+            detailed_save_id=association_input.simulation_id,
+            legacy_id=association_input.legacy_simulation_id,
+        )
         if association_input.legacy_simulation_id is not None:
             self._require_legacy_simulation(
                 country_id=country_id,
@@ -233,18 +341,25 @@ class V2UserSimulationService:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
             )
-            return user_simulation_read(
-                update_user_simulation(
-                    session,
-                    read_owned_user_simulation(
-                        session,
-                        user_id=owner.user_id,
-                        country_id=country_id,
-                        association_id=association_id,
-                    ),
-                    association_input,
-                )
+            association = read_owned_user_simulation(
+                session,
+                user_id=owner.user_id,
+                country_id=country_id,
+                association_id=association_id,
             )
+            require_one_simulation_after_update(association, association_input)
+            validate_stored_simulation(
+                session,
+                country_id=country_id,
+                simulation_id=association_input.simulation_id,
+            )
+            with _simulation_still_stored(
+                country_id=country_id, simulation_id=association_input.simulation_id
+            ):
+                updated = update_user_simulation(
+                    session, association, association_input
+                )
+            return user_simulation_read(updated)
 
     def delete_user_simulation(
         self,

@@ -1,9 +1,14 @@
 """Application services for native v2 user-report associations.
 
-Stage 12A anchors saved reports on the requested v1 report output ID. The
-owner always comes from the verified session principal (a signed-in user or a
-signed-out browser), and v1 references are checked in a short read-only v1
-transaction before the v2 transaction opens. Reads never provision a
+A saved report names a detailed-save report (``report_id``) or a v1 report
+output (``legacy_report_id``), never both: v1 report numbers are not
+connected to detailed-save reports, and only the production migration writes
+saved reports holding both. A detailed-save report is checked with a SELECT
+in the write's own transaction; one deleted before the write commits is
+refused by the ``RESTRICT`` foreign key, which is answered as not found too.
+The owner always comes from the verified session principal (a signed-in user
+or a signed-out browser), and v1 references are checked in a short read-only
+v1 transaction before the v2 transaction opens. Reads never provision a
 browser's unauthenticated user; one that does not exist yet owns no records.
 An optional ``user_policy_id`` (the saved reform the report was run from) and
 an optional ``baseline_user_policy_id`` (the saved reform it was compared with)
@@ -15,10 +20,17 @@ the report without a credential, minus the owner and the owner's links.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
+
+from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
+)
+from policyengine_api.services.v2.associations.validators import (
+    require_one_reference,
+    violates_foreign_key,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -36,6 +48,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.reads import 
     read_owned_user_policy_exists,
     read_owned_user_policy_row,
     read_owned_user_report_row,
+    read_report_exists,
     read_user_report_row,
     read_user_report_rows,
 )
@@ -51,11 +64,15 @@ from policyengine_api.services.v2.user_reports.transformations import (
 )
 from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
+    SAVED_REPORT_FOREIGN_KEY,
+    report_not_found,
     require_owned_user_policy,
+    require_stored_report,
     require_user_report,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from uuid import UUID
 
     from sqlmodel import Session
@@ -120,6 +137,67 @@ def validate_linked_user_policy(
     )
 
 
+def validate_stored_report(
+    session: Session, *, country_id: str, report_id: UUID | None
+) -> None:
+    """Check, in the write's transaction, that a named report is stored in the country.
+
+    A None ``report_id`` passes; otherwise raise AssociationReportNotFoundError.
+    """
+    if report_id is None:
+        return
+    require_stored_report(
+        stored=read_report_exists(session, country_id=country_id, report_id=report_id),
+        report_id=report_id,
+        country_id=country_id,
+    )
+
+
+@contextmanager
+def _report_still_stored(*, country_id: str, report_id: UUID | None) -> Iterator[None]:
+    """Answer the report's foreign key refusing the write as the report not found.
+
+    The report was checked in the same transaction, so the key refuses the
+    write only when the report was deleted in between.
+    """
+    try:
+        yield
+    except IntegrityError as error:
+        if report_id is not None and violates_foreign_key(
+            error, SAVED_REPORT_FOREIGN_KEY
+        ):
+            raise report_not_found(
+                report_id=report_id, country_id=country_id
+            ) from error
+        raise
+
+
+def require_one_report_after_update(
+    association: UserReportAssociation, association_input: UserReportUpdateInput
+) -> None:
+    """Raise AssociationReferenceConflictError if the update leaves both references.
+
+    Only an update that names a reference is checked, so a record the
+    production migration saved with both can still be renamed.
+    """
+    supplied = association_input.model_fields_set
+    if not supplied.intersection({"report_id", "legacy_report_id"}):
+        return
+    require_one_reference(
+        "report",
+        detailed_save_id=(
+            association_input.report_id
+            if "report_id" in supplied
+            else association.report_id
+        ),
+        legacy_id=(
+            association_input.legacy_report_id
+            if "legacy_report_id" in supplied
+            else association.legacy_report_id
+        ),
+    )
+
+
 def read_all_user_reports(
     session: Session, *, user_id: UUID
 ) -> tuple[UserReportRead, ...]:
@@ -161,22 +239,36 @@ class V2UserReportService:
         principal: AccountPrincipal,
         association_input: UserReportCreateFields,
     ) -> UserReportRead:
-        """Save a v1 report for the principal, provisioning its v2 user if needed.
+        """Save a report for the principal, provisioning its v2 user if needed.
 
-        The v1 report is checked first, in a read-only v1 transaction, and
-        LegacyReferenceNotFoundError is raised if it does not exist in the
-        country. Each saved-reform link must name the owner's saved policy in
-        the same country, or AssociationLinkNotFoundError is raised.
+        A request naming both a report_id and a legacy_report_id raises
+        AssociationReferenceConflictError. A v1 report is checked first, in a
+        read-only v1 transaction, and LegacyReferenceNotFoundError is raised
+        if it does not exist in the country; a detailed-save report is
+        checked in the write's transaction, and
+        AssociationReportNotFoundError is raised if the country has none.
+        Each saved-reform link must name the owner's saved policy in the same
+        country, or AssociationLinkNotFoundError is raised.
         """
-        self._require_legacy_report(
-            country_id=association_input.country_id,
-            legacy_report_id=association_input.legacy_report_id,
+        country_id = association_input.country_id
+        require_one_reference(
+            "report",
+            detailed_save_id=association_input.report_id,
+            legacy_id=association_input.legacy_report_id,
         )
+        if association_input.legacy_report_id is not None:
+            self._require_legacy_report(
+                country_id=country_id,
+                legacy_report_id=association_input.legacy_report_id,
+            )
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_in_session(
                 session,
                 principal,
-                country_id=association_input.country_id,
+                country_id=country_id,
+            )
+            validate_stored_report(
+                session, country_id=country_id, report_id=association_input.report_id
             )
             for linked_user_policy_id in (
                 association_input.user_policy_id,
@@ -188,12 +280,14 @@ class V2UserReportService:
                     country_id=association_input.country_id,
                     user_policy_id=linked_user_policy_id,
                 )
-            return user_report_read(
-                create_user_report(
+            with _report_still_stored(
+                country_id=country_id, report_id=association_input.report_id
+            ):
+                created = create_user_report(
                     session,
                     owned_user_report_input(association_input, user_id=owner.user_id),
                 )
-            )
+            return user_report_read(created)
 
     def get_user_report(
         self,
@@ -294,11 +388,18 @@ class V2UserReportService:
     ) -> UserReportRead:
         """Update the supplied fields of one of the principal's saved reports.
 
-        A new ``legacy_report_id`` is checked in v1 first, as on create, and a
-        supplied saved-reform link must name the owner's saved policy in this
-        country. Raise UserReportNotFoundError if the principal has no such
-        report in this country.
+        A new ``legacy_report_id`` is checked in v1 first and a new
+        ``report_id`` in the write's transaction, as on create, and a supplied
+        saved-reform link must name the owner's saved policy in this country.
+        Raise AssociationReferenceConflictError when the update would leave
+        the saved report naming both, and UserReportNotFoundError if the
+        principal has no such report in this country.
         """
+        require_one_reference(
+            "report",
+            detailed_save_id=association_input.report_id,
+            legacy_id=association_input.legacy_report_id,
+        )
         if association_input.legacy_report_id is not None:
             self._require_legacy_report(
                 country_id=country_id,
@@ -314,6 +415,10 @@ class V2UserReportService:
                 country_id=country_id,
                 association_id=association_id,
             )
+            require_one_report_after_update(association, association_input)
+            validate_stored_report(
+                session, country_id=country_id, report_id=association_input.report_id
+            )
             for link_field in ("user_policy_id", "baseline_user_policy_id"):
                 if link_field in association_input.model_fields_set:
                     validate_linked_user_policy(
@@ -322,13 +427,15 @@ class V2UserReportService:
                         country_id=country_id,
                         user_policy_id=getattr(association_input, link_field),
                     )
-            return user_report_read(
-                update_user_report(
+            with _report_still_stored(
+                country_id=country_id, report_id=association_input.report_id
+            ):
+                updated = update_user_report(
                     session,
                     association,
                     user_report_update_values(association_input),
                 )
-            )
+            return user_report_read(updated)
 
     def delete_user_report(
         self,
