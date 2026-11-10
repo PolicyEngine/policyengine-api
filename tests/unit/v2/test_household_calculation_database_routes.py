@@ -337,6 +337,8 @@ def test_the_submission_carries_the_request_and_callers_observability_ids(
     assert str(sent.url) == "https://simulation.example.test/household-calculations"
     assert sent.headers[REQUEST_ID_HEADER] == response.headers[REQUEST_ID_HEADER]
     assert sent.headers[OBSERVABILITY_ID_HEADER] == observability_id
+    # The 202 returns the ID the simulation service received.
+    assert response.headers[OBSERVABILITY_ID_HEADER] == observability_id
 
 
 def test_a_submission_without_an_observability_id_is_given_one(
@@ -349,3 +351,19 @@ def test_a_submission_without_an_observability_id_is_given_one(
     assert response.status_code == 202
     (sent,) = simulation_recorder.requests
     assert UUID(sent.headers[OBSERVABILITY_ID_HEADER])
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == (sent.headers[OBSERVABILITY_ID_HEADER])
+    )
+
+
+def test_a_refused_submission_returns_no_observability_id(
+    client_with_simulation_client, stored, simulation_recorder
+) -> None:
+    body = {**_body(stored, None), "household_id": str(uuid4())}
+
+    response = client_with_simulation_client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 404
+    assert simulation_recorder.requests == []
+    assert OBSERVABILITY_ID_HEADER not in response.headers
