@@ -109,7 +109,7 @@ def test_get_me_provisions_with_the_query_country() -> None:
 
 @pytest.mark.parametrize("user_type", ["author", "admin"])
 def test_account_responses_carry_an_author_or_admin_type(user_type: str) -> None:
-    def typed_result(_name: str, _kwargs: dict):
+    def typed_result(name: str, _kwargs: dict):
         account = _account(user_type=user_type)
         return {
             "export_account": AccountExport(
@@ -122,7 +122,7 @@ def test_account_responses_carry_an_author_or_admin_type(user_type: str) -> None
             "upgrade_account": AccountUpgrade(
                 account=account, outcome=AccountConversionOutcome.MERGED
             ),
-        }.get(_name, account)
+        }.get(name, account)
 
     client, _service = _client(RecordingService(typed_result))
 

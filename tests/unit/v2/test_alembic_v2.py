@@ -71,6 +71,8 @@ PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 CATALOG_PRUNING_REVISION = "334859ef4fec"
 # The simulation runs revision, parent of the user types revision.
 SIMULATION_RUNS_REVISION = "1356f658347d"
+# The user types revision, on the simulation runs revision.
+USER_TYPES_REVISION = "617f531f1506"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -1074,22 +1076,16 @@ def _simulation_runs_revision_source() -> str:
 
 def _user_types_revision_source() -> str:
     """Return the source of the one revision after the simulation runs revision."""
-    config = Config(str(REPO / "alembic-v2.ini"))
-    script = ScriptDirectory.from_config(config)
-    (revision,) = [
-        candidate
-        for candidate in script.walk_revisions()
-        if candidate.down_revision == SIMULATION_RUNS_REVISION
-    ]
-    return Path(revision.path).read_text(encoding="utf-8")
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{USER_TYPES_REVISION}_*.py")
+    return path.read_text(encoding="utf-8")
 
 
 def test_user_types_revision_only_replaces_the_user_type_check() -> None:
     """The generated revision swaps the users type check for one allowing four types.
 
-    Alembic compares a check constraint's condition with the database's
-    rewritten form only by name, so the check that allows author and admin has
-    a new name, which autogenerate turns into a drop and an add.
+    Alembic compares check constraints by name only, not by condition, so the
+    check that allows author and admin has a new name, which autogenerate turns
+    into a drop and an add.
     """
     revision = _user_types_revision_source()
     upgrade = revision[

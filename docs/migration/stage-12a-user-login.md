@@ -39,9 +39,9 @@ that order: each type has every permission of the types before it, and
 checks a type against a minimum.
 
 - A **signed-in** user, of type `standard`, `author` or `admin`, is backed by
-  one or more verified sign-in identities. Every user that existed before this
-  revision, including the Stage 10 legacy-mapping users, is standard, and so is
-  every user a first sign-in provisions. Signing in again, and moving a
+  one or more verified sign-in identities. Every user that existed before the
+  Stage 12A revision (`fbb7488ebe8a`), including the Stage 10 legacy-mapping
+  users, is standard, and so is every user a first sign-in provisions. Signing in again, and moving a
   browser's records into the account at sign-in, never changes a stored type:
   every request resolves a signed-in user with the type stored in `users`.
 - An **unauthenticated** user belongs to one signed-out browser. Its `id` is
@@ -113,7 +113,7 @@ provision), and `resolve_for_read_in_session`. `find_principal_user_in_session`,
   write waits for a conversion in progress and then sees its result. If the
   user was deleted between the insert and the re-read (by its own account
   deletion, or a merge at sign-in), the insert runs once more. A row that
-  turns out to be standard gets the 401 above.
+  turns out to be a signed-in user's gets the 401 above.
 
 **Reads never provision an unauthenticated user.** An absent one behaves as a
 user with no records: lists are empty, gets return 404, `GET /v2/me` returns
@@ -127,25 +127,25 @@ and DELETE on a record it does not own still return 404.
 `convert_unauthenticated_user_in_session(session, unauthenticated_user_id=...,
 principal=..., country_id=...)` in one transaction. It first locks the
 browser's `users` row `FOR UPDATE`, but only while that row is
-unauthenticated: a standard user's row is never locked.
+unauthenticated: a signed-in user's row is never locked.
 
 | State | Outcome | What happens |
 | --- | --- | --- |
 | The identity has no user yet; the browser's unauthenticated user exists | `converted` | The `user_identities` row (issuer, subject, verified email) is inserted pointing at the browser's `users.id`; the user becomes `standard` with `primary_country = country_id`. The ID is unchanged, so every association stays owned. |
-| The identity already belongs to standard user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. |
+| The identity already belongs to signed-in user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. S keeps its stored type. |
 | No unauthenticated user with that ID | `none` | The identity's user is resolved, or provisioned, as on any request. |
-| The ID names a standard user (already converted, or anyone else's) | `none` | That user is never touched; the identity's user is resolved as on any request. |
+| The ID names a signed-in user (already converted, or anyone else's) | `none` | That user is never touched; the identity's user is resolved as on any request. |
 
 The association tables have no uniqueness involving the owner
 (`client_ref` and its per-user constraints were removed), so a merge never
 conflicts. Association IDs do not change, so a report's `user_policy_id` link
 stays valid. `legacy_user_mappings` and `legacy_user_policy_mappings` belong
-only to standard users and are untouched.
+only to signed-in users and are untouched.
 
 Concurrency on Postgres:
 
 - Concurrent upgrades of one browser run one at a time behind the
-  `FOR UPDATE` lock. The first converts (or merges); the rest find a standard
+  `FOR UPDATE` lock. The first converts (or merges); the rest find a signed-in
   user and return `none`.
 - A first sign-in racing an upgrade, or two browsers upgrading into a new
   account at once, are reconciled by `UNIQUE(issuer, subject)`: the identity
@@ -156,7 +156,7 @@ Concurrency on Postgres:
   unauthenticated user (merged).
 - Deleting an unauthenticated account matches only `user_type =
   'unauthenticated'`, so a deletion racing a conversion never deletes the
-  converted standard user.
+  converted signed-in user.
 
 ## Security notes
 

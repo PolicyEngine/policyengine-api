@@ -163,7 +163,9 @@ class StandardAccountProvisioning:
                 },
             )
             return signed_in_resolved_user(
-                created_user_id, email=principal.email, user_type=user.user_type
+                created_user_id,
+                email=principal.email,
+                user_type=UserType(user.user_type),
             )
 
         concurrent = require_concurrent_identity(
@@ -291,7 +293,7 @@ def resolve_principal_user_for_read_in_session(
 ) -> ResolvedUser | None:
     """Return the user a read-only operation acts as.
 
-    A standard principal is provisioned as on any request. An unauthenticated
+    A signed-in principal is provisioned as on any request. An unauthenticated
     principal is not: ``None`` means it owns no records yet.
     """
     return account_provisioning_for(principal).resolve_for_read_in_session(
@@ -362,7 +364,7 @@ def convert_unauthenticated_user_in_session(
             owner=signed_in_resolved_user(
                 unauthenticated_user.id,
                 email=principal.email,
-                user_type=unauthenticated_user.user_type,
+                user_type=UserType(unauthenticated_user.user_type),
             ),
             outcome=AccountConversionOutcome.CONVERTED,
         )
