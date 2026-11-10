@@ -11,6 +11,7 @@ from sqlmodel import Session
 from policyengine_api.data.v2.models import User, UserType
 from policyengine_api.fastapi_routes.v2.me.response_models import MeItem
 from policyengine_api.services.v2.identity.services import (
+    convert_unauthenticated_user_in_session,
     find_principal_user_in_session,
     resolve_principal_user_for_read_in_session,
     resolve_principal_user_in_session,
@@ -205,3 +206,37 @@ def test_an_upgrade_into_an_author_or_admin_keeps_its_type(
         user_type.value
     }
     assert _stored_type(store, account.id) == user_type.value
+
+
+@pytest.mark.parametrize("user_type", SIGNED_IN_TYPES_ABOVE_STANDARD)
+def test_a_conversion_at_sign_in_resolves_its_owner_with_the_stored_type(
+    store: V2Store, user_type: UserType
+) -> None:
+    account = _accounts(store).get_account(principal=ALICE, country_id="us")
+    _set_stored_type(store, account.id, user_type)
+    V2UserPolicyService(
+        UserPolicyDatabaseSession(store.sessions), default_legacy_references()
+    ).create_user_policy(
+        principal=SIGNED_OUT_BROWSER,
+        association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
+    )
+
+    conversions = []
+    for _attempt in range(2):
+        with store.sessions.begin() as session:
+            conversions.append(
+                convert_unauthenticated_user_in_session(
+                    session,
+                    unauthenticated_user_id=SIGNED_OUT_BROWSER.user_id,
+                    principal=ALICE,
+                    country_id="us",
+                )
+            )
+
+    assert [
+        (conversion.outcome, conversion.owner.user_id, conversion.owner.user_type)
+        for conversion in conversions
+    ] == [
+        (AccountConversionOutcome.MERGED, account.id, user_type),
+        (AccountConversionOutcome.NONE, account.id, user_type),
+    ]

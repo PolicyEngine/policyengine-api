@@ -36,10 +36,10 @@ def identity_refresh_required(
 
 
 def signed_in_resolved_user(
-    user_id: UUID, *, email: str | None, user_type: str
+    user_id: UUID, *, email: str | None, user_type: UserType
 ) -> ResolvedUser:
     """Describe a signed-in identity's user, its stored type and verified email."""
-    return ResolvedUser(user_id=user_id, email=email, user_type=UserType(user_type))
+    return ResolvedUser(user_id=user_id, email=email, user_type=user_type)
 
 
 def stored_identity_resolved_user(stored: StoredIdentity) -> ResolvedUser:

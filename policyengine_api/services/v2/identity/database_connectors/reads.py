@@ -34,7 +34,7 @@ def read_user_identity(
     if row is None:
         return None
     identity, user_type = row
-    return StoredIdentity(identity=identity, user_type=user_type)
+    return StoredIdentity(identity=identity, user_type=UserType(user_type))
 
 
 def read_user(

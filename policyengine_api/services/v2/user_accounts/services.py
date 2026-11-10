@@ -1,17 +1,18 @@
 """Account services for ``/v2/me``.
 
 Each operation finds or provisions the caller's v2 user through the
-principal's provisioning strategy. A signed-in principal's standard user is
-provisioned on first use; a signed-out browser's unauthenticated user exists
-only after its first write, so reading, exporting, or deleting an absent one
-finds nothing. Only signed-in principals edit account details.
+principal's provisioning strategy. A signed-in principal's user is
+provisioned, as a standard user, on first use; a signed-out browser's
+unauthenticated user exists only after its first write, so reading,
+exporting, or deleting an absent one finds nothing. Only signed-in principals
+edit account details.
 
 Upgrading moves a browser's unauthenticated user into the signed-in account
-at sign-in. Deleting a standard account removes the user's legacy mappings,
+at sign-in. Deleting a signed-in account removes the user's legacy mappings,
 then the user (identities and associations cascade), and finally the Auth0
 user when the Management API is configured; deleting an unauthenticated
-account removes only its user and associations. Only standard user UUIDs are
-logged.
+account removes only its user and associations. Only signed-in user UUIDs
+are logged.
 """
 
 from __future__ import annotations

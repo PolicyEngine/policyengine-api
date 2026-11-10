@@ -61,7 +61,7 @@ class StoredIdentity:
     """A stored sign-in identity and its user's stored type."""
 
     identity: UserIdentity
-    user_type: str
+    user_type: UserType
 
 
 class AccountProvisioningStrategy(Protocol):
