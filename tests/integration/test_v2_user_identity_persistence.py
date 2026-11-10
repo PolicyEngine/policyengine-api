@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import create_engine, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
@@ -242,6 +242,48 @@ def _save_policy(services: Services, principal) -> UUID:
         principal=principal,
         association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
     ).id
+
+
+def _set_stored_user_type(user_id: UUID, user_type: str) -> None:
+    """Change a user's type as the superuser; the runtime role never changes one."""
+    engine = create_engine(_disposable_url())
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                update(User).where(User.id == user_id).values(user_type=user_type)
+            )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("user_type", ["author", "admin"])
+def test_an_author_or_admin_keeps_its_type_at_sign_in_and_upgrade(
+    sessions, user_type: str
+) -> None:
+    signed_in = _principal(sessions, f"google-oauth2|{user_type}")
+    browser = _browser(sessions)
+    services = _services(sessions)
+    account_id = services.accounts.get_account(principal=signed_in, country_id="us").id
+    _set_stored_user_type(account_id, user_type)
+    _save_policy(services, browser)
+
+    again = services.accounts.get_account(principal=signed_in, country_id="uk")
+    with sessions.begin() as session:
+        resolved = resolve_principal_user_in_session(
+            session, signed_in, country_id="uk"
+        )
+    upgrade = services.accounts.upgrade_account(
+        principal=signed_in, unauthenticated_user_id=browser.user_id, country_id="us"
+    )
+
+    assert (again.id, again.user_type) == (account_id, user_type)
+    assert (resolved.user_id, resolved.user_type) == (account_id, user_type)
+    assert upgrade.outcome is AccountConversionOutcome.MERGED
+    assert (upgrade.account.id, upgrade.account.user_type) == (account_id, user_type)
+    with sessions() as session:
+        stored = session.get(User, account_id)
+    assert stored is not None
+    assert stored.user_type == user_type
 
 
 def test_sessions_act_as_the_runtime_role(sessions, managed_v2_roles) -> None:
