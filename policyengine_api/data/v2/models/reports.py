@@ -173,7 +173,8 @@ class BudgetWindowRun(TimestampedModel, table=True):
     service creates the window's year runs and starts the first five; each
     year's Modal coordinator starts the next unstarted year when its own year
     finishes, and the last year to finish marks this row succeeded. A failed
-    year fails it.
+    year fails it, and the simulation service fails it at once when Modal
+    refuses the calls for its first years.
     """
 
     __tablename__ = "budget_window_runs"

@@ -424,7 +424,7 @@ def test_each_simulation_role_locks_a_budget_window_run_row(
     public_api_rows: PublicApiRows,
     role_kind: str,
 ) -> None:
-    """Both roles lock a window's row before they change its status.
+    """Either role may lock a window's row, for example before changing its status.
 
     PostgreSQL lets a role lock a row ``FOR UPDATE`` when it may update some of
     the table's columns. A lock over a join with ``reports`` names
