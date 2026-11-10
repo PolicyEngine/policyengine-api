@@ -5,6 +5,9 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
+
+from policyengine_api.services.v2.countries.types import CountryRead
 from policyengine_api.services.v2.household_calculations.types import (
     MAXIMUM_AXIS_POINTS,
     HouseholdCalculationInput,
@@ -15,9 +18,6 @@ from policyengine_api.services.v2.household_calculations.validators import (
     require_default_year,
     require_household_country,
 )
-from pydantic import ValidationError
-
-from policyengine_api.services.v2.countries.types import CountryRead
 from policyengine_api.services.v2.policies.validators import (
     PolicyParametersMissingError,
     require_policy_parameters_present,
