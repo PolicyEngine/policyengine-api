@@ -1,3 +1,10 @@
+## [5.37.0] - 2026-11-10
+
+### Added
+
+- The Public API has a setting, PUBLIC_API_SERVER_CREDENTIAL_REQUIRED, that refuses every request without a server credential with 401 before route matching, except GET and HEAD /health, GET /v2/openapi.json and CORS preflights. Deploys keep it switched off (0) unless the GitHub variable is 1.
+
+
 ## [5.36.0] - 2026-11-10
 
 ### Added
