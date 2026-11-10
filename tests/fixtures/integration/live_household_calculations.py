@@ -35,14 +35,16 @@ POLL_INTERVAL_SECONDS = float(
 # or version manifest for a moment, or the Public API failing to read
 # household_jobs, is sent through again while it lasts at most
 # TRANSIENT_LIMIT_SECONDS in a row. A submission is sent again only after a
-# 503 or a failed connection: the Public API answers 502 when the simulation
-# service accepted the calculation but its answer could not be read, so the
-# job exists, and sending it again would create another. A read is sent again
-# after a 502, 503 or 504 or a failed connection, since reading creates
-# nothing. Any other failure, and a longer outage, fails the check with the
-# answer's body.
+# 503 or a connection that was never made (httpx.ConnectError): the Public API
+# answers 502 when the simulation service may have created the job, and after
+# a read timeout or a dropped response the job may exist too, so sending it
+# again could create another. A read is sent again after a 502, 503 or 504 or
+# any transport error, since reading creates nothing. Any other failure, and a
+# longer outage, fails the check with the answer's body or the error.
 SUBMISSION_RETRY_STATUS_CODES = frozenset({503})
+SUBMISSION_RETRY_ERRORS: tuple[type[httpx.TransportError], ...] = (httpx.ConnectError,)
 READ_RETRY_STATUS_CODES = frozenset({502, 503, 504})
+READ_RETRY_ERRORS: tuple[type[httpx.TransportError], ...] = (httpx.TransportError,)
 TRANSIENT_LIMIT_SECONDS = float(
     os.environ.get("STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS", "90")
 )
@@ -191,17 +193,20 @@ def store_reform(client: httpx.Client, household: LiveHousehold) -> str | None:
 
 
 def _send_through_short_outages(
-    send: Callable[[], httpx.Response], retry_status_codes: frozenset[int]
+    send: Callable[[], httpx.Response],
+    retry_status_codes: frozenset[int],
+    retry_errors: tuple[type[httpx.TransportError], ...],
 ) -> httpx.Response:
-    """Send the request again while it fails to connect or gets one of the codes.
+    """Send the request again while it raises one of the errors or gets a code.
 
-    Raise AssertionError once that has lasted TRANSIENT_LIMIT_SECONDS.
+    Any other error is raised. Raise AssertionError once the outage has
+    lasted TRANSIENT_LIMIT_SECONDS.
     """
     outage_started: float | None = None
     while True:
         try:
             response = send()
-        except httpx.TransportError as error:
+        except retry_errors as error:
             failure = f"{type(error).__name__}: {error}"
         else:
             if response.status_code not in retry_status_codes:
@@ -235,6 +240,7 @@ def calculate(
     response = _send_through_short_outages(
         lambda: client.post(CALCULATION_PATH, json=body),
         SUBMISSION_RETRY_STATUS_CODES,
+        SUBMISSION_RETRY_ERRORS,
     )
     submit_seconds = time.monotonic() - started
     assert response.status_code == 202, response.text
@@ -245,7 +251,9 @@ def calculate(
     # household_jobs, so the calculation is read at least once.
     while True:
         polled = _send_through_short_outages(
-            partial(client.get, calculation_path), READ_RETRY_STATUS_CODES
+            partial(client.get, calculation_path),
+            READ_RETRY_STATUS_CODES,
+            READ_RETRY_ERRORS,
         )
         assert polled.status_code == 200, polled.text
         item = polled.json()["result"]["item"]
