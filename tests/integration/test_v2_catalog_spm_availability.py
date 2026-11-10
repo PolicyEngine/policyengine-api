@@ -130,6 +130,12 @@ def test_publication_lists_only_versions_still_unrecorded(
                 connection.execute(
                     sa.insert(MODELS).values(id=model_id, name=model_names[country_id])
                 )
+                # An earlier publication recorded the US version. The UK one
+                # leaves the column out, as publication's insert does, so it
+                # holds SQL NULL rather than JSON null.
+                recorded_earlier = (
+                    {"spm_availability": AVAILABLE} if country_id == "us" else {}
+                )
                 connection.execute(
                     sa.insert(MODEL_VERSIONS).values(
                         id=uuid4(),
@@ -137,8 +143,7 @@ def test_publication_lists_only_versions_still_unrecorded(
                         version="1.450.0",
                         current_law_id=2,
                         metadata_time_periods=[2026],
-                        # An earlier publication recorded the US version.
-                        spm_availability=AVAILABLE if country_id == "us" else None,
+                        **recorded_earlier,
                     )
                 )
         unreadable = record_published_spm_availability(

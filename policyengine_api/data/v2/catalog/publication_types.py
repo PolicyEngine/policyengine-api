@@ -46,13 +46,12 @@ class SPMAvailabilityRecording:
     """What one publication recorded of its catalog versions' SPM availability.
 
     ``recorded`` lists each version it recorded: country, model version and
-    whether SPM settings are available. ``not_recorded`` lists each version
-    whose availability it doesn't know: one the simulation service doesn't
-    serve yet, or every version when ``versions_unreadable`` says why the
-    service's versions couldn't be read. A version is unknown to
-    ``/v2/model-catalog`` until some publication records it, and a version
-    an earlier publication recorded keeps its value and is listed in
-    neither.
+    whether SPM settings are available. ``not_recorded`` lists each of its
+    versions whose availability is still unrecorded after it, so unknown to
+    ``/v2/model-catalog``: one the simulation service doesn't serve yet, or
+    any when ``versions_unreadable`` says why the service's versions
+    couldn't be read. A version an earlier publication recorded keeps its
+    value and is listed in neither.
     """
 
     recorded: tuple[tuple[str, str, bool], ...] = ()

@@ -43,7 +43,7 @@ from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.spm import SPMSelection
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
     from sqlalchemy import Connection, Engine
 
@@ -159,6 +159,42 @@ def record_spm_availability(
     return bool(result.rowcount)
 
 
+def read_unrecorded_versions(
+    connection: Connection, versions: Iterable[tuple[str, str]]
+) -> set[tuple[str, str]]:
+    """Return the (model name, version) pairs whose SPM availability is unrecorded."""
+    requested = list(versions)
+    if not requested:
+        return set()
+    rows = connection.execute(
+        sa.select(MODELS.c.name, MODEL_VERSIONS.c.version)
+        .join(MODEL_VERSIONS, MODEL_VERSIONS.c.model_id == MODELS.c.id)
+        .where(
+            sa.tuple_(MODELS.c.name, MODEL_VERSIONS.c.version).in_(requested),
+            MODEL_VERSIONS.c.spm_availability.is_(None),
+        )
+    ).all()
+    return {(row.name, row.version) for row in rows}
+
+
+def _still_unrecorded(
+    connection: Connection, catalog: NormalizedCatalog
+) -> tuple[tuple[str, str], ...]:
+    """Return the catalog's versions, by country, whose availability is unrecorded."""
+    unrecorded = read_unrecorded_versions(
+        connection,
+        [
+            (country.model.name, country.model_version.version)
+            for country in catalog.countries
+        ],
+    )
+    return tuple(
+        (country.country_id, country.model_version.version)
+        for country in catalog.countries
+        if (country.model.name, country.model_version.version) in unrecorded
+    )
+
+
 def record_published_spm_availability(
     engine: Engine,
     catalog: NormalizedCatalog,
@@ -168,10 +204,12 @@ def record_published_spm_availability(
 ) -> SPMAvailabilityRecording:
     """Record each published country's SPM availability for the catalog version.
 
-    Return what was recorded and what was not. A US version the service does
-    not serve yet stays unrecorded, and so does every version when the
-    service's versions cannot be read; the next publication run tries again.
-    Raise V2ConfigurationError without ``SIMULATION_ENTRYPOINT_URL``.
+    Return what was recorded, and the versions still unrecorded after it. A
+    US version the service does not serve yet stays unrecorded, and so does
+    every version when the service's versions cannot be read; the next
+    publication run tries again. A version an earlier publication recorded
+    keeps its value and is in neither list. Raise V2ConfigurationError
+    without ``SIMULATION_ENTRYPOINT_URL``.
     """
     url = simulation_entrypoint_url(os.environ if environ is None else environ)
     try:
@@ -182,24 +220,19 @@ def record_published_spm_availability(
             "tries again: %s",
             error,
         )
+        with engine.begin() as connection:
+            not_recorded = _still_unrecorded(connection, catalog)
         return SPMAvailabilityRecording(
-            not_recorded=tuple(
-                (country.country_id, country.model_version.version)
-                for country in catalog.countries
-            ),
-            versions_unreadable=str(error),
+            not_recorded=not_recorded, versions_unreadable=str(error)
         )
     recorded: list[tuple[str, str, bool]] = []
-    not_recorded: list[tuple[str, str]] = []
     with engine.begin() as connection:
         for country in catalog.countries:
             version = country.model_version.version
             availability = spm_availability(
                 country.country_id, catalog.policyengine_version, versions
             )
-            if availability is None:
-                not_recorded.append((country.country_id, version))
-            elif record_spm_availability(
+            if availability is not None and record_spm_availability(
                 connection,
                 model_name=country.model.name,
                 version=version,
@@ -208,6 +241,5 @@ def record_published_spm_availability(
                 recorded.append(
                     (country.country_id, version, bool(availability["available"]))
                 )
-    return SPMAvailabilityRecording(
-        recorded=tuple(recorded), not_recorded=tuple(not_recorded)
-    )
+        not_recorded = _still_unrecorded(connection, catalog)
+    return SPMAvailabilityRecording(recorded=tuple(recorded), not_recorded=not_recorded)
