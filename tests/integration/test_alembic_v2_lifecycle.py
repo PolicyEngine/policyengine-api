@@ -1394,7 +1394,10 @@ def test_user_types_revision_changes_only_the_user_type_check() -> None:
         parent_checks = dict(parent_users.pop("checks"))
         revision_checks = dict(revision_users.pop("checks"))
         assert revision_users == parent_users
-        assert "author" not in parent_checks.pop("ck_users_user_type")
+        assert re.findall(r"'(\w+)'", parent_checks.pop("ck_users_user_type")) == [
+            "unauthenticated",
+            "standard",
+        ]
         allowed_types = revision_checks.pop("ck_users_user_type_allowed")
         assert re.findall(r"'(\w+)'", allowed_types) == [
             "unauthenticated",
@@ -1436,31 +1439,33 @@ def test_user_type_changes_revision_adds_only_its_table() -> None:
         engine.dispose()
 
 
-def test_user_types_revision_accepts_authors_and_admins_until_downgraded() -> None:
-    """Authors and admins are stored, and the downgrade refuses while any exist."""
+@pytest.mark.parametrize("user_type", ["author", "admin"])
+def test_user_types_revision_accepts_authors_and_admins_until_downgraded(
+    user_type: str,
+) -> None:
+    """Either type is stored, and alone keeps the downgrade from running."""
     database_url = disposable_v2_url()
     config = alembic_v2_config()
     engine = create_engine(database_url)
-    user_ids = {user_type: uuid4() for user_type in ("author", "admin")}
+    user_id = uuid4()
 
-    def insert_user(user_id: UUID, user_type: str) -> None:
+    def insert_user(inserted_id: UUID, inserted_type: str) -> None:
         with engine.begin() as connection:
             connection.execute(
                 text(
                     "INSERT INTO users (id, user_type, primary_country) "
                     "VALUES (:user_id, :user_type, 'us')"
                 ),
-                {"user_id": user_id, "user_type": user_type},
+                {"user_id": inserted_id, "user_type": inserted_type},
             )
 
     try:
         command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
         with pytest.raises(sa.exc.IntegrityError):
-            insert_user(user_ids["author"], "author")
+            insert_user(user_id, user_type)
 
         command.upgrade(config, USER_TYPES_REVISION)
-        for user_type, user_id in user_ids.items():
-            insert_user(user_id, user_type)
+        insert_user(user_id, user_type)
         with pytest.raises(sa.exc.IntegrityError):
             insert_user(uuid4(), "editor")
         with pytest.raises(sa.exc.IntegrityError):
@@ -1468,16 +1473,18 @@ def test_user_types_revision_accepts_authors_and_admins_until_downgraded() -> No
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
             assert context.get_current_revision() == USER_TYPES_REVISION
-            stored_types = connection.execute(
-                text("SELECT user_type FROM users WHERE id IN (:author, :admin)"),
-                {"author": user_ids["author"], "admin": user_ids["admin"]},
-            ).scalars()
-            assert sorted(stored_types) == ["admin", "author"]
+            stored_type = connection.execute(
+                text("SELECT user_type FROM users WHERE id = :user_id"),
+                {"user_id": user_id},
+            ).scalar_one()
+        assert stored_type == user_type
+        # The refused downgrade left the revision's check in place.
+        assert _check_names(engine, "users") >= {"ck_users_user_type_allowed"}
+        assert "ck_users_user_type" not in _check_names(engine, "users")
     finally:
         with engine.begin() as connection:
             connection.execute(
-                text("DELETE FROM users WHERE id IN (:author, :admin)"),
-                {"author": user_ids["author"], "admin": user_ids["admin"]},
+                text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id}
             )
         command.downgrade(config, USER_TYPES_PREVIOUS_REVISION)
         command.upgrade(config, "head")

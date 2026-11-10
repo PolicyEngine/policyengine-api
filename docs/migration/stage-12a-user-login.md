@@ -41,9 +41,10 @@ checks a type against a minimum.
 - A **signed-in** user, of type `standard`, `author` or `admin`, is backed by
   one or more verified sign-in identities. Every user that existed before the
   Stage 12A revision (`fbb7488ebe8a`), including the Stage 10 legacy-mapping
-  users, is standard, and so is every user a first sign-in provisions. Signing in again, and moving a
-  browser's records into the account at sign-in, never changes a stored type:
-  every request resolves a signed-in user with the type stored in `users`.
+  users, is standard, and so is every user a first sign-in provisions.
+  Signing in again, and moving a browser's records into the account at
+  sign-in, never changes a stored type: every request resolves a signed-in
+  user with the type stored in `users`.
 - An **unauthenticated** user belongs to one signed-out browser. Its `id` is
   the browser's UUID, and every other user column (`first_name`, `last_name`,
   `email`, `primary_country`) is NULL. Its timestamps work as usual.
@@ -447,7 +448,10 @@ would therefore hand users' saved work to anyone.
   `household_id`, `simulation_id`, `report_id`, `country`, and
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
-  first deletes users' saved work.
+  first deletes users' saved work. From the head, the later revisions'
+  downgrades run first: the user types revision (`617f531f1506`) needs no
+  author or admin, and the simulation runs revision (`1356f658347d`) needs
+  `simulations` empty.
 
 ### Schema compatibility
 

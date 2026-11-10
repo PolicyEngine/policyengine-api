@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, NoReturn, get_args
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 SIGNED_IN_TYPES_ABOVE_STANDARD = (UserType.AUTHOR, UserType.ADMIN)
 
 
-def _never_build_the_auth0_deleter():
+def _never_build_the_auth0_deleter() -> NoReturn:
     msg = "these tests delete no account"
     raise AssertionError(msg)
 

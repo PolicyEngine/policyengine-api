@@ -1,7 +1,7 @@
 """Native FastAPI routes for the current user's account resource (/v2/me).
 
-A signed-in caller's standard user is provisioned on first use, with
-``primary_country`` taken from ``country_id``. A signed-out browser's
+A signed-in caller's user is provisioned, as a standard user, on first use,
+with ``primary_country`` taken from ``country_id``. A signed-out browser's
 unauthenticated user exists only after its first saved record, so reading
 an absent one returns 404 and exporting it returns nothing. Every route
 requires a credential; authentication is a router-level dependency.
