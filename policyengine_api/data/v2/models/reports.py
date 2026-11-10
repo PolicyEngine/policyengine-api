@@ -169,8 +169,11 @@ class BudgetWindowRun(TimestampedModel, table=True):
 
     Each year of the window is a report run of the same report that names this
     row and its year. ``recalculate`` says whether those years calculate their
-    simulations again instead of reusing successful runs. What starts the later
-    years is decided where the simulation service schedules them.
+    simulations again instead of reusing successful runs. The simulation
+    service creates the window's year runs and starts the first five; each
+    year's Modal coordinator starts the next unstarted year when its own year
+    finishes, and the last year to finish marks this row succeeded. A failed
+    year fails it.
     """
 
     __tablename__ = "budget_window_runs"
