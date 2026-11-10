@@ -60,6 +60,7 @@ from policyengine_api.services.v2.user_types.validators import (
     UserTypeCheckUnavailableError,
     require_admin_after_deletion,
     require_another_admin,
+    require_expected_user_type,
     require_listed_admin,
     require_minimum_user_type,
     require_one_user_with_email,
@@ -134,10 +135,14 @@ class V2UserTypeService:
         principal: AccountPrincipal,
         user_id: UUID,
         user_type: UserType,
+        expected_user_type: UserType,
     ) -> AdminUserRead:
         """Change a signed-in user's type for an admin, recording the change.
 
         Setting the type the user already has changes and records nothing.
+        Otherwise the user's stored type must still be ``expected_user_type``,
+        the type the admin last read; raise UserTypeChangedError if it isn't,
+        so the change can't overwrite one made since.
         """
         with self._database_session.transaction() as session:
             caller = find_principal_user_in_session(session, principal)
@@ -148,6 +153,12 @@ class V2UserTypeService:
             user = require_signed_in_user(
                 read_signed_in_user(session, user_id, for_update=True)
             )
+            current_user_type = UserType(user.user_type)
+            if current_user_type is not user_type:
+                require_expected_user_type(
+                    current_user_type=current_user_type,
+                    expected_user_type=expected_user_type,
+                )
             _change_type_in_session(
                 session,
                 user,

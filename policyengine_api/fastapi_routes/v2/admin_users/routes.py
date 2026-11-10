@@ -67,7 +67,10 @@ ADMIN_USER_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     409: {
         "model": V2ErrorResponse,
-        "description": "The change would leave no admin.",
+        "description": (
+            "The user's type is no longer the expected one, or the change would "
+            "leave no admin."
+        ),
     },
     413: {
         "model": V2ErrorResponse,
@@ -158,8 +161,11 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         summary="Change a signed-in user's type",
         description=(
             "Admins only. Records the change in the user's type history; setting "
-            "the type the user already has changes and records nothing. Demoting "
-            "the last admin is refused (409)."
+            "the type the user already has changes and records nothing. "
+            "expected_user_type is the user's type as the admin last read it: when "
+            "the stored type differs, the change is refused (409), so it can't "
+            "overwrite a change made since. Demoting the last admin is refused "
+            "(409) too."
         ),
     )
     def change_user_type(
@@ -173,6 +179,7 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
                 principal=principal,
                 user_id=user_id,
                 user_type=UserType(body.user_type),
+                expected_user_type=UserType(body.expected_user_type),
             )
             return AdminUserResponse(
                 result=AdminUserResult(item=AdminUserItem.from_read(user))

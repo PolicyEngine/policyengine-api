@@ -478,11 +478,18 @@ class V2UserTypeResourceService(Protocol):
         ...
 
     def change_user_type(
-        self, *, principal: AccountPrincipal, user_id: UUID, user_type: UserType
+        self,
+        *,
+        principal: AccountPrincipal,
+        user_id: UUID,
+        user_type: UserType,
+        expected_user_type: UserType,
     ) -> AdminUserRead:
         """Change a signed-in user's type for an admin, recording the change.
 
-        Raise ``LastAdminDemotionError`` when the change would leave no admin.
+        Raise ``UserTypeChangedError`` when the stored type is no longer
+        ``expected_user_type``, and ``LastAdminDemotionError`` when the change
+        would leave no admin.
         """
         ...
 

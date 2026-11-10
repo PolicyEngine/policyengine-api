@@ -105,7 +105,7 @@ type first, and each operation checks it again in its own transaction.
 | --- | --- |
 | `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's email, ignoring case, with `%` and `_` matching themselves. |
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
-| `PATCH /v2/admin/users/{user_id}` `{"user_type": "standard" \| "author" \| "admin"}` | Changes the type and records the change; the same type changes and records nothing. |
+| `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change; the same type changes and records nothing. `expected_user_type` is the type the admin last read: when the stored type differs, the change is refused with 409, so it can't overwrite a change made since. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,

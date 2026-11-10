@@ -36,6 +36,10 @@ class LastAdminDemotionError(ValueError):
     """Raised when a change would leave no admin (409)."""
 
 
+class UserTypeChangedError(ValueError):
+    """Raised when a user's type is no longer the one the admin expected (409)."""
+
+
 class LastAdminDeletionError(ValueError):
     """Raised when deleting an account would leave no admin (409)."""
 
@@ -69,6 +73,18 @@ def require_signed_in_user(user: User | None) -> User:
         msg = "No signed-in user has this ID"
         raise SignedInUserNotFoundError(msg)
     return user
+
+
+def require_expected_user_type(
+    *, current_user_type: UserType, expected_user_type: UserType
+) -> None:
+    """Refuse a change made from a type that is no longer the user's."""
+    if current_user_type is not expected_user_type:
+        msg = (
+            f"This user's type is now {current_user_type.value}, not "
+            f"{expected_user_type.value}: read the user again before changing it"
+        )
+        raise UserTypeChangedError(msg)
 
 
 def require_another_admin(

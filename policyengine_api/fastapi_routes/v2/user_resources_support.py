@@ -48,6 +48,7 @@ from policyengine_api.services.v2.user_types.validators import (
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
+    UserTypeChangedError,
 )
 
 if TYPE_CHECKING:
@@ -212,7 +213,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         404,
     ),
     UserResourceFailure(
-        (AssociationConflictError, LastAdminDemotionError, LastAdminDeletionError),
+        (
+            AssociationConflictError,
+            LastAdminDemotionError,
+            LastAdminDeletionError,
+            UserTypeChangedError,
+        ),
         409,
     ),
     UserResourceFailure(
