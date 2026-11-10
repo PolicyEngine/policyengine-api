@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from policyengine_api.data.v2.models import Report, ReportRun, Simulation
+    from policyengine_api.services.v2.simulation_service.types import (
+        PackageVersions,
+    )
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
     )
@@ -29,14 +32,6 @@ ReportStatusName = Literal["not_run", "pending", "running", "succeeded", "failed
 # or two economy simulations in each year of a budget window.
 ReportKind = Literal["economy", "household", "budget_window"]
 ReportRunTriggerName = Literal["initial", "manual", "system"]
-
-
-@dataclass(frozen=True)
-class PackageVersions:
-    """A country package version and the PolicyEngine.py version beside it."""
-
-    country_package_version: str
-    policyengine_version: str
 
 
 @dataclass(frozen=True)

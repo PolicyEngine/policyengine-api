@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from policyengine_api.data.v2.models import UserType
@@ -25,6 +26,11 @@ if TYPE_CHECKING:
         NativePolicyCreation,
         NativePolicyCreationInput,
     )
+    from policyengine_api.services.v2.stored_reports.types import (
+        ReportRead,
+        ReportSummaryRead,
+    )
+    from policyengine_api.services.v2.stored_simulations.types import SimulationRead
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,
         AccountExport,
@@ -143,6 +149,37 @@ class V2HouseholdResourceService(Protocol):
         limit: int,
     ) -> HouseholdPage:
         """Return a page of the country's households, optionally of one default year."""
+        ...
+
+
+class V2StoredReportResourceService(Protocol):
+    """Route-independent report operations for one request."""
+
+    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
+        """Return the country's economy report, its newest run and that run's result.
+
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report, ``ReportKindUnsupportedError`` for a household report or
+        budget window, and ``EconomyResultUnreadableError`` when a succeeded
+        run's result cannot be read.
+        """
+        ...
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[ReportSummaryRead, ...]:
+        """Return the country's economy reports among ``report_ids``, in that order."""
+        ...
+
+
+class V2StoredSimulationResourceService(Protocol):
+    """Route-independent simulation operations for one request."""
+
+    def get_simulation(self, *, country_id: str, simulation_id: UUID) -> SimulationRead:
+        """Return the country's simulation and its newest run.
+
+        Raise ``StoredSimulationNotFoundError`` when there is none.
+        """
         ...
 
 

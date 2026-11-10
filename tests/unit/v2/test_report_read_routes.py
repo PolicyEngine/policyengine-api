@@ -7,17 +7,18 @@ from dataclasses import replace
 from uuid import uuid4
 
 import pytest
-from policyengine_api.services.v2.stored_reports.validators import (
-    ReportKindUnsupportedError,
-    StoredReportNotFoundError,
-)
-from policyengine_api.services.v2.stored_simulations.validators import (
-    StoredSimulationNotFoundError,
-)
-from sqlalchemy.exc import OperationalError
 
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
+)
+from policyengine_api.services.v2.stored_reports.validators import (
+    ReportKindUnsupportedError,
+    ReportStorageError,
+    StoredReportNotFoundError,
+)
+from policyengine_api.services.v2.stored_simulations.validators import (
+    SimulationStorageError,
+    StoredSimulationNotFoundError,
 )
 from tests.fixtures.economy_results import us_economy_result
 from tests.unit.v2.stored_report_support import (
@@ -87,7 +88,7 @@ def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
             "The report's stored result cannot be read",
         ),
         (
-            OperationalError("SELECT 1", {}, Exception("connection refused")),
+            ReportStorageError("V2 report storage is unavailable"),
             503,
             "V2 report storage is unavailable",
         ),
@@ -194,7 +195,7 @@ def test_a_simulation_answers_its_definition_newest_run_and_versions() -> None:
     ("error", "status_code"),
     [
         (StoredSimulationNotFoundError("Simulation x was not found"), 404),
-        (OperationalError("SELECT 1", {}, Exception("connection refused")), 503),
+        (SimulationStorageError("V2 simulation storage is unavailable"), 503),
     ],
     ids=["not-found", "storage"],
 )

@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 DEFAULT_QUERY_LIMIT = 100
+# A report list reads every named report and its newest run in one query.
+MAXIMUM_LISTED_REPORTS = 25
 MAXIMUM_QUERY_LIMIT = 500
 MAXIMUM_USER_ID_LENGTH = 255
 
@@ -412,6 +414,27 @@ class UserReportCollectionQuery(CountryQuery, PaginationQuery):
     """Query contract for the signed-in user's report associations."""
 
     legacy_report_id: LegacyResourceId | None = None
+
+
+class ReportDetailQuery(CountryQuery):
+    """Query contract for reading one report in a country."""
+
+
+class ReportCollectionQuery(CountryQuery):
+    """Query contract for listing chosen reports of a country.
+
+    ``report_id`` is repeated once per report, at most 25 times.
+    """
+
+    report_id: list[ResourceId] = Field(
+        min_length=1,
+        max_length=MAXIMUM_LISTED_REPORTS,
+        description="A report to list; repeat the key for each report",
+    )
+
+
+class SimulationDetailQuery(CountryQuery):
+    """Query contract for reading one simulation in a country."""
 
 
 QueryParametersT = TypeVar("QueryParametersT", bound=StrictQueryParameters)

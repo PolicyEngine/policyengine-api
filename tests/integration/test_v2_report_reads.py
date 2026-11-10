@@ -19,17 +19,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from policyengine_api.services.v2.simulation_service.types import PackageVersions
-from policyengine_api.services.v2.stored_reports.database_session import (
-    StoredReportDatabaseSession,
-)
-from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
-from policyengine_api.services.v2.stored_simulations.database_session import (
-    StoredSimulationDatabaseSession,
-)
-from policyengine_api.services.v2.stored_simulations.services import (
-    V2StoredSimulationService,
-)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -41,6 +30,17 @@ from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
+)
+from policyengine_api.services.v2.simulation_service.types import PackageVersions
+from policyengine_api.services.v2.stored_reports.database_session import (
+    StoredReportDatabaseSession,
+)
+from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from policyengine_api.services.v2.stored_simulations.database_session import (
+    StoredSimulationDatabaseSession,
+)
+from policyengine_api.services.v2.stored_simulations.services import (
+    V2StoredSimulationService,
 )
 from tests.fixtures.economy_results import uk_economy_result, us_economy_result
 from tests.integration.simulation_rows import insert_row
@@ -164,7 +164,10 @@ def test_a_report_reads_its_newest_run_and_that_runs_result(
 
     assert response.status_code == 200, response.text
     item = response.json()["result"]["item"]
-    assert item["result"] == _as_json(output)
+    # A result's model version is the country package version its run used.
+    expected = _as_json(output)
+    expected["model_version"] = OLDER_VERSIONS["country_package_version"]
+    assert item["result"] == expected
     assert item["status"] == "succeeded"
     assert item["run"]["id"] == str(newest.report_run_id)
     assert item["run"]["country_package_version"] == "1.4.0"
