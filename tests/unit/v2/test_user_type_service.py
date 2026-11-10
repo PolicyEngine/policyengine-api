@@ -35,6 +35,7 @@ from policyengine_api.services.v2.user_types.validators import (
     SignedInUserNotFoundError,
     UserEmailMatchError,
     UserTypeBelowMinimumError,
+    UserTypeChangedError,
 )
 from tests.unit.v2.user_service_support import (
     ALICE,
@@ -239,7 +240,10 @@ def test_only_admins_list_read_or_change_users(store: V2Store) -> None:
             user_types.get_user(principal=principal, user_id=bob_id)
         with pytest.raises(UserTypeBelowMinimumError):
             user_types.change_user_type(
-                principal=principal, user_id=bob_id, user_type=UserType.ADMIN
+                principal=principal,
+                user_id=bob_id,
+                user_type=UserType.ADMIN,
+                expected_user_type=UserType.AUTHOR,
             )
         with pytest.raises(UserTypeBelowMinimumError):
             user_types.list_user_type_changes(principal=principal, user_id=bob_id)
@@ -253,13 +257,22 @@ def test_an_admin_changes_a_type_and_the_change_is_recorded(store: V2Store) -> N
     user_types = _user_types(store)
 
     promoted = user_types.change_user_type(
-        principal=ALICE_WITH_EMAIL, user_id=bob_id, user_type=UserType.AUTHOR
+        principal=ALICE_WITH_EMAIL,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
     )
     unchanged = user_types.change_user_type(
-        principal=ALICE_WITH_EMAIL, user_id=bob_id, user_type=UserType.AUTHOR
+        principal=ALICE_WITH_EMAIL,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.AUTHOR,
     )
     user_types.change_user_type(
-        principal=ALICE_WITH_EMAIL, user_id=bob_id, user_type=UserType.ADMIN
+        principal=ALICE_WITH_EMAIL,
+        user_id=bob_id,
+        user_type=UserType.ADMIN,
+        expected_user_type=UserType.AUTHOR,
     )
     history = user_types.list_user_type_changes(
         principal=ALICE_WITH_EMAIL, user_id=bob_id
@@ -311,6 +324,7 @@ def test_admins_read_one_user_and_only_signed_in_users(store: V2Store) -> None:
             principal=ALICE,
             user_id=SIGNED_OUT_BROWSER.user_id,
             user_type=UserType.STANDARD,
+            expected_user_type=UserType.STANDARD,
         ),
         lambda: user_types.list_user_type_changes(
             principal=ALICE, user_id=SIGNED_OUT_BROWSER.user_id
@@ -331,27 +345,42 @@ def test_the_last_admin_is_never_demoted(store: V2Store) -> None:
     for user_type in (UserType.AUTHOR, UserType.STANDARD):
         with pytest.raises(LastAdminDemotionError):
             user_types.change_user_type(
-                principal=ALICE, user_id=alice_id, user_type=user_type
+                principal=ALICE,
+                user_id=alice_id,
+                user_type=user_type,
+                expected_user_type=UserType.ADMIN,
             )
     assert _stored_type(store, alice_id) == "admin"
 
     bob_id = _sign_in(store, BOB)
     user_types.change_user_type(
-        principal=ALICE, user_id=bob_id, user_type=UserType.ADMIN
+        principal=ALICE,
+        user_id=bob_id,
+        user_type=UserType.ADMIN,
+        expected_user_type=UserType.STANDARD,
     )
     demoted = user_types.change_user_type(
-        principal=ALICE, user_id=alice_id, user_type=UserType.AUTHOR
+        principal=ALICE,
+        user_id=alice_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.ADMIN,
     )
 
     assert demoted.user_type is UserType.AUTHOR
     # Alice is no longer an admin, so she can't change anyone's type.
     with pytest.raises(UserTypeBelowMinimumError):
         user_types.change_user_type(
-            principal=ALICE, user_id=bob_id, user_type=UserType.STANDARD
+            principal=ALICE,
+            user_id=bob_id,
+            user_type=UserType.STANDARD,
+            expected_user_type=UserType.ADMIN,
         )
     with pytest.raises(LastAdminDemotionError):
         user_types.change_user_type(
-            principal=BOB, user_id=bob_id, user_type=UserType.STANDARD
+            principal=BOB,
+            user_id=bob_id,
+            user_type=UserType.STANDARD,
+            expected_user_type=UserType.ADMIN,
         )
 
 
@@ -430,3 +459,43 @@ def test_the_last_admin_cannot_delete_their_own_account(store: V2Store) -> None:
     with pytest.raises(LastAdminDeletionError):
         accounts.delete_account(principal=BOB)
     assert _stored_type(store, bob_id) == "admin"
+
+
+def test_a_change_is_refused_once_the_type_differs_from_the_expected_one(
+    store: V2Store,
+) -> None:
+    """Carol read Bob as standard, but Alice made him an author since."""
+    alice_id = _signed_in_admin(store, ALICE)
+    carol_id = _signed_in_admin(store, CAROL)
+    bob_id = _sign_in(store, BOB)
+    user_types = _user_types(store)
+    user_types.change_user_type(
+        principal=ALICE,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+
+    with pytest.raises(UserTypeChangedError, match="now author, not standard"):
+        user_types.change_user_type(
+            principal=CAROL,
+            user_id=bob_id,
+            user_type=UserType.ADMIN,
+            expected_user_type=UserType.STANDARD,
+        )
+    # Asking for the type the user already has changes nothing, whatever was
+    # expected.
+    unchanged = user_types.change_user_type(
+        principal=CAROL,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+
+    assert unchanged.user_type is UserType.AUTHOR
+    assert _stored_type(store, bob_id) == "author"
+    assert [
+        (change.changed_by_user_id, change.new_user_type)
+        for change in _history_rows(store)
+    ] == [(alice_id, "author")]
+    assert carol_id != alice_id

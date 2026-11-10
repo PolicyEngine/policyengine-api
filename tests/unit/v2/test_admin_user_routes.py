@@ -24,6 +24,7 @@ from policyengine_api.services.v2.user_types.validators import (
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
+    UserTypeChangedError,
     UserTypeCheckUnavailableError,
 )
 from tests.unit.v2.user_route_support import (
@@ -188,14 +189,23 @@ def test_admins_read_one_user_and_its_type_history() -> None:
 def test_admins_change_a_signed_in_users_type() -> None:
     client, service = _client()
 
-    changed = client.patch(f"/v2/admin/users/{TARGET_ID}", json={"user_type": "author"})
+    changed = client.patch(
+        f"/v2/admin/users/{TARGET_ID}",
+        json={"user_type": "author", "expected_user_type": "standard"},
+    )
     refused = [
         client.patch(f"/v2/admin/users/{TARGET_ID}", json=body)
         for body in (
             {},
-            {"user_type": "unauthenticated"},
-            {"user_type": "editor"},
-            {"user_type": "admin", "email": "x@example.test"},
+            {"user_type": "author"},
+            {"user_type": "unauthenticated", "expected_user_type": "standard"},
+            {"user_type": "editor", "expected_user_type": "standard"},
+            {"user_type": "author", "expected_user_type": "unauthenticated"},
+            {
+                "user_type": "admin",
+                "expected_user_type": "standard",
+                "email": "x@example.test",
+            },
         )
     ]
 
@@ -203,9 +213,14 @@ def test_admins_change_a_signed_in_users_type() -> None:
     assert changed.json()["result"] == {"item": EXPECTED_USER}
     assert (
         "change_user_type",
-        {"principal": PRINCIPAL, "user_id": TARGET_ID, "user_type": UserType.AUTHOR},
+        {
+            "principal": PRINCIPAL,
+            "user_id": TARGET_ID,
+            "user_type": UserType.AUTHOR,
+            "expected_user_type": UserType.STANDARD,
+        },
     ) in service.calls
-    assert [response.status_code for response in refused] == [422] * 4
+    assert [response.status_code for response in refused] == [422] * 6
     assert [name for name, _kwargs in service.calls].count("change_user_type") == 1
 
 
@@ -214,6 +229,7 @@ def test_admins_change_a_signed_in_users_type() -> None:
     [
         (SignedInUserNotFoundError("No signed-in user has this ID"), 404),
         (LastAdminDemotionError("The last admin can't be demoted"), 409),
+        (UserTypeChangedError("This user's type is now author, not standard"), 409),
         (UserTypeBelowMinimumError("Only admins may do this"), 403),
     ],
 )
@@ -228,7 +244,8 @@ def test_service_refusals_map_to_http_statuses(
     client, _service = _client(RecordingService(refuse))
 
     response = client.patch(
-        f"/v2/admin/users/{TARGET_ID}", json={"user_type": "standard"}
+        f"/v2/admin/users/{TARGET_ID}",
+        json={"user_type": "standard", "expected_user_type": "author"},
     )
 
     assert response.status_code == status_code
@@ -245,7 +262,10 @@ def test_callers_below_admin_get_403_from_every_admin_route(principal: str) -> N
     responses = [
         client.get("/v2/admin/users"),
         client.get(f"/v2/admin/users/{TARGET_ID}"),
-        client.patch(f"/v2/admin/users/{TARGET_ID}", json={"user_type": "admin"}),
+        client.patch(
+            f"/v2/admin/users/{TARGET_ID}",
+            json={"user_type": "admin", "expected_user_type": "standard"},
+        ),
         client.get(f"/v2/admin/users/{TARGET_ID}/user-type-changes"),
     ]
 

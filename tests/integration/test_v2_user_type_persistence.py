@@ -176,7 +176,10 @@ def test_the_runtime_role_changes_types_and_records_them(sessions) -> None:
     user_types = _user_types(sessions)
 
     promoted = user_types.change_user_type(
-        principal=alice, user_id=bob_id, user_type=UserType.AUTHOR
+        principal=alice,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
     )
     found = user_types.list_users(
         principal=alice,
@@ -217,7 +220,10 @@ def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
     def bob_demotes_alice() -> None:
         try:
             outcomes["result"] = _user_types(sessions).change_user_type(
-                principal=bob, user_id=alice_id, user_type=UserType.STANDARD
+                principal=bob,
+                user_id=alice_id,
+                user_type=UserType.STANDARD,
+                expected_user_type=UserType.ADMIN,
             )
         except Exception as error:  # noqa: BLE001  # the test inspects the failure
             outcomes["error"] = error
@@ -257,7 +263,10 @@ def test_deleting_accounts_removes_or_keeps_their_recorded_changes(sessions) -> 
     user_types = _user_types(sessions)
     for user_id in (alice_id, bob_id):
         user_types.change_user_type(
-            principal=carol, user_id=user_id, user_type=UserType.ADMIN
+            principal=carol,
+            user_id=user_id,
+            user_type=UserType.ADMIN,
+            expected_user_type=UserType.STANDARD,
         )
 
     # Bob's own deletion removes his history; Carol's keeps the change she
