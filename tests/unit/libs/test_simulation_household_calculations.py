@@ -7,13 +7,13 @@ from uuid import UUID
 
 import httpx
 import pytest
+
+from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_household_calculations import (
     HOUSEHOLD_CALCULATIONS_PATH,
     SimulationAnswer,
     SimulationHouseholdCalculationClient,
 )
-
-from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     SimulationServiceInvalidRequestError,
@@ -244,7 +244,7 @@ def test_the_request_is_sent_through_the_one_replaceable_send_function() -> None
     sent: list[dict[str, object]] = []
 
     def send(http_client: httpx.Client, body: dict[str, object]) -> SimulationAnswer:
-        assert str(http_client.base_url) == f"{SIMULATION_URL}/"
+        assert str(http_client.base_url).rstrip("/") == SIMULATION_URL
         sent.append(body)
         return SimulationAnswer(status_code=202, content=json.dumps(ACCEPTED).encode())
 
