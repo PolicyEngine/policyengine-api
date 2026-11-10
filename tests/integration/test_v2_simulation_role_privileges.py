@@ -417,6 +417,49 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
         _refused(connection, statement, id=ids["budget_window_run"])
 
 
+@pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
+def test_each_simulation_role_locks_a_budget_window_run_row(
+    connection: Connection,
+    managed_v2_roles,
+    public_api_rows: PublicApiRows,
+    role_kind: str,
+) -> None:
+    """Both roles lock a window's row before they change its status.
+
+    PostgreSQL lets a role lock a row ``FOR UPDATE`` when it may update some of
+    the table's columns. A lock over a join with ``reports`` names
+    ``budget_window_runs`` alone: neither role may update ``reports``, so a lock
+    on every joined table is refused.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+    _act_as(connection, getattr(managed_v2_roles, role_kind))
+
+    locked_window = connection.execute(
+        text("SELECT id FROM budget_window_runs WHERE id = :id FOR UPDATE"),
+        {"id": ids["budget_window_run"]},
+    ).scalar_one()
+    locked_over_join = connection.execute(
+        text(
+            "SELECT budget_window_runs.id, reports.budget_window_size "
+            "FROM budget_window_runs JOIN reports "
+            "ON reports.id = budget_window_runs.report_id "
+            "WHERE budget_window_runs.id = :id FOR UPDATE OF budget_window_runs"
+        ),
+        {"id": ids["budget_window_run"]},
+    ).one()
+
+    assert locked_window == ids["budget_window_run"]
+    assert tuple(locked_over_join) == (ids["budget_window_run"], 1)
+    _refused(
+        connection,
+        "SELECT budget_window_runs.id FROM budget_window_runs JOIN reports "
+        "ON reports.id = budget_window_runs.report_id "
+        "WHERE budget_window_runs.id = :id FOR UPDATE",
+        id=ids["budget_window_run"],
+    )
+
+
 def test_the_public_api_reads_runs_and_results_but_writes_neither(
     connection: Connection, managed_v2_roles
 ) -> None:
