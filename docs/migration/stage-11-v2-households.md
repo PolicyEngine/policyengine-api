@@ -318,11 +318,15 @@ optional `spm` settings. The year calculated is the household's
    PolicyEngine.py version can check passes.
 
 It then sends the simulation service's `POST /household-calculations` the
-IDs and options. The answer is 202 with the new job's `calculation_id` and
-`status`; each submission creates a new job. The simulation service's 422
-reasons reach the caller as 422; any other refusal, no answer, an answer the
-Public API can't read, missing configuration or a gateway token it can't
-fetch is 503.
+IDs and options, with the request's ID and observability ID headers. The
+answer is 202 with the new job's `calculation_id` and `status`; each
+submission creates a new job. The simulation service's 422 reasons reach the
+caller as 422. A 202 whose body the Public API can't read is 502: the job
+exists, so submitting again would create another. Any other refusal (with
+the simulation service's `code` and reason in the message, and the failed
+job's ID when Modal refused the call), no answer, a refusal the Public API
+can't read, missing configuration or a gateway token it can't fetch is 503.
+A failed catalog query in the policy check is 503 too.
 
 `GET /v2/household-calculations/{calculation_id}` reads the job from
 `household_jobs`, which the simulation service inserts and its household

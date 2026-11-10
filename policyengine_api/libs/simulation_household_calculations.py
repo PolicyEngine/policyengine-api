@@ -151,8 +151,10 @@ def post_household_calculation(
     Raise httpx.HTTPError when no answer arrives, and GatewayAuthError when
     the gateway token cannot be fetched. ``http_client`` has the service's
     base URL. To send through the generated client instead, this body
-    becomes (the operation and model names are those the simulation
-    service's OpenAPI document gives the route)::
+    becomes, with ``Client`` from ``policyengine_api_simulation_client``,
+    ``submit_household_calculation`` from its ``api.default`` package and
+    ``HouseholdCalculationRequest`` from its ``models``, the names the
+    simulation service's OpenAPI document gives the route::
 
         client = Client(base_url=str(http_client.base_url))
         client.set_httpx_client(http_client)
