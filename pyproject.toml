@@ -412,6 +412,8 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.user_reports.services",
     "policyengine_api.services.v2.user_simulations.database_session",
     "policyengine_api.services.v2.user_simulations.services",
+    "policyengine_api.services.v2.user_types.database_session",
+    "policyengine_api.services.v2.user_types.services",
     "spm_calculator",
 ]
 

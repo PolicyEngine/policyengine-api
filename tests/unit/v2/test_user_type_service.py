@@ -5,23 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from policyengine_api.services.v2.user_types.database_session import (
-    UserTypeDatabaseSession,
-)
-from policyengine_api.services.v2.user_types.services import V2UserTypeService
-from policyengine_api.services.v2.user_types.types import (
-    AdminUserSearch,
-    UserTypeChangeSource,
-)
-from policyengine_api.services.v2.user_types.validators import (
-    LastAdminDemotionError,
-    SignedInUserNotFoundError,
-    UserEmailMatchError,
-    UserTypeBelowMinimumError,
-)
 from sqlmodel import select
 
-from policyengine_api.data.v2.models import User, UserIdentity, UserType, UserTypeChange
+from policyengine_api.data.v2.models import (
+    User,
+    UserIdentity,
+    UserType,
+    UserTypeChange,
+    UserTypeChangeSource,
+)
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
@@ -32,6 +24,17 @@ from policyengine_api.services.v2.user_policies.database_session import (
 )
 from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 from policyengine_api.services.v2.user_policies.types import UserPolicyCreateFields
+from policyengine_api.services.v2.user_types.database_session import (
+    UserTypeDatabaseSession,
+)
+from policyengine_api.services.v2.user_types.services import V2UserTypeService
+from policyengine_api.services.v2.user_types.types import AdminUserSearch
+from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDemotionError,
+    SignedInUserNotFoundError,
+    UserEmailMatchError,
+    UserTypeBelowMinimumError,
+)
 from tests.unit.v2.user_service_support import (
     ALICE,
     BOB,
@@ -121,11 +124,11 @@ def test_a_signed_in_user_at_or_above_the_minimum_passes(
     user_id = _sign_in(store, ALICE)
     _store_type(store, user_id, stored_type)
 
-    resolved = _user_types(store).require_minimum_user_type(
+    caller_type = _user_types(store).require_minimum_user_type(
         principal=ALICE, minimum=minimum
     )
 
-    assert (resolved.user_id, resolved.user_type) == (user_id, stored_type)
+    assert caller_type is stored_type
 
 
 @pytest.mark.parametrize(
@@ -162,6 +165,15 @@ def test_callers_without_a_signed_in_user_are_below_every_signed_in_type(
             user_types.require_minimum_user_type(
                 principal=principal, minimum=UserType.AUTHOR
             )
+    # Bob has no user yet, but his first request will provision a standard one.
+    assert (
+        user_types.require_minimum_user_type(principal=BOB, minimum=UserType.STANDARD)
+        is UserType.STANDARD
+    )
+    with pytest.raises(UserTypeBelowMinimumError):
+        user_types.require_minimum_user_type(
+            principal=SIGNED_OUT_BROWSER, minimum=UserType.STANDARD
+        )
     # The check reads only: Bob, never seen before, is not provisioned.
     with store.sessions() as session:
         assert session.exec(select(UserIdentity)).all() == []

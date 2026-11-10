@@ -6,6 +6,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+
+from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2PermissionDeniedError,
+)
 from policyengine_api.fastapi_routes.v2.user_type_support import (
     minimum_user_type_dependency,
 )
@@ -14,19 +19,13 @@ from policyengine_api.services.v2.user_types.types import (
     AdminUserRead,
     AdminUserSearch,
     UserTypeChangeRead,
-    UserTypeChangeSource,
 )
 from policyengine_api.services.v2.user_types.validators import (
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
+    UserTypeCheckUnavailableError,
 )
-
-from policyengine_api.data.v2.models import UserType
-from policyengine_api.fastapi_routes.v2.errors_support import (
-    V2PermissionDeniedError,
-)
-from policyengine_api.services.v2.identity.types import ResolvedUser
 from tests.unit.v2.user_route_support import (
     CREATED_AT,
     OWNER_ID,
@@ -40,7 +39,6 @@ from tests.unit.v2.user_route_support import (
 TARGET_ID = UUID("00000000-0000-0000-0000-000000000081")
 CHANGE_ID = UUID("00000000-0000-0000-0000-000000000082")
 LAST_SEEN_AT = datetime(2026, 2, 1, tzinfo=UTC)
-ADMIN = ResolvedUser(user_id=OWNER_ID, email=None, user_type=UserType.ADMIN)
 
 
 def _user(**changes) -> AdminUserRead:
@@ -73,7 +71,7 @@ def _change() -> UserTypeChangeRead:
 
 def _result(name: str, kwargs: dict):
     if name == "require_minimum_user_type":
-        return ADMIN
+        return UserType.ADMIN
     if name == "list_users":
         search = kwargs["search"]
         return AdminUserPage(
@@ -224,7 +222,7 @@ def test_service_refusals_map_to_http_statuses(
 ) -> None:
     def refuse(name: str, kwargs: dict):
         if name == "require_minimum_user_type":
-            return ADMIN
+            return UserType.ADMIN
         raise error
 
     client, _service = _client(RecordingService(refuse))
@@ -269,8 +267,7 @@ def test_admin_routes_require_a_credential() -> None:
 
 
 def test_any_route_can_require_a_minimum_type_and_is_refused_below_it() -> None:
-    author = ResolvedUser(user_id=OWNER_ID, email=None, user_type=UserType.AUTHOR)
-    allowed = RecordingService(lambda _name, _kwargs: author)
+    allowed = RecordingService(lambda _name, _kwargs: UserType.AUTHOR)
     refused = RecordingService()
     refused.error = UserTypeBelowMinimumError("Only authors and admins may do this")
 
@@ -279,7 +276,7 @@ def test_any_route_can_require_a_minimum_type_and_is_refused_below_it() -> None:
             lambda: PRINCIPAL, lambda: service, UserType.AUTHOR
         )
 
-    assert require_author(allowed)(principal=PRINCIPAL) == author
+    assert require_author(allowed)(principal=PRINCIPAL) is UserType.AUTHOR
     assert allowed.calls == [
         (
             "require_minimum_user_type",
@@ -292,3 +289,19 @@ def test_any_route_can_require_a_minimum_type_and_is_refused_below_it() -> None:
         V2PermissionDeniedError, match="Only authors and admins may do this"
     ):
         require_author(refused)(principal=PRINCIPAL)
+
+
+def test_an_unreadable_caller_type_answers_503() -> None:
+    service = RecordingService(_result)
+    service.error = UserTypeCheckUnavailableError(
+        "The caller's user type could not be read"
+    )
+    client, _service = _client(service)
+
+    response = client.get("/v2/admin/users")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": "V2 user persistence is unavailable",
+    }

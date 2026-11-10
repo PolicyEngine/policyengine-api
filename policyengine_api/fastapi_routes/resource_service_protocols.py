@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
@@ -57,6 +58,12 @@ if TYPE_CHECKING:
         UserSimulationPage,
         UserSimulationRead,
         UserSimulationUpdateInput,
+    )
+    from policyengine_api.services.v2.user_types.types import (
+        AdminUserPage,
+        AdminUserRead,
+        AdminUserSearch,
+        UserTypeChangeRead,
     )
 
 
@@ -445,4 +452,42 @@ class V2AccountResourceService(Protocol):
         A signed-in user's Auth0 user is deleted too when Auth0 Management is
         configured.
         """
+        ...
+
+
+class V2UserTypeResourceService(Protocol):
+    """Route-independent minimum user types and admins' changes to users' types."""
+
+    def require_minimum_user_type(
+        self, *, principal: AccountPrincipal, minimum: UserType
+    ) -> UserType:
+        """Return the caller's type; raise ``UserTypeBelowMinimumError`` below it."""
+        ...
+
+    def list_users(
+        self, *, principal: AccountPrincipal, search: AdminUserSearch
+    ) -> AdminUserPage:
+        """Return one page of signed-in users, newest first, to an admin."""
+        ...
+
+    def get_user(self, *, principal: AccountPrincipal, user_id: UUID) -> AdminUserRead:
+        """Return one signed-in user to an admin.
+
+        Raise ``SignedInUserNotFoundError`` when no signed-in user has the ID.
+        """
+        ...
+
+    def change_user_type(
+        self, *, principal: AccountPrincipal, user_id: UUID, user_type: UserType
+    ) -> AdminUserRead:
+        """Change a signed-in user's type for an admin, recording the change.
+
+        Raise ``LastAdminDemotionError`` when the change would leave no admin.
+        """
+        ...
+
+    def list_user_type_changes(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> tuple[UserTypeChangeRead, ...]:
+        """Return a signed-in user's recorded type changes, newest first."""
         ...

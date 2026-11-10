@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+
+from policyengine_api.data.v2.models import UserType
 from policyengine_api.services.v2.user_types.types import (
     AdminUserRead,
     ScriptedUserTypeChange,
@@ -14,8 +16,6 @@ from policyengine_api.services.v2.user_types.validators import (
     LastAdminDemotionError,
     UserEmailMatchError,
 )
-
-from policyengine_api.data.v2.models import UserType
 from scripts import set_v2_user_type
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000091")
