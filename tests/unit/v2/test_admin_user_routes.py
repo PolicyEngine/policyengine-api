@@ -382,7 +382,13 @@ def test_admins_delete_a_signed_in_users_account() -> None:
             ),
             409,
         ),
-        (AccountIdentityDeletionError("remove them in Auth0"), 502),
+        (
+            AccountIdentityDeletionError(
+                "find them in Auth0 by the person's email",
+                undeleted_auth0_user_count=1,
+            ),
+            502,
+        ),
         (
             AccountDeletionUnavailableError(
                 "Account deletion is temporarily unavailable; nothing was deleted"
@@ -439,4 +445,5 @@ def test_the_admin_account_deletion_route_documents_its_responses() -> None:
     assert "Auth0" in operation["description"]
     assert "own account" in operation["responses"]["409"]["description"]
     assert "404" in operation["responses"]["502"]["description"]
+    assert "email" in operation["responses"]["502"]["description"]
     assert "nothing was deleted" in operation["responses"]["503"]["description"]

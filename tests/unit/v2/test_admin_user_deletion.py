@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -49,7 +50,7 @@ from tests.unit.v2.user_service_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Collection, Iterator
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
 
@@ -62,22 +63,33 @@ BOB_WITH_EMAIL = UserPrincipal(
 )
 BOB_LINKED_SUBJECT = "google-oauth2|bob-linked"
 OTHER_TENANT_ISSUER = "https://other-tenant.example.test/"
+DANA_FROM_ANOTHER_TENANT = UserPrincipal(
+    issuer=OTHER_TENANT_ISSUER, subject="auth0|dana", email="dana@example.test"
+)
+ACCOUNT_SERVICE_LOGGER = "policyengine_api.services.v2.user_accounts.services"
 ABSENT_USER_ID = UUID("00000000-0000-0000-0000-0000000000a1")
 ADMIN_DELETION_EVENT = "admin_deleted_v2_user_account"
 
 
 class RecordingAuth0Users:
-    """Stand in for the Auth0 deleter: count preparations, record deletions."""
+    """Stand in for the Auth0 deleter: count preparations, record deletions.
+
+    ``deletion_error`` is raised for every subject, or only for
+    ``failing_subjects`` when they are given.
+    """
 
     def __init__(
         self,
         *,
         preparation_error: Exception | None = None,
         deletion_error: Exception | None = None,
+        failing_subjects: Collection[str] | None = None,
     ) -> None:
         self.preparation_error = preparation_error
         self.deletion_error = deletion_error
+        self.failing_subjects = failing_subjects
         self.preparations = 0
+        self.attempted_subjects: list[str] = []
         self.deleted_subjects: list[str] = []
 
     def prepare_deletion(self) -> None:
@@ -86,7 +98,9 @@ class RecordingAuth0Users:
             raise self.preparation_error
 
     def delete_user(self, subject: str) -> None:
-        if self.deletion_error is not None:
+        self.attempted_subjects.append(subject)
+        fails = self.failing_subjects is None or subject in self.failing_subjects
+        if self.deletion_error is not None and fails:
             raise self.deletion_error
         self.deleted_subjects.append(subject)
 
@@ -352,9 +366,12 @@ def test_a_failed_auth0_deletion_after_an_admin_deletion_is_reported(
         store, RecordingAuth0Users(deletion_error=RuntimeError("management api down"))
     )
 
-    with pytest.raises(AccountIdentityDeletionError, match="remove them in Auth0"):
+    with pytest.raises(AccountIdentityDeletionError) as failure:
         accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
 
+    assert failure.value.undeleted_auth0_user_count == 1
+    assert "remain (1 of 1)" in str(failure.value)
+    assert "by the person's email" in str(failure.value)
     # The data is gone, so the deletion is recorded.
     assert _user_type_of(store, bob_id) is None
     assert runtime.events == [
@@ -408,3 +425,87 @@ def test_loading_the_account_service_leaves_the_observability_runtime_unbuilt() 
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def _account_service_warnings(
+    caplog: pytest.LogCaptureFixture,
+) -> list[tuple[str, dict[str, object]]]:
+    return [
+        (record.getMessage(), record.policyengine_attributes)
+        for record in caplog.records
+        if record.name == ACCOUNT_SERVICE_LOGGER and record.levelno == logging.WARNING
+    ]
+
+
+@pytest.mark.usefixtures("runtime")
+@pytest.mark.parametrize("deleted_by", ["bob", "an_admin"])
+def test_every_auth0_user_is_tried_before_a_failure_is_reported(
+    store: V2Store, caplog: pytest.LogCaptureFixture, deleted_by: str
+) -> None:
+    """Bob's first Auth0 user fails to delete, as after a rate limit."""
+    caplog.set_level(logging.WARNING, logger=ACCOUNT_SERVICE_LOGGER)
+    _sign_in(store, ALICE, UserType.ADMIN)
+    bob_id = _sign_in(store, BOB)
+    _give_bob_saved_work_and_more_identities(store, bob_id)
+    auth0_users = RecordingAuth0Users(
+        deletion_error=RuntimeError("rate limited"), failing_subjects={BOB.subject}
+    )
+    accounts = _accounts(store, auth0_users)
+
+    def delete_bob() -> AccountDeletion:
+        if deleted_by == "bob":
+            return accounts.delete_account(principal=BOB)
+        return accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
+
+    with pytest.raises(AccountIdentityDeletionError) as failure:
+        delete_bob()
+
+    assert auth0_users.attempted_subjects == [BOB.subject, BOB_LINKED_SUBJECT]
+    assert auth0_users.deleted_subjects == [BOB_LINKED_SUBJECT]
+    assert failure.value.undeleted_auth0_user_count == 1
+    if deleted_by == "bob":
+        # DELETE /v2/me keeps its message.
+        assert str(failure.value) == (
+            "Account data was deleted but the sign-in account could not be "
+            "removed; retry the request"
+        )
+    else:
+        assert "remain (1 of 2)" in str(failure.value)
+        assert "by the person's email" in str(failure.value)
+    assert _user_type_of(store, bob_id) is None
+    assert _account_service_warnings(caplog) == [
+        (
+            "auth0_user_deletion_failed",
+            {
+                "v2_user_id": str(bob_id),
+                "error_type": "RuntimeError",
+                "auth0_user_count": 2,
+                "undeleted_auth0_user_count": 1,
+            },
+        )
+    ]
+
+
+@pytest.mark.usefixtures("runtime")
+def test_an_admin_deletion_logs_that_no_identity_was_under_the_issuer(
+    store: V2Store, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Dana signed in through another tenant, whose users this one can't delete."""
+    caplog.set_level(logging.WARNING, logger=ACCOUNT_SERVICE_LOGGER)
+    _sign_in(store, ALICE, UserType.ADMIN)
+    dana_id = _sign_in(store, DANA_FROM_ANOTHER_TENANT)
+    auth0_users = RecordingAuth0Users()
+
+    deletion = _accounts(store, auth0_users).delete_user_account_as_admin(
+        principal=ALICE, user_id=dana_id
+    )
+
+    assert deletion == AccountDeletion(user_id=dana_id, auth0_subjects=())
+    assert auth0_users.attempted_subjects == []
+    assert _user_type_of(store, dana_id) is None
+    assert _account_service_warnings(caplog) == [
+        (
+            "auth0_user_deletion_skipped_no_identity_under_issuer",
+            {"v2_user_id": str(dana_id)},
+        )
+    ]

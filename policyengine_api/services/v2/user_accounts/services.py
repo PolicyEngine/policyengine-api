@@ -83,14 +83,18 @@ logger = logging.getLogger(__name__)
 
 # The runtime event recording each admin's deletion of a user's account.
 ADMIN_ACCOUNT_DELETION_EVENT = "admin_deleted_v2_user_account"
+# The messages of AccountIdentityDeletionError, formatted with
+# ``undeleted_count`` and ``subject_count``. DELETE /v2/me's names neither: a
+# retry with the same token deletes that token's Auth0 user.
 OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE = (
     "Account data was deleted but the sign-in account could not be removed; "
     "retry the request"
 )
 # A retry finds no user (404), so the admin is told what remains to remove.
 ADMIN_DELETION_AUTH0_FAILURE_MESSAGE = (
-    "The account's data was deleted but its Auth0 users could not all be "
-    "removed; remove them in Auth0"
+    "The account's data was deleted, but Auth0 users of its sign-in identities "
+    "remain ({undeleted_count} of {subject_count}); find them in Auth0 by the "
+    "person's email and delete them there"
 )
 
 
@@ -304,7 +308,7 @@ class V2AccountService:
             auth0_user_deleter,
             subjects,
             deleted_user_id=deleted_user_id,
-            failure_message=OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE,
+            failure_message_template=OWN_ACCOUNT_AUTH0_FAILURE_MESSAGE,
         )
 
     def delete_user_account_as_admin(
@@ -344,7 +348,7 @@ class V2AccountService:
             auth0_user_deleter,
             subjects,
             deleted_user_id=user_id,
-            failure_message=ADMIN_DELETION_AUTH0_FAILURE_MESSAGE,
+            failure_message_template=ADMIN_DELETION_AUTH0_FAILURE_MESSAGE,
         )
 
 
@@ -368,13 +372,15 @@ def _delete_auth0_users(
     subjects: tuple[str, ...],
     *,
     deleted_user_id: UUID | None,
-    failure_message: str,
+    failure_message_template: str,
 ) -> AccountDeletion:
     """Delete a deleted account's Auth0 users, after its data is gone.
 
-    Without a deleter the Auth0 users are kept and the skip is logged. Raise
-    AccountIdentityDeletionError, with ``failure_message``, when one can't be
-    deleted.
+    Without a deleter, or without a subject to delete, the Auth0 users are
+    kept and the skip is logged. Every subject is tried, since the identities
+    that named them are already gone; then, if any deletion failed, raise
+    AccountIdentityDeletionError with ``failure_message_template`` formatted
+    with the counts. No subject, email or token is logged.
     """
     logged_user_id = str(deleted_user_id) if deleted_user_id is not None else None
     if auth0_user_deleter is None:
@@ -383,21 +389,39 @@ def _delete_auth0_users(
             extra={"policyengine_attributes": {"v2_user_id": logged_user_id}},
         )
         return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
-    try:
-        for subject in subjects:
-            auth0_user_deleter.delete_user(subject)
-    except Exception as error:
+    if not subjects:
+        # Only an admin's deletion can find none: the user's identities were
+        # all from another issuer, whose Auth0 users this tenant can't delete.
         logger.warning(
-            "auth0_user_deletion_failed",
-            extra={
-                "policyengine_attributes": {
-                    "v2_user_id": logged_user_id,
-                    "error_type": type(error).__name__,
-                }
-            },
+            "auth0_user_deletion_skipped_no_identity_under_issuer",
+            extra={"policyengine_attributes": {"v2_user_id": logged_user_id}},
         )
-        raise AccountIdentityDeletionError(failure_message) from error
-    return AccountDeletion(user_id=deleted_user_id, auth0_subjects=subjects)
+        return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
+    failures: list[Exception] = []
+    for subject in subjects:
+        try:
+            auth0_user_deleter.delete_user(subject)
+        except Exception as error:  # noqa: BLE001  # the remaining subjects are still tried; the failures are raised below
+            failures.append(error)
+    if not failures:
+        return AccountDeletion(user_id=deleted_user_id, auth0_subjects=subjects)
+    logger.warning(
+        "auth0_user_deletion_failed",
+        extra={
+            "policyengine_attributes": {
+                "v2_user_id": logged_user_id,
+                "error_type": type(failures[0]).__name__,
+                "auth0_user_count": len(subjects),
+                "undeleted_auth0_user_count": len(failures),
+            }
+        },
+    )
+    message = failure_message_template.format(
+        undeleted_count=len(failures), subject_count=len(subjects)
+    )
+    raise AccountIdentityDeletionError(
+        message, undeleted_auth0_user_count=len(failures)
+    ) from failures[0]
 
 
 def _record_admin_account_deletion(

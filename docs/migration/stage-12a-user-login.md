@@ -166,11 +166,16 @@ by user ID with `delete_account`):
    It then deletes the user's `legacy_user_mappings` rows and the user, whose
    identities, saved records and type changes cascade.
 3. It deletes the Auth0 user of each of the user's sign-in identities from the
-   Public API's issuer, oldest first. If one fails after the data is gone it
+   Public API's issuer, oldest first, trying every one even after one fails,
+   since the identities that named them are already gone. If any fails it
    answers 502. Unlike `DELETE /v2/me`, a retry finds no user and answers
-   404, so the message tells the admin to remove the remaining Auth0 users in
-   Auth0. Without Auth0 Management the Auth0 users are kept, as for
-   `DELETE /v2/me`.
+   404, so the message says how many Auth0 users remain and tells the admin to
+   find them in Auth0 by the person's email and delete them there. Without
+   Auth0 Management the Auth0 users are kept, as for `DELETE /v2/me`, and so
+   they are when none of the user's identities is from the Public API's
+   issuer; each case logs a WARNING record
+   (`auth0_user_deletion_skipped_not_configured`,
+   `auth0_user_deletion_skipped_no_identity_under_issuer`).
 
 Since the caller must be an admin, the deleted user can be the only admin only
 when admins delete their own account. That is allowed while another admin
@@ -335,9 +340,13 @@ Concurrency on Postgres:
   Manager and obtains a Management token. If either fails, it returns 503 with
   nothing deleted. It then deletes the user's `legacy_user_mappings` rows
   (RESTRICT FK), then the user (identities and associations cascade), then the
-  Auth0 user. A 401 from Auth0 drops the cached token and retries once with a
-  fresh one. If the Auth0 call still fails after the data is gone, the route
-  returns 502 and a retry is safe. The Management settings are read only for
+  Auth0 user of each of the user's sign-in identities, trying every one even
+  after one fails. A 401 from Auth0 drops the cached token and retries once
+  with a fresh one. If any Auth0 deletion still fails after the data is gone,
+  the route returns 502, and `auth0_user_deletion_failed` logs how many Auth0
+  users remain, without their subjects. A retry with the same token is safe:
+  it finds no user and deletes that token's Auth0 user, though not those of
+  the user's other identities. The Management settings are read only for
   this route and admins' `DELETE /v2/admin/users/{user_id}` (see
   [Admins' account deletions](#admins-account-deletions)), which deletes
   another user's account the same way. For an unauthenticated user,
