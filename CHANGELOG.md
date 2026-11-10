@@ -1,3 +1,10 @@
+## [5.39.0] - 2026-11-10
+
+### Added
+
+- Admins can find signed-in v2 users by email, change their types and read each change at `/v2/admin/users`; routes can require a minimum user type; and `scripts/set_v2_user_type.py` sets a user's type by email.
+
+
 ## [5.38.0] - 2026-11-10
 
 ### Added
