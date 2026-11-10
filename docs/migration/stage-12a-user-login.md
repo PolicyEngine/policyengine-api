@@ -75,8 +75,8 @@ For a bearer token:
 The type alias `AccountPrincipal = UserPrincipal | UnauthenticatedPrincipal`
 flows from the routes through every service.
 
-An unauthenticated principal never acts on a standard user. When its UUID
-names a standard user (one converted from this browser, or anyone else's), the
+An unauthenticated principal never acts on a signed-in user. When its UUID
+names a signed-in user (one converted from this browser, or anyone else's), the
 request gets 401 with `WWW-Authenticate: Bearer` and the message "This
 browser's saved work now belongs to a signed-in account; sign in to continue".
 After a conversion, app v3 should sign the user in, or generate a new UUID to
@@ -215,7 +215,7 @@ Concurrency on Postgres:
   headers, and `UnauthenticatedPrincipal` and `ResolvedUser` keep the ID out
   of `repr`. Responses still include `user_id` and `id`, but only to the
   credential's owner.
-- **An unauthenticated principal never acts on a standard user**, including
+- **An unauthenticated principal never acts on a signed-in user**, including
   the one its own browser converted into (see "User types and credentials").
 - **Anyone can mint unauthenticated users.** Any new UUID creates one on its
   first write, without signing in. Only edge throttling bounds how fast one

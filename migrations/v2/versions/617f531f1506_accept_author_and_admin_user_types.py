@@ -13,8 +13,9 @@ as one check removed and one added. The operations are exactly as generated.
 The upgrade only widens what the check allows. The previous Public API
 revision keeps working until a user is given the author or admin type: its
 /v2/me responses allow only unauthenticated and standard, so they fail with
-500 for such a user. Give those types only once no deployment runs the
-previous revision. The downgrade restores the check that allows only
+500 for such a user, and /v2/me/upgrade fails only after its merge has
+committed. Give those types only once no deployment, rollback included, runs
+the previous revision. The downgrade restores the check that allows only
 unauthenticated and standard, so it fails while any user is an author or an
 admin.
 """

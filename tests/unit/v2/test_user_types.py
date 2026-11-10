@@ -76,15 +76,6 @@ def _stored_type(store: V2Store, user_id: UUID) -> str:
         return user.user_type
 
 
-def test_user_types_run_from_unauthenticated_to_admin() -> None:
-    assert [user_type.value for user_type in UserType] == [
-        "unauthenticated",
-        "standard",
-        "author",
-        "admin",
-    ]
-
-
 def test_account_responses_allow_every_user_type() -> None:
     allowed = get_args(MeItem.model_fields["user_type"].annotation)
 
@@ -240,3 +231,29 @@ def test_a_conversion_at_sign_in_resolves_its_owner_with_the_stored_type(
         (AccountConversionOutcome.MERGED, account.id, user_type),
         (AccountConversionOutcome.NONE, account.id, user_type),
     ]
+
+
+def test_a_conversion_of_a_new_identity_resolves_a_standard_owner(
+    store: V2Store,
+) -> None:
+    V2UserPolicyService(
+        UserPolicyDatabaseSession(store.sessions), default_legacy_references()
+    ).create_user_policy(
+        principal=SIGNED_OUT_BROWSER,
+        association_input=UserPolicyCreateFields(country_id="us", legacy_policy_id=1),
+    )
+
+    with store.sessions.begin() as session:
+        conversion = convert_unauthenticated_user_in_session(
+            session,
+            unauthenticated_user_id=SIGNED_OUT_BROWSER.user_id,
+            principal=ALICE,
+            country_id="us",
+        )
+
+    assert conversion.outcome is AccountConversionOutcome.CONVERTED
+    assert (conversion.owner.user_id, conversion.owner.user_type) == (
+        SIGNED_OUT_BROWSER.user_id,
+        UserType.STANDARD,
+    )
+    assert _stored_type(store, SIGNED_OUT_BROWSER.user_id) == "standard"

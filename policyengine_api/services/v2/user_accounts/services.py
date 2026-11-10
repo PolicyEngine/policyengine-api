@@ -88,7 +88,7 @@ class V2AccountService:
     ) -> None:
         """Open every session through ``database_session``.
 
-        ``auth0_user_deleter_factory`` is called only when a standard account is
+        ``auth0_user_deleter_factory`` is called only when a signed-in account is
         deleted; without it, or when it returns None, the Auth0 user is kept.
         """
         self._database_session = database_session

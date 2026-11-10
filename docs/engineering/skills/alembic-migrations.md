@@ -442,8 +442,10 @@ which serves it with no current-law values and fails the exact comparison if
 it publishes that version, with nothing to restore it. Downgrading past the
 revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
-From the head, such a downgrade first runs revision `1356f658347d`'s
-downgrade, which needs `simulations` empty (see "API v2 simulation runs").
+From the head, such a downgrade first runs revision `617f531f1506`'s
+downgrade, which needs no user to be an author or an admin (see "API v2 user
+types"), then revision `1356f658347d`'s, which needs `simulations` empty (see
+"API v2 simulation runs").
 Otherwise restore the versions the target code may install or serve first, by
 publishing each with this revision's code, as the Stage 9 runbook's rollback
 section describes. Production downgrades are never automatic in any case.
@@ -719,8 +721,9 @@ name in the same way.
 The upgrade only widens what the check allows. The previous Public API
 revision keeps working until a user is given the `author` or `admin` type: its
 `/v2/me` responses allow only `unauthenticated` and `standard`, so they fail
-with 500 for such a user. Give those types only once no deployment, rollback
-included, runs the previous revision. The downgrade restores the check that
+with 500 for such a user, and `/v2/me/upgrade` fails only after its merge has
+committed. Give those types only once no deployment, rollback included, runs
+the previous revision. The downgrade restores the check that
 allows only `unauthenticated` and `standard`, so it fails while any user is an
 author or an admin. `test_user_types_revision_changes_only_the_user_type_check` in
 `tests/integration/test_alembic_v2_lifecycle.py` checks that nothing else

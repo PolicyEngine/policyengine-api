@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -1333,13 +1334,18 @@ def test_a_household_only_country_row_lets_records_name_that_country() -> None:
         engine.dispose()
 
 
-def _schema_shape(engine: Engine) -> dict[str, dict[str, object]]:
-    """Reflect every table's columns, keys, indexes and checks, by name."""
+def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
+    """Reflect every table's columns and defaults, keys, indexes and checks."""
     inspector = inspect(engine)
     return {
         table_name: {
             "columns": [
-                (column["name"], str(column["type"]), column["nullable"])
+                (
+                    column["name"],
+                    str(column["type"]),
+                    column["nullable"],
+                    column.get("default"),
+                )
                 for column in inspector.get_columns(table_name)
             ],
             "primary_key": inspector.get_pk_constraint(table_name),
@@ -1379,8 +1385,8 @@ def test_user_types_revision_changes_only_the_user_type_check() -> None:
 
         changed_tables = sorted(
             table_name
-            for table_name in revision
-            if revision[table_name] != parent.get(table_name)
+            for table_name in set(parent) | set(revision)
+            if revision.get(table_name) != parent.get(table_name)
         )
         assert changed_tables == ["users"]
         parent_users = dict(parent["users"])
@@ -1390,9 +1396,12 @@ def test_user_types_revision_changes_only_the_user_type_check() -> None:
         assert revision_users == parent_users
         assert "author" not in parent_checks.pop("ck_users_user_type")
         allowed_types = revision_checks.pop("ck_users_user_type_allowed")
-        assert {"unauthenticated", "standard", "author", "admin"} <= set(
-            re.findall(r"'(\w+)'", allowed_types)
-        )
+        assert re.findall(r"'(\w+)'", allowed_types) == [
+            "unauthenticated",
+            "standard",
+            "author",
+            "admin",
+        ]
         # The users table's other checks, conditions included, are unchanged.
         assert revision_checks == parent_checks
     finally:
