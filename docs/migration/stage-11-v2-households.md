@@ -322,7 +322,9 @@ IDs and options, with the request's ID and observability ID headers. The
 answer is 202 with the new job's `calculation_id` and `status`; each
 submission creates a new job. The simulation service's 422 reasons reach the
 caller as 422. A 202 whose body the Public API can't read is 502: the job
-exists, so submitting again would create another. Any other refusal (with
+exists, so submitting again would create another. So is a 500 from the
+simulation service (`internal_error`), which may come after it created the
+job. Any other refusal (with
 the simulation service's `code` and reason in the message, and the failed
 job's ID when Modal refused the call), no answer, a refusal the Public API
 can't read, missing configuration or a gateway token it can't fetch is 503.

@@ -182,7 +182,8 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The simulation service accepted the calculation, so its job exists, "
-            "but its answer cannot be read. Submitting again creates another job."
+            "but its answer cannot be read; or it failed (500), possibly after "
+            "creating the job. Submitting again could create another job."
         ),
     },
     422: {

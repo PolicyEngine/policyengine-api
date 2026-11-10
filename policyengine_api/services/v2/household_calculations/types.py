@@ -319,7 +319,9 @@ class HouseholdCalculationSubmitter(Protocol):
         Raise SimulationServiceInvalidRequestError when the service refuses
         the caller's data, with its reasons;
         SimulationServiceAnswerUnreadableError when it accepted the
-        calculation but its answer cannot be read; and
+        calculation but its answer cannot be read;
+        SimulationServiceInternalError when it failed (500), possibly after
+        creating the job; and
         SimulationServiceUnavailableError for any other refusal or failure.
         """
         ...
@@ -339,6 +341,14 @@ class SimulationServiceAnswerUnreadableError(RuntimeError):
 
     The service answered 202, so it has already created the job and started
     its call; submitting again would create another job.
+    """
+
+
+class SimulationServiceInternalError(RuntimeError):
+    """The simulation service failed (500), possibly after creating the job.
+
+    Submitting again could create another job, so this is not reported as
+    the service being unavailable.
     """
 
 

@@ -39,6 +39,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
 )
 from policyengine_api.services.v2.household_calculations.types import (
     SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -84,9 +85,11 @@ HOUSEHOLD_CALCULATION_ERROR_MAPPINGS = (
         404,
     ),
     V2ErrorMapping((SimulationServiceUnavailableError,), 503),
-    # The simulation service created the job, so this is not a 503, which
-    # invites the caller to submit again.
-    V2ErrorMapping((SimulationServiceAnswerUnreadableError,), 502),
+    # The simulation service created the job, or may have, so this is not a
+    # 503, which invites the caller to submit again.
+    V2ErrorMapping(
+        (SimulationServiceAnswerUnreadableError, SimulationServiceInternalError), 502
+    ),
     V2ErrorMapping(
         (HouseholdCalculationResultUnreadableError,),
         500,

@@ -19,6 +19,8 @@ settings only when the caller gave them. The simulation service answers:
   request, or one its household contract refuses), one per field as
   FastAPI writes them: the reasons reach the caller as
   SimulationServiceInvalidRequestError;
+- 500 (``internal_error``) when it failed, possibly after creating the job:
+  SimulationServiceInternalError, which the caller must not resubmit after;
 - anything else (400 for a household, policy or catalog version it cannot
   find, which the Public API checks first; 503 when it cannot read its
   manifest or database or Modal refuses the call, failing the job it
@@ -58,6 +60,7 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     HouseholdJobStatusName,
     SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -192,6 +195,21 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
         return None
 
 
+RESUBMISSION_WARNING = (
+    "It may have created the job, so submitting again could create another."
+)
+
+
+def _internal_error(refusal: _Refusal | None) -> str:
+    """Describe the service's failure, which may have created the job."""
+    if refusal is None or not isinstance(refusal.detail, str):
+        return f"The simulation service answered 500. {RESUBMISSION_WARNING}"
+    code = "" if refusal.code is None else f" ({refusal.code})"
+    return (
+        f"The simulation service failed{code}: {refusal.detail} {RESUBMISSION_WARNING}"
+    )
+
+
 def _unavailable(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
     """Describe an answer that means the service cannot calculate now."""
     if refusal is None or not isinstance(refusal.detail, str):
@@ -252,7 +270,8 @@ class SimulationHouseholdCalculationClient:
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
         when it refuses the caller's data, SimulationServiceAnswerUnreadableError
-        when it accepted the calculation but its answer cannot be read, and
+        when it accepted the calculation but its answer cannot be read,
+        SimulationServiceInternalError when it failed (500), and
         SimulationServiceUnavailableError otherwise.
         """
         start_observability_id()
@@ -278,6 +297,8 @@ class SimulationHouseholdCalculationClient:
             if refusal is None:
                 raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
+        if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
+            raise SimulationServiceInternalError(_internal_error(refusal))
         raise SimulationServiceUnavailableError(_unavailable(answer, refusal))
 
 
