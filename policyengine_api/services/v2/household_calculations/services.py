@@ -23,6 +23,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    MetadataCatalogUnavailableError,
+)
 from policyengine_api.services.v2.household_calculations.database_connectors import (
     reads as household_job_reads,
 )
@@ -61,10 +64,14 @@ if TYPE_CHECKING:
 
 @contextmanager
 def _storage_failures() -> Iterator[None]:
-    """Raise HouseholdCalculationStorageError for a failed database read."""
+    """Raise HouseholdCalculationStorageError for a failed database read.
+
+    That includes the policy check's catalog query, which the policy service
+    reports as MetadataCatalogUnavailableError.
+    """
     try:
         yield
-    except SQLAlchemyError as error:
+    except (SQLAlchemyError, MetadataCatalogUnavailableError) as error:
         msg = "V2 household calculation storage is unavailable"
         raise HouseholdCalculationStorageError(msg) from error
 
