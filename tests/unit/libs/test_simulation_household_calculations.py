@@ -8,6 +8,9 @@ from uuid import UUID
 import httpx
 import pytest
 
+from policyengine_api.fastapi_routes.v2.household_calculations.routes import (
+    HOUSEHOLD_CALCULATION_ERROR_MAPPINGS,
+)
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_household_calculations import (
     HOUSEHOLD_CALCULATIONS_PATH,
@@ -54,6 +57,15 @@ def configured_simulation_service(monkeypatch):
     # whatever the economy routes select.
     monkeypatch.setenv("SIM_ENTRYPOINT", "old_gateway_direct")
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test")
+
+
+def _route_status(error: Exception) -> int:
+    """Return the status the household calculation route answers ``error`` with."""
+    return next(
+        mapping.status_code
+        for mapping in HOUSEHOLD_CALCULATION_ERROR_MAPPINGS
+        if isinstance(error, mapping.error_types)
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -267,16 +279,39 @@ def test_an_internal_error_is_not_unavailable(body, message) -> None:
     with pytest.raises(SimulationServiceInternalError) as failed:
         service.client().submit(calculation_input())
 
-    assert not isinstance(failed.value, SimulationServiceUnavailableError)
+    assert _route_status(failed.value) == 502
     assert str(failed.value) == message
 
 
-@pytest.mark.parametrize("status_code", [400, 401, 404, 502, 503])
+@pytest.mark.parametrize("status_code", [502, 504])
+def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
+    status_code,
+) -> None:
+    # A proxy in front of the service, such as Cloud Run's front end, may
+    # answer 502 or 504 after the service created the job.
+    service = RecordingService(status_code, b"upstream request timeout")
+
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        service.client().submit(calculation_input())
+
+    assert _route_status(lost.value) == 502
+    assert str(lost.value) == (
+        "The simulation service may have received the submission, but "
+        f"{status_code} was answered in its place. Check whether it created the "
+        "job before submitting again."
+    )
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 404, 503])
 def test_any_other_answer_is_unavailable(status_code) -> None:
     service = RecordingService(status_code, b"")
 
-    with pytest.raises(SimulationServiceUnavailableError, match=str(status_code)):
+    with pytest.raises(
+        SimulationServiceUnavailableError, match=str(status_code)
+    ) as unavailable:
         service.client().submit(calculation_input())
+
+    assert _route_status(unavailable.value) == 503
 
 
 @pytest.mark.parametrize(
@@ -296,7 +331,7 @@ def test_an_accepted_answer_that_cannot_be_read_is_not_unavailable(body) -> None
     with pytest.raises(SimulationServiceAnswerUnreadableError) as unreadable:
         service.client().submit(calculation_input())
 
-    assert not isinstance(unreadable.value, SimulationServiceUnavailableError)
+    assert _route_status(unreadable.value) == 502
     assert str(unreadable.value) == (
         "The simulation service accepted the calculation, but its answer "
         "could not be read."
@@ -337,7 +372,7 @@ def test_an_answer_lost_after_sending_is_not_unavailable(error_type) -> None:
     with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
         _client_raising(error_type).submit(calculation_input())
 
-    assert not isinstance(lost.value, SimulationServiceUnavailableError)
+    assert _route_status(lost.value) == 502
     assert str(lost.value) == (
         "The simulation service may have received the submission, but its "
         f"answer did not arrive ({error_type.__name__}). Check whether it "

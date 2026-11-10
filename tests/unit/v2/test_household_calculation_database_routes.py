@@ -272,9 +272,13 @@ class SimulationRecorder:
         self.requests: list[httpx.Request] = []
         self.status_code = 202
         self.content = json.dumps({"job_id": str(JOB_ID), "status": "pending"})
+        self.transport_error: type[httpx.TransportError] | None = None
 
     def answer(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        if self.transport_error is not None:
+            msg = "the transport failed"
+            raise self.transport_error(msg, request=request)
         return httpx.Response(self.status_code, content=self.content)
 
 
@@ -422,4 +426,30 @@ def test_an_answer_after_sim_was_called_returns_the_observability_id(
     assert (
         response.headers[OBSERVABILITY_ID_HEADER]
         == (sent.headers[OBSERVABILITY_ID_HEADER])
+    )
+
+
+@pytest.mark.parametrize(
+    ("transport_error", "status_code"),
+    [(httpx.ConnectError, 503), (httpx.ReadTimeout, 502)],
+    ids=["connection-never-made", "answer-lost"],
+)
+def test_a_failed_attempt_returns_the_attempts_observability_id(
+    client_with_simulation_client,
+    stored,
+    simulation_recorder,
+    transport_error,
+    status_code,
+) -> None:
+    simulation_recorder.transport_error = transport_error
+
+    response = client_with_simulation_client.post(
+        CALCULATIONS, json=_body(stored, None)
+    )
+
+    assert response.status_code == status_code
+    (attempted,) = simulation_recorder.requests
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == (attempted.headers[OBSERVABILITY_ID_HEADER])
     )

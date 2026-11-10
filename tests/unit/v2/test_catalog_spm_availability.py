@@ -285,3 +285,36 @@ def test_an_unreadable_versions_answer_lists_only_versions_still_unrecorded(
         not_recorded=(("uk", "1.0.0"),),
         versions_unreadable="the simulation service's versions could not be read",
     )
+
+
+@pytest.mark.parametrize(
+    ("still_unrecorded", "warnings_expected"),
+    [(("policyengine-uk",), 1), ((), 0)],
+    ids=["some-unrecorded", "all-recorded-earlier"],
+)
+def test_an_unreadable_versions_answer_warns_only_when_versions_are_unrecorded(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    still_unrecorded: tuple[str, ...],
+    warnings_expected: int,
+) -> None:
+    _store_unrecorded(monkeypatch, *still_unrecorded)
+
+    def unreadable(_url: str) -> object:
+        msg = "the simulation service's versions could not be read"
+        raise CatalogPublicationError(msg)
+
+    with caplog.at_level("WARNING", logger=spm_availability.LOGGER.name):
+        spm_availability.record_published_spm_availability(
+            RecordingEngine(),
+            _catalog("uk", "us"),
+            {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+            fetch_versions=unreadable,
+        )
+
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == spm_availability.LOGGER.name
+    ]
+    assert len(warnings) == warnings_expected
