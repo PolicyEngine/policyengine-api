@@ -44,6 +44,22 @@ class SimulationServiceUnavailableError(RuntimeError):
     """
 
 
+class SimulationServiceAnswerUnreadableError(RuntimeError):
+    """The simulation service created the record, but its answer is unreadable.
+
+    It answered that it created the simulation or report and started its run,
+    so submitting again would create another.
+    """
+
+
+class SimulationServiceInternalError(RuntimeError):
+    """The simulation service failed (500), possibly after creating the record.
+
+    Submitting again could create another, so this is not reported as the
+    service being unavailable.
+    """
+
+
 class SimulationServiceRefusalError(ValueError):
     """The simulation service refused the request's data, and said why.
 
