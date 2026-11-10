@@ -16,6 +16,7 @@ from policyengine_api.libs.simulation_household_calculations import (
 )
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
+    SimulationServiceAnswerUnreadableError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -179,14 +180,50 @@ def test_a_refusal_of_another_shape_is_unavailable(body) -> None:
 
 
 def test_a_reference_the_service_cannot_find_is_unavailable_with_its_reason() -> None:
-    service = RecordingService(400, {"detail": f"Household {HOUSEHOLD_ID} not found"})
+    service = RecordingService(
+        400,
+        {"code": "unknown_household", "detail": f"Household {HOUSEHOLD_ID} not found"},
+    )
 
     with pytest.raises(SimulationServiceUnavailableError) as refused:
         service.client().submit(calculation_input())
 
     assert str(refused.value) == (
-        "The simulation service refused the calculation: "
+        "The simulation service refused the calculation (unknown_household): "
         f"Household {HOUSEHOLD_ID} not found"
+    )
+
+
+def test_a_modal_call_the_service_could_not_start_names_the_failed_job() -> None:
+    service = RecordingService(
+        503,
+        {
+            "code": "modal_call_refused",
+            "detail": "Modal refused the household function's call",
+            "household_job_id": str(JOB_ID),
+        },
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as refused:
+        service.client().submit(calculation_input())
+
+    assert str(refused.value) == (
+        "The simulation service is unavailable (modal_call_refused): Modal "
+        f"refused the household function's call; it failed household job {JOB_ID}"
+    )
+
+
+def test_a_dependency_the_service_cannot_read_names_its_code() -> None:
+    service = RecordingService(
+        503, {"code": "database_unavailable", "detail": "The database is down"}
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as refused:
+        service.client().submit(calculation_input())
+
+    assert str(refused.value) == (
+        "The simulation service is unavailable (database_unavailable): "
+        "The database is down"
     )
 
 
@@ -207,11 +244,19 @@ def test_any_other_answer_is_unavailable(status_code) -> None:
         pytest.param({"job_id": str(JOB_ID), "status": "queued"}, id="bad-status"),
     ],
 )
-def test_an_accepted_answer_of_another_shape_is_unavailable(body) -> None:
+def test_an_accepted_answer_that_cannot_be_read_is_not_unavailable(body) -> None:
+    # The service has created the job and started its call, so the caller is
+    # told the answer was unreadable rather than to try again.
     service = RecordingService(202, body)
 
-    with pytest.raises(SimulationServiceUnavailableError, match="could not be read"):
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as unreadable:
         service.client().submit(calculation_input())
+
+    assert not isinstance(unreadable.value, SimulationServiceUnavailableError)
+    assert str(unreadable.value) == (
+        "The simulation service accepted the calculation, but its answer "
+        "could not be read."
+    )
 
 
 def test_an_unreachable_service_is_unavailable() -> None:

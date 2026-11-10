@@ -21,6 +21,7 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationOutput,
     HouseholdCalculationRead,
     HouseholdCalculationSubmitted,
+    SimulationServiceAnswerUnreadableError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -258,6 +259,15 @@ def test_a_malformed_request_is_refused_before_anything_is_read(
             "V2 household calculation storage is unavailable",
         ),
         (
+            SimulationServiceAnswerUnreadableError(
+                "The simulation service accepted the calculation, but its "
+                "answer could not be read."
+            ),
+            502,
+            "The simulation service accepted the calculation, but its "
+            "answer could not be read.",
+        ),
+        (
             RuntimeError("secret detail"),
             500,
             "V2 household calculation failed",
@@ -415,7 +425,7 @@ def test_openapi_documents_both_routes_and_the_missing_parameter_refusal(
 
     submit = schema["paths"][CALCULATIONS]["post"]
     read = schema["paths"][f"{CALCULATIONS}/{{calculation_id}}"]["get"]
-    assert set(submit["responses"]) >= {"202", "404", "422", "500", "503"}
+    assert set(submit["responses"]) >= {"202", "404", "422", "500", "502", "503"}
     assert set(read["responses"]) >= {"200", "404", "422", "500", "503"}
     assert "security" not in submit
     refusal_schema = submit["responses"]["422"]["content"]["application/json"]["schema"]

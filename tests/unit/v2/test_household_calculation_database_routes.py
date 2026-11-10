@@ -8,8 +8,9 @@ simulation service is a stand-in.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -30,10 +31,15 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.libs.simulation_household_calculations import (
+    SimulationHouseholdCalculationClient,
+)
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
+from policyengine_api.request_context import REQUEST_ID_HEADER
 from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
@@ -241,3 +247,105 @@ def test_a_catalog_that_cannot_be_queried_answers_503(
         "message": "V2 household calculation storage is unavailable",
     }
     assert simulation.submissions == []
+
+
+GATEWAY_AND_ENTRYPOINT_VARIABLES = (
+    "GATEWAY_AUTH_ISSUER",
+    "GATEWAY_AUTH_AUDIENCE",
+    "GATEWAY_AUTH_CLIENT_ID",
+    "GATEWAY_AUTH_CLIENT_SECRET",
+    "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE",
+    "GATEWAY_AUTH_REQUIRED",
+    "SIM_ENTRYPOINT",
+)
+
+
+class SimulationRecorder:
+    """The simulation service, answering every submission 202 and recording it."""
+
+    def __init__(self) -> None:
+        self.requests: list[httpx.Request] = []
+
+    def answer(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        return httpx.Response(202, json={"job_id": str(JOB_ID), "status": "pending"})
+
+
+@pytest.fixture
+def simulation_recorder(monkeypatch) -> SimulationRecorder:
+    """Configure the Cloud Run simulation service, with no gateway credentials."""
+    for name in GATEWAY_AND_ENTRYPOINT_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SIMULATION_ENTRYPOINT_URL", "https://simulation.example.test")
+    return SimulationRecorder()
+
+
+@pytest.fixture
+def client_with_simulation_client(engine, simulation_recorder) -> TestClient:
+    """Serve the route with the real simulation client over a recording transport."""
+    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+    transport = httpx.MockTransport(simulation_recorder.answer)
+
+    def service() -> V2HouseholdCalculationService:
+        return V2HouseholdCalculationService(
+            countries=V2CountryService(CountryDatabaseSession(sessions)),
+            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
+            policies=V2PolicyService(
+                PolicyDatabaseSession(sessions),
+                running_policyengine_version=RUNNING_VERSION,
+            ),
+            database_session=HouseholdCalculationDatabaseSession(sessions),
+            simulation_factory=lambda: (
+                SimulationHouseholdCalculationClient.from_environment(
+                    transport=transport
+                )
+            ),
+        )
+
+    dependencies = NativeRouteDependencies(
+        readiness_probe=lambda: True,
+        gateway_client_factory=lambda: None,
+        metadata_reader_factory=lambda: None,
+        v2_household_calculation_service_factory=service,
+    )
+    settings = RouteImplementationSettings(
+        health=RouteImplementation.FLASK_FALLBACK,
+        specification=RouteImplementation.FLASK_FALLBACK,
+        metadata=RouteImplementation.FLASK_FALLBACK,
+    )
+    return TestClient(
+        create_asgi_app(
+            Flask(__name__), dependencies=dependencies, route_settings=settings
+        ),
+        raise_server_exceptions=False,
+    )
+
+
+def test_the_submission_carries_the_request_and_callers_observability_ids(
+    client_with_simulation_client, stored, simulation_recorder
+) -> None:
+    observability_id = str(uuid4())
+
+    response = client_with_simulation_client.post(
+        CALCULATIONS,
+        json=_body(stored, "running_policy"),
+        headers={OBSERVABILITY_ID_HEADER: observability_id},
+    )
+
+    assert response.status_code == 202
+    (sent,) = simulation_recorder.requests
+    assert str(sent.url) == "https://simulation.example.test/household-calculations"
+    assert sent.headers[REQUEST_ID_HEADER] == response.headers[REQUEST_ID_HEADER]
+    assert sent.headers[OBSERVABILITY_ID_HEADER] == observability_id
+
+
+def test_a_submission_without_an_observability_id_is_given_one(
+    client_with_simulation_client, stored, simulation_recorder
+) -> None:
+    response = client_with_simulation_client.post(
+        CALCULATIONS, json=_body(stored, None)
+    )
+
+    assert response.status_code == 202
+    (sent,) = simulation_recorder.requests
+    assert UUID(sent.headers[OBSERVABILITY_ID_HEADER])
