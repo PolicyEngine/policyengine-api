@@ -630,7 +630,9 @@ jobs:
   parallel-live-simulation-tests-staging-cloud-run:
     name: Run live simulations against the staging candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The household calculation checks run after the other live tests and
+    # wait on Modal.
+    timeout-minutes: 30
     needs: deploy-cloud-run-staging
     if: |
       !cancelled()
