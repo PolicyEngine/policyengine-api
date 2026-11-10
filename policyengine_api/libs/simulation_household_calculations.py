@@ -31,9 +31,12 @@ settings only when the caller gave them. The simulation service answers:
 
 Each submission carries the request's ID and observability ID headers. The
 observability ID is the request's own, else the caller's, else a new one,
-bound for the rest of the request, as the Public API's own household
-calculations bind one once they accept a calculation; the simulation service
-passes it to the household function.
+which ``submit`` binds in the current context once the Public API's checks
+have passed, as the Public API's own household calculations bind one when
+they accept a calculation; the simulation service passes it to the household
+function. The route reads it from that context and returns it in the 202's
+``X-PolicyEngine-Observability-Id`` header, since a synchronous route runs in
+a copy of the request context that the response middleware doesn't see.
 
 Wiring the generated simulation client: ``post_household_calculation`` is the
 only code that sends the request, and it returns the status and body, which

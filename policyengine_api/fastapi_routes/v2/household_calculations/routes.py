@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
@@ -37,6 +37,8 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
     HouseholdCalculationSubmittedResponse,
     HouseholdCalculationSubmittedResult,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
+from policyengine_api.request_context import current_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
@@ -137,6 +139,7 @@ def build_v2_household_calculation_router(
     )
     def submit_household_calculation(
         body: HouseholdCalculationRequest,
+        response: Response,
     ) -> HouseholdCalculationSubmittedResponse | JSONResponse:
         def submit() -> HouseholdCalculationSubmittedResponse | JSONResponse:
             try:
@@ -147,6 +150,12 @@ def build_v2_household_calculation_router(
                 return v2_missing_parameters_response(
                     str(error), error.missing_parameters
                 )
+            # The submission bound the observability ID it sent the simulation
+            # service in this worker thread's copy of the request context,
+            # which the response middleware doesn't see, so the 202 names it.
+            observability_id = current_observability_id()
+            if observability_id is not None:
+                response.headers[OBSERVABILITY_ID_HEADER] = observability_id
             return HouseholdCalculationSubmittedResponse(
                 result=HouseholdCalculationSubmittedResult(
                     item=HouseholdCalculationSubmittedItem.from_submitted(calculation)
