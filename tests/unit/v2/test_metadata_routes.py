@@ -349,6 +349,9 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/me",
         "/v2/me/export",
         "/v2/me/upgrade",
+        "/v2/admin/users",
+        "/v2/admin/users/{user_id}",
+        "/v2/admin/users/{user_id}/user-type-changes",
     }
     assert set(schema["paths"]) == metadata_paths | native_paths
     assert "V2ErrorResponse" in schema["components"]["schemas"]

@@ -22,6 +22,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    StringConstraints,
     model_validator,
 )
 
@@ -349,6 +350,19 @@ class UserPolicyCollectionQuery(CountryQuery, PaginationQuery):
 
     policy_id: ResourceId | None = None
     legacy_policy_id: LegacyResourceId | None = None
+
+
+EmailSearch = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=320),
+    Field(description="Part of a user's email address, matched ignoring case"),
+]
+
+
+class AdminUserCollectionQuery(PaginationQuery):
+    """Query contract for admins' list of signed-in users, in every country."""
+
+    email: EmailSearch | None = None
 
 
 class HouseholdCreateQuery(CountryQuery):

@@ -24,7 +24,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
 | `report` | `report`, `user-reports`, `shared-reports` | `report` | `report` |
-| `user_profile` | `user-profile`, `me` | `user` | `none` |
+| `user_profile` | `user-profile`, `me`, `admin` | `user` | `none` |
 
 ## App V2 Workflow Contracts
 

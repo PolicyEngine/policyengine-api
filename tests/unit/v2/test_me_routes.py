@@ -24,6 +24,9 @@ from policyengine_api.services.v2.user_accounts.validators import (
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead
+from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDeletionError,
+)
 from tests.unit.v2.user_route_support import (
     BROWSER_USER_ID,
     CREATED_AT,
@@ -107,6 +110,42 @@ def test_get_me_provisions_with_the_query_country() -> None:
     ]
 
 
+@pytest.mark.parametrize("user_type", ["author", "admin"])
+def test_account_responses_carry_an_author_or_admin_type(user_type: str) -> None:
+    def typed_result(name: str, _kwargs: dict):
+        account = _account(user_type=user_type)
+        return {
+            "export_account": AccountExport(
+                user=account,
+                policies=(),
+                households=(),
+                simulations=(),
+                reports=(),
+            ),
+            "upgrade_account": AccountUpgrade(
+                account=account, outcome=AccountConversionOutcome.MERGED
+            ),
+        }.get(name, account)
+
+    client, _service = _client(RecordingService(typed_result))
+
+    read = client.get("/v2/me?country_id=us")
+    patched = client.patch("/v2/me?country_id=us", json={"first_name": "Ada"})
+    exported = client.get("/v2/me/export?country_id=us")
+    upgraded = client.post(
+        "/v2/me/upgrade?country_id=us", headers=UNAUTHENTICATED_HEADERS
+    )
+
+    responses = (read, patched, exported, upgraded)
+    assert [response.status_code for response in responses] == [200] * 4
+    assert [
+        read.json()["result"]["item"]["user_type"],
+        patched.json()["result"]["item"]["user_type"],
+        exported.json()["result"]["user"]["user_type"],
+        upgraded.json()["result"]["item"]["user_type"],
+    ] == [user_type] * 4
+
+
 def test_patch_me_accepts_names_and_country_only() -> None:
     client, service = _client()
 
@@ -149,6 +188,19 @@ def test_export_and_delete_me() -> None:
     assert deleted.status_code == 204
     assert deleted.content == b""
     assert service.calls[1] == ("delete_account", {"principal": PRINCIPAL})
+
+
+def test_the_last_admins_account_deletion_is_refused_with_409() -> None:
+    service = RecordingService(_result)
+    service.error = LastAdminDeletionError(
+        "The last admin's account can't be deleted; make another user an admin first"
+    )
+    client, _service = _client(service)
+
+    response = client.delete("/v2/me?country_id=us")
+
+    assert response.status_code == 409
+    assert response.json() == {"status": "error", "message": str(service.error)}
 
 
 def test_failed_auth0_deletion_reports_a_retryable_upstream_error() -> None:

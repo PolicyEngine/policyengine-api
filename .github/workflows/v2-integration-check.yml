@@ -77,8 +77,8 @@ jobs:
         run: uv run --frozen --extra dev coverage run --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_catalog_publication_time_periods.py tests/integration/test_v2_catalog_publication_pruning.py tests/integration/test_v2_catalog_spm_availability.py tests/integration/test_v2_metadata_routes.py tests/integration/test_v2_country_routes.py
       - name: Test v2 policy persistence and immediate v1 mirroring
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
-      - name: Test signed-in identity provisioning and user associations
-        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py
+      - name: Test signed-in identity provisioning, user associations and user types
+        run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_user_identity_persistence.py tests/integration/test_v2_user_type_persistence.py
       - name: Test comparison-run persistence, the simulation API's roles and privilege reconciliation as the managed roles
         run: uv run --frozen --extra dev coverage run -a --branch -m pytest -q tests/integration/test_v2_stage12_comparison_persistence.py tests/integration/test_v2_simulation_role_privileges.py tests/integration/test_v2_privilege_reconciliation.py
       - name: Test v2 household persistence, immediate v1 copying and household calculation reads

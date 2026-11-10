@@ -284,6 +284,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "user_report_associations": _access(runtime=READ_WRITE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
+    # Each change of a signed-in user's type, recorded by the admin routes and
+    # the type script and never changed afterwards.
+    "user_type_changes": _access(runtime=READ_INSERT),
     # Temporary Stage 12 comparison-run tables.
     "stage12_evaluation_reports": _access(runtime=READ_WRITE, stage12=READ_WRITE),
     "stage12_evaluation_simulations": _access(runtime=READ_WRITE, stage12=READ_WRITE),

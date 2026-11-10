@@ -103,7 +103,8 @@
       "name": "user_profile",
       "path_segments": [
         "user-profile",
-        "me"
+        "me",
+        "admin"
       ],
       "sim_flow": null
     }

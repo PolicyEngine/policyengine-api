@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.37.2"
+version = "5.38.0"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -50,7 +50,7 @@ dependencies = [
     # versions certified by this PolicyEngine bundle. Cloud Run installs the
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
-    "policyengine[models]==6.16.0",
+    "policyengine[models]==6.17.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
@@ -417,6 +417,8 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.user_reports.services",
     "policyengine_api.services.v2.user_simulations.database_session",
     "policyengine_api.services.v2.user_simulations.services",
+    "policyengine_api.services.v2.user_types.database_session",
+    "policyengine_api.services.v2.user_types.services",
     "spm_calculator",
 ]
 

@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
+from policyengine_api.fastapi_routes.v2.admin_users.routes import (
+    build_v2_admin_user_router,
+)
 from policyengine_api.fastapi_routes.v2.countries.routes import (
     build_v2_country_router,
 )
@@ -55,6 +58,7 @@ def build_v2_router(
     """Build isolated resource routes without loading v2 configuration."""
     router = APIRouter()
     router.include_router(build_v2_me_router(dependencies))
+    router.include_router(build_v2_admin_user_router(dependencies))
     router.include_router(build_v2_user_report_router(dependencies))
     router.include_router(build_v2_shared_report_router(dependencies))
     router.include_router(build_v2_user_simulation_router(dependencies))

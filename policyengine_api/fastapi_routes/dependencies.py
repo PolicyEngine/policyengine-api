@@ -24,6 +24,7 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2UserPolicyResourceService,
     V2UserReportResourceService,
     V2UserSimulationResourceService,
+    V2UserTypeResourceService,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     MetadataResponseCache,
@@ -67,6 +68,7 @@ __all__ = [
     "V2UserPolicyResourceService",
     "V2UserReportResourceService",
     "V2UserSimulationResourceService",
+    "V2UserTypeResourceService",
 ]
 
 
@@ -347,6 +349,18 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
     )
 
 
+def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_types.database_session import (
+        UserTypeDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_types.services import V2UserTypeService
+
+    return V2UserTypeService(UserTypeDatabaseSession(get_v2_session_factory()))
+
+
 @dataclass(frozen=True)
 class NativeRouteDependencies:
     """Runtime collaborators for native read routes."""
@@ -374,6 +388,7 @@ class NativeRouteDependencies:
         None
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
+    v2_user_type_service_factory: Callable[[], V2UserTypeResourceService] | None = None
     # Whole catalog-version responses (/v2/model-catalog and its variables) are
     # kept here once built; None reads them on every request.
     v2_metadata_response_cache: MetadataResponseCache | None = None
@@ -407,5 +422,6 @@ class NativeRouteDependencies:
             ),
             v2_user_report_service_factory=_default_v2_user_report_service_factory,
             v2_account_service_factory=_default_v2_account_service_factory,
+            v2_user_type_service_factory=_default_v2_user_type_service_factory,
             require_user=_default_require_user,
         )

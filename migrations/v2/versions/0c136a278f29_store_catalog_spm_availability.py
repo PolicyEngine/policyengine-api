@@ -1,14 +1,16 @@
 """store catalog spm availability
 
 Revision ID: 0c136a278f29
-Revises: 81b728a088e7
+Revises: 970be5d29283
 Create Date: 2026-11-10 23:31:42.564586
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
-No post-generation corrections. It adds one nullable column, which catalog
-publication fills after publishing each version, so it writes no data, and
-the previous Public API revision, which doesn't map the column, keeps
-working. The downgrade drops the column with its values.
+Generated on 81b728a088e7; its down_revision moved to 970be5d29283 when the
+user types revisions reached master first. No post-generation corrections.
+It adds one nullable column, which catalog publication fills after
+publishing each version, so it writes no data, and the previous Public API
+revision, which doesn't map the column, keeps working. The downgrade drops
+the column with its values.
 """
 
 from typing import Sequence, Union
@@ -19,7 +21,7 @@ import sqlmodel
 
 
 revision: str = '0c136a278f29'
-down_revision: Union[str, None] = '81b728a088e7'
+down_revision: Union[str, None] = '970be5d29283'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

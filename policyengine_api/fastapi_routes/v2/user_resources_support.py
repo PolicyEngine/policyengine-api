@@ -43,6 +43,13 @@ from policyengine_api.services.v2.user_households.validators import (
 from policyengine_api.services.v2.user_policies.validators import (
     AssociationPolicyNotFoundError,
 )
+from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDeletionError,
+    LastAdminDemotionError,
+    SignedInUserNotFoundError,
+    UserTypeBelowMinimumError,
+    UserTypeChangedError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -190,6 +197,7 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         headers={"WWW-Authenticate": BEARER_CHALLENGE},
     ),
     UserResourceFailure((AccountEditRequiresSignInError,), 403),
+    UserResourceFailure((UserTypeBelowMinimumError,), 403),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
         (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
@@ -200,10 +208,19 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
             AssociationPolicyNotFoundError,
             AssociationHouseholdNotFoundError,
             AccountNotFoundError,
+            SignedInUserNotFoundError,
         ),
         404,
     ),
-    UserResourceFailure((AssociationConflictError,), 409),
+    UserResourceFailure(
+        (
+            AssociationConflictError,
+            LastAdminDemotionError,
+            LastAdminDeletionError,
+            UserTypeChangedError,
+        ),
+        409,
+    ),
     UserResourceFailure(
         (IntegrityError,), 409, "The record conflicts with stored state"
     ),
