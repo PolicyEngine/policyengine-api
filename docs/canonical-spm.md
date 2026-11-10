@@ -397,6 +397,25 @@ after a deploy that changes the versions or worker app a request resolves
 to, the `DELETE` finds nothing to remove (404) and the next GET starts a new
 run anyway.
 
+Before either economy route starts a job or replays a stored failure, it
+checks the stored reform and baseline policies
+(`policyengine_api/services/economy_policy_values.py`). Every value must pass
+the value check a new policy gets (`policyengine_api/utils/policy_data_validation.py`):
+a finite number, a boolean, null, a list, or `"Infinity"` or `"-Infinity"`,
+also for a parameter given one value without periods. Every period key must be
+one the simulation service reads: one date or a range of two, each read with
+`strptime` and `%Y-%m-%d` (so unpadded months and days pass, unlike for new
+policies), with the end no earlier than the start. Some policies saved before
+the checks for new policies hold values no simulation can read, such as
+amounts stored as text, and every job for them fails. For such a policy the route answers
+HTTP 422 with `errors` listing each refused period key or value, with its
+parameter (`name`), its `path` in the policy's data and the `policy_id`,
+starts no job, stores nothing and logs the refusal at WARNING. A stored failure
+of such a policy is answered with the same 422 instead of being replayed, and
+a job already running for it is still polled until it fails. If the policies
+can't be read before a replay, as during a database outage, the stored failure
+is replayed as before and the skipped check is logged at WARNING.
+
 `DELETE /<country_id>/economy/<policy_id>/over/<baseline_policy_id>` takes
 the GET's query parameters, parsed by the same model, and acts on the stored
 record the GET would answer from. It covers every failed job: national,

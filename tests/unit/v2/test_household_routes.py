@@ -28,6 +28,7 @@ from policyengine_api.services.v2.households.validators import (
     HouseholdCreationIntegrityError,
     HouseholdNotFoundError,
     HouseholdValidationError,
+    HouseholdValidationReason,
 )
 
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -298,7 +299,14 @@ def test_list_passes_exact_year_filter_and_canonical_pagination() -> None:
 @pytest.mark.parametrize(
     ("error", "status", "message"),
     [
-        (HouseholdValidationError("invalid relationship"), 400, "relationship"),
+        (
+            HouseholdValidationError(
+                "invalid relationship",
+                reason=HouseholdValidationReason.ABSENT_MEMBERSHIP_TARGET,
+            ),
+            400,
+            "relationship",
+        ),
         (HouseholdNotFoundError("absent household"), 404, "absent"),
         (
             HouseholdContentHashCollisionError("database statement secret"),

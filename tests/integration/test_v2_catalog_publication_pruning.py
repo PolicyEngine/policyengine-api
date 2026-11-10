@@ -592,7 +592,7 @@ def _pruned_message(country_id: str, version: str) -> str:
     )
 
 
-def test_routes_answer_503_for_a_pruned_version_and_serve_its_kept_rows(
+def test_routes_answer_404_for_a_pruned_version_and_serve_its_kept_rows(
     publication_engine: Engine,
     managed_v2_roles,
     v2_engine_as_role,
@@ -658,7 +658,7 @@ def test_routes_answer_503_for_a_pruned_version_and_serve_its_kept_rows(
         runtime_engine.dispose()
 
     for label, response in pruned_responses.items():
-        assert response.status_code == 503, label
+        assert response.status_code == 404, label
         assert response.json() == {
             "status": "error",
             "message": _pruned_message("us", OLD_VERSION),
@@ -669,7 +669,7 @@ def test_routes_answer_503_for_a_pruned_version_and_serve_its_kept_rows(
     assert len(previous_values.json()["result"]["items"]) == 2
 
 
-def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
+def test_a_process_that_selected_a_version_before_its_pruning_answers_404(
     publication_engine: Engine,
     managed_v2_roles,
     v2_engine_as_role,
@@ -678,7 +678,7 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
 
     A process of the previous release selected the old version before the
     next release's publication pruned it. Its later requests read the marker
-    again when they find no values, so they answer 503 rather than an empty
+    again when they find no values, so they answer 404 rather than an empty
     result that a cache could keep for a day. The variables catalog body it
     built before the pruning stays kept: it answers 200 with that body, and
     304 to its ETag, which equal what restoring the version writes.
@@ -725,7 +725,7 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_503(
     assert kept_selection is not None
     assert kept_selection.model_version.catalog_values_pruned_at is None
     for path, response in after_pruning.items():
-        assert response.status_code == 503, path
+        assert response.status_code == 404, path
         assert response.json()["message"] == _pruned_message("us", OLD_VERSION)
         assert response.headers["cache-control"] == "no-store", path
     assert variables_before_pruning.status_code == 200
@@ -745,7 +745,7 @@ def test_a_process_that_selected_a_pruned_version_serves_it_once_restored(
 ) -> None:
     """A selection kept while the version was pruned doesn't outlive restoration.
 
-    A process selected the old version while it was pruned and answered 503.
+    A process selected the old version while it was pruned and answered 404.
     A rollback's publication then restores it, and the same process serves
     its values, tree and search file again.
     """
@@ -778,7 +778,7 @@ def test_a_process_that_selected_a_pruned_version_serves_it_once_restored(
     finally:
         runtime_engine.dispose()
 
-    assert while_pruned.status_code == 503
+    assert while_pruned.status_code == 404
     for path, response in after_restoration.items():
         assert response.status_code == 200, (path, response.text)
     values = after_restoration["/v2/parameter-values"].json()["result"]["items"]

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import math
+from enum import StrEnum
+from functools import partial
 from typing import TYPE_CHECKING, Any
+
+from typing_extensions import override
 
 from policyengine_api.spm import SPMSelection
 
@@ -25,8 +29,74 @@ ENTITY_RECORD_FIELDS = frozenset({"id", "source_name", "values"})
 REQUIRED_RECORD_FIELDS = frozenset({"id", "values"})
 
 
+class HouseholdValidationReason(StrEnum):
+    """Which structural rule a household document breaks, as logs name it."""
+
+    UNSUPPORTED_COUNTRY = "unsupported_country"
+    DOCUMENT_NOT_OBJECT = "document_not_object"
+    UNSUPPORTED_COLLECTIONS = "unsupported_collections"
+    PEOPLE_MISSING = "people_missing"
+    SPM_NOT_OBJECT = "spm_not_object"
+    SPM_SELECTION_INVALID = "spm_selection_invalid"
+    COLLECTION_NOT_LIST = "collection_not_list"
+    TOO_MANY_RECORDS = "too_many_records"
+    DUPLICATE_RECORD_ID = "duplicate_record_id"
+    RECORD_NOT_OBJECT = "record_not_object"
+    RECORD_FIELDS_INVALID = "record_fields_invalid"
+    # An id, source name or membership that is not a short non-empty string.
+    INVALID_IDENTIFIER = "invalid_identifier"
+    VALUES_NOT_OBJECT = "values_not_object"
+    TOO_MANY_VALUES = "too_many_values"
+    MEMBERSHIPS_NOT_OBJECT = "memberships_not_object"
+    # A person who does not belong to one record of each entity collection.
+    INCOMPLETE_MEMBERSHIPS = "incomplete_memberships"
+    ABSENT_MEMBERSHIP_TARGET = "absent_membership_target"
+
+
+class LegacyHouseholdTranslationReason(StrEnum):
+    """Why a v1 household cannot be translated exactly, as copy logs name it.
+
+    A v1 household that translates into a document breaking a v2 rule takes
+    that rule's HouseholdValidationReason instead.
+    """
+
+    UNSUPPORTED_COLLECTIONS = "legacy_unsupported_collections"
+    PEOPLE_NOT_OBJECT = "legacy_people_not_object"
+    GROUPS_NOT_OBJECT = "legacy_groups_not_object"
+    GROUP_NOT_OBJECT = "legacy_group_not_object"
+    MEMBERS_NOT_NAMED_PEOPLE = "legacy_members_not_named_people"
+    PERSON_IN_MULTIPLE_GROUPS = "legacy_person_in_multiple_groups"
+    PERSON_NOT_OBJECT = "legacy_person_not_object"
+    AMBIGUOUS_DEFAULT_YEAR = "legacy_ambiguous_default_year"
+    # The year the explicit periods give is outside the years v2 accepts.
+    DEFAULT_YEAR_OUT_OF_RANGE = "legacy_default_year_out_of_range"
+    # A period key policyengine-core parses but whose dates can't be computed.
+    PERIOD_INVALID = "legacy_period_invalid"
+    # A value that is not standards-compliant JSON (require_json_value), or
+    # that the translated document nests too deeply.
+    VALUE_NOT_JSON = "value_not_json"
+
+
 class HouseholdValidationError(ValueError):
-    """Raised when a household document violates its structural contract."""
+    """Raised when a household document violates its structural contract.
+
+    ``reason`` names the broken rule. Unlike the message, which can quote the
+    document's names, it holds nothing from the document, so logs record it.
+    """
+
+    def __init__(self, message: str, *, reason: HouseholdValidationReason) -> None:
+        """Keep the message for the caller and the fixed reason for logs."""
+        super().__init__(message)
+        self.reason = reason
+
+    @override
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Tell copy and pickle to rebuild the error with its reason.
+
+        ``BaseException`` rebuilds an error as ``type(error)(*error.args)``,
+        which would leave out the keyword-only ``reason``.
+        """
+        return (partial(type(self), reason=self.reason), self.args, self.__dict__)
 
 
 class HouseholdNotFoundError(LookupError):
@@ -46,7 +116,30 @@ class LegacyHouseholdMappingIntegrityError(RuntimeError):
 
 
 class LegacyHouseholdTranslationError(ValueError):
-    """Raised when committed v1 household data cannot be translated exactly."""
+    """Raised when committed v1 household data cannot be translated exactly.
+
+    ``reason`` is a fixed code that copy failure logs record; the message,
+    which can quote the household's names, is never logged.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: LegacyHouseholdTranslationReason | HouseholdValidationReason,
+    ) -> None:
+        """Keep the message for debugging and the fixed reason for logs."""
+        super().__init__(message)
+        self.reason = reason
+
+    @override
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Tell copy and pickle to rebuild the error with its reason.
+
+        ``BaseException`` rebuilds an error as ``type(error)(*error.args)``,
+        which would leave out the keyword-only ``reason``.
+        """
+        return (partial(type(self), reason=self.reason), self.args, self.__dict__)
 
 
 def require_json_value(
@@ -110,7 +203,9 @@ def _require_identifier(value: object, *, field: str) -> str:
             f"{field} must be a non-empty string of at most "
             f"{MAXIMUM_IDENTIFIER_LENGTH} characters"
         )
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.INVALID_IDENTIFIER
+        )
     return value
 
 
@@ -118,13 +213,17 @@ def _require_values(record: dict[str, Any], *, collection: str) -> None:
     values = record.get("values")
     if type(values) is not dict:
         msg = f"{collection} record values must be an object"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.VALUES_NOT_OBJECT
+        )
     if len(values) > MAXIMUM_HOUSEHOLD_RECORD_VALUES:
         msg = (
             f"{collection} records must contain at most "
             f"{MAXIMUM_HOUSEHOLD_RECORD_VALUES} variable values"
         )
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.TOO_MANY_VALUES
+        )
     require_json_value(values)
 
 
@@ -168,20 +267,28 @@ def _require_supported_collections(
     collections = SUPPORTED_ENTITY_COLLECTIONS.get(country_id)
     if collections is None:
         msg = f"unsupported country_id {country_id!r}"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.UNSUPPORTED_COUNTRY
+        )
     if type(document) is not dict:
         msg = "household_data must be an object"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.DOCUMENT_NOT_OBJECT
+        )
     allowed = {"people", *collections}
     if country_id == "us":
         allowed.add("spm")
     unsupported = sorted(set(document) - allowed)
     if unsupported:
         msg = f"household_data contains unsupported collections: {unsupported}"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.UNSUPPORTED_COLLECTIONS
+        )
     if "people" not in document:
         msg = "household_data must contain people"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.PEOPLE_MISSING
+        )
     return collections
 
 
@@ -189,12 +296,16 @@ def _normalized_spm_selection(selection: object) -> dict[str, Any]:
     """Return a copy of a structurally valid saved SPM selection."""
     if type(selection) is not dict:
         msg = "spm must be an object"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.SPM_NOT_OBJECT
+        )
     try:
         SPMSelection.model_validate(selection)
     except ValueError as error:
         msg = "spm selection is invalid"
-        raise HouseholdValidationError(msg) from error
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.SPM_SELECTION_INVALID
+        ) from error
     # Saved selections are immutable identity, not a request to recertify
     # against whichever scientific bundle is currently installed.
     return dict(selection)
@@ -207,17 +318,23 @@ def _normalized_collection(
     """Validate one collection's records; return copies of them and their ids."""
     if type(records) is not list:
         msg = f"{collection} must be a list"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.COLLECTION_NOT_LIST
+        )
     if len(records) > MAXIMUM_HOUSEHOLD_ENTITIES:
         msg = f"{collection} must contain at most {MAXIMUM_HOUSEHOLD_ENTITIES} records"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.TOO_MANY_RECORDS
+        )
     record_ids: set[str] = set()
     normalized_records: list[dict[str, Any]] = []
     for record in records:
         record_id = _require_record_identity(record, collection=collection)
         if record_id in record_ids:
             msg = f"{collection} contains duplicate id {record_id!r}"
-            raise HouseholdValidationError(msg)
+            raise HouseholdValidationError(
+                msg, reason=HouseholdValidationReason.DUPLICATE_RECORD_ID
+            )
         record_ids.add(record_id)
         _require_record_contents(record, collection=collection)
         normalized_records.append(dict(record))
@@ -228,7 +345,9 @@ def _require_record_identity(record: object, *, collection: str) -> str:
     """Return the id of a record that has exactly its collection's fields."""
     if type(record) is not dict:
         msg = f"{collection} records must be objects"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.RECORD_NOT_OBJECT
+        )
     expected_fields = (
         PERSON_RECORD_FIELDS if collection == "people" else ENTITY_RECORD_FIELDS
     )
@@ -239,7 +358,9 @@ def _require_record_identity(record: object, *, collection: str) -> str:
             f"{collection} record fields are invalid: "
             f"missing={missing}, unsupported={unknown}"
         )
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.RECORD_FIELDS_INVALID
+        )
     return _require_identifier(record["id"], field=f"{collection} id")
 
 
@@ -249,7 +370,9 @@ def _require_record_contents(record: dict[str, Any], *, collection: str) -> None
     _require_values(record, collection=collection)
     if collection == "people" and type(record.get("memberships")) is not dict:
         msg = "people record memberships must be an object"
-        raise HouseholdValidationError(msg)
+        raise HouseholdValidationError(
+            msg, reason=HouseholdValidationReason.MEMBERSHIPS_NOT_OBJECT
+        )
 
 
 def _require_complete_memberships(
@@ -269,7 +392,9 @@ def _require_complete_memberships(
                 "people record memberships must identify every country-supported "
                 "entity collection"
             )
-            raise HouseholdValidationError(msg)
+            raise HouseholdValidationError(
+                msg, reason=HouseholdValidationReason.INCOMPLETE_MEMBERSHIPS
+            )
         for collection, entity_id in memberships.items():
             linked_id = _require_identifier(
                 entity_id,
@@ -279,7 +404,9 @@ def _require_complete_memberships(
                 msg = (
                     f"person membership references absent {collection} id {linked_id!r}"
                 )
-                raise HouseholdValidationError(msg)
+                raise HouseholdValidationError(
+                    msg, reason=HouseholdValidationReason.ABSENT_MEMBERSHIP_TARGET
+                )
 
 
 def verify_legacy_household_mapping(

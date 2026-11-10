@@ -7,9 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Flask
 from policyengine_core.errors import SituationParsingError
+from werkzeug.exceptions import NotFound
 
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
+from policyengine_api.routes.error_routes import error_bp
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
     HouseholdNotFoundError,
@@ -57,6 +59,17 @@ def client():
     return app.test_client()
 
 
+@pytest.fixture
+def client_with_error_handlers():
+    """Return a client that also has the app's JSON error handlers."""
+    app = Flask(__name__)
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
+    app.register_blueprint(household_routes.household_bp)
+    app.register_blueprint(error_bp)
+    return app.test_client()
+
+
 @pytest.mark.parametrize(
     ("error", "status_code", "body"),
     [
@@ -99,10 +112,73 @@ def test_stored_household_calculation_errors_map_to_responses(
     assert response.get_json() == body
     if status_code == 500:
         module_logger.exception.assert_called_once_with(
-            "Error calculating household #%s under policy #%s", "3", "4"
+            "Error calculating household #%s under policy #%s", 3, 4
         )
     else:
         module_logger.exception.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/us/household/58725/policy/current-law",
+        "/us/household/current-law/policy/2",
+        "/us/household/58725.0/policy/2",
+        "/us/household/58725/policy/2.0",
+        "/us/household/%2258725%22/policy/2",
+        "/us/household/58725/policy/%222%22",
+        # Forms int() accepts but a path ID shouldn't: a sign, a digit
+        # separator, surrounding whitespace and a negative number.
+        "/us/household/%2B58725/policy/2",
+        "/us/household/5_8725/policy/2",
+        "/us/household/%2058725/policy/2",
+        "/us/household/58725/policy/2%20",
+        "/us/household/-58725/policy/2",
+    ],
+)
+def test_stored_household_calculation_answers_an_id_that_isnt_digits_with_404(
+    client_with_error_handlers,
+    calculation_service: MagicMock,
+    path: str,
+) -> None:
+    """An ID that isn't a string of digits matches no route.
+
+    The app's JSON 404 answers it, without running the calculation or logging
+    an error.
+    """
+    calculation_service.calculate_stored_household.return_value = (
+        HouseholdCalculationResult(household={"people": {}}, warnings=())
+    )
+
+    with patch.object(household_routes, "module_logger") as module_logger:
+        response = client_with_error_handlers.get(path)
+
+    assert response.status_code == 404
+    assert response.get_json() == {
+        "status": "error",
+        "message": str(NotFound()),
+        "result": None,
+    }
+    calculation_service.calculate_stored_household.assert_not_called()
+    module_logger.exception.assert_not_called()
+
+
+def test_stored_household_calculation_reads_ids_with_leading_zeros(
+    client,
+    calculation_service: MagicMock,
+) -> None:
+    calculation_service.calculate_stored_household.return_value = (
+        HouseholdCalculationResult(household={"people": {}}, warnings=())
+    )
+
+    response = client.get("/us/household/0003/policy/04")
+
+    assert response.status_code == 200
+    assert calculation_service.calculate_stored_household.call_args.args == (
+        "us",
+        3,
+        4,
+    )
 
 
 def test_stored_household_calculation_needs_a_valid_read_source(

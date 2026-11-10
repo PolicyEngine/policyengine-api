@@ -293,11 +293,27 @@ def _validate_calculation_request(
     return decorator
 
 
+def _is_successful_calculation_result(view_result: object) -> bool:
+    """Return whether the HTTP cache may store a calculation view's result.
+
+    The calculation views return a dict, which Flask sends with status 200,
+    for a successful calculation and a Response for every failure. Only a
+    2xx result is cached, so the request after a failed calculation runs it
+    again, and an unexpected failure is logged again, instead of replaying the
+    failure for the cache's whole timeout.
+    """
+    if isinstance(view_result, Response):
+        return HTTPStatus.OK <= view_result.status_code < HTTPStatus.MULTIPLE_CHOICES
+    return isinstance(view_result, dict)
+
+
 def _calculation_cache_key(*_args: object, **_kwargs: object) -> str:
     country_id = request.view_args["country_id"]
     return hash_object(
         {
-            "schema": 3,
+            # Schema 4 started when only successes were cached: keys of earlier
+            # schemas can hold error responses.
+            "schema": 4,
             "path": request.full_path,
             "payload": request.get_json(),
             "spm": g.spm,
@@ -410,14 +426,18 @@ def post_household(country_id: str) -> Response:
 
 
 @household_bp.route(
-    "/<country_id>/household/<household_id>/policy/<policy_id>",
+    "/<country_id>/household/<int:household_id>/policy/<int:policy_id>",
     methods=["GET"],
 )
 @validate_country
 def get_household_under_policy(
-    country_id: str, household_id: str, policy_id: str
+    country_id: str, household_id: int, policy_id: int
 ) -> dict | Response:
-    """Get a stored household's output under a stored policy."""
+    """Get a stored household's output under a stored policy.
+
+    Both IDs use Flask's ``int`` converter, so a path whose household or
+    policy ID isn't a string of digits matches no route and gets a 404.
+    """
     try:
         get_v1_household_read_source()
     except ValueError:
@@ -425,8 +445,8 @@ def get_household_under_policy(
     try:
         calculation = household_calculation_service.calculate_stored_household(
             country_id,
-            int(household_id),
-            int(policy_id),
+            household_id,
+            policy_id,
             on_accepted=start_observability_id,
         )
     except (
@@ -460,8 +480,8 @@ def get_household_under_policy(
 def _stored_calculation_error_response(
     error: HouseholdNotFoundError | PolicyNotFoundError | InvalidHouseholdInputsError,
     *,
-    household_id: str,
-    policy_id: str,
+    household_id: int,
+    policy_id: int,
 ) -> Response:
     """Map an expected stored-household calculation failure to its error response."""
     if isinstance(error, HouseholdNotFoundError):
@@ -553,7 +573,10 @@ def _calculation_error_response(
 @household_bp.route("/<country_id>/calculate", methods=["POST"])
 @validate_country
 @_validate_calculation_request(add_missing=False)
-@cache.cached(make_cache_key=_calculation_cache_key)
+@cache.cached(
+    make_cache_key=_calculation_cache_key,
+    response_filter=_is_successful_calculation_result,
+)
 def get_calculate(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household without adding omitted yearly variables."""
     return _calculate()
@@ -562,7 +585,10 @@ def get_calculate(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask 
 @household_bp.route("/<country_id>/calculate-full", methods=["POST"])
 @validate_country
 @_validate_calculation_request(add_missing=True)
-@cache.cached(make_cache_key=_calculation_cache_key)
+@cache.cached(
+    make_cache_key=_calculation_cache_key,
+    response_filter=_is_successful_calculation_result,
+)
 def get_calculate_full(country_id: str) -> dict | Response:  # noqa: ARG001  # Flask passes the <country_id> URL variable by keyword
     """Calculate a household after adding omitted yearly variables."""
     return _calculate()
