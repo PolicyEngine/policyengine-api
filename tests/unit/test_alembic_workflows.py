@@ -210,6 +210,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2_catalog_tables.py" in lifecycle_script
     assert "test_alembic_v2_simulation_runs.py" in lifecycle_script
     assert "test_alembic_v2_saved_item_keys.py" in lifecycle_script
+    assert "test_alembic_v2_user_types.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow

@@ -199,8 +199,10 @@ def _assert_stage_12a_association_shape(engine) -> None:
         constraint["name"]
         for constraint in inspect(engine).get_check_constraints("users")
     }
+    # The user types revision renamed the type check when it added author and
+    # admin.
     assert {
-        "ck_users_user_type",
+        "ck_users_user_type_allowed",
         "ck_users_standard_primary_country",
     } <= user_checks
 

@@ -1,9 +1,10 @@
 """Canonical SQLModel tables for v2 users and their sign-in identities.
 
-A user is either ``standard`` (backed by one or more verified sign-in
-identities, as every Stage 10 legacy-mapping user is) or ``unauthenticated``.
-An unauthenticated user's ``id`` is the random UUID a signed-out browser
-generates and sends as its credential; every other user column stays NULL.
+A user is ``unauthenticated``, or a signed-in user of type ``standard``,
+``author`` or ``admin``, backed by one or more verified sign-in identities
+(every Stage 10 legacy-mapping user is standard). An unauthenticated user's
+``id`` is the random UUID a signed-out browser generates and sends as its
+credential; every other user column stays NULL.
 """
 
 from datetime import datetime
@@ -27,27 +28,39 @@ if TYPE_CHECKING:
 
 
 class UserType(StrEnum):
-    """Whether a user is backed by sign-in identities or by a signed-out browser."""
+    """A user's type, listed from the fewest permissions to the most.
+
+    An ``unauthenticated`` user belongs to a signed-out browser. Every
+    signed-in user is ``standard``, ``author`` or ``admin``, and each type has
+    every permission of the types listed before it, so the order of the
+    members is the order a minimum type is checked against.
+    """
 
     UNAUTHENTICATED = "unauthenticated"
     STANDARD = "standard"
+    AUTHOR = "author"
+    ADMIN = "admin"
+
+
+_ALLOWED_USER_TYPES_SQL = ", ".join(f"'{user_type.value}'" for user_type in UserType)
 
 
 class User(IdentifiedModel, table=True):
     """A v2 user account, unique by email when one is given.
 
-    A ``standard`` user always has a primary country. Deleting a user deletes
-    their sign-in identities and saved associations; reports they own are kept
-    without an owner.
+    A signed-in user, of any type but ``unauthenticated``, always has a
+    primary country. Deleting a user deletes their sign-in identities and
+    saved associations; reports they own are kept without an owner.
     """
 
     __tablename__ = "users"
     __table_args__ = (
         sa.UniqueConstraint("email", name="uq_users_email"),
         sa.CheckConstraint(
-            "user_type IN ('unauthenticated', 'standard')",
-            name="ck_users_user_type",
+            f"user_type IN ({_ALLOWED_USER_TYPES_SQL})",
+            name="ck_users_user_type_allowed",
         ),
+        # Named for the standard type alone, but required of every signed-in type.
         sa.CheckConstraint(
             "user_type = 'unauthenticated' OR primary_country IS NOT NULL",
             name="ck_users_standard_primary_country",
@@ -64,7 +77,8 @@ class User(IdentifiedModel, table=True):
         ondelete="RESTRICT",
     )
     # The server default keeps inserts by earlier Public API revisions, which
-    # do not map this column, creating standard users.
+    # do not map this column, creating standard users. Signing in never
+    # changes a stored type.
     user_type: str = Field(
         default=UserType.STANDARD.value,
         max_length=16,

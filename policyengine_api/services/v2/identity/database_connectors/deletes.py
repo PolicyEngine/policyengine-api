@@ -17,7 +17,7 @@ def delete_unauthenticated_user(session: Session, *, user_id: UUID) -> None:
     """Delete an unauthenticated user; its associations cascade.
 
     The statement matches only an unauthenticated row, so it never deletes a
-    standard user, including one converted by a concurrent transaction.
+    signed-in user, including one converted by a concurrent transaction.
     """
     session.execute(
         delete(User).where(

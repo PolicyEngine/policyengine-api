@@ -779,7 +779,8 @@ pruning").
 
 A schema downgrade past revision `334859ef4fec` drops
 `catalog_last_published_at` and `catalog_values_pruned_at`. From the head,
-it first runs the later revisions' downgrades, and `1356f658347d`'s needs
+it first runs the later revisions' downgrades: `617f531f1506`'s needs no
+user to be an author or an admin, and `1356f658347d`'s needs
 `simulations` empty. A pruned version
 then looks complete, but holds
 no current-law values, parameter tree or search file: the parent revision's

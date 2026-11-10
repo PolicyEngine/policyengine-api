@@ -1,3 +1,21 @@
+## [5.38.0] - 2026-11-10
+
+### Added
+
+- Signed-in v2 users can be standard, author or admin users. `/v2/me` returns the type stored for each user, and signing in again never changes it.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.17.1.
+
+
+## [5.37.2] - 2026-11-10
+
+### Changed
+
+- The v2 database now refuses a saved report or saved simulation that names a v2 report or simulation that doesn't exist, and won't delete a report or simulation that a saved item names.
+
+
 ## [5.37.1] - 2026-11-10
 
 ### Changed

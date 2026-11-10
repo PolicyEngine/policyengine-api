@@ -613,6 +613,7 @@ uv run --frozen pytest \
   tests/unit/libs/test_auth0_management.py \
   tests/unit/v2/test_user_route_auth.py \
   tests/unit/v2/test_me_routes.py \
+  tests/unit/v2/test_user_types.py \
   tests/unit/v2/test_user_policy_routes.py \
   tests/unit/v2/test_user_household_routes.py \
   tests/unit/v2/test_user_simulation_report_routes.py \
