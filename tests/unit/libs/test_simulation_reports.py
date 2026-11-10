@@ -8,14 +8,14 @@ from uuid import UUID
 
 import httpx
 import pytest
+
+from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_reports import (
     REPORTS_PATH,
     SIMULATIONS_PATH,
     SimulationAnswer,
     SimulationServiceReportClient,
 )
-
-from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.services.v2.simulation_service.types import (
     EconomyReportCreationInput,
     EconomySimulationCreationInput,
@@ -26,6 +26,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SubmittedReport,
     SubmittedSimulation,
 )
+from policyengine_api.spm import SPMSelection
 
 SIMULATION_URL = "https://simulation.example.test"
 ENVIRONMENT_VARIABLES = (
@@ -163,7 +164,9 @@ def test_a_report_sends_its_options_and_spm_settings_only_when_given() -> None:
         "policy_id": str(POLICY_ID),
         "dynamic_id": str(DYNAMIC_ID),
     }
-    assert body["spm"] == {"geography_kind": "national"}
+    assert body["spm"] == SPMSelection(geography_kind="national").model_dump(
+        mode="json"
+    )
 
 
 def test_a_simulation_is_posted_and_the_created_simulation_returned() -> None:
