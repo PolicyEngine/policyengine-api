@@ -71,6 +71,7 @@ PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 CATALOG_PRUNING_REVISION = "334859ef4fec"
 # The simulation runs revision, parent of the saved-item keys revision.
 SIMULATION_RUNS_REVISION = "1356f658347d"
+SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -1136,7 +1137,7 @@ def test_saved_item_keys_revision_adds_only_two_foreign_keys() -> None:
         if revision.down_revision == SIMULATION_RUNS_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == SAVED_ITEM_KEYS_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from sqlalchemy import Connection, Engine
 
 SAVED_ITEM_KEYS_PREVIOUS_REVISION = "1356f658347d"
+SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
 SAVED_ITEM_KEYS = {
     "user_report_associations": (
         "fk_user_report_associations_report_id_reports",
@@ -182,7 +183,8 @@ def test_the_revision_adds_the_keys_and_drops_them_on_downgrade(
     engine: Engine,
 ) -> None:
     config = alembic_v2_config()
-    command.upgrade(config, "head")
+    command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
+    command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
     assert _saved_item_keys(engine) == {
         table_name: (key_name, [column_name], referred_table, "RESTRICT")
         for table_name, (
@@ -195,6 +197,58 @@ def test_the_revision_adds_the_keys_and_drops_them_on_downgrade(
     command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
     assert _saved_item_keys(engine) == {}
 
+    command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
+    assert set(_saved_item_keys(engine)) == set(SAVED_ITEM_KEYS)
     command.upgrade(config, "head")
     command.check(config)
-    assert set(_saved_item_keys(engine)) == set(SAVED_ITEM_KEYS)
+
+
+def _current_revision(engine: Engine) -> str:
+    with engine.connect() as connection:
+        return connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one()
+
+
+@pytest.mark.parametrize(
+    ("table_name", "reference"),
+    [
+        ("user_report_associations", {"report_id": uuid4()}),
+        ("user_simulation_associations", {"simulation_id": uuid4()}),
+    ],
+)
+def test_the_upgrade_fails_changing_nothing_while_a_saved_item_names_a_missing_row(
+    engine: Engine, table_name: str, reference: dict[str, object]
+) -> None:
+    """Adding a key checks every existing row, so the upgrade fails and stays put.
+
+    Before the revision a saved item could name a report or simulation that
+    doesn't exist; while one does, the upgrade fails inside its transaction,
+    leaving the database at the parent revision with no new key.
+    """
+    config = alembic_v2_config()
+    command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
+    saved_item_id = uuid4()
+    with engine.begin() as connection:
+        user_id = _insert_user(connection)
+        insert_row(
+            connection,
+            table_name,
+            id=saved_item_id,
+            user_id=user_id,
+            country_id="us",
+            **reference,
+        )
+    try:
+        with pytest.raises(IntegrityError, match=SAVED_ITEM_KEYS[table_name][0]):
+            command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
+        assert _current_revision(engine) == SAVED_ITEM_KEYS_PREVIOUS_REVISION
+        assert _saved_item_keys(engine) == {}
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(f"DELETE FROM {table_name} WHERE id = :id"), {"id": saved_item_id}
+            )
+            connection.execute(
+                text("DELETE FROM users WHERE id = :id"), {"id": user_id}
+            )
