@@ -18,12 +18,6 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from policyengine_api.services.v2.household_calculations.database_session import (
-    HouseholdCalculationDatabaseSession,
-)
-from policyengine_api.services.v2.household_calculations.services import (
-    V2HouseholdCalculationService,
-)
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -34,6 +28,12 @@ from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
+from policyengine_api.services.v2.household_calculations.database_session import (
+    HouseholdCalculationDatabaseSession,
+)
+from policyengine_api.services.v2.household_calculations.services import (
+    V2HouseholdCalculationService,
+)
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationNotFoundError,
 )

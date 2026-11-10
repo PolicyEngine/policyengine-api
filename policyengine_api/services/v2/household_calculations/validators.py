@@ -4,8 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
+from policyengine_api.services.v2.household_calculations.types import (
+    StoredExecutionFailure,
+    StoredExecutionResult,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from uuid import UUID
 
     from policyengine_api.services.v2.countries.types import CountryRead
 
@@ -16,6 +24,18 @@ class HouseholdCalculationCountryError(ValueError):
 
 class HouseholdCalculationYearError(ValueError):
     """The household has no default year to calculate."""
+
+
+class HouseholdCalculationNotFoundError(LookupError):
+    """household_jobs has no job with this ID."""
+
+
+class HouseholdCalculationResultUnreadableError(RuntimeError):
+    """A succeeded job's stored result is not one result document the API reads."""
+
+
+class HouseholdCalculationStorageError(RuntimeError):
+    """The v2 database could not be read while handling a household calculation."""
 
 
 def require_household_country(
@@ -42,3 +62,29 @@ def require_default_year(default_year: int | None) -> None:
     if default_year is None:
         msg = "This household has no default year to calculate."
         raise HouseholdCalculationYearError(msg)
+
+
+def stored_household_outcome(
+    job_id: UUID, status: str, document: object
+) -> StoredExecutionResult | StoredExecutionFailure | None:
+    """Return a job's stored result document, read as its status says.
+
+    An unfinished job's result is not read. A succeeded job must hold one
+    ``HouseholdExecutionResult`` with exactly one policy result, or
+    HouseholdCalculationResultUnreadableError is raised. A failed job holds a
+    ``HouseholdExecutionFailure``, or None when it failed without one; any
+    other document is read as none, since the job's error message still
+    says why it failed.
+    """
+    if status == "succeeded":
+        try:
+            return StoredExecutionResult.model_validate(document)
+        except ValidationError as error:
+            msg = f"Household calculation {job_id} has an unreadable result."
+            raise HouseholdCalculationResultUnreadableError(msg) from error
+    if status == "failed" and document is not None:
+        try:
+            return StoredExecutionFailure.model_validate(document)
+        except ValidationError:
+            return None
+    return None

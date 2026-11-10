@@ -275,7 +275,9 @@ check the declarations:
   `policyengine_stage12_test`, holding only their declared privileges.
   `tests/integration/test_v2_simulation_role_privileges.py` runs the
   simulation API's writes as its two roles; their code lives in the simulation
-  API's repository.
+  API's repository. `tests/integration/test_v2_household_calculation_reads.py`
+  reads the household jobs they write through the household calculation
+  service as `policyengine_v2_runtime`.
 - `api.v2.deployed-privileges-match`: every deploy runs
   `scripts/reconcile_v2_privileges.py apply` right after the schema upgrade,
   then `verify`, before the catalog is seeded.
@@ -321,6 +323,7 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
      tests/integration/test_v2_catalog_publication.py \
      tests/integration/test_v2_catalog_publication_pruning.py \
      tests/integration/test_v2_simulation_role_privileges.py \
+     tests/integration/test_v2_household_calculation_reads.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
 

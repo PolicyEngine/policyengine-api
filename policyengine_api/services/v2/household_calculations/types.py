@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import math
-from typing import Annotated, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.spm import SPMSelection
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.households.types import HouseholdRead
+    from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 
 # The simulation service's limits on axes, as its household contract sets
 # them: at most MAXIMUM_AXIS_GROUPS groups of at most MAXIMUM_PARALLEL_AXES
@@ -19,6 +27,11 @@ from policyengine_api.spm import SPMSelection
 MAXIMUM_AXIS_POINTS = 10_000
 MAXIMUM_AXIS_GROUPS = 8
 MAXIMUM_PARALLEL_AXES = 32
+
+# A household job's status, as household_jobs stores it: the simulation
+# service inserts the job pending, its household function sets it running,
+# then succeeded or failed.
+HouseholdJobStatusName = Literal["pending", "running", "succeeded", "failed"]
 
 
 class StrictCalculationModel(BaseModel):
@@ -102,3 +115,199 @@ class HouseholdCalculationInput(StrictCalculationModel):
             msg = "spm must be an object when supplied"
             raise ValueError(msg)
         return value
+
+
+@dataclass(frozen=True)
+class HouseholdCalculationAccepted:
+    """The simulation service's answer to a submission: the new job and its status."""
+
+    calculation_id: UUID
+    status: HouseholdJobStatusName
+
+
+@dataclass(frozen=True)
+class HouseholdCalculationSubmitted:
+    """A calculation the simulation service accepted, and what it calculates.
+
+    ``year`` is the household's default year, which the simulation service
+    calculates.
+    """
+
+    calculation_id: UUID
+    status: HouseholdJobStatusName
+    country_id: str
+    household_id: UUID
+    policy_id: UUID | None
+    year: int
+
+
+@dataclass(frozen=True)
+class HouseholdCalculationOutput:
+    """A succeeded calculation's household and its notes.
+
+    ``household`` is the stored household in the situation shape, its people
+    and groups named by their record IDs, with each requested value filled
+    in, in the order the household function wrote it. ``warnings`` lists the
+    inputs the country model ignored. ``spm_config`` is the SPM selection the
+    calculation applied and ``spm_provenance`` its receipt, both None for a
+    country without SPM.
+    """
+
+    household: dict[str, Any]
+    warnings: tuple[str, ...]
+    spm_config: dict[str, Any] | None
+    spm_provenance: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class HouseholdCalculationFailure:
+    """Why a calculation failed.
+
+    ``code`` is the household function's error code, such as
+    ``invalid_inputs``, with ``input_errors`` naming each input the country
+    model does not recognize and ``spm_error`` an SPM error. A job that failed
+    without the household function's failure, such as one whose Modal call
+    ended, has no code, and ``message`` is the job's error message.
+    """
+
+    code: str | None
+    message: str
+    input_errors: tuple[dict[str, Any], ...]
+    spm_error: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class HouseholdCalculationRead:
+    """A household calculation as household_jobs records it.
+
+    ``catalog_version_id`` and the package versions are those the simulation
+    service ran it with. ``result`` is set once it succeeded and ``error``
+    once it failed.
+    """
+
+    calculation_id: UUID
+    country_id: str
+    household_id: UUID
+    policy_id: UUID | None
+    year: int
+    catalog_version_id: UUID
+    country_package_version: str
+    policyengine_version: str
+    status: HouseholdJobStatusName
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    result: HouseholdCalculationOutput | None
+    error: HouseholdCalculationFailure | None
+
+
+class StoredDocumentModel(BaseModel):
+    """Base for the result documents the household functions store.
+
+    The simulation service owns their shape, so fields the Public API does
+    not read are ignored, and a later contract may add some.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+
+class StoredPolicyResult(StoredDocumentModel):
+    """The calculated household under the job's one policy."""
+
+    household: dict[str, JsonValue]
+    warnings: list[str] = Field(default_factory=list)
+    spm_provenance: dict[str, JsonValue] | None = None
+
+
+class StoredCalculationOutput(StoredDocumentModel):
+    """A finished calculation: one result, for the job's one policy."""
+
+    spm_config: dict[str, JsonValue] | None = None
+    results: Annotated[list[StoredPolicyResult], Field(min_length=1, max_length=1)]
+
+
+class StoredExecutionResult(StoredDocumentModel):
+    """A succeeded job's result document (``HouseholdExecutionResult``)."""
+
+    status: Literal["succeeded"]
+    output: StoredCalculationOutput
+
+
+class StoredCalculationError(StoredDocumentModel):
+    """The household function's error, worded as the Public API words it."""
+
+    code: str
+    message: str
+    input_errors: list[dict[str, JsonValue]] = Field(default_factory=list)
+    spm_error: dict[str, JsonValue] | None = None
+
+
+class StoredExecutionFailure(StoredDocumentModel):
+    """A refused job's result document (``HouseholdExecutionFailure``)."""
+
+    status: Literal["failed"]
+    error: StoredCalculationError
+
+
+class CountrySource(Protocol):
+    """The countries table (``V2CountryService``)."""
+
+    def list_countries(self) -> list[CountryRead]:
+        """Return every served country and the calculations it supports."""
+        ...
+
+
+class HouseholdSource(Protocol):
+    """Stored households (``V2HouseholdService``)."""
+
+    def get_household(self, *, country_id: str, household_id: UUID) -> HouseholdRead:
+        """Return one household of this country, or raise HouseholdNotFoundError."""
+        ...
+
+
+class PolicySource(Protocol):
+    """Stored policies (``V2PolicyService``)."""
+
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicyRead:
+        """Return one policy of this country, checked against the running catalog.
+
+        Raise PolicyNotFoundError when the country has no such policy.
+        """
+        ...
+
+
+class HouseholdCalculationSubmitter(Protocol):
+    """The simulation service's ``POST /household-calculations``.
+
+    The simulation service reads the household, the policy's parameter values
+    and the catalog version from the Public API's tables itself, inserts the
+    job and starts its Modal call.
+    """
+
+    def submit(
+        self, calculation: HouseholdCalculationInput
+    ) -> HouseholdCalculationAccepted:
+        """Submit the calculation and return the job the service created.
+
+        Raise SimulationServiceInvalidRequestError when the service refuses
+        the caller's data, with its reasons, and
+        SimulationServiceUnavailableError for any other refusal or failure.
+        """
+        ...
+
+
+class SimulationServiceUnavailableError(RuntimeError):
+    """The simulation service could not be reached, could not answer, or refused.
+
+    It covers every refusal other than the caller's data: a household, policy
+    or catalog version it cannot find (which the Public API checks first), a
+    database or manifest it cannot read, and a Modal call it cannot start.
+    """
+
+
+class SimulationServiceInvalidRequestError(ValueError):
+    """The simulation service refuses the caller's data; the message says why.
+
+    Such as a stored household or policy value its household contract cannot
+    take, or an option it refuses.
+    """

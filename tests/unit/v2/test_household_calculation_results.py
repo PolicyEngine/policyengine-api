@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+
+from policyengine_api.data.v2.models import HouseholdJob, HouseholdJobStatus
 from policyengine_api.services.v2.household_calculations.transformations import (
     household_calculation_read,
 )
-
-from policyengine_api.data.v2.models import HouseholdJob, HouseholdJobStatus
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationResultUnreadableError,
     stored_household_outcome,
