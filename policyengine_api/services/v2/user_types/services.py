@@ -229,7 +229,7 @@ class V2UserTypeService:
 def require_admin_remains_after_deletion_in_session(
     session: Session, *, user_id: UUID
 ) -> None:
-    """Lock the admins, then refuse to delete the account of the only admin.
+    """Take the user-type change lock, then refuse to delete the only admin.
 
     Account deletion calls this for every signed-in user before deleting it.
     It takes the user-type change lock, as a type change does, and checks the

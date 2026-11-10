@@ -1,9 +1,10 @@
 """PostgreSQL tests for admins' changes to users' types, as the runtime role.
 
 These prove what SQLite cannot: the runtime role's declared privileges cover
-the changes and their history, the admins' row locks make concurrent changes
-run one at a time so the last admin is never demoted, and account deletion
-cascades through the history or keeps a change without its admin.
+the changes and their history, the user-type change lock makes concurrent
+changes and deletions run one at a time so the last admin is never demoted or
+deleted, and account deletion cascades through the history or keeps a change
+without its admin.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ from policyengine_api.services.v2.user_types.validators import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-# Long enough for a change that is not blocked by a held row lock to finish.
+# Long enough for a change or deletion not blocked by the held lock to finish.
 LOCK_WAIT_SECONDS = 1.0
 
 
@@ -202,7 +203,7 @@ def test_the_runtime_role_changes_types_and_records_them(sessions) -> None:
 def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
     sessions,
 ) -> None:
-    """Alice demotes Bob while Bob's demotion of Alice waits for the admins' locks."""
+    """Alice demotes Bob while Bob's demotion of Alice waits for the lock."""
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     accounts = _accounts(sessions)

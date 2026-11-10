@@ -31,8 +31,11 @@ def acquire_user_type_change_lock(session: Session) -> None:
     before reading the admins, so they run one at a time and each reads the
     admins the ones before it committed. Locking the admins' rows instead
     would miss a user promoted while the lock was awaited, since a waiting
-    query rechecks only the rows its snapshot matched. SQLite, which runs one
-    writing transaction at a time, has no advisory locks and takes none.
+    query rechecks only the rows its snapshot matched. The admins read after
+    it see every committed change only under READ COMMITTED, PostgreSQL's
+    default and the only level the v2 engines use: under REPEATABLE READ the
+    snapshot would predate the wait. SQLite, which runs one writing
+    transaction at a time, has no advisory locks and takes none.
     """
     if session.get_bind().dialect.name != "postgresql":
         return

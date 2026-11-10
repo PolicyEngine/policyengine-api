@@ -414,6 +414,11 @@ caller can list a user's saved items by `user_id`, read, rename or delete one
 by record ID, and create rows for any user. Rolling the application back
 would therefore hand users' saved work to anyone.
 
+While any instance runs a revision older than the admin routes (during a
+deploy, or after an application rollback), the last admin's `DELETE /v2/me`
+there is neither refused nor serialized with type changes, so it can leave no
+admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
+
 - **Before any user-owned record exists, an application rollback is safe
   without a database downgrade.** Signed-out saving needs no configuration, so
   treat user-owned records as existing from the moment this revision serves
