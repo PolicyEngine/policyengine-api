@@ -747,6 +747,15 @@ def test_v1_copy_mappings_keep_their_us_and_uk_checks() -> None:
         }
 
 
+def test_spm_availability_is_nullable_for_versions_not_yet_recorded() -> None:
+    """Publication records it after the catalog, so a version may lack it."""
+    column = V2_METADATA.tables["tax_benefit_model_versions"].c["spm_availability"]
+
+    assert column.nullable
+    assert column.server_default is None
+    assert isinstance(column.type, sa.JSON)
+
+
 def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
     """Catalog format 2 stores v3's metadata; versions published before it keep null.
 

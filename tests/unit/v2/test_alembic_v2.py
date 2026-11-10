@@ -71,6 +71,7 @@ PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 CATALOG_PRUNING_REVISION = "334859ef4fec"
 # The simulation runs revision, parent of the saved-item keys revision.
 SIMULATION_RUNS_REVISION = "1356f658347d"
+# The saved-item keys revision, parent of the SPM availability revision.
 SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
@@ -253,6 +254,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SAVED_ITEM_KEYS_REVISION,
         SIMULATION_RUNS_REVISION,
         CATALOG_PRUNING_REVISION,
         PARAMETER_SEARCH_FILE_REVISION,
@@ -1178,3 +1180,46 @@ def test_saved_item_keys_revision_adds_only_two_foreign_keys() -> None:
         assert "op.drop_table(" not in body
         assert "op.add_column(" not in body
         assert "op.drop_column(" not in body
+
+
+def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
+    """The revision after the saved-item keys records SPM availability.
+
+    It is generated, adds the nullable JSON ``spm_availability`` column to
+    ``tax_benefit_model_versions`` and drops it on downgrade, and writes no
+    data: catalog publication records it.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == SAVED_ITEM_KEYS_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert upgrade.count("op.add_column(") == 1
+    assert re.search(
+        r'op\.add_column\(\s*"tax_benefit_model_versions",\s*'
+        r'sa\.Column\(\s*"spm_availability",\s*sa\.JSON\(\),\s*'
+        r"nullable=True,?\s*\),?\s*\)",
+        upgrade,
+    )
+    assert downgrade.count("op.drop_column(") == 1
+    assert 'op.drop_column("tax_benefit_model_versions", "spm_availability")' in (
+        downgrade
+    )
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body
