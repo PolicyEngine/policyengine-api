@@ -625,7 +625,13 @@ def test_associations_are_v1_anchored_without_client_refs() -> None:
         } == {("id", "country_id")}
 
 
-def test_simulation_and_report_associations_have_no_cross_service_keys() -> None:
+def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
+    """A saved simulation or report names a stored simulation or report.
+
+    ``simulation_id`` and ``report_id`` are foreign keys to ``simulations`` and
+    ``reports``, with ``RESTRICT``: a saved item can't name a row that doesn't
+    exist, and a simulation or report a saved item names can't be deleted.
+    """
     simulations = V2_METADATA.tables["user_simulation_associations"]
     reports = V2_METADATA.tables["user_report_associations"]
 
@@ -635,12 +641,19 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
         assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
-    } == {"users.id", "countries.id"}
+    } == {"users.id", "countries.id", "simulations.id"}
     assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
         "users.id",
         "user_policies.id",
         "countries.id",
+        "reports.id",
     }
+    (simulation_key,) = simulations.c.simulation_id.foreign_keys
+    assert simulation_key.target_fullname == "simulations.id"
+    assert simulation_key.ondelete == "RESTRICT"
+    (report_key,) = reports.c.report_id.foreign_keys
+    assert report_key.target_fullname == "reports.id"
+    assert report_key.ondelete == "RESTRICT"
     user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
     assert user_policy_key.ondelete == "SET NULL"
     for column_name in ("provisions", "validation"):

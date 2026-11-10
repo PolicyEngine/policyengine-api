@@ -1,3 +1,10 @@
+## [5.37.1] - 2026-11-10
+
+### Changed
+
+- Cloud Armor's policy lets requests to the metadata and calculate paths that carry a well-formed bearer token skip the per-address limits, so the Public API's own server routes aren't throttled as a few Vercel addresses; the Public API refuses any such token that isn't valid.
+
+
 ## [5.37.0] - 2026-11-10
 
 ### Added
