@@ -1,9 +1,9 @@
 """Which answers the live household calculation checks send again.
 
-A submission is sent again only after a 503 or a failed connection: a 502
-means the simulation service accepted it, so the job exists. A read is sent
-again after a 502, 503 or 504 or a failed connection, since reading creates
-nothing.
+A submission is sent again only after a 503 or a connection that was never
+made: a 502 means the simulation service accepted it, and after a read
+timeout or a dropped response the job may exist. A read is sent again after
+a 502, 503 or 504 or any transport error, since reading creates nothing.
 """
 
 from __future__ import annotations
@@ -86,6 +86,20 @@ def test_a_submission_is_sent_again_after_a_failed_connection() -> None:
 
     assert finished.item["status"] == "succeeded"
     assert public_api.sent == ["POST", "POST", "GET"]
+
+
+@pytest.mark.parametrize(
+    "transport_error", [httpx.ReadTimeout, httpx.RemoteProtocolError, httpx.ReadError]
+)
+def test_a_submission_is_never_sent_again_once_it_may_have_arrived(
+    transport_error,
+) -> None:
+    public_api = ScriptedPublicApi(submissions=[transport_error, 202], reads=[200])
+
+    with pytest.raises(transport_error):
+        public_api.calculate()
+
+    assert public_api.sent == ["POST"]
 
 
 @pytest.mark.parametrize("status_code", [502, 504, 500])
