@@ -10,7 +10,10 @@ import httpx
 import pytest
 
 from policyengine_api.data.v2.catalog import spm_availability
-from policyengine_api.data.v2.catalog.publication_types import CatalogPublicationError
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
+    SPMAvailabilityRecording,
+)
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.spm import SPMSelection
 
@@ -116,6 +119,21 @@ def test_a_us_version_the_service_does_not_serve_is_not_known_yet(
     )
 
 
+def _catalog(*country_ids: str) -> SimpleNamespace:
+    """Return a published catalog of version 1.0.0 of each country's model."""
+    return SimpleNamespace(
+        policyengine_version=POLICYENGINE_VERSION,
+        countries=[
+            SimpleNamespace(
+                country_id=country_id,
+                model=SimpleNamespace(name=f"policyengine-{country_id}"),
+                model_version=SimpleNamespace(version="1.0.0"),
+            )
+            for country_id in country_ids
+        ],
+    )
+
+
 class RecordingEngine:
     """An engine whose transactions are only counted."""
 
@@ -134,34 +152,44 @@ def test_publication_records_only_what_is_known(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     recorded: list[tuple[str, dict]] = []
-    monkeypatch.setattr(
-        spm_availability,
-        "record_spm_availability",
-        lambda _connection, *, model_name, version, availability: recorded.append(
-            (model_name, dict(availability))
-        ),
-    )
-    catalog = SimpleNamespace(
-        policyengine_version=POLICYENGINE_VERSION,
-        countries=[
-            SimpleNamespace(
-                country_id=country_id,
-                model=SimpleNamespace(name=f"policyengine-{country_id}"),
-                model_version=SimpleNamespace(version="1.0.0"),
-            )
-            for country_id in ("uk", "us")
-        ],
-    )
+
+    def record(_connection, *, model_name, version, availability) -> bool:
+        recorded.append((model_name, dict(availability)))
+        return True
+
+    monkeypatch.setattr(spm_availability, "record_spm_availability", record)
     not_served = {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}
 
-    spm_availability.record_published_spm_availability(
+    recording = spm_availability.record_published_spm_availability(
         RecordingEngine(),
-        catalog,
+        _catalog("uk", "us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
         fetch_versions=lambda _url: not_served,
     )
 
     assert recorded == [("policyengine-uk", {"available": False})]
+    assert recording == SPMAvailabilityRecording(
+        recorded=(("uk", "1.0.0", False),), left_unknown=(("us", "1.0.0"),)
+    )
+
+
+def test_a_version_recorded_by_an_earlier_publication_is_not_listed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        spm_availability,
+        "record_spm_availability",
+        lambda _connection, *, model_name, version, availability: False,
+    )
+
+    recording = spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        _catalog("us"),
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=lambda _url: VERSIONS,
+    )
+
+    assert recording == SPMAvailabilityRecording()
 
 
 def test_the_versions_come_from_the_simulation_services_public_route() -> None:
@@ -218,26 +246,20 @@ def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
             model_name
         ),
     )
-    catalog = SimpleNamespace(
-        policyengine_version=POLICYENGINE_VERSION,
-        countries=[
-            SimpleNamespace(
-                country_id="us",
-                model=SimpleNamespace(name="policyengine-us"),
-                model_version=SimpleNamespace(version="1.0.0"),
-            )
-        ],
-    )
 
     def unreadable(_url: str) -> object:
         msg = "the simulation service's versions could not be read"
         raise CatalogPublicationError(msg)
 
-    spm_availability.record_published_spm_availability(
+    recording = spm_availability.record_published_spm_availability(
         RecordingEngine(),
-        catalog,
+        _catalog("uk", "us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
         fetch_versions=unreadable,
     )
 
     assert recorded == []
+    assert recording == SPMAvailabilityRecording(
+        left_unknown=(("uk", "1.0.0"), ("us", "1.0.0")),
+        versions_unreadable="the simulation service's versions could not be read",
+    )

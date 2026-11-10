@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -80,9 +81,14 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
             environ,
         )
 
+    recording = publication_types.SPMAvailabilityRecording(
+        recorded=(("us", "1.450.0", True),)
+    )
+
     def record_spm(selected_engine, catalog, environ):
         assert "engine" in observed
         observed["spm"] = (selected_engine, catalog.policyengine_version, environ)
+        return recording
 
     result = initialization.initialize_catalog(
         ENVIRONMENT,
@@ -95,7 +101,7 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
         ),
     )
 
-    assert result == _evidence()
+    assert result == replace(_evidence(), spm_availability=recording)
     assert observed == {
         "username": "data-writer",
         "verified": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
@@ -408,3 +414,30 @@ def test_a_missing_simulation_service_url_stops_before_extraction() -> None:
 
     with pytest.raises(V2ConfigurationError, match="SIMULATION_ENTRYPOINT_URL"):
         initialization.initialize_catalog(environment, extractor=refuse_extraction)
+
+
+def test_main_says_on_stderr_when_spm_availability_could_not_be_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The evidence names the versions left unknown, and stderr says why."""
+    recording = publication_types.SPMAvailabilityRecording(
+        left_unknown=(("us", "1.450.0"),),
+        versions_unreadable="the simulation service's versions could not be read",
+    )
+    evidence = replace(_evidence(), spm_availability=recording)
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["spm_availability"] == {
+        "recorded": [],
+        "left_unknown": [{"country_id": "us", "version": "1.450.0"}],
+        "versions_unreadable": ("the simulation service's versions could not be read"),
+    }
+    assert output.err.splitlines() == [
+        "SPM availability was not recorded: the simulation service's versions "
+        "could not be read; /v2/model-catalog reports it as unknown until a "
+        "publication records it"
+    ]

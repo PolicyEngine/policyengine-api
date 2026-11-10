@@ -460,9 +460,26 @@ def test_model_catalog_serves_the_versions_recorded_spm_availability(
     assert result.spm.model_dump(mode="json") == SPM_AVAILABLE
 
 
-def test_model_catalog_without_recorded_spm_availability_offers_none(
+def test_model_catalog_without_recorded_spm_availability_reports_it_unknown(
     catalog_session: Session,
 ) -> None:
+    result = catalog_service(catalog_session).get_model_catalog("uk")
+
+    assert result.spm.model_dump(mode="json") == {
+        "available": None,
+        "settings_schema": None,
+        "defaults": None,
+    }
+
+
+def test_model_catalog_serves_a_recorded_absence_of_spm(
+    catalog_session: Session,
+) -> None:
+    model_version = stored_model_version(catalog_session, "policyengine-uk")
+    model_version.spm_availability = {"available": False}
+    catalog_session.add(model_version)
+    catalog_session.commit()
+
     result = catalog_service(catalog_session).get_model_catalog("uk")
 
     assert result.spm.model_dump(mode="json") == {
