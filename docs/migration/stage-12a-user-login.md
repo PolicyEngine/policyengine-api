@@ -355,8 +355,9 @@ Concurrency on Postgres:
   with a fresh one. If any Auth0 deletion still fails after the data is gone,
   the route returns 502, and `auth0_user_deletion_failed` logs how many Auth0
   users remain, without their subjects. A retry with the same token is safe:
-  it finds no user and deletes that token's Auth0 user, though not those of
-  the user's other identities. The Management settings are read only for
+  it finds no user and deletes only the Auth0 user of the token's own
+  identity, so an Auth0 user of another identity that failed stays and must
+  be deleted in Auth0. The Management settings are read only for
   this route and admins' `DELETE /v2/admin/users/{user_id}` (see
   [Admins' account deletions](#admins-account-deletions)), which deletes
   another user's account the same way. For an unauthenticated user,

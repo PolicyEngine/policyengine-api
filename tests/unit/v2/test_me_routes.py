@@ -216,6 +216,17 @@ def test_failed_auth0_deletion_reports_a_retryable_upstream_error() -> None:
     assert response.json() == {"status": "error", "message": "retry the request"}
 
 
+def test_the_account_deletion_route_documents_what_a_retry_deletes() -> None:
+    client, _service = _client()
+
+    schema = client.get("/v2/openapi.json").json()
+    description = schema["paths"]["/v2/me"]["delete"]["responses"]["502"]["description"]
+
+    assert "every one was tried" in description
+    assert "only the Auth0 user of the token's own identity" in description
+    assert "must be deleted in Auth0" in description
+
+
 def test_unavailable_auth0_deletion_reports_that_nothing_was_deleted() -> None:
     service = RecordingService(_result)
     service.error = AccountDeletionUnavailableError(
