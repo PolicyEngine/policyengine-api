@@ -36,6 +36,10 @@ class LastAdminDemotionError(ValueError):
     """Raised when a change would leave no admin (409)."""
 
 
+class LastAdminDeletionError(ValueError):
+    """Raised when deleting an account would leave no admin (409)."""
+
+
 class UserTypeCheckUnavailableError(RuntimeError):
     """Raised when the caller's type can't be read from the database (503)."""
 
@@ -80,6 +84,18 @@ def require_another_admin(
     if demotes_an_admin and len(admin_user_ids) <= 1:
         msg = "The last admin can't be demoted; make another user an admin first"
         raise LastAdminDemotionError(msg)
+
+
+def require_admin_after_deletion(
+    *, user_type: UserType, admin_user_ids: Collection[UUID]
+) -> None:
+    """Refuse to delete the account of the only admin."""
+    if user_type is UserType.ADMIN and len(admin_user_ids) <= 1:
+        msg = (
+            "The last admin's account can't be deleted; make another user an "
+            "admin first"
+        )
+        raise LastAdminDeletionError(msg)
 
 
 def require_one_user_with_email(users: Sequence[User], email: str) -> User:

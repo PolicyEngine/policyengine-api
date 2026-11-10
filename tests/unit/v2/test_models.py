@@ -1026,6 +1026,7 @@ def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> Non
         "ck_user_type_changes_changed_type": "previous_user_type <> new_user_type",
         "ck_user_type_changes_source": "source IN ('admin_route', 'script')",
     }
+    # The admin's index serves the SET NULL that each user deletion runs.
     assert {
         tuple(column.name for column in index.columns) for index in changes.indexes
-    } == {("user_id", "created_at")}
+    } == {("user_id", "created_at"), ("changed_by_user_id",)}

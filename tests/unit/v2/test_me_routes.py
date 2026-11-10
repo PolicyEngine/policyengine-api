@@ -24,6 +24,9 @@ from policyengine_api.services.v2.user_accounts.validators import (
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead
+from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDeletionError,
+)
 from tests.unit.v2.user_route_support import (
     BROWSER_USER_ID,
     CREATED_AT,
@@ -185,6 +188,19 @@ def test_export_and_delete_me() -> None:
     assert deleted.status_code == 204
     assert deleted.content == b""
     assert service.calls[1] == ("delete_account", {"principal": PRINCIPAL})
+
+
+def test_the_last_admins_account_deletion_is_refused_with_409() -> None:
+    service = RecordingService(_result)
+    service.error = LastAdminDeletionError(
+        "The last admin's account can't be deleted; make another user an admin first"
+    )
+    client, _service = _client(service)
+
+    response = client.delete("/v2/me?country_id=us")
+
+    assert response.status_code == 409
+    assert response.json() == {"status": "error", "message": str(service.error)}
 
 
 def test_failed_auth0_deletion_reports_a_retryable_upstream_error() -> None:

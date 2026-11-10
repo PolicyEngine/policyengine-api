@@ -30,6 +30,7 @@ from policyengine_api.services.v2.user_types.database_session import (
 from policyengine_api.services.v2.user_types.services import V2UserTypeService
 from policyengine_api.services.v2.user_types.types import AdminUserSearch
 from policyengine_api.services.v2.user_types.validators import (
+    LastAdminDeletionError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserEmailMatchError,
@@ -410,3 +411,22 @@ def test_a_script_needs_exactly_one_signed_in_user_with_the_email(
     with pytest.raises(UserEmailMatchError, match="no signed-in user"):
         user_types.set_user_type_by_email(email="alice", user_type=UserType.ADMIN)
     assert _history_rows(store) == []
+
+
+def test_the_last_admin_cannot_delete_their_own_account(store: V2Store) -> None:
+    alice_id = _signed_in_admin(store, ALICE)
+    accounts = V2AccountService(AccountDatabaseSession(store.sessions))
+
+    with pytest.raises(LastAdminDeletionError):
+        accounts.delete_account(principal=ALICE)
+    assert _stored_type(store, alice_id) == "admin"
+
+    bob_id = _signed_in_admin(store, BOB)
+    accounts.delete_account(principal=ALICE)
+
+    with store.sessions() as session:
+        assert session.get(User, alice_id) is None
+    # Bob is now the last admin.
+    with pytest.raises(LastAdminDeletionError):
+        accounts.delete_account(principal=BOB)
+    assert _stored_type(store, bob_id) == "admin"

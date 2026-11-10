@@ -138,10 +138,9 @@ class V2UserTypeService:
         """
         with self._database_session.transaction() as session:
             caller = find_principal_user_in_session(session, principal)
+            caller_user_id = None if caller is None else caller.user_id
             admin_user_ids = read_admin_user_ids_for_update(session)
-            require_listed_admin(
-                None if caller is None else caller.user_id, admin_user_ids
-            )
+            require_listed_admin(caller_user_id, admin_user_ids)
             user = require_signed_in_user(
                 read_signed_in_user(session, user_id, for_update=True)
             )
@@ -151,7 +150,7 @@ class V2UserTypeService:
                 user_type=user_type,
                 admin_user_ids=admin_user_ids,
                 origin=UserTypeChangeOrigin(
-                    changed_by_user_id=None if caller is None else caller.user_id,
+                    changed_by_user_id=caller_user_id,
                     source=UserTypeChangeSource.ADMIN_ROUTE,
                 ),
             )

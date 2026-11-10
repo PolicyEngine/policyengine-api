@@ -50,7 +50,7 @@ AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
 USER_TYPES_PREVIOUS_REVISION = "1356f658347d"
 USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision.
-USER_TYPE_CHANGES_REVISION = "e990c2d6b08b"
+USER_TYPE_CHANGES_REVISION = "970be5d29283"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")

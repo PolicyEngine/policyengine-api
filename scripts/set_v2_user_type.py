@@ -98,7 +98,11 @@ def main(
         _runtime_user_type_service
     ),
 ) -> int:
-    """Set one user's type; return 0 on success and 1 when it is refused."""
+    """Set one user's type; return 0 on success and 1 when it is refused.
+
+    Any other failure, such as missing settings or an unreachable database,
+    raises, so Python prints its traceback and also exits with 1.
+    """
     arguments = _parser().parse_args(argv)
     try:
         change = user_type_service_factory().set_user_type_by_email(

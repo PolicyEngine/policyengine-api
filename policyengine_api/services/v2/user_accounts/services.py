@@ -8,7 +8,8 @@ exporting, or deleting an absent one finds nothing. Only signed-in principals
 edit account details.
 
 Upgrading moves a browser's unauthenticated user into the signed-in account
-at sign-in. Deleting a signed-in account removes the user's legacy mappings,
+at sign-in. Deleting the last admin's account is refused. Deleting a
+signed-in account removes the user's legacy mappings,
 then the user (identities and associations cascade), and finally the Auth0
 user when the Management API is configured; deleting an unauthenticated
 account removes only its user and associations. Only signed-in user UUIDs
@@ -64,6 +65,12 @@ from policyengine_api.services.v2.user_accounts.validators import (
     require_account,
     require_editable_account,
     require_resolved_account,
+)
+from policyengine_api.services.v2.user_types.database_connectors.reads import (
+    read_admin_user_ids_for_update,
+)
+from policyengine_api.services.v2.user_types.validators import (
+    require_admin_after_deletion,
 )
 
 if TYPE_CHECKING:
@@ -262,6 +269,13 @@ class V2AccountService:
         auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
+            if owner is not None and owner.user_type is UserType.ADMIN:
+                # Lock the admins as a type change does, so a concurrent
+                # demotion or deletion can't leave no admin either.
+                require_admin_after_deletion(
+                    user_type=owner.user_type,
+                    admin_user_ids=read_admin_user_ids_for_update(session),
+                )
             if owner is None:
                 subjects: tuple[str, ...] = (principal.subject,)
             else:

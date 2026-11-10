@@ -22,16 +22,17 @@ if TYPE_CHECKING:
 def read_admin_user_ids_for_update(session: Session) -> list[UUID]:
     """Lock every admin's row, in ID order, and return their IDs.
 
-    Every change of a type locks the admins first, in the same order, so
-    concurrent changes run one at a time and each counts the admins the ones
-    before it left.
+    Every change of a type, and every admin's account deletion, locks the
+    admins first, in the same order, so they run one at a time and each counts
+    the admins the ones before it left. The lock (``FOR NO KEY UPDATE``)
+    doesn't hold up inserts whose foreign keys name an admin.
     """
     return list(
         session.exec(
             select(User.id)
             .where(User.user_type == UserType.ADMIN.value)
             .order_by(col(User.id))
-            .with_for_update()
+            .with_for_update(key_share=True)
         ).all()
     )
 
@@ -42,13 +43,13 @@ def read_signed_in_user(
     """Return the signed-in user with this ID, or None.
 
     An unauthenticated user is never returned. ``for_update`` locks the row
-    until the transaction ends.
+    (``FOR NO KEY UPDATE``) until the transaction ends.
     """
     statement = select(User).where(
         User.id == user_id, User.user_type != UserType.UNAUTHENTICATED.value
     )
     if for_update:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update(key_share=True)
     return session.exec(
         statement.execution_options(populate_existing=True)
     ).one_or_none()

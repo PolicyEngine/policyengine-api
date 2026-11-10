@@ -109,9 +109,9 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
-primary_country, created_at, last_seen_at}`: `email` is that of the user's
-most recently seen identity that has one, else the user's own, and
-`last_seen_at` is when that identity was last seen. Unauthenticated users are
+primary_country, created_at, last_seen_at}`: `email` is that of the most
+recently seen of the user's identities that has one, else the user's own, and
+`last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
 never listed, read or changed (404), since their IDs are their browsers'
 credentials.
 
@@ -120,11 +120,13 @@ types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
 `script`. Deleting the user deletes its changes; deleting the admin keeps them
 with no admin.
 
-A change that would leave no admin is refused with 409. Every change first
-locks all admins' `users` rows, in ID order, and checks the caller against
-them, so concurrent changes run one at a time and each counts the admins the
-ones before it left; an admin demoted by an earlier change is then refused
-with 403.
+A change that would leave no admin is refused with 409, and so is the last
+admin's `DELETE /v2/me`. Every change, and an admin's account deletion, first
+locks all admins' `users` rows (`FOR NO KEY UPDATE`, which doesn't hold up
+inserts whose foreign keys name an admin), in ID order, and a change checks
+the caller against them. Concurrent changes and deletions therefore run one at
+a time, and each counts the admins the ones before it left; an admin demoted
+by an earlier change is then refused with 403.
 
 `scripts/set_v2_user_type.py --email <address> --user-type <type>` sets the
 type of the one signed-in user whose own or any identity's email is exactly

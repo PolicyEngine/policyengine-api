@@ -74,6 +74,8 @@ CATALOG_PRUNING_REVISION = "334859ef4fec"
 SIMULATION_RUNS_REVISION = "1356f658347d"
 # The user types revision, on the simulation runs revision.
 USER_TYPES_REVISION = "617f531f1506"
+# The user type changes revision, on the user types revision.
+USER_TYPE_CHANGES_REVISION = "970be5d29283"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -1084,7 +1086,9 @@ def _user_types_revision_source() -> str:
 
 def test_user_type_changes_revision_only_adds_the_history_table() -> None:
     """The generated revision after the user types revision adds one table."""
-    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{USER_TYPE_CHANGES_REVISION}_*.py"
+    )
     revision = path.read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1103,6 +1107,7 @@ def test_user_type_changes_revision_only_adds_the_history_table() -> None:
         "op.f",
     ]
     assert upgrade.count("op.create_table(") == 1
+    assert upgrade.count("op.create_index(") == 2
     assert 'op.create_table(\n        "user_type_changes"' in upgrade
     assert sorted(set(re.findall(r"op\.\w+", downgrade))) == [
         "op.drop_index",

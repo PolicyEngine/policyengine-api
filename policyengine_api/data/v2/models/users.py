@@ -185,6 +185,8 @@ class UserTypeChange(IdentifiedModel, table=True):
             name="ck_user_type_changes_source",
         ),
         sa.Index("ix_user_type_changes_user_id_created_at", "user_id", "created_at"),
+        # Deleting any user sets its changes' admin to NULL, which searches here.
+        sa.Index("ix_user_type_changes_changed_by_user_id", "changed_by_user_id"),
     )
 
     user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
