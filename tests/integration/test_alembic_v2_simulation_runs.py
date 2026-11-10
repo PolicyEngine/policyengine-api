@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 # The catalog pruning revision, the simulation runs revision's parent.
 SIMULATION_RUNS_PREVIOUS_REVISION = "334859ef4fec"
+SIMULATION_RUNS_REVISION = "1356f658347d"
 NEW_TABLES = frozenset(
     {
         "simulation_runs",
@@ -240,9 +241,11 @@ def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
     assert not program_entity["nullable"]
     assert "v2_simulation_status" in _enum_type_names(engine)
 
+    # Upgrade to this revision alone: later revisions change other tables.
+    command.upgrade(config, SIMULATION_RUNS_REVISION)
+    after = _shapes(engine)
     command.upgrade(config, "head")
     command.check(config)
-    after = _shapes(engine)
     assert set(after) - set(before) == NEW_TABLES
     assert set(before) <= set(after)
     changed = {

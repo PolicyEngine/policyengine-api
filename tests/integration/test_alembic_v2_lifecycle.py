@@ -165,12 +165,22 @@ def _assert_stage_12a_association_shape(engine) -> None:
             constraint["column_names"]
             for constraint in inspect(engine).get_unique_constraints(table_name)
         ] == [["id", "country_id"]]
-    for table_name in ("user_simulation_associations", "user_report_associations"):
-        referred_tables = {
-            foreign_key["referred_table"]
+    # At head, a saved simulation or report names a stored detailed-save
+    # simulation or report through one RESTRICT key (revision 81b728a088e7).
+    for table_name, column_name, referred_table in (
+        ("user_simulation_associations", "simulation_id", "simulations"),
+        ("user_report_associations", "report_id", "reports"),
+    ):
+        detailed_save_keys = [
+            (
+                foreign_key["constrained_columns"],
+                foreign_key["referred_table"],
+                foreign_key["options"].get("ondelete"),
+            )
             for foreign_key in inspect(engine).get_foreign_keys(table_name)
-        }
-        assert {"simulations", "reports"}.isdisjoint(referred_tables)
+            if foreign_key["referred_table"] in {"simulations", "reports"}
+        ]
+        assert detailed_save_keys == [([column_name], referred_table, "RESTRICT")]
     report_policy_key = next(
         foreign_key
         for foreign_key in inspect(engine).get_foreign_keys("user_report_associations")
