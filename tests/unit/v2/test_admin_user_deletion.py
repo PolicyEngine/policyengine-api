@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -57,7 +58,7 @@ from tests.unit.v2.user_service_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterator
+    from collections.abc import Collection, Iterator, Mapping
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
 
@@ -69,6 +70,7 @@ BOB_WITH_EMAIL = UserPrincipal(
     issuer=ISSUER, subject=BOB.subject, email="bob@example.test"
 )
 BOB_LINKED_SUBJECT = "google-oauth2|bob-linked"
+BOB_THIRD_SUBJECT = "google-oauth2|bob-third"
 OTHER_TENANT_ISSUER = "https://other-tenant.example.test/"
 DANA_FROM_ANOTHER_TENANT = UserPrincipal(
     issuer=OTHER_TENANT_ISSUER, subject="auth0|dana", email="dana@example.test"
@@ -82,7 +84,8 @@ class RecordingAuth0Users:
     """Stand in for the Auth0 deleter: count preparations, record deletions.
 
     ``deletion_error`` is raised for every subject, or only for
-    ``failing_subjects`` when they are given.
+    ``failing_subjects`` when they are given. ``errors_by_subject`` instead
+    gives each failing subject its own error.
     """
 
     def __init__(
@@ -91,10 +94,12 @@ class RecordingAuth0Users:
         preparation_error: Exception | None = None,
         deletion_error: Exception | None = None,
         failing_subjects: Collection[str] | None = None,
+        errors_by_subject: Mapping[str, Exception] | None = None,
     ) -> None:
         self.preparation_error = preparation_error
         self.deletion_error = deletion_error
         self.failing_subjects = failing_subjects
+        self.errors_by_subject = errors_by_subject or {}
         self.preparations = 0
         self.attempted_subjects: list[str] = []
         self.deleted_subjects: list[str] = []
@@ -106,6 +111,8 @@ class RecordingAuth0Users:
 
     def delete_user(self, subject: str) -> None:
         self.attempted_subjects.append(subject)
+        if subject in self.errors_by_subject:
+            raise self.errors_by_subject[subject]
         fails = self.failing_subjects is None or subject in self.failing_subjects
         if self.deletion_error is not None and fails:
             raise self.deletion_error
@@ -590,3 +597,45 @@ def test_a_failed_commit_records_no_deletion_and_deletes_no_auth0_user(
     assert auth0_users.preparations == 1
     assert auth0_users.attempted_subjects == []
     assert runtime.events == []
+
+
+@pytest.mark.usefixtures("runtime")
+def test_several_failed_auth0_deletions_are_all_counted_and_the_first_is_the_cause(
+    store: V2Store,
+) -> None:
+    """Two of Bob's three Auth0 users fail to delete, the first and the last."""
+    _sign_in(store, ALICE, UserType.ADMIN)
+    bob_id = _sign_in(store, BOB)
+    linked_at = datetime.now(UTC) + timedelta(minutes=1)
+    with store.sessions.begin() as session:
+        # Later identities, in a fixed order: subjects are tried oldest first.
+        for minutes_later, subject in enumerate(
+            (BOB_LINKED_SUBJECT, BOB_THIRD_SUBJECT)
+        ):
+            session.add(
+                UserIdentity(
+                    user_id=bob_id,
+                    issuer=ISSUER,
+                    subject=subject,
+                    created_at=linked_at + timedelta(minutes=minutes_later),
+                )
+            )
+    first_failure = RuntimeError("rate limited")
+    last_failure = RuntimeError("service unavailable")
+    auth0_users = RecordingAuth0Users(
+        errors_by_subject={BOB.subject: first_failure, BOB_THIRD_SUBJECT: last_failure}
+    )
+
+    with pytest.raises(AccountIdentityDeletionError) as failure:
+        _accounts(store, auth0_users).delete_user_account_as_admin(
+            principal=ALICE, user_id=bob_id
+        )
+
+    assert auth0_users.attempted_subjects == [
+        BOB.subject,
+        BOB_LINKED_SUBJECT,
+        BOB_THIRD_SUBJECT,
+    ]
+    assert auth0_users.deleted_subjects == [BOB_LINKED_SUBJECT]
+    assert failure.value.undeleted_auth0_user_count == 2
+    assert failure.value.__cause__ is first_failure
