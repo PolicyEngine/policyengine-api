@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
 from sqlmodel import select
 
+from policyengine_api import observability
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
@@ -16,7 +19,6 @@ from policyengine_api.data.v2.models import (
     UserType,
 )
 from policyengine_api.services.v2.identity.types import UserPrincipal
-from policyengine_api.services.v2.user_accounts import services as account_services
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
@@ -114,7 +116,7 @@ def store() -> Iterator[V2Store]:
 @pytest.fixture
 def runtime(monkeypatch) -> RecordingRuntime:
     recording_runtime = RecordingRuntime()
-    monkeypatch.setattr(account_services, "get_runtime", lambda: recording_runtime)
+    monkeypatch.setattr(observability, "get_runtime", lambda: recording_runtime)
     return recording_runtime
 
 
@@ -382,3 +384,27 @@ def test_an_admin_deletion_without_auth0_management_keeps_the_auth0_users(
     assert [name for name, _severity, _attributes in runtime.events] == [
         ADMIN_DELETION_EVENT
     ]
+
+
+def test_loading_the_account_service_leaves_the_observability_runtime_unbuilt() -> None:
+    """Loading the account service mustn't build the observability runtime.
+
+    Importing ``policyengine_api.observability`` builds the process-wide
+    runtime, which adds a root log handler and, with no OTLP endpoint, writes
+    an ERROR record, so any command that loads the service would write them.
+    """
+    import_check = (
+        "import sys\n"
+        "import policyengine_api.services.v2.user_accounts.services\n"
+        "loaded = 'policyengine_api.observability' in sys.modules\n"
+        "assert not loaded, 'the observability runtime was imported'\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", import_check],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

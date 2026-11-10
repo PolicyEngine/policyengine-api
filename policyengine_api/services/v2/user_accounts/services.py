@@ -24,7 +24,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
-from policyengine_api.observability import get_runtime
 from policyengine_api.services.v2.identity.database_connectors.deletes import (
     delete_unauthenticated_user,
 )
@@ -413,7 +412,11 @@ def _record_admin_account_deletion(
     """
     # Telemetry must never fail a deletion that has already happened.
     with contextlib.suppress(Exception):
-        get_runtime().event(
+        from policyengine_api import (  # noqa: PLC0415  # importing it builds the process-wide runtime, which commands that load the account service must not
+            observability,
+        )
+
+        observability.get_runtime().event(
             ADMIN_ACCOUNT_DELETION_EVENT,
             severity="INFO",
             attributes={
