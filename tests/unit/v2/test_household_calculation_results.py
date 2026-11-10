@@ -132,13 +132,16 @@ def test_a_job_the_household_function_refused_reads_back_its_error() -> None:
 
 def test_a_job_that_failed_unexpectedly_reads_back_its_error_message() -> None:
     calculation = _read(
-        _job(HouseholdJobStatus.FAILED, error_message="The Modal call ended.")
+        _job(
+            HouseholdJobStatus.FAILED,
+            error_message="household_function_error: the Modal call ended",
+        )
     )
 
     assert calculation.result is None
     assert calculation.error is not None
     assert calculation.error.code is None
-    assert calculation.error.message == "The Modal call ended."
+    assert calculation.error.message == "household_function_error: the Modal call ended"
     assert calculation.error.input_errors == ()
     assert calculation.error.spm_error is None
 

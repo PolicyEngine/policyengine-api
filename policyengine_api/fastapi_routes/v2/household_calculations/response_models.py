@@ -74,8 +74,10 @@ class HouseholdCalculationErrorItem(StrictHouseholdCalculationAPIModel):
     with ``input_errors`` naming each input the country model does not
     recognize; ``invalid_household``; ``invalid_spm_selection``, with
     ``spm_error``; ``bundle_mismatch``; or ``calculation_failed``. It is null
-    when the calculation failed for another reason, such as a Modal call that
-    ended; ``message`` then says why, and submitting again may succeed.
+    when the calculation failed for another reason, such as a household
+    function that raised or was cancelled; ``message`` is then the job's
+    one-line error, such as ``household_function_error: …`` or
+    ``household_function_cancelled: …``, and submitting again may succeed.
     """
 
     code: str | None

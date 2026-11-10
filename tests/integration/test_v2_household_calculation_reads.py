@@ -139,7 +139,7 @@ def stored_jobs(disposable_v2_database_url, managed_v2_roles) -> Iterator[Stored
             rows,
             jobs.failed_unexpectedly,
             "failed",
-            error_message="The Modal call ended.",
+            error_message="household_function_error: the Modal call ended",
             completed_at=COMPLETED_AT,
         )
         _insert_job(connection, rows, jobs.pending, "pending")
@@ -211,7 +211,10 @@ def test_the_runtime_role_reads_why_a_calculation_failed(
     assert refused.error.input_errors == (INPUT_ERROR,)
     assert failed_unexpectedly.error is not None
     assert failed_unexpectedly.error.code is None
-    assert failed_unexpectedly.error.message == "The Modal call ended."
+    assert (
+        failed_unexpectedly.error.message
+        == "household_function_error: the Modal call ended"
+    )
 
 
 def test_the_runtime_role_reads_an_unfinished_calculation(

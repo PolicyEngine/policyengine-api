@@ -166,8 +166,9 @@ class HouseholdCalculationFailure:
     ``code`` is the household function's error code, such as
     ``invalid_inputs``, with ``input_errors`` naming each input the country
     model does not recognize and ``spm_error`` an SPM error. A job that failed
-    without the household function's failure, such as one whose Modal call
-    ended, has no code, and ``message`` is the job's error message.
+    without the household function's failure document (one whose function
+    raised or was cancelled) has no code, and ``message`` is the job's error
+    message, such as ``household_function_error: …``.
     """
 
     code: str | None
