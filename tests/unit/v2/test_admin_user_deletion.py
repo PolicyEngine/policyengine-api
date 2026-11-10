@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from sqlmodel import select
+import sqlalchemy as sa
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import Session, select
 
 from policyengine_api import observability
 from policyengine_api.data.v2.models import (
@@ -34,6 +37,9 @@ from policyengine_api.services.v2.user_policies.database_session import (
 )
 from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 from policyengine_api.services.v2.user_policies.types import UserPolicyCreateFields
+from policyengine_api.services.v2.user_types.services import (
+    require_admin_may_delete_user_in_session,
+)
 from policyengine_api.services.v2.user_types.validators import (
     LastAdminDeletionError,
     SignedInUserNotFoundError,
@@ -43,6 +49,7 @@ from tests.unit.v2.user_service_support import (
     ALICE,
     BOB,
     ISSUER,
+    OTHER_SIGNED_OUT_BROWSER,
     SIGNED_OUT_BROWSER,
     V2Store,
     default_legacy_references,
@@ -509,3 +516,77 @@ def test_an_admin_deletion_logs_that_no_identity_was_under_the_issuer(
             {"v2_user_id": str(dana_id)},
         )
     ]
+
+
+@pytest.mark.parametrize("target", ["absent", "unauthenticated"])
+@pytest.mark.parametrize("caller", ["standard", "author", "signed_out"])
+def test_callers_below_admin_are_refused_before_the_target_is_looked_up(
+    store: V2Store, runtime: RecordingRuntime, caller: str, target: str
+) -> None:
+    """A caller below admin gets 403 whether or not the target exists.
+
+    The router refuses these callers first, so only this shows that the
+    deletion's own check, in its transaction, looks at the caller before the
+    target: an unauthenticated user's ID never answers differently from an
+    absent one.
+    """
+    _sign_in(store, ALICE, UserType.ADMIN)
+    _sign_in(store, BOB)
+    _sign_in(store, CAROL, UserType.AUTHOR)
+    _save_policy(store, SIGNED_OUT_BROWSER)
+    _save_policy(store, OTHER_SIGNED_OUT_BROWSER)
+    target_id = (
+        ABSENT_USER_ID if target == "absent" else OTHER_SIGNED_OUT_BROWSER.user_id
+    )
+    auth0_users = RecordingAuth0Users()
+
+    def attempt_deletion() -> None:
+        if caller == "signed_out":
+            # The service takes only signed-in principals, since admins are
+            # signed in; the check it runs takes any caller.
+            with store.sessions.begin() as session:
+                require_admin_may_delete_user_in_session(
+                    session, principal=SIGNED_OUT_BROWSER, user_id=target_id
+                )
+            return
+        _accounts(store, auth0_users).delete_user_account_as_admin(
+            principal=BOB if caller == "standard" else CAROL, user_id=target_id
+        )
+
+    with pytest.raises(UserTypeBelowMinimumError, match="Only admins"):
+        attempt_deletion()
+
+    assert _user_type_of(store, OTHER_SIGNED_OUT_BROWSER.user_id) == "unauthenticated"
+    with store.sessions() as session:
+        assert len(session.exec(select(UserPolicy)).all()) == 2
+    assert auth0_users.attempted_subjects == []
+    assert runtime.events == []
+
+
+def test_a_failed_commit_records_no_deletion_and_deletes_no_auth0_user(
+    store: V2Store, runtime: RecordingRuntime
+) -> None:
+    _sign_in(store, ALICE, UserType.ADMIN)
+    bob_id = _sign_in(store, BOB)
+    refusing_sessions = sessionmaker(
+        store.sessions.kw["bind"], class_=Session, expire_on_commit=False
+    )
+
+    @sa.event.listens_for(refusing_sessions, "before_commit")
+    def refuse_commit(_session: Session) -> None:
+        msg = "COMMIT"
+        raise OperationalError(msg, {}, Exception("the connection was lost"))
+
+    auth0_users = RecordingAuth0Users()
+    accounts = V2AccountService(
+        AccountDatabaseSession(refusing_sessions),
+        auth0_user_deleter_factory=lambda: auth0_users,
+    )
+
+    with pytest.raises(OperationalError):
+        accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
+
+    assert _user_type_of(store, bob_id) == "standard"
+    assert auth0_users.preparations == 1
+    assert auth0_users.attempted_subjects == []
+    assert runtime.events == []
