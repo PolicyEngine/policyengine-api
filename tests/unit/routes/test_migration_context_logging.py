@@ -723,3 +723,79 @@ def test_compute_routes_in_the_same_groups_keep_their_compute_labels():
     assert context["route_group"] == "simulation"
     assert context["sim_flow"] == "economy"
     assert context["sim_compute"] is not None
+
+
+def _log_household_calculation(method: str, path: str) -> dict:
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            ServedRequest(
+                request_id=f"request-{method}",
+                method=method,
+                path=path,
+                status_code=202 if method == "POST" else 200,
+                started_at=None,
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
+        )
+    return mock_logger.log_struct.call_args.args[0]["migration"]
+
+
+def test_household_calculations_log_the_sources_they_use_whatever_the_flags_say(
+    monkeypatch,
+):
+    # None of these flags applies to /v2/household-calculations, so invalid
+    # values must not reach its log record.
+    monkeypatch.setenv("DB_READ_HOUSEHOLD", "invalid-for-household-calculations")
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "invalid-for-household-calculations")
+    monkeypatch.setenv("SIM_ENTRYPOINT", "invalid-for-household-calculations")
+    monkeypatch.setenv("SIM_COMPUTE_HOUSEHOLD", "invalid-for-household-calculations")
+
+    submitted = _log_household_calculation("POST", "/v2/household-calculations")
+    read = _log_household_calculation(
+        "GET", "/v2/household-calculations/00000000-0000-0000-0000-000000000001"
+    )
+
+    # A submission reads the household and policy from Supabase and computes
+    # on the Cloud Run simulation service's v2 household functions.
+    assert submitted == {
+        "route_group": "household",
+        "route_impl": "fastapi_native",
+        "db_entity": "household",
+        "db_write": None,
+        "db_read": "supabase",
+        "sim_flow": "household",
+        "sim_entrypoint": "cloud_run_simulation_entrypoint",
+        "sim_compute": "v2_primary",
+    }
+    # A read reads the job from Supabase and calls nothing.
+    assert read == {
+        "route_group": "household",
+        "route_impl": "fastapi_native",
+        "db_entity": "household",
+        "db_write": None,
+        "db_read": "supabase",
+        "sim_flow": None,
+        "sim_entrypoint": "cloud_run_simulation_entrypoint",
+        "sim_compute": None,
+    }
+
+
+def test_household_calculations_report_an_invalid_route_implementation(
+    monkeypatch,
+):
+    monkeypatch.setenv("ROUTE_IMPL_HOUSEHOLD", "invalid")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            ServedRequest(
+                request_id="request",
+                method="POST",
+                path="/v2/household-calculations",
+                status_code=202,
+                started_at=None,
+            )
+        )
+
+    context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert context["route_group"] == "household"
+    assert "ROUTE_IMPL_HOUSEHOLD" in context["migration_flag_error"]
