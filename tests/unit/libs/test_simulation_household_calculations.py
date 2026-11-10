@@ -14,6 +14,7 @@ from policyengine_api.libs.simulation_household_calculations import (
     SimulationAnswer,
     SimulationHouseholdCalculationClient,
 )
+from policyengine_api.request_context import _asgi_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     SimulationServiceAnswerUnreadableError,
@@ -52,6 +53,14 @@ def configured_simulation_service(monkeypatch):
     # whatever the economy routes select.
     monkeypatch.setenv("SIM_ENTRYPOINT", "old_gateway_direct")
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test")
+
+
+@pytest.fixture(autouse=True)
+def restored_observability_id():
+    """Undo the observability ID each submission binds in the test's context."""
+    token = _asgi_observability_id.set(None)
+    yield
+    _asgi_observability_id.reset(token)
 
 
 class RecordingService:

@@ -313,7 +313,9 @@ class HouseholdCalculationSubmitter(Protocol):
         """Submit the calculation and return the job the service created.
 
         Raise SimulationServiceInvalidRequestError when the service refuses
-        the caller's data, with its reasons, and
+        the caller's data, with its reasons;
+        SimulationServiceAnswerUnreadableError when it accepted the
+        calculation but its answer cannot be read; and
         SimulationServiceUnavailableError for any other refusal or failure.
         """
         ...
@@ -325,6 +327,14 @@ class SimulationServiceUnavailableError(RuntimeError):
     It covers every refusal other than the caller's data: a household, policy
     or catalog version it cannot find (which the Public API checks first), a
     database or manifest it cannot read, and a Modal call it cannot start.
+    """
+
+
+class SimulationServiceAnswerUnreadableError(RuntimeError):
+    """The simulation service accepted the calculation, but its answer is unreadable.
+
+    The service answered 202, so it has already created the job and started
+    its call; submitting again would create another job.
     """
 
 

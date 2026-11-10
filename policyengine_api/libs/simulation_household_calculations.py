@@ -12,16 +12,26 @@ The request names the country, the stored household and the stored policy
 (null for current law), ``add_missing_variables``, and the axes and SPM
 settings only when the caller gave them. The simulation service answers:
 
-- 202 with the new job's ID and status;
+- 202 with the new job's ID and status. A 202 whose body cannot be read
+  is SimulationServiceAnswerUnreadableError: the job exists, so the caller
+  must not be invited to submit again;
 - 422 with its reasons when it refuses the caller's data (a malformed
-  request, or one its household contract refuses): the reasons reach the
-  caller as SimulationServiceInvalidRequestError;
+  request, or one its household contract refuses), one per field as
+  FastAPI writes them: the reasons reach the caller as
+  SimulationServiceInvalidRequestError;
 - anything else (400 for a household, policy or catalog version it cannot
   find, which the Public API checks first; 503 when it cannot read its
-  manifest or database or Modal refuses the call): the service is
-  unavailable (SimulationServiceUnavailableError), as it is for no answer,
-  an answer of another shape, a gateway token that cannot be fetched and
+  manifest or database or Modal refuses the call, failing the job it
+  names): the service is unavailable (SimulationServiceUnavailableError),
+  with its ``code`` and reason when it gives them, as it is for no answer,
+  a refusal of another shape, a gateway token that cannot be fetched and
   missing configuration.
+
+Each submission carries the request's ID and observability ID headers. The
+observability ID is the request's own, else the caller's, else a new one,
+bound for the rest of the request, as the Public API's own household
+calculations bind one once they accept a calculation; the simulation service
+passes it to the household function.
 
 Wiring the generated simulation client: ``post_household_calculation`` is the
 only code that sends the request, and it returns the status and body, which
@@ -43,9 +53,11 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
+from policyengine_api.request_context import start_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     HouseholdJobStatusName,
+    SimulationServiceAnswerUnreadableError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -60,6 +72,9 @@ if TYPE_CHECKING:
 HOUSEHOLD_CALCULATIONS_PATH = "/household-calculations"
 CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 UNREADABLE_ANSWER = "The simulation service's answer could not be read."
+UNREADABLE_ACCEPTANCE = (
+    "The simulation service accepted the calculation, but its answer could not be read."
+)
 
 
 @dataclass(frozen=True)
@@ -91,9 +106,15 @@ class _RefusedField(_AnswerModel):
 
 
 class _Refusal(_AnswerModel):
-    """A refusal's body: a reason, or each refused request field."""
+    """A refusal's body: a reason, or each refused request field.
+
+    A 400 or 503 also names its ``code``, and a 503 after Modal refused the
+    call names the household job it failed.
+    """
 
     detail: str | list[_RefusedField]
+    code: str | None = None
+    household_job_id: UUID | None = None
 
 
 def household_calculation_request(
@@ -169,6 +190,22 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
         return None
 
 
+def _unavailable(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
+    """Describe an answer that means the service cannot calculate now."""
+    if refusal is None or not isinstance(refusal.detail, str):
+        return f"The simulation service answered {answer.status_code}."
+    stated = (
+        "refused the calculation"
+        if answer.status_code == HTTPStatus.BAD_REQUEST
+        else "is unavailable"
+    )
+    code = "" if refusal.code is None else f" ({refusal.code})"
+    message = f"The simulation service {stated}{code}: {refusal.detail}"
+    if refusal.household_job_id is not None:
+        message += f"; it failed household job {refusal.household_job_id}"
+    return message
+
+
 class SimulationHouseholdCalculationClient:
     """Submit household calculations to the simulation service."""
 
@@ -212,9 +249,11 @@ class SimulationHouseholdCalculationClient:
         """Submit the calculation and return the job the service created.
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
-        when it refuses the caller's data, and SimulationServiceUnavailableError
-        otherwise.
+        when it refuses the caller's data, SimulationServiceAnswerUnreadableError
+        when it accepted the calculation but its answer cannot be read, and
+        SimulationServiceUnavailableError otherwise.
         """
+        start_observability_id()
         try:
             answer = self._send(
                 self._http_client, household_calculation_request(calculation)
@@ -226,7 +265,9 @@ class SimulationHouseholdCalculationClient:
             try:
                 accepted = _AcceptedJob.model_validate_json(answer.content)
             except ValidationError as error:
-                raise SimulationServiceUnavailableError(UNREADABLE_ANSWER) from error
+                raise SimulationServiceAnswerUnreadableError(
+                    UNREADABLE_ACCEPTANCE
+                ) from error
             return HouseholdCalculationAccepted(
                 calculation_id=accepted.job_id, status=accepted.status
             )
@@ -235,15 +276,7 @@ class SimulationHouseholdCalculationClient:
             if refusal is None:
                 raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
-        if (
-            answer.status_code == HTTPStatus.BAD_REQUEST
-            and refusal is not None
-            and isinstance(refusal.detail, str)
-        ):
-            msg = f"The simulation service refused the calculation: {refusal.detail}"
-            raise SimulationServiceUnavailableError(msg)
-        msg = f"The simulation service answered {answer.status_code}."
-        raise SimulationServiceUnavailableError(msg)
+        raise SimulationServiceUnavailableError(_unavailable(answer, refusal))
 
 
 @lru_cache(maxsize=1)

@@ -178,6 +178,13 @@ HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
+    502: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The simulation service accepted the calculation, so its job exists, "
+            "but its answer cannot be read. Submitting again creates another job."
+        ),
+    },
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
@@ -191,10 +198,11 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: {
         "model": V2ErrorResponse,
         "description": (
-            "The simulation service is unavailable, cannot be reached, answers "
-            "in a shape the Public API cannot read, or refuses a household, "
-            "policy or catalog version the Public API has already checked; or "
-            "v2 storage is unavailable."
+            "The simulation service is unavailable or cannot be reached, "
+            "refuses in a shape the Public API cannot read, or refuses a "
+            "household, policy or catalog version the Public API has already "
+            "checked; or v2 storage is unavailable. The message gives the "
+            "simulation service's code and reason when it states them."
         ),
     },
 }
