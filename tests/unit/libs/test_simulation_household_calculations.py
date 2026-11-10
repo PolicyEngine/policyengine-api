@@ -18,6 +18,7 @@ from policyengine_api.request_context import _asgi_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -236,7 +237,41 @@ def test_a_dependency_the_service_cannot_read_names_its_code() -> None:
     )
 
 
-@pytest.mark.parametrize("status_code", [400, 401, 404, 500, 502, 503])
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param(
+            {
+                "code": "internal_error",
+                "detail": "The service could not build the household function's "
+                "request.",
+            },
+            "The simulation service failed (internal_error): The service could "
+            "not build the household function's request. It may have created "
+            "the job, so submitting again could create another.",
+            id="internal-error",
+        ),
+        pytest.param(
+            b"",
+            "The simulation service answered 500. It may have created the job, "
+            "so submitting again could create another.",
+            id="unreadable",
+        ),
+    ],
+)
+def test_an_internal_error_is_not_unavailable(body, message) -> None:
+    # A 500 may come after the service created the job, so the caller is not
+    # invited to submit again.
+    service = RecordingService(500, body)
+
+    with pytest.raises(SimulationServiceInternalError) as failed:
+        service.client().submit(calculation_input())
+
+    assert not isinstance(failed.value, SimulationServiceUnavailableError)
+    assert str(failed.value) == message
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 404, 502, 503])
 def test_any_other_answer_is_unavailable(status_code) -> None:
     service = RecordingService(status_code, b"")
 

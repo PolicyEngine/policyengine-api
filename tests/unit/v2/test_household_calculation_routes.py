@@ -22,6 +22,7 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationRead,
     HouseholdCalculationSubmitted,
     SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
@@ -266,6 +267,11 @@ def test_a_malformed_request_is_refused_before_anything_is_read(
             502,
             "The simulation service accepted the calculation, but its "
             "answer could not be read.",
+        ),
+        (
+            SimulationServiceInternalError("The simulation service failed."),
+            502,
+            "The simulation service failed.",
         ),
         (
             RuntimeError("secret detail"),
