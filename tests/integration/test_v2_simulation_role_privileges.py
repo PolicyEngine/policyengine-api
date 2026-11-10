@@ -1,8 +1,9 @@
 """Run the simulation tables' writes as the roles that do them in production.
 
-The simulation API creates simulations, reports, their runs and household
-jobs; its Modal workers write their runs' status and results; the Public API
-reads them. Each role holds only its declared privileges
+The simulation service creates simulations, reports, their runs, budget-window
+runs and household jobs; its Modal workers write their runs' status and
+results and their budget-window runs' status; the Public API reads them. Each
+role holds only its declared privileges
 (``policyengine_api/data/v2/privileges.py``), so a statement outside them
 fails here as it would in staging and production.
 """
@@ -319,6 +320,101 @@ def test_modal_workers_write_their_run_status_and_results_only(
         ),
     ):
         _refused(connection, statement, id=ids[run_key])
+
+
+def test_the_simulation_service_fails_a_window_whose_first_calls_modal_refuses(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The service fails a budget-window run when Modal refuses its first years.
+
+    It never sets when the window started, which the Modal workers record, and
+    never changes what the window is.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+
+    failed_window = connection.execute(
+        text(
+            "UPDATE budget_window_runs SET status = 'failed', "
+            "error_message = 'refused', completed_at = now(), updated_at = now() "
+            "WHERE id = :id AND status = 'pending' RETURNING id"
+        ),
+        {"id": ids["budget_window_run"]},
+    ).scalar_one()
+
+    assert failed_window == ids["budget_window_run"]
+    for statement in (
+        "UPDATE budget_window_runs SET started_at = now() WHERE id = :id",
+        "UPDATE budget_window_runs SET recalculate = true WHERE id = :id",
+        "UPDATE budget_window_runs SET report_id = report_id WHERE id = :id",
+    ):
+        _refused(connection, statement, id=ids["budget_window_run"])
+
+
+def test_modal_workers_start_finish_and_fail_budget_windows(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The Modal workers write a budget-window run's status and times.
+
+    Each year's coordinator starts the window's next unstarted year when its
+    own year finishes; the last year to finish marks the window succeeded, and
+    a failed year fails it.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+    failing_window_id = uuid4()
+    insert_row(
+        connection,
+        "budget_window_runs",
+        id=failing_window_id,
+        report_id=ids["report"],
+        tax_benefit_model_version_id=public_api_rows.version_id,
+        trigger="manual",
+        recalculate=True,
+        status="pending",
+    )
+    _act_as(connection, managed_v2_roles.modal_worker)
+
+    started_windows = [
+        connection.execute(
+            text(
+                "UPDATE budget_window_runs SET status = 'running', "
+                "started_at = now(), updated_at = now() "
+                "WHERE id = :id AND status = 'pending' RETURNING id"
+            ),
+            {"id": window_id},
+        ).scalar_one()
+        for window_id in (ids["budget_window_run"], failing_window_id)
+    ]
+    succeeded_window = connection.execute(
+        text(
+            "UPDATE budget_window_runs SET status = 'succeeded', "
+            "completed_at = now(), updated_at = now() "
+            "WHERE id = :id AND status = 'running' RETURNING id"
+        ),
+        {"id": ids["budget_window_run"]},
+    ).scalar_one()
+    failed_window = connection.execute(
+        text(
+            "UPDATE budget_window_runs SET status = 'failed', "
+            "error_message = 'the 2027 report run failed', completed_at = now(), "
+            "updated_at = now() WHERE id = :id AND status = 'running' RETURNING id"
+        ),
+        {"id": failing_window_id},
+    ).scalar_one()
+
+    assert started_windows == [ids["budget_window_run"], failing_window_id]
+    assert (succeeded_window, failed_window) == (
+        ids["budget_window_run"],
+        failing_window_id,
+    )
+    for statement in (
+        "UPDATE budget_window_runs SET trigger = 'manual' WHERE id = :id",
+        "UPDATE budget_window_runs SET recalculate = false WHERE id = :id",
+        "UPDATE budget_window_runs SET tax_benefit_model_version_id = "
+        "tax_benefit_model_version_id WHERE id = :id",
+    ):
+        _refused(connection, statement, id=ids["budget_window_run"])
 
 
 def test_the_public_api_reads_runs_and_results_but_writes_neither(
