@@ -1,3 +1,11 @@
+## [5.36.0] - 2026-11-10
+
+### Added
+
+- The Public API checks the Auth0 server credential a request sends in Authorization: a client-credentials token from the Public API's own Auth0 tenant (PUBLIC_API_SERVER_AUTH_ISSUER), from a client listed in PUBLIC_API_SERVER_CLIENT_IDS; signed-in users' tokens keep their own issuer. A credential that fails validation gets 401 before any route runs, while requests that send none are still served, and each request records its caller.
+- A PolicyEngine server whose credential the Public API accepts can act for a user on the signed-in user routes: it forwards the signed-in user's token in PolicyEngine-User-Authorization: Bearer, or a signed-out browser's PolicyEngine-Unauthenticated-User header, and the routes authenticate that user with the same checks as a direct request.
+
+
 ## [5.35.3] - 2026-11-09
 
 ### Changed
