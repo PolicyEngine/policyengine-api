@@ -337,10 +337,11 @@ class SimulationServiceUnavailableError(RuntimeError):
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service accepted the calculation, but its answer is unreadable.
+    """The simulation service received the calculation, or may have, but no answer.
 
-    The service answered 202, so it has already created the job and started
-    its call; submitting again would create another job.
+    Either it answered 202, so it has already created the job and started its
+    call, but its answer is unreadable; or its answer was lost after the
+    submission may have reached it. Submitting again could create another job.
     """
 
 

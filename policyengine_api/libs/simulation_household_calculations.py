@@ -27,16 +27,20 @@ settings only when the caller gave them. The simulation service answers:
   names): the service is unavailable (SimulationServiceUnavailableError),
   with its ``code`` and reason when it gives them, as it is for no answer,
   a refusal of another shape, a gateway token that cannot be fetched and
-  missing configuration.
+  missing configuration. No answer means a connection never made
+  (``ConnectError``, ``ConnectTimeout``, ``PoolTimeout``); once the request
+  may have been sent, a lost answer (a read timeout, a dropped connection) is
+  SimulationServiceAnswerUnreadableError, since the job may exist.
 
 Each submission carries the request's ID and observability ID headers. The
 observability ID is the request's own, else the caller's, else a new one,
 which ``submit`` binds in the current context once the Public API's checks
 have passed, as the Public API's own household calculations bind one when
 they accept a calculation; the simulation service passes it to the household
-function. The route reads it from that context and returns it in the 202's
-``X-PolicyEngine-Observability-Id`` header, since a synchronous route runs in
-a copy of the request context that the response middleware doesn't see.
+function. The route reads it from that context and returns it in the
+``X-PolicyEngine-Observability-Id`` header of every answer given once the
+call was attempted, since a synchronous route runs in a copy of the request
+context that the response middleware doesn't see.
 
 Wiring the generated simulation client: ``post_household_calculation`` is the
 only code that sends the request, and it returns the status and body, which
@@ -81,6 +85,9 @@ UNREADABLE_ANSWER = "The simulation service's answer could not be read."
 UNREADABLE_ACCEPTANCE = (
     "The simulation service accepted the calculation, but its answer could not be read."
 )
+# Transport errors raised before the request could reach the service. After
+# any other, the service may have received the submission and created the job.
+CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
 @dataclass(frozen=True)
@@ -272,19 +279,28 @@ class SimulationHouseholdCalculationClient:
         """Submit the calculation and return the job the service created.
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
-        when it refuses the caller's data, SimulationServiceAnswerUnreadableError
-        when it accepted the calculation but its answer cannot be read,
-        SimulationServiceInternalError when it failed (500), and
-        SimulationServiceUnavailableError otherwise.
+        when it refuses the caller's data; SimulationServiceAnswerUnreadableError
+        when it accepted the calculation but its answer cannot be read, or its
+        answer was lost after the submission may have reached it;
+        SimulationServiceInternalError when it failed (500); and
+        SimulationServiceUnavailableError otherwise, including a connection
+        never made.
         """
         start_observability_id()
         try:
             answer = self._send(
                 self._http_client, household_calculation_request(calculation)
             )
-        except (httpx.HTTPError, GatewayAuthError) as error:
+        except (*CONNECTION_NEVER_MADE, GatewayAuthError) as error:
             msg = "The simulation service could not be reached."
             raise SimulationServiceUnavailableError(msg) from error
+        except httpx.HTTPError as error:
+            msg = (
+                "The simulation service may have received the submission, but "
+                f"its answer did not arrive ({type(error).__name__}). Check "
+                "whether it created the job before submitting again."
+            )
+            raise SimulationServiceAnswerUnreadableError(msg) from error
         if answer.status_code == HTTPStatus.ACCEPTED:
             try:
                 accepted = _AcceptedJob.model_validate_json(answer.content)

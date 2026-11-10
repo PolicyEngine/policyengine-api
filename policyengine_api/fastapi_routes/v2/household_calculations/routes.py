@@ -150,19 +150,24 @@ def build_v2_household_calculation_router(
                 return v2_missing_parameters_response(
                     str(error), error.missing_parameters
                 )
-            # The submission bound the observability ID it sent the simulation
-            # service in this worker thread's copy of the request context,
-            # which the response middleware doesn't see, so the 202 names it.
-            observability_id = current_observability_id()
-            if observability_id is not None:
-                response.headers[OBSERVABILITY_ID_HEADER] = observability_id
             return HouseholdCalculationSubmittedResponse(
                 result=HouseholdCalculationSubmittedResult(
                     item=HouseholdCalculationSubmittedItem.from_submitted(calculation)
                 )
             )
 
-        return _calculation_operation(submit)
+        outcome = _calculation_operation(submit)
+        # A submission that reached the simulation call bound the observability
+        # ID it sent in this worker thread's copy of the request context, which
+        # the response middleware doesn't see, so every answer from then on
+        # names it. A refusal before the call binds none.
+        observability_id = current_observability_id()
+        if observability_id is not None:
+            headers = (
+                outcome.headers if isinstance(outcome, Response) else response.headers
+            )
+            headers[OBSERVABILITY_ID_HEADER] = observability_id
+        return outcome
 
     @router.get(
         "/household-calculations/{calculation_id}",

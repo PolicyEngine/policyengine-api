@@ -200,7 +200,11 @@ def main() -> int:
             file=sys.stderr,
         )
     spm_recording = evidence.spm_availability
-    if spm_recording is not None and spm_recording.versions_unreadable is not None:
+    if (
+        spm_recording is not None
+        and spm_recording.versions_unreadable is not None
+        and spm_recording.not_recorded
+    ):
         print(
             "SPM availability was not recorded: "
             f"{spm_recording.versions_unreadable}; /v2/model-catalog reports a "
