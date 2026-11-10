@@ -377,7 +377,9 @@ def test_standard_users_require_a_supported_primary_country() -> None:
     }
     # The countries table, not a check, lists the countries a user may choose.
     assert checks == {
-        "ck_users_user_type": "user_type IN ('unauthenticated', 'standard')",
+        "ck_users_user_type": (
+            "user_type IN ('unauthenticated', 'standard', 'author', 'admin')"
+        ),
         "ck_users_standard_primary_country": (
             "user_type = 'unauthenticated' OR primary_country IS NOT NULL"
         ),
@@ -393,7 +395,12 @@ def test_user_type_defaults_to_standard_for_every_writer() -> None:
     # the column; the Python default covers this revision's ORM inserts.
     assert users.c.user_type.server_default.arg == "standard"
     assert User().user_type == "standard"
-    assert [member.value for member in UserType] == ["unauthenticated", "standard"]
+    assert [member.value for member in UserType] == [
+        "unauthenticated",
+        "standard",
+        "author",
+        "admin",
+    ]
 
 
 def test_regions_have_one_same_model_version_default_logical_dataset() -> None:

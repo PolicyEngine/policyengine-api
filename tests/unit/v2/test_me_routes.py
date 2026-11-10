@@ -107,6 +107,42 @@ def test_get_me_provisions_with_the_query_country() -> None:
     ]
 
 
+@pytest.mark.parametrize("user_type", ["author", "admin"])
+def test_account_responses_carry_an_author_or_admin_type(user_type: str) -> None:
+    def typed_result(_name: str, _kwargs: dict):
+        account = _account(user_type=user_type)
+        return {
+            "export_account": AccountExport(
+                user=account,
+                policies=(),
+                households=(),
+                simulations=(),
+                reports=(),
+            ),
+            "upgrade_account": AccountUpgrade(
+                account=account, outcome=AccountConversionOutcome.MERGED
+            ),
+        }.get(_name, account)
+
+    client, _service = _client(RecordingService(typed_result))
+
+    read = client.get("/v2/me?country_id=us")
+    patched = client.patch("/v2/me?country_id=us", json={"first_name": "Ada"})
+    exported = client.get("/v2/me/export?country_id=us")
+    upgraded = client.post(
+        "/v2/me/upgrade?country_id=us", headers=UNAUTHENTICATED_HEADERS
+    )
+
+    responses = (read, patched, exported, upgraded)
+    assert [response.status_code for response in responses] == [200] * 4
+    assert [
+        read.json()["result"]["item"]["user_type"],
+        patched.json()["result"]["item"]["user_type"],
+        exported.json()["result"]["user"]["user_type"],
+        upgraded.json()["result"]["item"]["user_type"],
+    ] == [user_type] * 4
+
+
 def test_patch_me_accepts_names_and_country_only() -> None:
     client, service = _client()
 
