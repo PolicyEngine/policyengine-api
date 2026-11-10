@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Engine, create_engine
@@ -26,6 +27,10 @@ from policyengine_api.data.v2.catalog.publication import (
 from policyengine_api.data.v2.catalog.region_data_verification import (
     RegionDataVerificationError,
     verify_region_data,
+)
+from policyengine_api.data.v2.catalog.spm_availability import (
+    record_published_spm_availability,
+    simulation_entrypoint_url,
 )
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
@@ -96,25 +101,49 @@ def verify_unpublished_region_data(
     )
 
 
+@dataclass(frozen=True)
+class PublicationSteps:
+    """What initialization does with the database, in order, after extraction.
+
+    ``verify_region_data`` checks the regions' certified data before anything
+    is written, ``publish`` writes the catalog, and ``record_spm_availability``
+    then records each version's SPM availability from the simulation service
+    (``spm_availability``).
+    """
+
+    verify_region_data: Callable[
+        [Engine, NormalizedCatalog, Mapping[str, str] | None], None
+    ] = verify_unpublished_region_data
+    publish: Callable[[Engine, NormalizedCatalog], PublicationEvidence] = (
+        publish_catalog
+    )
+    record_spm_availability: Callable[
+        [Engine, NormalizedCatalog, Mapping[str, str] | None], None
+    ] = record_published_spm_availability
+
+
 def initialize_catalog(
     environ: Mapping[str, str] | None = None,
     *,
     extractor: Callable[[], NormalizedCatalog] = extract_installed_catalog,
     engine_builder: Callable[[V2DatabaseSettings], Engine] = build_data_write_engine,
-    publisher: Callable[[Engine, NormalizedCatalog], PublicationEvidence] = (
-        publish_catalog
-    ),
-    region_data_verifier: Callable[
-        [Engine, NormalizedCatalog, Mapping[str, str] | None], None
-    ] = verify_unpublished_region_data,
+    steps: PublicationSteps | None = None,
 ) -> PublicationEvidence:
-    """Load only row-write settings, extract fully, verify, then publish explicitly."""
+    """Load only row-write settings, extract fully, verify, then publish explicitly.
+
+    After publishing, record each version's SPM availability. The simulation
+    service's URL, which that needs, is checked before anything else.
+    """
+    selected_steps = steps or PublicationSteps()
     settings = load_v2_data_write_database_settings(environ)
+    simulation_entrypoint_url(os.environ if environ is None else environ)
     catalog = extractor()
     engine = engine_builder(settings)
     try:
-        region_data_verifier(engine, catalog, environ)
-        return publisher(engine, catalog)
+        selected_steps.verify_region_data(engine, catalog, environ)
+        evidence = selected_steps.publish(engine, catalog)
+        selected_steps.record_spm_availability(engine, catalog, environ)
+        return evidence
     finally:
         engine.dispose()
 

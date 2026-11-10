@@ -84,8 +84,11 @@ class MetadataResponseCache:
 
     Of what these bodies hold, a published catalog version changes only when
     a release's catalog publication replaces its time-period options, before
-    that release's processes start, or when pruning deletes its current-law
-    values, which restoration writes back identically; publication also sets
+    that release's processes start, when pruning deletes its current-law
+    values, which restoration writes back identically, or when publication
+    records its SPM availability once after publishing it, so a body built
+    before then offers no SPM settings for the life of the process;
+    publication also sets
     the version's ``catalog_last_published_at`` and pruning its
     ``catalog_values_pruned_at``, which no body holds. So a body built for a
     route, country and version stays valid for the life of the process; a

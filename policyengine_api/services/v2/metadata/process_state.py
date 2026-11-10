@@ -24,10 +24,13 @@ class SelectedCatalogStore:
     time-period options, which a release's publication replaces before that
     release's processes start, its ``catalog_last_published_at``, which each
     publication of it sets and no read uses, and its
-    ``catalog_values_pruned_at``, which pruning sets and restoration clears.
-    So once a request has found the version, later requests for the same
-    country and version need not query for it again; a process of the
-    previous release keeps the time-period options it read.
+    ``catalog_values_pruned_at``, which pruning sets and restoration clears,
+    and its ``spm_availability``, which publication records once after
+    publishing it. So once a request has found the version, later requests
+    for the same country and version need not query for it again; a process
+    of the previous release keeps the time-period options it read, and a
+    process that found a version before its SPM availability was recorded
+    offers no SPM settings for it until it restarts.
 
     A kept ``catalog_values_pruned_at`` can be out of date in either
     direction, so ``MetadataCatalogSelection`` checks it for the reads of the

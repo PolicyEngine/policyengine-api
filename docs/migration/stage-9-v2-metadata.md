@@ -36,7 +36,14 @@ version (with the current-law policy id and the years offered), the entities
 input dataset, and the economy choices. A catalog without regions, such as a
 household-only country's, has empty region, dataset and economy-choice lists
 rather than an error. A version published before catalog format 2 has a null
-`catalog_format` and empty entities and basic inputs. The result names the
+`catalog_format` and empty entities and basic inputs. `spm` says whether the
+version offers SPM settings for a household: `available`, and when it does,
+`settings_schema` (the JSON schema of a household's `spm` selection) and
+`defaults` (the certified selection for every field a household leaves out).
+Catalog publication records it for each US version from the simulation
+service's public `GET /versions`, after publishing the version; any other
+country, a bundle without a certified capability, and a version not recorded
+yet offer none. The result names the
 selected PolicyEngine.py version, so a client that starts without a version
 learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated
@@ -159,7 +166,11 @@ dropped first; the 6.10.0 US variables body is 4,190,824 bytes uncompressed,
 so eight entries hold about 12 MB for both countries' two routes at two
 versions). A response is kept under the exact version it was read from,
 so a request without `policyengine_version` (the process's running version,
-which never changes while it runs) and one naming that version share it. Only
+which never changes while it runs) and one naming that version share it. A
+version's SPM availability is the one part recorded after publication: a
+process that built a version's `/v2/model-catalog` body before publication
+recorded it keeps offering no SPM settings until it restarts, normally at the
+deployment that follows the publication run. Only
 the first successful request per process reads the database. Requests that
 arrive while that read is in progress wait for it and all receive its outcome,
 the kept response or a copy of its error response, so one failing read is not

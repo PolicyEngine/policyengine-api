@@ -12,15 +12,17 @@ from uuid import uuid4
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
-from policyengine_api.data.v2.catalog.spm_availability import (
-    MODEL_VERSIONS,
-    MODELS,
-    record_spm_availability,
-)
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.catalog.publication_tables import (
+    MODEL_VERSIONS,
+    MODELS,
+)
+from policyengine_api.data.v2.catalog.spm_availability import (
+    record_spm_availability,
+)
 from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
 
 AVAILABLE = {"available": True, "settings_schema": {}, "defaults": {"scenario": "x"}}

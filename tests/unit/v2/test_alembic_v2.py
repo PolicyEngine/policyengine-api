@@ -1207,16 +1207,19 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
+    # The revision stays as Alembic wrote it, in either quote style.
     assert upgrade.count("op.add_column(") == 1
     assert re.search(
-        r'op\.add_column\(\s*"tax_benefit_model_versions",\s*'
-        r'sa\.Column\(\s*"spm_availability",\s*sa\.JSON\(\),\s*'
+        r"""op\.add_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""sa\.Column\(\s*["']spm_availability["'],\s*sa\.JSON\(\),\s*"""
         r"nullable=True,?\s*\),?\s*\)",
         upgrade,
     )
     assert downgrade.count("op.drop_column(") == 1
-    assert 'op.drop_column("tax_benefit_model_versions", "spm_availability")' in (
-        downgrade
+    assert re.search(
+        r"""op\.drop_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""["']spm_availability["'],?\s*\)""",
+        downgrade,
     )
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
