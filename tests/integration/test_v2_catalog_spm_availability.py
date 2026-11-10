@@ -7,6 +7,7 @@ declared privileges must cover the update (rule
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -20,7 +21,12 @@ from policyengine_api.data.v2.catalog.publication_tables import (
     MODEL_VERSIONS,
     MODELS,
 )
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
+    SPMAvailabilityRecording,
+)
 from policyengine_api.data.v2.catalog.spm_availability import (
+    record_published_spm_availability,
     record_spm_availability,
 )
 from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
@@ -89,3 +95,80 @@ def test_availability_fills_only_the_named_version_and_only_once(
     assert first
     assert not again
     assert stored == {version_id: AVAILABLE, other_version_id: None}
+
+
+def _unreadable_versions(_url: str) -> object:
+    msg = "the simulation service's versions could not be read"
+    raise CatalogPublicationError(msg)
+
+
+def test_publication_lists_only_versions_still_unrecorded(
+    disposable_v2_database_url: str, managed_v2_roles, v2_engine_as_role
+) -> None:
+    command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
+    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
+    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
+    model_ids = {"us": uuid4(), "uk": uuid4()}
+    model_names = {
+        country_id: f"policyengine-{country_id}-{model_id.hex[:8]}"
+        for country_id, model_id in model_ids.items()
+    }
+    catalog = SimpleNamespace(
+        policyengine_version="6.10.0",
+        countries=[
+            SimpleNamespace(
+                country_id=country_id,
+                model=SimpleNamespace(name=model_names[country_id]),
+                model_version=SimpleNamespace(version="1.450.0"),
+            )
+            for country_id in ("uk", "us")
+        ],
+    )
+    try:
+        with engine.begin() as connection:
+            for country_id, model_id in model_ids.items():
+                connection.execute(
+                    sa.insert(MODELS).values(id=model_id, name=model_names[country_id])
+                )
+                connection.execute(
+                    sa.insert(MODEL_VERSIONS).values(
+                        id=uuid4(),
+                        model_id=model_id,
+                        version="1.450.0",
+                        current_law_id=2,
+                        metadata_time_periods=[2026],
+                        # An earlier publication recorded the US version.
+                        spm_availability=AVAILABLE if country_id == "us" else None,
+                    )
+                )
+        unreadable = record_published_spm_availability(
+            writer_engine,
+            catalog,
+            {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+            fetch_versions=_unreadable_versions,
+        )
+        # The simulation service serves no PolicyEngine.py version yet.
+        not_served = record_published_spm_availability(
+            writer_engine,
+            catalog,
+            {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+            fetch_versions=lambda _url: {"policyengine": {}},
+        )
+    finally:
+        with engine.begin() as connection:
+            for model_id in model_ids.values():
+                connection.execute(
+                    sa.delete(MODEL_VERSIONS).where(
+                        MODEL_VERSIONS.c.model_id == model_id
+                    )
+                )
+                connection.execute(sa.delete(MODELS).where(MODELS.c.id == model_id))
+        writer_engine.dispose()
+        engine.dispose()
+
+    assert unreadable == SPMAvailabilityRecording(
+        not_recorded=(("uk", "1.450.0"),),
+        versions_unreadable="the simulation service's versions could not be read",
+    )
+    # The UK version is recorded unavailable; the US one keeps its value.
+    assert not_served == SPMAvailabilityRecording(recorded=(("uk", "1.450.0", False),))

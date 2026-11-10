@@ -134,6 +134,19 @@ def _catalog(*country_ids: str) -> SimpleNamespace:
     )
 
 
+def _store_unrecorded(monkeypatch: pytest.MonkeyPatch, *model_names: str) -> None:
+    """Make version 1.0.0 of these models the only ones still unrecorded."""
+    monkeypatch.setattr(
+        spm_availability,
+        "read_unrecorded_versions",
+        lambda _connection, versions: {
+            (model_name, version)
+            for model_name, version in versions
+            if model_name in model_names
+        },
+    )
+
+
 class RecordingEngine:
     """An engine whose transactions are only counted."""
 
@@ -158,6 +171,7 @@ def test_publication_records_only_what_is_known(
         return True
 
     monkeypatch.setattr(spm_availability, "record_spm_availability", record)
+    _store_unrecorded(monkeypatch, "policyengine-us")
     not_served = {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}
 
     recording = spm_availability.record_published_spm_availability(
@@ -173,20 +187,26 @@ def test_publication_records_only_what_is_known(
     )
 
 
+@pytest.mark.parametrize(
+    "versions",
+    [VERSIONS, {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}],
+    ids=["served", "not-served-now"],
+)
 def test_a_version_recorded_by_an_earlier_publication_is_not_listed(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, versions: object
 ) -> None:
     monkeypatch.setattr(
         spm_availability,
         "record_spm_availability",
         lambda _connection, *, model_name, version, availability: False,
     )
+    _store_unrecorded(monkeypatch)
 
     recording = spm_availability.record_published_spm_availability(
         RecordingEngine(),
         _catalog("us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
-        fetch_versions=lambda _url: VERSIONS,
+        fetch_versions=lambda _url: versions,
     )
 
     assert recording == SPMAvailabilityRecording()
@@ -235,7 +255,7 @@ def test_recording_needs_the_simulation_service_url() -> None:
     )
 
 
-def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
+def test_an_unreadable_versions_answer_lists_only_versions_still_unrecorded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     recorded: list[str] = []
@@ -246,6 +266,8 @@ def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
             model_name
         ),
     )
+    # An earlier publication recorded the US version.
+    _store_unrecorded(monkeypatch, "policyengine-uk")
 
     def unreadable(_url: str) -> object:
         msg = "the simulation service's versions could not be read"
@@ -260,6 +282,6 @@ def test_an_unreadable_versions_answer_leaves_every_version_unrecorded(
 
     assert recorded == []
     assert recording == SPMAvailabilityRecording(
-        not_recorded=(("uk", "1.0.0"), ("us", "1.0.0")),
+        not_recorded=(("uk", "1.0.0"),),
         versions_unreadable="the simulation service's versions could not be read",
     )
