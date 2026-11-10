@@ -81,7 +81,8 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     assert "MetricsServiceStub" in verifier
     assert "LogsServiceStub" in verifier
     assert "StatusCode.UNIMPLEMENTED" in verifier
-    assert "print-identity-token" in verify_script
+    assert "print-identity-token" not in verify_script
+    assert "COLLECTOR_ID_TOKEN" in verify_script
     assert "print-access-token" in verify_script
     assert "uv run --no-project" in verify_script
     assert "cloudtrace.googleapis.com" in verifier
@@ -91,3 +92,43 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     assert 'status.latestReadyRevisionName // ""' in deploy_script
     assert 'status.url // ""' in deploy_script
     assert "delivery_timeout_seconds: float = 600.0" in verifier
+
+
+def _collector_deploy_steps() -> list[dict]:
+    workflow_file = "deploy-observability-collector.yml"
+    workflow_path = ROOT / ".github" / "workflows" / workflow_file
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    return workflow["jobs"]["deploy"]["steps"]
+
+
+def test_collector_verification_gets_its_identity_token_from_the_auth_action() -> None:
+    """A second auth step mints the identity token the verification step uses.
+
+    gcloud can't mint an identity token with an audience from a workload
+    identity federation credential, so the step mints it for the deployed
+    collector's URL and the verification step reads it from that step's output.
+    """
+    steps = _collector_deploy_steps()
+    names = [step.get("name") for step in steps]
+    token_step = next(step for step in steps if step.get("id") == "collector_token")
+    verify_step = next(
+        step
+        for step in steps
+        if "verify_observability_collector.sh" in step.get("run", "")
+    )
+
+    assert token_step["uses"] == "google-github-actions/auth@v2"
+    assert token_step["with"] == {
+        "workload_identity_provider": "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}",
+        "service_account": "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}",
+        "token_format": "id_token",
+        "id_token_audience": "${{ steps.collector.outputs.service_url }}",
+        "id_token_include_email": True,
+        "create_credentials_file": False,
+        "export_environment_variables": False,
+    }
+    assert names.index(token_step["name"]) > names.index("Build and deploy collector")
+    assert names.index(token_step["name"]) < names.index(verify_step["name"])
+    assert verify_step["env"] == {
+        "COLLECTOR_ID_TOKEN": "${{ steps.collector_token.outputs.id_token }}"
+    }
