@@ -299,6 +299,9 @@ def test_an_unreadable_versions_answer_warns_only_when_versions_are_unrecorded(
     warnings_expected: int,
 ) -> None:
     _store_unrecorded(monkeypatch, *still_unrecorded)
+    # Alembic's logging setup, which another test may have run in this
+    # process, disables loggers that existed before it.
+    monkeypatch.setattr(spm_availability.LOGGER, "disabled", False)
 
     def unreadable(_url: str) -> object:
         msg = "the simulation service's versions could not be read"

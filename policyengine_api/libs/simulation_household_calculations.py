@@ -30,7 +30,8 @@ settings only when the caller gave them. The simulation service answers:
   missing configuration. No answer means a connection never made
   (``ConnectError``, ``ConnectTimeout``, ``PoolTimeout``); once the request
   may have been sent, a lost answer (a read timeout, a dropped connection) is
-  SimulationServiceAnswerUnreadableError, since the job may exist.
+  SimulationServiceAnswerUnreadableError, since the job may exist, and so is
+  a 502 or 504 a proxy in front of the service answers in its place.
 
 Each submission carries the request's ID and observability ID headers. The
 observability ID is the request's own, else the caller's, else a new one,
@@ -40,7 +41,9 @@ they accept a calculation; the simulation service passes it to the household
 function. The route reads it from that context and returns it in the
 ``X-PolicyEngine-Observability-Id`` header of every answer given once the
 call was attempted, since a synchronous route runs in a copy of the request
-context that the response middleware doesn't see.
+context that the response middleware doesn't see. It is the attempt's ID,
+which the service never received after a connection never made or a gateway
+token that couldn't be fetched.
 
 Wiring the generated simulation client: ``post_household_calculation`` is the
 only code that sends the request, and it returns the status and body, which
@@ -84,6 +87,12 @@ CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 UNREADABLE_ANSWER = "The simulation service's answer could not be read."
 UNREADABLE_ACCEPTANCE = (
     "The simulation service accepted the calculation, but its answer could not be read."
+)
+# The service never answers 502 or 504 itself: a proxy in front of it, such as
+# Cloud Run's front end, answers them in its place, possibly after the
+# service created the job.
+PROXY_STAND_IN_STATUSES = frozenset(
+    {HTTPStatus.BAD_GATEWAY, HTTPStatus.GATEWAY_TIMEOUT}
 )
 # Transport errors raised before the request could reach the service. After
 # any other, the service may have received the submission and created the job.
@@ -318,6 +327,13 @@ class SimulationHouseholdCalculationClient:
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
         if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
             raise SimulationServiceInternalError(_internal_error(refusal))
+        if answer.status_code in PROXY_STAND_IN_STATUSES:
+            msg = (
+                "The simulation service may have received the submission, but "
+                f"{answer.status_code} was answered in its place. Check whether "
+                "it created the job before submitting again."
+            )
+            raise SimulationServiceAnswerUnreadableError(msg)
         raise SimulationServiceUnavailableError(_unavailable(answer, refusal))
 
 

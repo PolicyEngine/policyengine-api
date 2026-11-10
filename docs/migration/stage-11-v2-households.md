@@ -323,16 +323,19 @@ answer is 202 with the new job's `calculation_id` and `status`; each
 submission creates a new job. The simulation service's 422 reasons reach the
 caller as 422. A 202 whose body the Public API can't read is 502: the job
 exists, so submitting again would create another. So is a 500 from the
-simulation service (`internal_error`), and an answer lost after the
-submission may have been sent (a read timeout or a dropped connection),
-since either may come after it created the job; a connection never made is
-503. Every answer given once the call was attempted carries
-`X-PolicyEngine-Observability-Id` with the ID sent to the simulation service;
-a refusal before it carries none, not even the caller's. Any other refusal (with
-the simulation service's `code` and reason in the message, and the failed
-job's ID when Modal refused the call), no answer, a refusal the Public API
-can't read, missing configuration or a gateway token it can't fetch is 503.
-A failed catalog query in the policy check is 503 too.
+simulation service (`internal_error`), an answer lost after the submission
+may have been sent (a read timeout or a dropped connection), and a 502 or
+504 a proxy in front of the simulation service answered in its place, since
+each may come after it created the job. Any other refusal (with the
+simulation service's `code` and reason in the message, and the failed job's
+ID when Modal refused the call), a connection never made, a refusal the
+Public API can't read, missing configuration or a gateway token it can't
+fetch is 503. A failed catalog query in the policy check is 503 too. Every
+answer given once the call was attempted carries
+`X-PolicyEngine-Observability-Id` with the attempt's ID, which the
+simulation service never received after a connection never made or a token
+that couldn't be fetched; a refusal before the attempt carries none, not even
+the caller's.
 
 `GET /v2/household-calculations/{calculation_id}` reads the job from
 `household_jobs`, which the simulation service inserts and its household

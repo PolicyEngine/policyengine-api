@@ -215,13 +215,14 @@ def record_published_spm_availability(
     try:
         versions = fetch_versions(url)
     except CatalogPublicationError as error:
-        LOGGER.warning(
-            "SPM availability was not recorded; the next publication run "
-            "tries again: %s",
-            error,
-        )
         with engine.begin() as connection:
             not_recorded = _still_unrecorded(connection, catalog)
+        if not_recorded:
+            LOGGER.warning(
+                "SPM availability was not recorded; the next publication run "
+                "tries again: %s",
+                error,
+            )
         return SPMAvailabilityRecording(
             not_recorded=not_recorded, versions_unreadable=str(error)
         )
