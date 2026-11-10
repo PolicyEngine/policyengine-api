@@ -185,8 +185,11 @@ def _policy_ids(api_client, headers: dict[str, str]) -> set[str]:
     return {item["id"] for item in response.json()["result"]["items"]}
 
 
-def test_live_user_routes_reject_unauthenticated_requests(api_client) -> None:
-    for method, path in (
+def test_live_user_routes_reject_unauthenticated_requests(
+    api_client, uncredentialed_api_client
+) -> None:
+    """Refuse a credentialed server that forwards no user, and a bare caller."""
+    user_routes = (
         ("GET", "/v2/me"),
         ("GET", "/v2/me/export"),
         ("POST", "/v2/me/upgrade"),
@@ -194,18 +197,20 @@ def test_live_user_routes_reject_unauthenticated_requests(api_client) -> None:
         ("GET", "/v2/user-households"),
         ("GET", "/v2/user-simulations"),
         ("GET", "/v2/user-reports"),
-    ):
-        for headers in ({}, {UNAUTHENTICATED_USER_HEADER: "not-a-uuid"}):
-            response = api_client.request(
-                method,
-                path,
-                params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
-                headers=headers,
-                json={} if method == "POST" else None,
-            )
-            assert response.status_code == 401, (path, response.text[:500])
-            assert response.headers["www-authenticate"].startswith("Bearer")
-            assert response.json()["status"] == "error"
+    )
+    for client in (api_client, uncredentialed_api_client):
+        for method, path in user_routes:
+            for headers in ({}, {UNAUTHENTICATED_USER_HEADER: "not-a-uuid"}):
+                response = client.request(
+                    method,
+                    path,
+                    params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
+                    headers=headers,
+                    json={} if method == "POST" else None,
+                )
+                assert response.status_code == 401, (path, response.text[:500])
+                assert response.headers["www-authenticate"].startswith("Bearer")
+                assert response.json()["status"] == "error"
 
 
 def test_live_native_policy_resources_and_v2_policy_save(

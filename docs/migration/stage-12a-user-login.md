@@ -538,8 +538,10 @@ GitHub environment, and passes it to its test step as
 `CI_SERVER_ACCESS_TOKEN`. The tests send it in `Authorization: Bearer` on
 every request (`tests/integration/deployed_api_credentials.py`), and forward
 the signed-in test user's token in `PolicyEngine-User-Authorization`. Only
-the health polling, on a public route, sends no credential. The CI client's
-settings are in both the `staging` and `production` environments:
+two kinds of request send no credential: the health polling, on a public
+route, and the user-route refusal checks, which also run without any
+credential on purpose (the `uncredentialed_api_client` fixture). The CI
+client's settings are in both the `staging` and `production` environments:
 
 | Setting | Kind |
 | --- | --- |

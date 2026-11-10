@@ -439,11 +439,12 @@ automatically restore the captured revision if promotion or stable verification
 fails. Live Cloud Run candidate checks must be explicit deployed probes.
 Production candidate smoke tests require `API_BASE_URL` and should not run as
 part of ordinary local test commands. These checks should stay read-only and
-avoid depending on specific production data fixtures. Every deployed-API test
-sends the CI server credential from `CI_SERVER_ACCESS_TOKEN` through the
-`api_client` fixture, and fails without it: a client-credentials token of a
+avoid depending on specific production data fixtures. The deployed-API tests
+send the CI server credential from `CI_SERVER_ACCESS_TOKEN` through the
+`api_client` fixture, and fail without it: a client-credentials token of a
 client on that environment's `PUBLIC_API_SERVER_CLIENT_IDS`
-(`tests/integration/deployed_api_credentials.py`). In push.yml each job that
+(`tests/integration/deployed_api_credentials.py`). Only refusal checks use
+`uncredentialed_api_client`, which sends no credential. In push.yml each job that
 sets `API_BASE_URL` requests one with
 `.github/scripts/request_ci_server_token.sh`, and
 `tests/unit/test_ci_server_credential_workflow.py` fails for a job that

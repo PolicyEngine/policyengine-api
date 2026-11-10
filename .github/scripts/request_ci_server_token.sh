@@ -93,14 +93,20 @@ if ! token_response="$(
       client_secret: env.CI_SERVER_AUTH0_CLIENT_SECRET,
       audience: env.CI_SERVER_AUTH0_AUDIENCE
     }' \
-    | curl --silent --show-error --fail \
+    | curl --silent --show-error --fail-with-body \
         --retry 3 \
         --max-time 30 \
         --header "Content-Type: application/json" \
         --data-binary @- \
         "${token_url}"
 )"; then
-  fail "Auth0 refused or did not answer the token request to ${token_url}"
+  # Auth0's own reason, such as a missing client grant: only its error code
+  # and description, never the rest of the answer.
+  auth0_reason="$(
+    jq --raw-output '[.error, .error_description] | map(strings) | join(": ")' \
+      <<< "${token_response:-}" 2>/dev/null
+  )" || auth0_reason=""
+  fail "Auth0 refused or did not answer the token request to ${token_url}${auth0_reason:+ (${auth0_reason})}"
 fi
 
 access_token="$(

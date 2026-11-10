@@ -40,22 +40,24 @@ DEPLOYMENT_AUTH_ENV = {
     "PUBLIC_API_AUTH_AUDIENCE": "${{ vars.PUBLIC_API_AUTH_AUDIENCE }}",
     "PUBLIC_API_SERVER_CLIENT_IDS": "${{ vars.PUBLIC_API_SERVER_CLIENT_IDS }}",
 }
-STAGING_CANDIDATE_URL = "${{ steps.candidate.outputs.url }}"
+# A deploy job tests the revision it deployed itself.
+OWN_REVISION_URL = "${{ steps.candidate.outputs.url }}"
 LIVE_TESTS_CANDIDATE_URL = "${{ needs.deploy-cloud-run-staging.outputs.url }}"
 # Each job that calls a deployed Public API: its GitHub environment, and the
 # address of the candidate it tests.
 DEPLOYED_API_CALLERS = {
-    ("push.yml", "deploy-cloud-run-staging"): ("staging", STAGING_CANDIDATE_URL),
+    ("push.yml", "deploy-cloud-run-staging"): ("staging", OWN_REVISION_URL),
     ("push.yml", "parallel-live-simulation-tests-staging-cloud-run"): (
         "staging",
         LIVE_TESTS_CANDIDATE_URL,
     ),
-    ("push.yml", "deploy-cloud-run-candidate"): (
-        "production",
-        STAGING_CANDIDATE_URL,
-    ),
+    ("push.yml", "deploy-cloud-run-candidate"): ("production", OWN_REVISION_URL),
 }
 PULL_REQUEST_EVENTS = {"pull_request", "pull_request_target"}
+DEPLOY_COMMAND = "bash .github/scripts/deploy_cloud_run_candidate.sh"
+# Any way a job could name a deployed Public API to call: an env value at any
+# level, a reusable workflow's input, or the baseline tool's argument.
+DEPLOYED_API_MARKERS = ("API_BASE_URL", "--base-url")
 
 
 def _workflows() -> dict[str, dict]:
@@ -105,10 +107,17 @@ def _token_step(job: dict) -> tuple[int, dict]:
 def test_the_known_jobs_are_the_only_callers_of_a_deployed_public_api() -> None:
     callers = {
         (workflow_name, job_id)
+        for workflow_name, workflow in _workflows().items()
+        for job_id, job in workflow["jobs"].items()
+        if any(marker in yaml.safe_dump(job) for marker in DEPLOYED_API_MARKERS)
+    }
+    step_callers = {
+        (workflow_name, job_id)
         for workflow_name, job_id, _job, _step in _deployed_api_steps()
     }
 
     assert callers == set(DEPLOYED_API_CALLERS)
+    assert step_callers == callers
 
 
 @pytest.mark.parametrize(("workflow_name", "job_id"), sorted(DEPLOYED_API_CALLERS))
@@ -119,9 +128,19 @@ def test_each_caller_requests_its_environments_token_once(
     expected_environment, _candidate_url = DEPLOYED_API_CALLERS[(workflow_name, job_id)]
 
     assert job.get("environment") == expected_environment
-    _step_index, token_step = _token_step(job)
-    # The command alone: ::add-mask:: must reach the log, not a redirect.
+    token_step_index, token_step = _token_step(job)
+    # The command alone: ::add-mask:: must reach the log, not a redirect. It
+    # always runs, and its failure fails the job.
     assert token_step["run"] == TOKEN_STEP_COMMAND
+    assert "if" not in token_step
+    assert "continue-on-error" not in token_step
+    # A missing credential stops a deploy job before a candidate exists.
+    deploy_step_indexes = [
+        step_index
+        for step_index, step in enumerate(job["steps"])
+        if step.get("run") == DEPLOY_COMMAND
+    ]
+    assert all(token_step_index < index for index in deploy_step_indexes)
     # The CI client's settings reach this step only, never the job's env.
     for name, source in TOKEN_STEP_ENV.items():
         assert token_step["env"].get(name) == source, name

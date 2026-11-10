@@ -144,7 +144,7 @@ def test_requests_one_token_from_the_tenant_and_writes_it_to_the_step_output(
     assert len(run.curl_calls) == 1
     (curl_arguments,) = run.curl_calls
     assert curl_arguments[-1] == f"https://{STAGING_TENANT}/oauth/token"
-    assert "--fail" in curl_arguments
+    assert "--fail-with-body" in curl_arguments
     assert "--data-binary" in curl_arguments
     assert curl_arguments[curl_arguments.index("--data-binary") + 1] == "@-"
     assert json.loads(run.request_bodies[0]) == {
@@ -267,6 +267,9 @@ def test_fails_when_auth0_refuses_the_request(tmp_path: Path) -> None:
 
     assert run.result.returncode != 0
     assert f"https://{STAGING_TENANT}/oauth/token" in run.result.stderr
+    # Auth0's own reason, such as a missing client grant, is shown.
+    assert "access_denied: Unauthorized" in run.result.stderr
+    assert "--fail-with-body" in run.curl_calls[0]
     assert run.step_output == ""
     assert CLIENT_SECRET not in run.result.stdout + run.result.stderr
 
