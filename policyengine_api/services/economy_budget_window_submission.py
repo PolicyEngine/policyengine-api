@@ -122,15 +122,22 @@ class BudgetWindowSubmissionMixin:
         """Submit the batch job if this request wins the claim, and report it queued.
 
         Both policies load first, so a request naming a policy its country does
-        not have raises PolicyNotFoundError before it claims the submission. A
-        request that loses the claim reports the window queued without
-        submitting; a submission the gateway rejects as invalid is a failed result.
+        not have raises PolicyNotFoundError, and one whose stored policies hold
+        period keys or values simulations can't read is refused, before it
+        claims the submission. A request that loses the claim reports the
+        window queued without submitting; a submission the gateway rejects as
+        invalid is a failed result.
         """
         policies = self._get_policy_jsons(
             setup_options.country_id,
             setup_options.baseline_policy_id,
             setup_options.reform_policy_id,
         )
+        unreadable_policies = self._unreadable_loaded_policies(setup_options, policies)
+        if unreadable_policies is not None:
+            return BudgetWindowEconomicImpactResult.refused_for_unreadable_policies(
+                unreadable_policies
+            )
         years = budget_window_setup.years
         cache_status = "starting-claim-hit"
         observability_id_candidate = resolve_observability_id(

@@ -26,9 +26,13 @@ from policyengine_api.data.v2.models import (
     ParameterValue,
     Variable,
 )
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
+from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.types import ParameterTreeLevel
 from policyengine_api.services.v2.metadata.validators import (
     CatalogValuesPrunedError,
@@ -192,6 +196,96 @@ def test_reads_of_pruned_data_name_the_country_and_version(
         PRUNED_DATA_READS[read_name](catalog_service(catalog_session))
 
     assert str(raised.value) == PRUNED_MESSAGE
+
+
+@pytest.mark.parametrize("read_name", sorted(PRUNED_DATA_READS))
+@pytest.mark.parametrize(
+    ("running_policyengine_version", "is_running_version"),
+    [(POLICYENGINE_VERSION, True), ("99.0.0", False)],
+    ids=["running-version", "other-version"],
+)
+def test_reads_of_pruned_data_say_whether_the_process_runs_the_version(
+    catalog_session: Session,
+    read_name: str,
+    running_policyengine_version: str,
+    is_running_version,
+) -> None:
+    """The routes answer 503 for the running version and 404 for any other."""
+    _add_us_tree_search_file_and_part_variable(catalog_session)
+    _prune_us_version(catalog_session)
+    service = V2MetadataService(
+        MetadataDatabaseSession(catalog_session),
+        running_policyengine_version=running_policyengine_version,
+        selected_catalogs=None,
+    )
+
+    with pytest.raises(CatalogValuesPrunedError) as raised:
+        PRUNED_DATA_READS[read_name](service)
+
+    assert raised.value.running_version is is_running_version
+
+
+def _service_running(session: Session, running_policyengine_version: str, **options):
+    return V2MetadataService(
+        MetadataDatabaseSession(session),
+        running_policyengine_version=running_policyengine_version,
+        **options,
+    )
+
+
+@pytest.mark.parametrize(
+    ("running_policyengine_version", "is_running_version"),
+    [(POLICYENGINE_VERSION, True), ("99.0.0", False)],
+    ids=["running-version", "other-version"],
+)
+@pytest.mark.parametrize("kept", ["before-pruning", "while-pruned"])
+def test_kept_selections_of_a_pruned_version_say_whether_the_process_runs_it(
+    catalog_session: Session,
+    kept: str,
+    running_policyengine_version: str,
+    is_running_version,
+) -> None:
+    """Both kinds of kept selection say whether the process runs the version.
+
+    A selection kept before the pruning is caught after the read finds no
+    rows, and one kept while pruned before the read.
+    """
+    _add_us_tree_search_file_and_part_variable(catalog_session)
+    selected_catalogs = SelectedCatalogStore()
+
+    def service() -> V2MetadataService:
+        return _service_running(
+            catalog_session,
+            running_policyengine_version,
+            selected_catalogs=selected_catalogs,
+        )
+
+    if kept == "before-pruning":
+        service().list_parameter_values("us", POLICYENGINE_VERSION)
+        catalog_session.expunge_all()
+        _prune_us_version(catalog_session)
+    else:
+        _prune_us_version(catalog_session)
+        with pytest.raises(CatalogValuesPrunedError):
+            service().list_parameter_values("us", POLICYENGINE_VERSION)
+    kept_selection = selected_catalogs.get(("us", POLICYENGINE_VERSION))
+
+    assert kept_selection is not None
+    for read_name in sorted(PRUNED_DATA_READS):
+        with pytest.raises(CatalogValuesPrunedError) as raised:
+            PRUNED_DATA_READS[read_name](service())
+        assert raised.value.running_version is is_running_version, read_name
+
+
+def test_a_request_without_a_version_for_a_pruned_running_version_says_so(
+    catalog_session: Session,
+) -> None:
+    _prune_us_version(catalog_session)
+
+    with pytest.raises(CatalogValuesPrunedError) as raised:
+        catalog_service(catalog_session).list_parameter_values("us", None)
+
+    assert raised.value.running_version is True
 
 
 def test_a_pruned_version_answers_so_even_where_a_read_needs_no_values(

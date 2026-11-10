@@ -62,7 +62,10 @@ def test_legacy_flask_urls_are_owned_by_blueprints():
     assert {
         ("/<country_id>/policy", "POST"),
         ("/<country_id>/policy/<int:policy_id>", "GET"),
-        ("/<country_id>/household/<household_id>/policy/<policy_id>", "GET"),
+        (
+            "/<country_id>/household/<int:household_id>/policy/<int:policy_id>",
+            "GET",
+        ),
         ("/<country_id>/calculate", "POST"),
         ("/<country_id>/calculate-full", "POST"),
     } <= rules

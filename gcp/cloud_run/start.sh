@@ -10,6 +10,7 @@ WEB_CONCURRENCY="${WEB_CONCURRENCY:-1}"
 # application preloading is disabled). --timeout 0 is required: a worker mid-import does
 # not heartbeat, and the default 30s watchdog would kill it before boot.
 exec gunicorn policyengine_api.asgi:app \
+  --config python:policyengine_api.gunicorn_config \
   --worker-class uvicorn.workers.UvicornWorker \
   --workers "$WEB_CONCURRENCY" \
   --bind "0.0.0.0:${PORT}" \

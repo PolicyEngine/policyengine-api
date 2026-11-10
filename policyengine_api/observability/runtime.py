@@ -3,57 +3,30 @@
 from __future__ import annotations
 
 import contextlib
-import os
 from dataclasses import replace
-from importlib.metadata import PackageNotFoundError, version
 
 from policyengine_observability import (
-    DeploymentIdentity,
-    GoogleCloudLogFormatter,
     LoggingConfig,
     ObservabilityConfig,
     ObservabilityRuntime,
-    ServiceIdentity,
-    StdoutLogDestination,
     configure,
-    process_instance_id,
+)
+
+from policyengine_api.observability_identity import (
+    deployment_identity,
+    service_identity,
+    standard_output_destination,
 )
 
 DISPATCH_ATTRIBUTE_KEYS = frozenset({"observability_id"})
 
 
-def _package_version() -> str:
-    try:
-        return version("policyengine-api")
-    except PackageNotFoundError:
-        return "4.1.0"
-
-
 def _build_runtime() -> ObservabilityRuntime:
-    environment = os.getenv("APP_ENVIRONMENT", "local").strip() or "local"
-    trace_project = os.getenv("OBSERVABILITY_TRACE_PROJECT_ID", "").strip()
-    formatter = GoogleCloudLogFormatter(trace_project) if trace_project else None
     config = ObservabilityConfig.from_env(
-        service=ServiceIdentity(
-            name="policyengine-api",
-            namespace=os.getenv(
-                "OBSERVABILITY_SERVICE_NAMESPACE",
-                "policyengine.api-v1",
-            ),
-            version=_package_version(),
-            role="api",
-        ),
-        deployment=DeploymentIdentity(
-            environment=environment,
-            platform="google_cloud_run",
-            region=os.getenv("CLOUD_RUN_REGION") or "us-central1",
-            instance_id=process_instance_id(
-                "policyengine-api",
-                os.getenv("K_REVISION"),
-            ),
-        ),
+        service=service_identity(),
+        deployment=deployment_identity(),
         logging=LoggingConfig(
-            destinations=(StdoutLogDestination(formatter=formatter),),
+            destinations=(standard_output_destination(),),
             capture_standard_library=True,
         ),
         dispatch_attribute_keys=DISPATCH_ATTRIBUTE_KEYS,

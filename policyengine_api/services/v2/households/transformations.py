@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.households.types import (
     CanonicalHouseholdContent,
@@ -20,7 +21,9 @@ from policyengine_api.services.v2.households.types import (
 )
 from policyengine_api.services.v2.households.validators import (
     SUPPORTED_ENTITY_COLLECTIONS,
+    HouseholdValidationError,
     LegacyHouseholdTranslationError,
+    LegacyHouseholdTranslationReason,
     normalize_household_document,
 )
 
@@ -170,8 +173,14 @@ def _period_years(value: object) -> set[int] | None:
             parsed = parse_policyengine_period(period_key)
         except ValueError:
             return None
-        years.add(parsed.start.year)
-        years.add(parsed.stop.year)
+        try:
+            years.add(parsed.start.year)
+            years.add(parsed.stop.year)
+        except (ValueError, OverflowError) as error:
+            msg = "legacy household has a period whose dates cannot be computed"
+            raise LegacyHouseholdTranslationError(
+                msg, reason=LegacyHouseholdTranslationReason.PERIOD_INVALID
+            ) from error
     return years
 
 
@@ -186,7 +195,9 @@ def _derive_default_year(values: list[object]) -> int | None:
         "legacy household has values without explicit periods and no "
         "unambiguous default year"
     )
-    raise LegacyHouseholdTranslationError(msg)
+    raise LegacyHouseholdTranslationError(
+        msg, reason=LegacyHouseholdTranslationReason.AMBIGUOUS_DEFAULT_YEAR
+    )
 
 
 class _LegacyTranslation:
@@ -224,7 +235,9 @@ def translate_legacy_household(
     people_source = source.get("people", {})
     if type(people_source) is not dict:
         msg = "legacy people must be an object"
-        raise LegacyHouseholdTranslationError(msg)
+        raise LegacyHouseholdTranslationError(
+            msg, reason=LegacyHouseholdTranslationReason.PEOPLE_NOT_OBJECT
+        )
     translation = _LegacyTranslation(people_source)
     normalized_groups = {
         collection: _translate_legacy_groups(source, collection, translation)
@@ -237,13 +250,58 @@ def translate_legacy_household(
         document["spm"] = source["spm"]
     try:
         normalized = normalize_household_document(snapshot.country_id, document)
+    except HouseholdValidationError as error:
+        raise LegacyHouseholdTranslationError(
+            str(error), reason=error.reason
+        ) from error
     except ValueError as error:
-        raise LegacyHouseholdTranslationError(str(error)) from error
-    return HouseholdCreationInput(
-        country_id=snapshot.country_id,
-        default_year=_derive_default_year(translation.all_values),
-        household_data=normalized,
-    )
+        # The only other ValueError is require_json_value's, for a value that
+        # is not standards-compliant JSON.
+        raise LegacyHouseholdTranslationError(
+            str(error), reason=LegacyHouseholdTranslationReason.VALUE_NOT_JSON
+        ) from error
+    default_year = _derive_default_year(translation.all_values)
+    try:
+        return HouseholdCreationInput(
+            country_id=snapshot.country_id,
+            default_year=default_year,
+            household_data=normalized,
+        )
+    except ValidationError as error:
+        refusal = _creation_input_refusal(error)
+        if refusal is None:
+            raise
+        raise refusal from error
+
+
+# The creation input fields a translated v1 household can fail, with the
+# message and reason each failure records. Unlike pydantic's messages, which
+# quote the refused input, these hold nothing from the household.
+_CREATION_INPUT_REFUSALS: dict[str, tuple[str, LegacyHouseholdTranslationReason]] = {
+    "default_year": (
+        "legacy household's default year is outside the years v2 accepts",
+        LegacyHouseholdTranslationReason.DEFAULT_YEAR_OUT_OF_RANGE,
+    ),
+    "household_data": (
+        "translated household values must be standards-compliant JSON",
+        LegacyHouseholdTranslationReason.VALUE_NOT_JSON,
+    ),
+}
+
+
+def _creation_input_refusal(
+    error: ValidationError,
+) -> LegacyHouseholdTranslationError | None:
+    """Return the translation error for a creation input pydantic refused.
+
+    Return None for a refusal of another field, which no translation causes.
+    """
+    for detail in error.errors():
+        field = detail["loc"][0] if detail["loc"] else None
+        if isinstance(field, str) and field in _CREATION_INPUT_REFUSALS:
+            message, reason = _CREATION_INPUT_REFUSALS[field]
+            return LegacyHouseholdTranslationError(message, reason=reason)
+    return None
 
 
 def _require_supported_legacy_collections(
@@ -261,7 +319,9 @@ def _require_supported_legacy_collections(
     unsupported = sorted(set(source) - allowed_source)
     if unsupported:
         msg = f"legacy household contains unsupported collections: {unsupported}"
-        raise LegacyHouseholdTranslationError(msg)
+        raise LegacyHouseholdTranslationError(
+            msg, reason=LegacyHouseholdTranslationReason.UNSUPPORTED_COLLECTIONS
+        )
 
 
 def _translate_legacy_groups(
@@ -274,14 +334,18 @@ def _translate_legacy_groups(
     source_groups = source.get(source_name, {})
     if type(source_groups) is not dict:
         msg = f"legacy {source_name} must be an object"
-        raise LegacyHouseholdTranslationError(msg)
+        raise LegacyHouseholdTranslationError(
+            msg, reason=LegacyHouseholdTranslationReason.GROUPS_NOT_OBJECT
+        )
     group_ids = _stable_ids(collection, list(source_groups))
     group_records: list[dict[str, Any]] = []
     for group_name in sorted(source_groups):
         group = source_groups[group_name]
         if type(group) is not dict:
             msg = f"legacy {source_name} records must be objects"
-            raise LegacyHouseholdTranslationError(msg)
+            raise LegacyHouseholdTranslationError(
+                msg, reason=LegacyHouseholdTranslationReason.GROUP_NOT_OBJECT
+            )
         values = _translate_legacy_group(
             group,
             collection=collection,
@@ -334,7 +398,9 @@ def _record_legacy_memberships(
         isinstance(item, str) and item in translation.person_ids for item in members
     ):
         msg = f"legacy {source_name} members must reference named people"
-        raise LegacyHouseholdTranslationError(msg)
+        raise LegacyHouseholdTranslationError(
+            msg, reason=LegacyHouseholdTranslationReason.MEMBERS_NOT_NAMED_PEOPLE
+        )
     for raw_person_name in members:
         if not isinstance(raw_person_name, str):
             msg = f"legacy {source_name} member names must be strings"
@@ -347,7 +413,9 @@ def _record_legacy_memberships(
                 f"legacy person {person_name!r} belongs to multiple "
                 f"{source_name} records"
             )
-            raise LegacyHouseholdTranslationError(msg)
+            raise LegacyHouseholdTranslationError(
+                msg, reason=LegacyHouseholdTranslationReason.PERSON_IN_MULTIPLE_GROUPS
+            )
         memberships[collection] = group_id
 
 
@@ -361,7 +429,9 @@ def _translate_legacy_people(
         person_values = people_source[person_name]
         if type(person_values) is not dict:
             msg = "legacy person records must be objects"
-            raise LegacyHouseholdTranslationError(msg)
+            raise LegacyHouseholdTranslationError(
+                msg, reason=LegacyHouseholdTranslationReason.PERSON_NOT_OBJECT
+            )
         translation.all_values.extend(person_values.values())
         people.append(
             {

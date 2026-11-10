@@ -48,7 +48,8 @@ body that is not parseable JSON is rejected, with 422, by FastAPI first):
 
 | Request | Principal or response |
 | --- | --- |
-| `Authorization: Bearer <token>` | Validated as below; a valid user token is a `UserPrincipal`. The unauthenticated-user header is ignored. |
+| `Authorization: Bearer <token>`, not a server's | Validated as below; a valid user token is a `UserPrincipal`. The unauthenticated-user header is ignored. |
+| A server's token in `Authorization` | The user the server forwards: `PolicyEngine-User-Authorization: Bearer <token>` takes the place of `Authorization` in this table, and `PolicyEngine-Unauthenticated-User` works as below (see [Settings](#settings)). |
 | No bearer token, `PolicyEngine-Unauthenticated-User: <canonical UUID>` | `UnauthenticatedPrincipal(user_id)`. Needs no Auth0 configuration. |
 | No bearer token and no header, or a header that is not a canonical UUID | 401 with `WWW-Authenticate: Bearer` |
 
@@ -69,8 +70,9 @@ answers first (see [Settings](#settings)):
   the Public API's own tenant (`PUBLIC_API_SERVER_AUTH_ISSUER`) but of a
   client not in `PUBLIC_API_SERVER_CLIENT_IDS`: the same 401, as is any
   token from the Public API's own tenant without a client subject;
-- a listed client's token from the Public API's own tenant: 403 on the user
-  routes, which need a user;
+- a listed client's token from the Public API's own tenant: the request is
+  from a server, so the user routes read the user it forwards (below), and
+  answer 401 when it forwards none;
 - authentication not configured, or signing keys unreachable: 503.
 
 The user routes' own `WWW-Authenticate: Bearer error="invalid_token"`
@@ -491,6 +493,27 @@ runs; an expired user token is refused there too, so a user route no longer
 answers it with `error="invalid_token"`. A bearer token that cannot be checked
 gets 503. A signed-in user's valid token passes the check and the user route
 checks it again.
+
+A PolicyEngine server whose token passes that check acts for a user by
+forwarding the user's credential: a signed-in user's token in
+`PolicyEngine-User-Authorization: Bearer <token>`, or a signed-out browser's
+`PolicyEngine-Unauthenticated-User`. The user routes authenticate that user
+with the same code as a direct request's credential
+(`fastapi_routes.v2.user_auth_support`), including `POST /v2/me/upgrade`.
+Two differences, both still refusals, because a forwarded token is not
+checked before routing:
+
+- an expired or invalid one gets the user routes' own 401 with
+  `WWW-Authenticate: Bearer error="invalid_token"` and "The bearer access
+  token is invalid", where a direct one now gets the plain 401 above; two
+  forwarded headers get that `invalid_token` 401 too;
+- a machine-to-machine token from the users' tenant gets 403 whether or not
+  its client is in `PUBLIC_API_SERVER_CLIENT_IDS`, where a direct one gets
+  401; a forwarded token from the Public API's own tenant is no user token,
+  so it gets the `invalid_token` 401.
+`PolicyEngine-User-Authorization` is read only from a server; on any other
+request it is ignored. It is not in the OpenAPI schema, because only servers
+send it.
 
 With `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED=1`, the same check, before route
 matching, also refuses every request that has no server credential, a

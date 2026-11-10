@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-import jwt
 import pytest
 
 from policyengine_api.libs import user_auth
@@ -15,6 +14,12 @@ from policyengine_api.services.v2.identity.types import (
 )
 from policyengine_api.services.v2.user_accounts.types import AccountExport
 from policyengine_api.services.v2.user_policies.types import UserPolicyPage
+from tests.unit.credential_token_support import (
+    SIGNING_KEY,
+    bearer,
+    configure_credentials,
+    server_token,
+)
 from tests.unit.v2.user_route_support import RecordingService, user_route_client
 
 if TYPE_CHECKING:
@@ -26,11 +31,11 @@ AUDIENCE = "https://api.policyengine.org/"
 ASSOCIATION_ID = "00000000-0000-0000-0000-000000000001"
 BROWSER_USER_ID = UUID("0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a")
 UNAUTHENTICATED_HEADER = "PolicyEngine-Unauthenticated-User"
-# A token that names the Public API's own tenant as its issuer. The fake
-# decoder ignores its signature and returns the configured claims.
-SERVER_MACHINE_TOKEN = jwt.encode(
-    {"iss": SERVER_ISSUER}, "fake-decoder-ignores-this-" * 2, algorithm="HS256"
-)
+
+
+def _users_tenant_client_token() -> str:
+    """Return a listed client's token from the users' tenant, signed now."""
+    return server_token(iss=ISSUER, signing_key=SIGNING_KEY)
 
 
 class FakeDecoder:
@@ -170,16 +175,21 @@ def test_invalid_tokens_are_refused_before_the_user_route(
     assert not services["account"].calls
 
 
-def test_machine_client_principals_are_forbidden(configured_auth) -> None:
-    configured_auth(
-        {"iss": SERVER_ISSUER, "sub": "abc123@clients", "gty": "client-credentials"}
-    )
+def test_forwarded_machine_client_principals_are_forbidden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A server's token in Authorization makes the routes read the user it
+    # forwards; a forwarded client token from the users' tenant is no user.
+    configure_credentials(monkeypatch)
     services, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
 
     response = client.get(
         "/v2/user-policies?country_id=us",
-        headers={"Authorization": f"Bearer {SERVER_MACHINE_TOKEN}"},
+        headers={
+            "Authorization": bearer(server_token()),
+            "PolicyEngine-User-Authorization": bearer(_users_tenant_client_token()),
+        },
     )
 
     assert response.status_code == 403
@@ -450,19 +460,18 @@ def test_an_invalid_bearer_token_never_falls_back_to_the_header(
     assert not services["policy"].calls
 
 
-def test_machine_client_principals_are_forbidden_beside_the_header(
-    configured_auth,
+def test_forwarded_machine_client_principals_are_forbidden_beside_the_header(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    configured_auth(
-        {"iss": SERVER_ISSUER, "sub": "abc123@clients", "gty": "client-credentials"}
-    )
+    configure_credentials(monkeypatch)
     services, factories = _services()
     client, _flask_calls = user_route_client(require_user=None, **factories)
 
     response = client.get(
         "/v2/user-policies?country_id=us",
         headers={
-            "Authorization": f"Bearer {SERVER_MACHINE_TOKEN}",
+            "Authorization": bearer(server_token()),
+            "PolicyEngine-User-Authorization": bearer(_users_tenant_client_token()),
             UNAUTHENTICATED_HEADER: str(BROWSER_USER_ID),
         },
     )

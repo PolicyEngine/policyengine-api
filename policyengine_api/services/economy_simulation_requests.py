@@ -3,6 +3,7 @@
 import datetime
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 from typing import Any
 
@@ -39,6 +40,11 @@ from policyengine_api.services.economy_impact_types import (
     EconomicImpactSetupOptions,
     ImpactPolicies,
     SimulationOptions,
+    log_skipped_policy_check,
+)
+from policyengine_api.services.economy_policy_values import (
+    UnreadablePolicies,
+    find_unreadable_policies,
 )
 from policyengine_api.services.policy_service import PolicyNotFoundError
 from policyengine_api.spm import SPMValidationError
@@ -84,6 +90,57 @@ class SimulationRequestMixin:
             baseline=self._parse_json_object(baseline),
             reform=self._parse_json_object(reform),
         )
+
+    @staticmethod
+    def _unreadable_loaded_policies(
+        setup_options: EconomicImpactSetupOptions,
+        policies: ImpactPolicies,
+    ) -> UnreadablePolicies | None:
+        """Return the loaded policies simulations can't read, before a job starts."""
+        return find_unreadable_policies(
+            (
+                (setup_options.reform_policy_id, policies.reform),
+                (setup_options.baseline_policy_id, policies.baseline),
+            )
+        )
+
+    def _unreadable_stored_policies(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> UnreadablePolicies | None:
+        """Load the impact's stored policies and return those simulations can't read.
+
+        Called before a stored failure is replayed. A policy that no longer
+        exists, or whose stored JSON is not an object, is left out, so its
+        stored failure is replayed as before. So is every policy when they
+        can't be read at all, such as during a database outage: the check
+        must never turn a replay into a failure of its own. That is logged at
+        WARNING.
+        """
+        try:
+            stored_policies = list(self._stored_policy_objects(setup_options))
+        except Exception as error:  # noqa: BLE001  # the check must not make a stored failure's replay fail; logged below
+            log_skipped_policy_check(error)
+            return None
+        return find_unreadable_policies(stored_policies)
+
+    def _stored_policy_objects(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> Iterator[tuple[int, dict[str, Any]]]:
+        """Yield the impact's stored policies that exist as JSON objects."""
+        for policy_id in (
+            setup_options.reform_policy_id,
+            setup_options.baseline_policy_id,
+        ):
+            policy_json = self._policies.get_policy_json(
+                setup_options.country_id, policy_id
+            )
+            parsed = (
+                json.loads(policy_json) if isinstance(policy_json, str) else policy_json
+            )
+            if isinstance(parsed, dict):
+                yield policy_id, parsed
 
     @staticmethod
     def _parse_json_object(value: JSONValue) -> dict[str, Any]:

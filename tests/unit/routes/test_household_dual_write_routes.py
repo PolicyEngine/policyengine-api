@@ -17,6 +17,7 @@ from policyengine_api.services.household_mirroring import (
 from policyengine_api.services.household_service import HouseholdCreateResult
 from policyengine_api.services.v2.households.types import LegacyHouseholdSnapshot
 from policyengine_api.services.v2.households.validators import (
+    HouseholdValidationReason,
     LegacyHouseholdTranslationError,
 )
 
@@ -185,7 +186,10 @@ def test_destination_failure_keeps_the_stored_create_event_pending_and_logs_an_e
     monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
     failing_destination = MagicMock()
     failing_destination.mirror_legacy_household.side_effect = (
-        LegacyHouseholdTranslationError("private household value")
+        LegacyHouseholdTranslationError(
+            "private household value",
+            reason=HouseholdValidationReason.INCOMPLETE_MEMBERSHIPS,
+        )
     )
     with (
         patch(
@@ -210,6 +214,8 @@ def test_destination_failure_keeps_the_stored_create_event_pending_and_logs_an_e
     assert logged_record["metric_name"] == "v1_household_mirror_operations"
     assert logged_record["outcome"] == "error"
     assert logged_record["failure_category"] == "translation"
+    assert logged_record["error_type"] == "LegacyHouseholdTranslationError"
+    assert logged_record["failure_reason"] == "incomplete_memberships"
     assert logged_record["legacy_household_id"] == stored_household_id
     assert logged_record["pending_event"] is True
     assert "private household value" not in json.dumps(logged_record)

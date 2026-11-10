@@ -239,8 +239,9 @@ def test_waiting_requests_receive_the_outcome_of_the_one_read(
 def test_waiting_requests_receive_a_failed_read_s_cache_control() -> None:
     """A failure that no cache may keep reaches every waiting request as such.
 
-    The 503 for a version whose current-law values pruning removed carries
-    ``Cache-Control: no-store``; each waiting request's copy carries it too.
+    The answer for a version whose current-law values pruning removed (a 404,
+    or a 503 for the running version) carries ``Cache-Control: no-store``;
+    each waiting request's copy carries it too.
     """
     cache = MetadataResponseCache()
     builds: list[str] = []

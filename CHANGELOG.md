@@ -1,3 +1,34 @@
+## [5.36.0] - 2026-11-10
+
+### Added
+
+- The Public API checks the Auth0 server credential a request sends in Authorization: a client-credentials token from the Public API's own Auth0 tenant (PUBLIC_API_SERVER_AUTH_ISSUER), from a client listed in PUBLIC_API_SERVER_CLIENT_IDS; signed-in users' tokens keep their own issuer. A credential that fails validation gets 401 before any route runs, while requests that send none are still served, and each request records its caller.
+- A PolicyEngine server whose credential the Public API accepts can act for a user on the signed-in user routes: it forwards the signed-in user's token in PolicyEngine-User-Authorization: Bearer, or a signed-out browser's PolicyEngine-Unauthenticated-User header, and the routes authenticate that user with the same checks as a direct request.
+
+
+## [5.35.3] - 2026-11-09
+
+### Changed
+
+- `GET /<country_id>/household/<household_id>/policy/<policy_id>` accepts only IDs written as digits: an ID with a sign, a `_` digit separator or surrounding whitespace, such as `+58725` or `5_8725`, which the route used to read as a number, now gets a 404. Its error messages print the IDs as numbers, so `0003` appears as `3`.
+- A v2 metadata request for a catalog version whose data catalog publication pruned now answers 404 instead of 503, with the same message and `Cache-Control: no-store`, and the OpenAPI document describes that 404. When the pruned version is the one the service runs, which a request without `policyengine_version` selects, it still answers 503, as does an unavailable catalog.
+
+### Fixed
+
+- A v1 household that fails to copy to v2 is now logged as `V1 household immediate copy failed` instead of `completed`, with the exception's type (`error_type`) and, for a translation failure, a fixed code naming the check that refused the household (`failure_reason`), which holds nothing from the household.
+- A household or policy ID that is not a number, such as `current-law`, `58725.0` or a quoted `"58725"`, in `GET /<country_id>/household/<household_id>/policy/<policy_id>` gets a 404 instead of a 500 (or, for an unsupported country, instead of a 400).
+- gunicorn's main process now writes an ERROR record through policyengine-observability when a signal ends a worker unexpectedly, such as an out-of-memory SIGKILL, naming the signal and the worker's process ID, so the daily telemetry error report counts worker kills. Workers that gunicorn or Cloud Run stops, or that exit with an exit code, write no such record.
+- The annual and budget-window economy routes now answer 422, naming each parameter and period that simulations can't read, for a stored policy saved before new policies' period keys and values were checked, instead of starting a job that fails or replaying its failure as a 502. Nothing is submitted and the refusal is logged at WARNING, not ERROR. Policies that pass the checks are answered as before.
+- `POST /<country_id>/calculate` and `POST /<country_id>/calculate-full` cache only successful responses, so a request after a failed calculation runs it again instead of getting the cached error for up to five minutes.
+
+
+## [5.35.2] - 2026-11-09
+
+### Changed
+
+- A v2 deploy now fails when the simulation API's database roles, policyengine_v2_simulation_service and policyengine_v2_modal_worker, are missing, as it does for every other declared role; both exist in staging and production.
+
+
 ## [5.35.1] - 2026-11-09
 
 ### Changed

@@ -399,6 +399,11 @@ class EconomyService(
             )
 
         if impact_action == ImpactAction.FAILED:
+            unreadable_policies = self._unreadable_stored_policies(setup_options)
+            if unreadable_policies is not None:
+                return EconomicImpactResult.refused_for_unreadable_policies(
+                    unreadable_policies
+                )
             return self._handle_failed_impact(most_recent_impact=most_recent_impact)
 
         if impact_action == ImpactAction.COMPUTING:
@@ -428,14 +433,20 @@ class EconomyService(
         """Submit a new simulation unless another request already owns submitting it.
 
         Both policies load first, so a request naming a policy its country does
-        not have raises PolicyNotFoundError before it claims the submission or
-        submits a job.
+        not have raises PolicyNotFoundError, and one whose stored policies hold
+        period keys or values simulations can't read is refused, before it
+        claims the submission or submits a job.
         """
         policies = self._get_policy_jsons(
             setup_options.country_id,
             setup_options.baseline_policy_id,
             setup_options.reform_policy_id,
         )
+        unreadable_policies = self._unreadable_loaded_policies(setup_options, policies)
+        if unreadable_policies is not None:
+            return EconomicImpactResult.refused_for_unreadable_policies(
+                unreadable_policies
+            )
         existing_claim = self._claim_reform_impact_submission(setup_options)
 
         # The identifier above was selected while the runtime-resolution

@@ -220,6 +220,38 @@ collector configuration changes with the `Deploy observability collector`
 workflow; committing `gcp/observability/collector/config.yaml` alone does not
 change the live Cloud Run service.
 
+## Worker exits
+
+gunicorn's master writes an ERROR record when a signal ends a worker
+unexpectedly (`policyengine_api/gunicorn_worker_exits.py`, loaded through the
+settings module `policyengine_api.gunicorn_config` that `gcp/cloud_run/start.sh`
+names). The message is `Signal <name> ended gunicorn worker process <pid>`,
+with the attributes `signal`, `signal_number` and `worker_pid`, in the
+operation `gunicorn.worker_exit`, which also writes an INFO
+`operation.completed` record. The daily report groups these records by their
+first three words, so each signal gets a group of its own, and names the
+operation in the issue's title.
+
+- A worker that exits with an exit code writes no record, nor does one that
+  SIGTERM or SIGQUIT ends (gunicorn's stop signals; Cloud Run's SIGTERM
+  reaches workers through the master) or SIGINT ends (a shell's Ctrl-C reaches
+  every process in the group), nor one that SIGKILL ends after
+  the master sent it SIGKILL itself, as it does to workers still running when
+  its graceful timeout ends at shutdown. A worker the master killed after its
+  timeout (`worker.aborted`) is recorded.
+- The master never imports `policyengine_api.observability`, whose import
+  builds the API's runtime: a worker forked afterwards would reuse it. So the
+  operation name is not in the stage registry. The master takes the service
+  and deployment identity from `policyengine_api.observability_identity`,
+  which the API's runtime uses too, and writes each record through a runtime
+  of its own with OpenTelemetry off and inline standard-output logging, which
+  starts no thread.
+- gunicorn's `child_exit` hook gets no wait status, so the `on_starting` hook
+  wraps `os.waitpid` in the master to keep the status of each child it reaps,
+  and wraps the master's `kill_worker` to note the workers it sends SIGKILL.
+- The hooks never raise: an exception in a hook stops gunicorn's main loop and
+  every worker. A failure goes to gunicorn's error log instead.
+
 ## Trace boundaries
 
 HTTP instrumentation carries W3C trace context across synchronous calls. The
