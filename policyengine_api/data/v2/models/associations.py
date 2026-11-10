@@ -172,10 +172,12 @@ class UserPolicy(TimestampedModel, table=True):
 
 
 class UserSimulationAssociation(TimestampedModel, table=True):
-    """A user's saved v1 simulation; ``simulation_id`` is a logical reference.
+    """A user's saved simulation, named by its v2 or v1 simulation or both.
 
-    Simulations are owned by the Simulation Entrypoint, so the v2 reference
-    deliberately has no cross-service foreign key.
+    ``simulation_id`` is a foreign key to ``simulations`` with ``RESTRICT``,
+    although the simulation service writes that table: the database refuses
+    a saved simulation that names a missing simulation, and a simulation a
+    saved one names can't be deleted.
     """
 
     __tablename__ = "user_simulation_associations"
@@ -208,7 +210,12 @@ class UserSimulationAssociation(TimestampedModel, table=True):
         ondelete="CASCADE",
         index=True,
     )
-    simulation_id: UUID | None = Field(default=None, index=True)
+    simulation_id: UUID | None = Field(
+        default=None,
+        foreign_key="simulations.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
     legacy_simulation_id: int | None = Field(default=None, sa_type=sa.BigInteger)
     country_id: str = Field(
         max_length=2,
@@ -225,11 +232,14 @@ class UserSimulationAssociation(TimestampedModel, table=True):
 
 
 class UserReportAssociation(TimestampedModel, table=True):
-    """A user's saved v1 report; ``report_id`` is a logical reference.
+    """A user's saved report, named by its v2 or v1 report or both.
 
-    ``legacy_report_id`` is the requested v1 report output identifier. The
-    optional ``user_policy_id`` links a v3 report to the same owner's saved
-    reform and is cleared when that reform is deleted.
+    ``report_id`` is a foreign key to ``reports`` with ``RESTRICT``, although
+    the simulation service writes that table: the database refuses a saved
+    report that names a missing report, and a report a saved one names can't
+    be deleted. ``legacy_report_id`` is the requested v1 report output
+    identifier. The optional ``user_policy_id`` links a v3 report to the same
+    owner's saved reform and is cleared when that reform is deleted.
     """
 
     __tablename__ = "user_report_associations"
@@ -267,7 +277,12 @@ class UserReportAssociation(TimestampedModel, table=True):
         ondelete="CASCADE",
         index=True,
     )
-    report_id: UUID | None = Field(default=None, index=True)
+    report_id: UUID | None = Field(
+        default=None,
+        foreign_key="reports.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
     legacy_report_id: int | None = Field(default=None, sa_type=sa.BigInteger)
     country_id: str = Field(
         max_length=2,
