@@ -4,6 +4,9 @@ A submission is sent again only after a 503 or a connection that was never
 made: a 502 means the simulation service accepted it, and after a read
 timeout or a dropped response the job may exist. A read is sent again after
 a 502, 503 or 504 or any transport error, since reading creates nothing.
+
+A check that opens a client of its own sends the CI server credential, as the
+``api_client`` fixture does.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from tests.fixtures.integration.live_household_calculations import (
     LiveHousehold,
     calculate,
 )
+from tests.integration.deployed_api_credentials import MissingServerCredentialError
 
 HOUSEHOLD_ID = str(uuid4())
 CALCULATION_ID = str(uuid4())
@@ -42,9 +46,11 @@ class ScriptedPublicApi:
         self.submissions = list(submissions)
         self.reads = list(reads)
         self.sent: list[str] = []
+        self.authorizations: list[str | None] = []
 
     def answer(self, request: httpx.Request) -> httpx.Response:
         self.sent.append(request.method)
+        self.authorizations.append(request.headers.get("Authorization"))
         script = self.submissions if request.method == "POST" else self.reads
         outcome = script.pop(0)
         if isinstance(outcome, type):
@@ -130,3 +136,27 @@ def test_a_lasting_outage_fails_the_check(monkeypatch) -> None:
         public_api.calculate()
 
     assert public_api.sent == ["POST"]
+
+
+def test_a_client_of_its_own_sends_the_ci_server_credential(monkeypatch) -> None:
+    # The parallel check gives each calculation a client of its own. Once the
+    # Public API requires a server credential, each must send it.
+    monkeypatch.setenv("CI_SERVER_ACCESS_TOKEN", "ci-server-token")
+    public_api = ScriptedPublicApi(submissions=[202], reads=[200])
+
+    with live_household_calculations.deployed_api_client(
+        "https://public-api.example", transport=httpx.MockTransport(public_api.answer)
+    ) as client:
+        calculate(client, HOUSEHOLD, HOUSEHOLD_ID)
+
+    assert public_api.sent == ["POST", "GET"]
+    assert public_api.authorizations == ["Bearer ci-server-token"] * 2
+
+
+def test_a_client_of_its_own_fails_without_the_ci_server_credential(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("CI_SERVER_ACCESS_TOKEN", raising=False)
+
+    with pytest.raises(MissingServerCredentialError):
+        live_household_calculations.deployed_api_client("https://public-api.example")
