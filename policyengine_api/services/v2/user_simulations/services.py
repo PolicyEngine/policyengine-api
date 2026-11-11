@@ -14,17 +14,13 @@ exist yet owns no records.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import TYPE_CHECKING
-
-from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
 from policyengine_api.services.v2.associations.validators import (
     require_one_reference,
-    violates_foreign_key,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -53,14 +49,11 @@ from policyengine_api.services.v2.user_simulations.transformations import (
 )
 from policyengine_api.services.v2.user_simulations.types import UserSimulationListing
 from policyengine_api.services.v2.user_simulations.validators import (
-    SAVED_SIMULATION_FOREIGN_KEY,
     require_stored_simulation,
     require_user_simulation,
-    simulation_not_found,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from uuid import UUID
 
     from sqlmodel import Session
@@ -117,27 +110,6 @@ def validate_stored_simulation(
         simulation_id=simulation_id,
         country_id=country_id,
     )
-
-
-@contextmanager
-def _simulation_still_stored(
-    *, country_id: str, simulation_id: UUID | None
-) -> Iterator[None]:
-    """Answer the simulation's foreign key refusing the write as it not found.
-
-    The simulation was checked in the same transaction, so the key refuses
-    the write only when the simulation was deleted in between.
-    """
-    try:
-        yield
-    except IntegrityError as error:
-        if simulation_id is not None and violates_foreign_key(
-            error, SAVED_SIMULATION_FOREIGN_KEY
-        ):
-            raise simulation_not_found(
-                simulation_id=simulation_id, country_id=country_id
-            ) from error
-        raise
 
 
 def require_one_simulation_after_update(
@@ -241,17 +213,15 @@ class V2UserSimulationService:
             validate_stored_simulation(
                 session, country_id=country_id, simulation_id=simulation_id
             )
-            with _simulation_still_stored(
-                country_id=country_id, simulation_id=simulation_id
-            ):
-                created = create_user_simulation(
+            return user_simulation_read(
+                create_user_simulation(
                     session,
                     owned_user_simulation_input(
                         association_input,
                         user_id=owner.user_id,
                     ),
                 )
-            return user_simulation_read(created)
+            )
 
     def get_user_simulation(
         self,
@@ -353,13 +323,9 @@ class V2UserSimulationService:
                 country_id=country_id,
                 simulation_id=association_input.simulation_id,
             )
-            with _simulation_still_stored(
-                country_id=country_id, simulation_id=association_input.simulation_id
-            ):
-                updated = update_user_simulation(
-                    session, association, association_input
-                )
-            return user_simulation_read(updated)
+            return user_simulation_read(
+                update_user_simulation(session, association, association_input)
+            )
 
     def delete_user_simulation(
         self,

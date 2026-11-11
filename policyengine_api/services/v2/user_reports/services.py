@@ -20,17 +20,13 @@ the report without a credential, minus the owner and the owner's links.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import TYPE_CHECKING
-
-from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.services.v2.associations.services import (
     require_legacy_reference,
 )
 from policyengine_api.services.v2.associations.validators import (
     require_one_reference,
-    violates_foreign_key,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_for_read_in_session,
@@ -64,15 +60,12 @@ from policyengine_api.services.v2.user_reports.transformations import (
 )
 from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
-    SAVED_REPORT_FOREIGN_KEY,
-    report_not_found,
     require_owned_user_policy,
     require_stored_report,
     require_user_report,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from uuid import UUID
 
     from sqlmodel import Session
@@ -151,25 +144,6 @@ def validate_stored_report(
         report_id=report_id,
         country_id=country_id,
     )
-
-
-@contextmanager
-def _report_still_stored(*, country_id: str, report_id: UUID | None) -> Iterator[None]:
-    """Answer the report's foreign key refusing the write as the report not found.
-
-    The report was checked in the same transaction, so the key refuses the
-    write only when the report was deleted in between.
-    """
-    try:
-        yield
-    except IntegrityError as error:
-        if report_id is not None and violates_foreign_key(
-            error, SAVED_REPORT_FOREIGN_KEY
-        ):
-            raise report_not_found(
-                report_id=report_id, country_id=country_id
-            ) from error
-        raise
 
 
 def require_one_report_after_update(
@@ -280,14 +254,12 @@ class V2UserReportService:
                     country_id=association_input.country_id,
                     user_policy_id=linked_user_policy_id,
                 )
-            with _report_still_stored(
-                country_id=country_id, report_id=association_input.report_id
-            ):
-                created = create_user_report(
+            return user_report_read(
+                create_user_report(
                     session,
                     owned_user_report_input(association_input, user_id=owner.user_id),
                 )
-            return user_report_read(created)
+            )
 
     def get_user_report(
         self,
@@ -427,15 +399,13 @@ class V2UserReportService:
                         country_id=country_id,
                         user_policy_id=getattr(association_input, link_field),
                     )
-            with _report_still_stored(
-                country_id=country_id, report_id=association_input.report_id
-            ):
-                updated = update_user_report(
+            return user_report_read(
+                update_user_report(
                     session,
                     association,
                     user_report_update_values(association_input),
                 )
-            return user_report_read(updated)
+            )
 
     def delete_user_report(
         self,

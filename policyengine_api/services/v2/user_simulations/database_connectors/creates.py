@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import IntegrityError
+
 from policyengine_api.data.v2.models import UserSimulationAssociation
+from policyengine_api.services.v2.associations.validators import violates_foreign_key
+from policyengine_api.services.v2.user_simulations.validators import (
+    SAVED_SIMULATION_FOREIGN_KEY,
+    simulation_not_found,
+)
 
 if TYPE_CHECKING:
     from sqlmodel import Session
@@ -18,9 +25,24 @@ def create_user_simulation(
     session: Session,
     association_input: UserSimulationCreationInput,
 ) -> UserSimulationAssociation:
-    """Insert an association and return it with its database-generated fields loaded."""
+    """Insert an association and return it with its database-generated fields loaded.
+
+    Raise AssociationSimulationNotFoundError when the simulation's foreign key
+    refuses the insert: the service checked the simulation in this
+    transaction, so it was deleted after that check.
+    """
     association = UserSimulationAssociation(**association_input.model_dump())
     session.add(association)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as error:
+        if association.simulation_id is not None and violates_foreign_key(
+            error, SAVED_SIMULATION_FOREIGN_KEY
+        ):
+            raise simulation_not_found(
+                simulation_id=association.simulation_id,
+                country_id=association.country_id,
+            ) from error
+        raise
     session.refresh(association)
     return association
