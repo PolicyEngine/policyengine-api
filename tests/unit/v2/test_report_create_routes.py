@@ -6,6 +6,11 @@ from typing import Any
 
 import pytest
 
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPINGS
+from policyengine_api.fastapi_routes.v2.simulations.routes import (
+    SIMULATION_ERROR_MAPPINGS,
+)
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
@@ -318,3 +323,67 @@ def test_the_openapi_document_gives_the_created_records_id_with_a_502(
         "message",
         id_field,
     ]
+
+
+@pytest.mark.parametrize(
+    "error_mappings",
+    [REPORT_ERROR_MAPPINGS, SIMULATION_ERROR_MAPPINGS],
+    ids=["reports", "simulations"],
+)
+def test_no_error_mapping_is_shadowed_by_an_earlier_one(error_mappings) -> None:
+    # The first matching mapping answers, so an error type an earlier mapping
+    # already matches would never get its own answer.
+    shadowed = [
+        (error_type.__name__, mapping.message)
+        for position, mapping in enumerate(error_mappings)
+        for error_type in mapping.error_types
+        if any(
+            issubclass(error_type, earlier_type)
+            for earlier in error_mappings[:position]
+            for earlier_type in earlier.error_types
+        )
+    ]
+
+    assert shadowed == []
+
+
+@pytest.mark.parametrize(
+    ("client_for_error", "method", "path", "body"),
+    [
+        pytest.param(
+            lambda error: report_route_client(reports=FakeReportService(error=error)),
+            "get",
+            f"/v2/reports/{REPORT_ID}?country_id=us",
+            None,
+            id="report-read",
+        ),
+        pytest.param(
+            lambda error: report_route_client(reports=FakeReportService(error=error)),
+            "post",
+            "/v2/reports?country_id=us",
+            report_body(),
+            id="report-create",
+        ),
+        pytest.param(
+            lambda error: report_route_client(
+                simulations=FakeSimulationService(error=error)
+            ),
+            "post",
+            "/v2/simulations?country_id=us",
+            simulation_body(),
+            id="simulation-create",
+        ),
+    ],
+)
+def test_missing_v2_database_configuration_is_storage_unavailable(
+    client_for_error, method: str, path: str, body: dict[str, Any] | None
+) -> None:
+    client = client_for_error(V2ConfigurationError("V2_DATABASE_URL is not set"))
+
+    response = client.request(method, path, json=body)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": "V2 storage is unavailable",
+    }
