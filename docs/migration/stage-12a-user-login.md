@@ -140,12 +140,15 @@ API when an admin asks, and store none of them:
 - Only identities whose issuer equals `PUBLIC_API_AUTH_ISSUER`, normalized
   with a trailing `/` as identities store it, are looked up; their subjects
   are Auth0 user IDs. Identities from any other issuer keep their stored
-  values. Without `PUBLIC_API_AUTH_ISSUER`, nothing is looked up.
+  values. The profile settings are refused without `PUBLIC_API_AUTH_ISSUER`
+  (readiness and the deploy validation fail), since no identity could be
+  looked up.
 - `GET /v2/admin/users` reads the page from the database as before, then
   reads the page's profiles with one `GET /api/v2/users` search for each
   group of at most 50 user IDs (`q=user_id:("…" OR "…")`,
-  `search_engine=v3`, only `user_id`, `email`, `email_verified`,
-  `given_name`, `family_name` and `name`). `GET /v2/admin/users/{user_id}`,
+  `search_engine=v3`, `sort=user_id:1`, only `user_id`, `email`,
+  `email_verified`, `given_name`, `family_name` and `name`), all through one
+  HTTP client, so one connection serves them. `GET /v2/admin/users/{user_id}`,
   the `PATCH` response and the history's `changed_by_email` are filled the
   same way.
 - Each user's profiles are taken in identity order, most recently seen
@@ -155,34 +158,45 @@ API when an admin asks, and store none of them:
   profile nor the user has a first or last name, a profile's full `name` that
   isn't an email address (Auth0 sets a password user's `name` to its email)
   is the first name.
-- `GET /v2/admin/users?email=…` first searches Auth0 for the users whose
-  email contains the text: `email:*text*`, or `email:text*` (a prefix) for
-  fewer than three characters, since Auth0 needs three characters after a
-  leading wildcard. The text is lowercased, and every Lucene special
-  character (`+ - & | ! ( ) { } [ ] ^ " ~ * ? : \ /`) and whitespace in it is
-  escaped, so it can't change the query. Results are read 50 a page, up to
-  Auth0's limit of 1,000 results for one query. The route then lists the
-  users with an identity from the users' issuer among those Auth0 users,
-  together with the users whose stored email matches as before, newest
-  first, with the same `offset`, `limit` and `has_more`. Auth0's search is
-  eventually consistent, so a user created or changed moments ago may be
-  missing; when the search reaches the 1,000-result limit the route answers
-  with what it found and records the WARNING
-  `admin_user_email_search_limit_reached`. Without the profile settings
-  (local development), the search reads stored emails only.
+- `GET /v2/admin/users?email=…` refuses text with `<` or `>` with 422
+  before any Auth0 call, with or without the profile settings: no email
+  address holds them unquoted, and Auth0's query syntax reads them as a
+  range (`email:>a*`) and can't escape them. It then searches Auth0 for the
+  users whose email contains the text: `email:*text*`, or `email:text*` (a
+  prefix) for fewer than three characters, since Auth0 needs three
+  characters after a leading wildcard. The text is lowercased, and every
+  Lucene special character (`+ - & | ! ( ) { } [ ] ^ " ~ * ? : \ /`) and
+  whitespace in it is escaped, so it can't change the query. Results are
+  read 50 a page, sorted by user ID so pages don't shift, through one HTTP
+  client, counting each user once. The search stops once more than 200
+  Auth0 users match (`MAXIMUM_EMAIL_SEARCH_MATCHES`), which takes at most
+  five pages, and the route answers 422 "More than 200 users match that
+  email text; enter more of it"; exactly 200 are served. Otherwise the
+  route lists the users with an identity from the users' issuer among
+  those Auth0 users, together with the users whose stored email matches as
+  before, newest first, with the same `offset`, `limit` and `has_more`.
+  Auth0's search is eventually consistent, so a user created or changed
+  moments ago may be missing. Without the profile settings (local
+  development), the search reads stored emails only.
 - When the profile settings are present but Auth0 can't answer (a timeout,
   a connection error, a failed token request, 403 for a client without
   `read:users`, 429, a 5xx), the list, the single read, the `PATCH`
   response and the history answer with stored values and record the WARNING
-  `admin_user_profiles_unavailable` with only the operation and the error
-  type, never an email, a user ID, a token or a secret. A type change is
-  committed before its response reads Auth0, so it stands either way. An
+  `admin_user_profiles_unavailable` with only the operation, the error type
+  and a cause: `http_<status>` (`http_403` for a client without
+  `read:users`, `http_429` for rate limiting), `timeout`,
+  `connection_error`, `unreadable_answer`, `token_http_<status>`,
+  `token_unreadable_answer`, `secret_unavailable`, `invalid_settings` or
+  `unknown`; never an email, a user ID, a token or a secret. A type change
+  is committed before its response reads Auth0, so it stands either way. An
   email search can't be served without Auth0 and answers 503.
 - Each Auth0 call is a Management API request, rate limited per tenant (2 a
-  second on the Free plan; on paid plans a burst of 40 and 500 a minute for
-  reading users), and a rate-limited request (429) counts as Auth0 being
-  unable to answer. A page of 100 users needs at least two profile searches,
-  and an email search one more for every 50 Auth0 matches.
+  second on the Free plan). A rate-limited request (429) is retried once
+  after the wait Auth0 gives, from `Retry-After` or `X-RateLimit-Reset` less
+  the current time, when that wait is at most 2 seconds; otherwise, or when
+  the retry is rate limited too, Auth0 counts as unable to answer. A page of
+  100 users needs at least two profile searches, and an email search at
+  most five pages more.
 
 The response shapes are unchanged; the routes' OpenAPI descriptions say where
 the emails and names come from.
@@ -590,7 +604,7 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
-| `AUTH0_USER_PROFILES_DOMAIN` | GitHub variable (optional, `staging` and `production`) | The users' tenant's canonical domain, for reading users' emails and names for the admin routes |
+| `AUTH0_USER_PROFILES_DOMAIN` | GitHub variable (optional, `staging` and `production`) | The users' tenant's canonical domain, for reading users' emails and names for the admin routes; the group needs `PUBLIC_API_AUTH_ISSUER` |
 | `AUTH0_USER_PROFILES_CLIENT_ID` | GitHub variable (optional, `staging` and `production`) | Read-only M2M client with `read:users` |
 | `AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `staging` and `production`) | Secret Manager version holding that client's secret |
 
@@ -619,10 +633,13 @@ readiness, which the deploy waits on. Request handling reads the
 blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
 `PUBLIC_API_AUTH_REQUIRED` (`0` or `1`) and checks the issuer, audience, and
 all-or-none Management and user profile settings, and it rejects Management
-settings outside production and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
+settings outside production, user profile settings without
+`PUBLIC_API_AUTH_ISSUER` and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
 It allows the user profile settings in staging and production.
 `deploy_cloud_run_candidate.sh` writes them to the revision. The release test
-step unsets them.
+step unsets the `PUBLIC_API_AUTH_*` and `PUBLIC_API_SERVER_*` settings; the
+`release-tests` job never receives the `AUTH0_MANAGEMENT_*` or
+`AUTH0_USER_PROFILES_*` settings.
 
 Every request's `Authorization` header is checked before route matching
 (`policyengine_api.request_caller`), so a bearer token sent to any route, not

@@ -355,7 +355,13 @@ class UserPolicyCollectionQuery(CountryQuery, PaginationQuery):
 EmailSearch = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=320),
-    Field(description="Part of a user's email address, matched ignoring case"),
+    Field(
+        description=(
+            "Part of a user's email address, matched ignoring case. Text with "
+            "< or > is refused (422), and so is text that more than 200 Auth0 "
+            "users match"
+        )
+    ),
 ]
 
 

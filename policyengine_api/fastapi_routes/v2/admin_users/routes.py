@@ -137,11 +137,13 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
             "The search covers stored emails and, with Auth0 user profiles "
             "configured, Auth0 emails: an Auth0 email matches when it "
             "contains the text, or, for fewer than three characters, starts "
-            "with it. Auth0's search is eventually consistent and returns at "
-            "most 1,000 users, so a just-changed email or users beyond that "
-            "may be missing. When Auth0 can't answer the search, the response "
-            "is 503. " + EMAILS_AND_NAMES_DESCRIPTION + " Unauthenticated "
-            "users are never listed."
+            "with it. Auth0's search is eventually consistent, so a "
+            "just-changed email may be missing. Text with < or >, which no "
+            "email address holds, is refused (422), and so is text that "
+            "more than 200 Auth0 users match: enter more of it. When Auth0 "
+            "can't answer the search, the response is 503. "
+            + EMAILS_AND_NAMES_DESCRIPTION
+            + " Unauthenticated users are never listed."
         ),
     )
     def list_users(
