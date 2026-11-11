@@ -94,6 +94,7 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     version: it deleted the version's current-law parameter values, parameter
     tree rows and parameter search file, which publishing the version again
     restores from the installed packages, clearing the marker.
+    ``spm_availability`` records whether the version offers SPM settings.
     """
 
     __tablename__ = "tax_benefit_model_versions"
@@ -129,6 +130,12 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     catalog_values_pruned_at: datetime | None = Field(
         default=None, sa_type=sa.DateTime(timezone=True)
     )
+    # Whether this version offers SPM settings, with their schema and the
+    # certified defaults, as the simulation service reports its bundle's SPM
+    # support: {available, settings_schema, defaults}. Catalog publication
+    # records it once, after publishing the version, so a version has none
+    # until then.
+    spm_availability: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(

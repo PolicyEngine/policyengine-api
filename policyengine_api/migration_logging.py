@@ -74,13 +74,17 @@ V2_USER_RESOURCE_SEGMENTS = frozenset(
         "admin",
     }
 )
-# /v2/reports and /v2/simulations read only Supabase, and create only through
-# the Cloud Run simulation service's v2 routes, whatever the report and
-# simulation route groups' database, entrypoint and compute flags select: a
-# read reads the tables and calls nothing, and a create checks the country
-# and policies and sends the request there. They read none of those flags, so
-# none of them is checked for their log records.
-V2_SIMULATION_SERVICE_SEGMENTS = frozenset({"reports", "simulations"})
+# /v2/household-calculations, /v2/reports and /v2/simulations read only
+# Supabase, and compute or create only through the Cloud Run simulation
+# service's v2 routes, whatever their route groups' database, entrypoint and
+# compute flags select. A household calculation's submission reads the
+# countries row, household and policy and sends the calculation there; a
+# report's or simulation's create checks the country and policies and sends
+# the request there; a read reads the tables and calls nothing. They read none
+# of those flags, so none of them is checked for their log records.
+V2_SIMULATION_SERVICE_SEGMENTS = frozenset(
+    {"household-calculations", "reports", "simulations"}
+)
 V2_SIMULATION_SERVICE_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 V2_SIMULATION_SERVICE_COMPUTE = "v2_primary"
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
@@ -269,22 +273,28 @@ def log_migration_request(served_request: ServedRequest) -> None:
 def _simulation_service_context(
     route_group: str, *, method: str, route_impl: RouteImplementation | None
 ) -> dict[str, str | None]:
-    """Return a v2 report's or simulation's log record from what it uses."""
+    """Return a household calculation's, report's or simulation's log record.
+
+    The record names what the request actually uses, not its route group's
+    flags.
+    """
     try:
         selected_route_impl = route_impl or get_route_impl(route_group)
     except ValueError as error:
         return {"route_group": route_group, "migration_flag_error": str(error)}
     route_config = ROUTE_GROUP_CONFIG_BY_NAME[route_group]
-    creates = method == "POST"
+    sends_to_simulation_service = method == "POST"
     return MigrationContext(
         route_group=route_group,
         route_impl=selected_route_impl,
         db_entity=route_config.db_entity,
         db_write=None,
         db_read="supabase",
-        sim_flow=route_config.sim_flow if creates else None,
+        sim_flow=route_config.sim_flow if sends_to_simulation_service else None,
         sim_entrypoint=V2_SIMULATION_SERVICE_ENTRYPOINT,
-        sim_compute=V2_SIMULATION_SERVICE_COMPUTE if creates else None,
+        sim_compute=(
+            V2_SIMULATION_SERVICE_COMPUTE if sends_to_simulation_service else None
+        ),
     ).to_log_dict()
 
 

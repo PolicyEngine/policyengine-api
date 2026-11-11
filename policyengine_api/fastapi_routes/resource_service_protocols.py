@@ -10,6 +10,11 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.household_calculations.types import (
+        HouseholdCalculationInput,
+        HouseholdCalculationRead,
+        HouseholdCalculationSubmitted,
+    )
     from policyengine_api.services.v2.households.types import (
         HouseholdPage,
         HouseholdRead,
@@ -153,6 +158,32 @@ class V2HouseholdResourceService(Protocol):
         limit: int,
     ) -> HouseholdPage:
         """Return a page of the country's households, optionally of one default year."""
+        ...
+
+
+class V2HouseholdCalculationResourceService(Protocol):
+    """Route-independent household calculation operations for one request."""
+
+    def submit_calculation(
+        self, calculation: HouseholdCalculationInput
+    ) -> HouseholdCalculationSubmitted:
+        """Send a stored household's calculation to the simulation service.
+
+        Raise ``HouseholdCalculationCountryError`` for a country without
+        household calculations, ``HouseholdNotFoundError`` or
+        ``PolicyNotFoundError`` for a record not stored in that country,
+        ``HouseholdCalculationYearError`` for a household without a default
+        year, ``PolicyParametersMissingError`` for a policy setting parameters
+        the running catalog version lacks, and the simulation service errors
+        when it refuses the calculation.
+        """
+        ...
+
+    def get_calculation(self, calculation_id: UUID) -> HouseholdCalculationRead:
+        """Return the calculation household_jobs records.
+
+        Raise ``HouseholdCalculationNotFoundError`` when there is no such job.
+        """
         ...
 
 

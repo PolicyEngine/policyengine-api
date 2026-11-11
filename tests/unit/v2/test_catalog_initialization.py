@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,7 @@ ENVIRONMENT = {
     V2_SUPABASE_ENVIRONMENT: "test-foundation",
     "V2_RUNTIME_DATABASE_URL": "invalid-runtime-value",
     "V2_MIGRATION_DATABASE_URL": "invalid-migration-value",
+    "SIMULATION_ENTRYPOINT_URL": "https://simulation.example",
 }
 
 
@@ -79,20 +81,33 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
             environ,
         )
 
+    recording = publication_types.SPMAvailabilityRecording(
+        recorded=(("us", "1.450.0", True),)
+    )
+
+    def record_spm(selected_engine, catalog, environ):
+        assert "engine" in observed
+        observed["spm"] = (selected_engine, catalog.policyengine_version, environ)
+        return recording
+
     result = initialization.initialize_catalog(
         ENVIRONMENT,
         extractor=normalized_catalog,
         engine_builder=build,
-        publisher=publish,
-        region_data_verifier=verify,
+        steps=initialization.PublicationSteps(
+            verify_region_data=verify,
+            publish=publish,
+            record_spm_availability=record_spm,
+        ),
     )
 
-    assert result == _evidence()
+    assert result == replace(_evidence(), spm_availability=recording)
     assert observed == {
         "username": "data-writer",
         "verified": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
         "engine": engine,
         "version": POLICYENGINE_VERSION,
+        "spm": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
     }
     assert engine.disposed
 
@@ -113,8 +128,9 @@ def test_region_data_failure_publishes_nothing_and_disposes_engine() -> None:
             ENVIRONMENT,
             extractor=normalized_catalog,
             engine_builder=lambda _settings: engine,
-            publisher=refuse_publication,
-            region_data_verifier=reject,
+            steps=initialization.PublicationSteps(
+                verify_region_data=reject, publish=refuse_publication
+            ),
         )
     assert engine.disposed
 
@@ -383,3 +399,63 @@ def test_main_reports_a_missing_hugging_face_token_with_its_message(
     assert "HUGGING_FACE_TOKEN must be set to read the certified uk data" in (
         failure.err
     )
+
+
+def test_a_missing_simulation_service_url_stops_before_extraction() -> None:
+    def refuse_extraction():
+        msg = "extraction must not start"
+        raise AssertionError(msg)
+
+    environment = {
+        name: value
+        for name, value in ENVIRONMENT.items()
+        if name != "SIMULATION_ENTRYPOINT_URL"
+    }
+
+    with pytest.raises(V2ConfigurationError, match="SIMULATION_ENTRYPOINT_URL"):
+        initialization.initialize_catalog(environment, extractor=refuse_extraction)
+
+
+def test_main_says_on_stderr_when_spm_availability_could_not_be_recorded(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The evidence names the versions not recorded, and stderr says why."""
+    recording = publication_types.SPMAvailabilityRecording(
+        not_recorded=(("us", "1.450.0"),),
+        versions_unreadable="the simulation service's versions could not be read",
+    )
+    evidence = replace(_evidence(), spm_availability=recording)
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["spm_availability"] == {
+        "recorded": [],
+        "not_recorded": [{"country_id": "us", "version": "1.450.0"}],
+        "versions_unreadable": ("the simulation service's versions could not be read"),
+    }
+    assert output.err.splitlines() == [
+        "SPM availability was not recorded: the simulation service's versions "
+        "could not be read; /v2/model-catalog reports a version without a "
+        "recorded availability as unknown until a publication records it"
+    ]
+
+
+def test_main_says_nothing_when_no_version_needed_recording(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every version had its availability from an earlier publication."""
+    recording = publication_types.SPMAvailabilityRecording(
+        versions_unreadable="the simulation service's versions could not be read"
+    )
+    evidence = replace(_evidence(), spm_availability=recording)
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["spm_availability"]["not_recorded"] == []
+    assert output.err == ""

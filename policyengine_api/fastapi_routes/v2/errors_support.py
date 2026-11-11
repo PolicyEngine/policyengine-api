@@ -46,6 +46,18 @@ class V2ErrorResponse(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
+class V2MissingParametersErrorResponse(V2ErrorResponse):
+    """A refused calculation whose policy sets parameters the catalog lacks.
+
+    ``missing_parameters`` names each parameter the policy sets that the
+    running catalog version does not have, sorted; the calculation would
+    otherwise run without those values.
+    """
+
+    code: Literal["missing_parameters"] = "missing_parameters"
+    missing_parameters: list[str]
+
+
 def v2_error_response(
     status_code: int,
     message: str,
@@ -59,6 +71,16 @@ def v2_error_response(
         content=error.model_dump(mode="json"),
         headers=dict(headers) if headers is not None else None,
     )
+
+
+def v2_missing_parameters_response(
+    message: str, missing_parameters: Sequence[str]
+) -> JSONResponse:
+    """Serialize a 422 refusing a policy whose parameters the catalog lacks."""
+    error = V2MissingParametersErrorResponse(
+        message=message, missing_parameters=list(missing_parameters)
+    )
+    return JSONResponse(status_code=422, content=error.model_dump(mode="json"))
 
 
 OperationT = TypeVar("OperationT")

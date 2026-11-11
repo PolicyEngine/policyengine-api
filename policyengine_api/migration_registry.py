@@ -64,6 +64,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
         path_segments=(
             "household",
             "households",
+            "household-calculations",
             "user-household",
             "user-households",
             "calculate",
