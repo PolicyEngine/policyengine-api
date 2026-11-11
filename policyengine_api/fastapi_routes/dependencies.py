@@ -37,12 +37,14 @@ from policyengine_api.libs.server_credentials import CallerKind
 from policyengine_api.libs.user_auth import (
     FORWARDED_USER_AUTHORIZATION_HEADER,
     UNAUTHENTICATED_USER_HEADER,
+    load_user_auth_settings,
 )
 from policyengine_api.readiness import is_ready
 from policyengine_api.request_caller import current_request_caller
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
+from policyengine_api.services.v2.user_types.types import UserProfileSource
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -349,6 +351,26 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
     )
 
 
+def _default_user_profile_source() -> UserProfileSource | None:
+    """Return the users' Auth0 tenant to read admins' user profiles from.
+
+    None without the AUTH0_USER_PROFILES_* settings, or without the users'
+    issuer, which says which identities are that tenant's users. Settings are
+    read on each call, and raise when they are unusable.
+    """
+    from policyengine_api.libs.auth0_management import (
+        build_auth0_user_profile_reader,
+    )
+
+    reader = build_auth0_user_profile_reader()
+    if reader is None:
+        return None
+    issuer = load_user_auth_settings().issuer
+    if not issuer:
+        return None
+    return UserProfileSource(issuer=issuer, reader=reader)
+
+
 def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -358,7 +380,10 @@ def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     )
     from policyengine_api.services.v2.user_types.services import V2UserTypeService
 
-    return V2UserTypeService(UserTypeDatabaseSession(get_v2_session_factory()))
+    return V2UserTypeService(
+        UserTypeDatabaseSession(get_v2_session_factory()),
+        user_profile_source_factory=_default_user_profile_source,
+    )
 
 
 @dataclass(frozen=True)

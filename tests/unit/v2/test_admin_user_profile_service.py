@@ -569,7 +569,7 @@ def test_an_email_search_at_auth0s_result_limit_answers_and_records_a_warning(
         (
             logging.WARNING,
             "admin_user_email_search_limit_reached",
-            {"result_limit": 1000},
+            {"auth0_result_count": 1},
         )
     ]
 

@@ -52,6 +52,14 @@ class UserEmailMatchError(LookupError):
     """Raised when the type script finds no signed-in user, or several, by email."""
 
 
+class AdminUserProfilesUnavailableError(RuntimeError):
+    """Raised when users' emails and names can't be read from Auth0.
+
+    An email search can't be served without them (503); every other admin
+    read answers with stored values instead.
+    """
+
+
 def require_minimum_user_type(user_type: UserType, minimum: UserType) -> UserType:
     """Return ``user_type`` if it meets ``minimum``; raise otherwise."""
     if user_type_meets_minimum(user_type, minimum):

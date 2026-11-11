@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
     from datetime import datetime
     from uuid import UUID
 
     from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
+    from policyengine_api.libs.auth0_management import (
+        Auth0UserIdSearch,
+        Auth0UserProfile,
+    )
 
 DEFAULT_ADMIN_USER_LIMIT = 100
 MAXIMUM_ADMIN_USER_LIMIT = 500
@@ -26,8 +31,9 @@ class AdminUserSearch(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    # Matched case-insensitively against any part of a user's emails; a LIKE
-    # wildcard in it is matched literally.
+    # Matched case-insensitively against any part of a user's stored emails,
+    # and of its Auth0 email when user profiles are configured; a LIKE or
+    # Lucene wildcard in it is matched literally.
     email: EmailSearchText | None = None
     offset: int = Field(default=0, ge=0)
     limit: int = Field(
@@ -41,8 +47,9 @@ class AdminUserRead:
 
     id: UUID
     user_type: UserType
-    # The email of the user's most recently seen sign-in identity that has
-    # one, else the email stored on the user.
+    # Its Auth0 email when user profiles are configured and Auth0 has one;
+    # otherwise the stored email of the user's most recently seen sign-in
+    # identity that has one, else the email stored on the user.
     email: str | None
     first_name: str | None
     last_name: str | None
@@ -104,3 +111,59 @@ class ScriptedUserTypeChange:
 
     user: AdminUserRead
     previous_user_type: UserType
+
+
+class UserProfileReader(Protocol):
+    """Reads users' emails and names from Auth0 when an admin asks.
+
+    Nothing it returns is stored. Each method raises when Auth0 can't answer.
+    """
+
+    def read_user_profiles(
+        self, user_ids: Iterable[str]
+    ) -> Mapping[str, Auth0UserProfile]:
+        """Return the profiles Auth0 has for these sign-in subjects, by subject."""
+        ...
+
+    def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
+        """Return the sign-in subjects of the users whose email contains ``text``."""
+        ...
+
+
+@dataclass(frozen=True)
+class UserProfileSource:
+    """The Auth0 tenant admins' reads take users' emails and names from.
+
+    ``issuer`` is the signed-in users' token issuer, normalized with a
+    trailing slash as identities store it: only identities from it are users
+    of that tenant, so only they are looked up.
+    """
+
+    issuer: str
+    reader: UserProfileReader
+
+
+@dataclass(frozen=True)
+class IdentitySubjects:
+    """Sign-in subjects from one issuer."""
+
+    issuer: str
+    subjects: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StoredAdminUser:
+    """A signed-in user as stored, and the subjects to read its profile with."""
+
+    read: AdminUserRead
+    # The user's subjects from the users' issuer, most recently seen first.
+    profile_subjects: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StoredUserTypeChange:
+    """A recorded change as stored, and the subjects of the admin who made it."""
+
+    read: UserTypeChangeRead
+    # The admin's subjects from the users' issuer, most recently seen first.
+    changed_by_profile_subjects: tuple[str, ...]
