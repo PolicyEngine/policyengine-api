@@ -167,11 +167,12 @@ def generate(repository: Path, commit: str) -> dict[str, Any]:
             "policyengine_simulation_contract.macro_output"
         )
         # .py's US data, as the simulation service's district codes use it.
-        from policyengine.countries.us.data import AT_LARGE_STATES, US_STATE_FIPS
-
+        us_data = importlib.import_module("policyengine.countries.us.data")
         district_codes = writer.DistrictCodes(
-            state_fips={state: int(fips) for state, fips in US_STATE_FIPS.items()},
-            at_large_states=frozenset(AT_LARGE_STATES),
+            state_fips={
+                state: int(fips) for state, fips in us_data.US_STATE_FIPS.items()
+            },
+            at_large_states=frozenset(us_data.AT_LARGE_STATES),
         )
         cases = []
         for name, country, build in CASES:
