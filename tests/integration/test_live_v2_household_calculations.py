@@ -26,13 +26,12 @@ import statistics
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 
-import httpx
-
 from tests.fixtures.integration.live_household_calculations import (
     YEAR,
     FinishedCalculation,
     LiveHousehold,
     calculate,
+    deployed_api_client,
     probe_amount,
     store_household,
 )
@@ -105,7 +104,7 @@ def test_parallel_calculations_finish_within_the_latency_limits(
     ]
 
     def run(household: LiveHousehold) -> FinishedCalculation:
-        with httpx.Client(base_url=api_base_url, timeout=90.0) as client:
+        with deployed_api_client(api_base_url) as client:
             return calculate(client, household, store_household(client, household))
 
     with ThreadPoolExecutor(max_workers=PARALLEL_CALCULATIONS) as pool:
