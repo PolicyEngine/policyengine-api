@@ -32,6 +32,9 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 )
 from policyengine_api.services.economic_impact_request import LocalAreaBreakdown
 from policyengine_api.services.v2.metadata.types import MetadataRegionType
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+)
 from policyengine_api.spm import SPMSelection
 from policyengine_api.supported_countries import SupportedCountryId
 from policyengine_api.utils.budget_window import (
@@ -358,8 +361,8 @@ EmailSearch = Annotated[
     Field(
         description=(
             "Part of a user's email address, matched ignoring case. Text with "
-            "< or > is refused (422), and so is text that more than 200 Auth0 "
-            "users match"
+            "< or > is refused (422), and so is text that more than "
+            f"{MAXIMUM_EMAIL_SEARCH_MATCHES} Auth0 users match"
         )
     ),
 ]

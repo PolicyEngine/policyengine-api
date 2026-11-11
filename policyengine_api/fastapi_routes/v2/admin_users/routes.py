@@ -46,7 +46,10 @@ from policyengine_api.fastapi_routes.v2.user_type_support import (
 )
 from policyengine_api.query_parameters import AdminUserCollectionQuery
 from policyengine_api.services.v2.identity.types import AccountPrincipal
-from policyengine_api.services.v2.user_types.types import AdminUserSearch
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+    AdminUserSearch,
+)
 
 AdminUserCollectionQueryDependency = Annotated[
     AdminUserCollectionQuery, Depends(query_dependency(AdminUserCollectionQuery))
@@ -83,7 +86,8 @@ ADMIN_USER_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The request does not match the schema, or an email search's text "
-            "holds < or >, or more than 200 Auth0 users match it."
+            f"holds < or >, or more than {MAXIMUM_EMAIL_SEARCH_MATCHES} Auth0 "
+            "users match it."
         ),
     },
     500: {
@@ -140,7 +144,8 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
             "with it. Auth0's search is eventually consistent, so a "
             "just-changed email may be missing. Text with < or >, which no "
             "email address holds, is refused (422), and so is text that "
-            "more than 200 Auth0 users match: enter more of it. When Auth0 "
+            f"more than {MAXIMUM_EMAIL_SEARCH_MATCHES} Auth0 users match: "
+            "enter more of it. When Auth0 "
             "can't answer the search, the response is 503. "
             + EMAILS_AND_NAMES_DESCRIPTION
             + " Unauthenticated users are never listed."
