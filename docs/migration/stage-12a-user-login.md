@@ -171,7 +171,9 @@ API when an admin asks, and store none of them:
   client, counting each user once. The search stops once more than 200
   Auth0 users match (`MAXIMUM_EMAIL_SEARCH_MATCHES`), which takes at most
   five pages, and the route answers 422 "More than 200 users match that
-  email text; enter more of it"; exactly 200 are served. Otherwise the
+  email text; enter more of it"; exactly 200 are served. A full fifth page
+  counts as more than 200 too: only duplicate or ID-less entries can make
+  it full, and it may hide more users. Otherwise the
   route lists the users with an identity from the users' issuer among
   those Auth0 users, together with the users whose stored email matches as
   before, newest first, with the same `offset`, `limit` and `has_more`.
@@ -192,11 +194,13 @@ API when an admin asks, and store none of them:
   email search can't be served without Auth0 and answers 503.
 - Each Auth0 call is a Management API request, rate limited per tenant (2 a
   second on the Free plan). A rate-limited request (429) is retried once
-  after the wait Auth0 gives, from `Retry-After` or `X-RateLimit-Reset` less
-  the current time, when that wait is at most 2 seconds; otherwise, or when
-  the retry is rate limited too, Auth0 counts as unable to answer. A page of
-  100 users needs at least two profile searches, and an email search at
-  most five pages more.
+  after the wait Auth0 gives, from `Retry-After` (which comes first) or
+  `X-RateLimit-Reset` less the current time, when that wait fits in what is
+  left of the admin request's budget: 2 seconds of waiting in total, shared
+  by the email search and the profile read of one admin request. Otherwise,
+  or when the retry is rate limited too, or the wait isn't a finite number,
+  Auth0 counts as unable to answer. A page of 100 users needs at least two
+  profile searches, and an email search at most five pages more.
 
 The response shapes are unchanged; the routes' OpenAPI descriptions say where
 the emails and names come from.
