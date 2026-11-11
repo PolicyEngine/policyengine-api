@@ -22,10 +22,12 @@ an error message, an email, a subject, a token or a secret.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import cache
 from http import HTTPStatus
@@ -35,7 +37,7 @@ from urllib.parse import quote
 import httpx
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping
 
 AUTH0_MANAGEMENT_DOMAIN_ENV = "AUTH0_MANAGEMENT_DOMAIN"
 AUTH0_MANAGEMENT_CLIENT_ID_ENV = "AUTH0_MANAGEMENT_CLIENT_ID"
@@ -54,6 +56,11 @@ DOMAIN_PATTERN = re.compile(
 SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
 HTTP_TIMEOUT_SECONDS = 10.0
 TOKEN_REFRESH_MARGIN_SECONDS = 60
+# A rate-limited (429) search is retried once, only when Auth0 asks for a wait
+# no longer than this.
+MAXIMUM_RATE_LIMIT_WAIT_SECONDS = 2.0
+# Every search page is sorted by user ID, so pages don't shift between requests.
+USER_SEARCH_SORT = "user_id:1"
 
 # Auth0's user search (search engine v3) answers at most 50 users a page on
 # its public cloud, and at most 1,000 results for one query.
@@ -113,17 +120,47 @@ class Auth0ManagementConfigurationError(RuntimeError):
 
 
 class Auth0ManagementError(RuntimeError):
-    """Raised when the Management API rejects or fails a request."""
+    """Raised when the Management API rejects or fails a request.
+
+    ``cause`` says why, with no personal data: ``http_<status>`` for a
+    request's answer, ``token_http_<status>`` or ``token_unreadable_answer``
+    for the token request, ``timeout``, ``connection_error``,
+    ``unreadable_answer`` or ``secret_unavailable``.
+    """
+
+    def __init__(self, message: str, *, cause: str = "management_api_error") -> None:
+        """Keep ``cause`` with the message; neither names a person."""
+        super().__init__(message)
+        self.cause = cause
 
 
 class Auth0UserProfilesUnavailableError(Auth0ManagementError):
     """Raised when users' profiles can't be read: any failure of a profile read.
 
     Timeouts, connection errors, a refused or failed token request, a missing
-    ``read:users`` permission (403), rate limiting (429), server errors (5xx)
-    and an answer that isn't a list of users all raise it. The message names
-    at most an HTTP status or an error type.
+    ``read:users`` permission (``http_403``), rate limiting (``http_429``,
+    after at most one short wait), server errors (``http_5xx``) and an answer
+    that isn't a list of users all raise it, each with its ``cause``. The
+    message names at most that cause.
     """
+
+
+def _transport_cause(error: httpx.HTTPError) -> str:
+    """Name a failed request's cause: a timeout, or no usable connection."""
+    if isinstance(error, httpx.TimeoutException):
+        return "timeout"
+    return "connection_error"
+
+
+def _seconds(value: str | None) -> float | None:
+    """Read a header's number of seconds, or None when it isn't one."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        return None
+    return seconds if math.isfinite(seconds) else None
 
 
 @dataclass(frozen=True)
@@ -294,16 +331,22 @@ class Auth0ManagementClient:
         *,
         http_client: httpx.Client | None = None,
         secret_loader: Callable[[str], str] = _load_secret_from_secret_manager,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         """Use ``settings`` for the tenant and client credentials.
 
-        ``http_client`` replaces the per-request client (tests pass a mock
-        transport), and ``secret_loader`` reads ``client_secret_resource`` when
-        no direct secret is set.
+        ``http_client`` replaces the per-request and per-operation clients
+        (tests pass a mock transport), and ``secret_loader`` reads
+        ``client_secret_resource`` when no direct secret is set. ``sleep``
+        waits before a rate-limited search's retry, and ``clock`` gives the
+        current Unix time for Auth0's rate-limit reset.
         """
         self._settings = settings
         self._http_client = http_client
         self._secret_loader = secret_loader
+        self._sleep = sleep
+        self._clock = clock
         self._token: str | None = None
         self._expires_at = 0.0
         self._lock = threading.Lock()
@@ -319,10 +362,10 @@ class Auth0ManagementClient:
             secret = self._secret_loader(self._settings.client_secret_resource).strip()
         except Exception as error:
             msg = "the Management API client secret could not be loaded"
-            raise Auth0ManagementError(msg) from error
+            raise Auth0ManagementError(msg, cause="secret_unavailable") from error
         if not secret:
             msg = "the Management API client secret is empty"
-            raise Auth0ManagementError(msg)
+            raise Auth0ManagementError(msg, cause="secret_unavailable")
         return secret
 
     def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
@@ -333,9 +376,29 @@ class Auth0ManagementClient:
                 return client.request(method, url, **kwargs)  # type: ignore[arg-type]
         except httpx.HTTPError as error:
             msg = f"Management API request failed: {type(error).__name__}"
-            raise Auth0ManagementError(msg) from error
+            raise Auth0ManagementError(msg, cause=_transport_cause(error)) from error
 
-    def _access_token(self) -> str:
+    def _send(
+        self, http_client: httpx.Client, request: httpx.Request
+    ) -> httpx.Response:
+        """Send one request through an operation's own HTTP client."""
+        try:
+            return http_client.send(request)
+        except httpx.HTTPError as error:
+            msg = f"Management API request failed: {type(error).__name__}"
+            raise Auth0ManagementError(msg, cause=_transport_cause(error)) from error
+
+    @contextmanager
+    def _operation_http_client(self) -> Iterator[httpx.Client]:
+        """Yield one HTTP client, so one connection serves an operation's requests."""
+        if self._http_client is not None:
+            yield self._http_client
+            return
+        with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as http_client:
+            yield http_client
+
+    def _access_token(self, http_client: httpx.Client | None = None) -> str:
+        """Return the cached token, or request one, through ``http_client`` if given."""
         with self._lock:
             now = time.time()
             if (
@@ -343,29 +406,42 @@ class Auth0ManagementClient:
                 and now < self._expires_at - TOKEN_REFRESH_MARGIN_SECONDS
             ):
                 return self._token
-            response = self._request(
-                "POST",
-                f"{self._base_url}/oauth/token",
-                json={
-                    "grant_type": "client_credentials",
-                    "client_id": self._settings.client_id,
-                    "client_secret": self._client_secret(),
-                    "audience": f"{self._base_url}/api/v2/",
-                },
+            token_url = f"{self._base_url}/oauth/token"
+            token_request = {
+                "grant_type": "client_credentials",
+                "client_id": self._settings.client_id,
+                "client_secret": self._client_secret(),
+                "audience": f"{self._base_url}/api/v2/",
+            }
+            response = (
+                self._request("POST", token_url, json=token_request)
+                if http_client is None
+                else self._send(
+                    http_client,
+                    http_client.build_request("POST", token_url, json=token_request),
+                )
             )
             if response.status_code != HTTPStatus.OK:
                 msg = (
                     f"Management API token request failed: HTTP {response.status_code}"
                 )
-                raise Auth0ManagementError(msg)
-            payload = response.json()
+                raise Auth0ManagementError(
+                    msg, cause=f"token_http_{response.status_code}"
+                )
+            try:
+                payload = response.json()
+            except ValueError as error:
+                msg = "Management API token response is invalid"
+                raise Auth0ManagementError(
+                    msg, cause="token_unreadable_answer"
+                ) from error
             token = payload.get("access_token") if isinstance(payload, dict) else None
             expires_in = (
                 payload.get("expires_in") if isinstance(payload, dict) else None
             )
             if not isinstance(token, str) or not token:
                 msg = "Management API token response is invalid"
-                raise Auth0ManagementError(msg)
+                raise Auth0ManagementError(msg, cause="token_unreadable_answer")
             lifetime = int(expires_in) if isinstance(expires_in, int) else 0
             self._token = token
             self._expires_at = now + max(lifetime, TOKEN_REFRESH_MARGIN_SECONDS * 2)
@@ -407,45 +483,84 @@ class Auth0ManagementClient:
         if response.status_code in {200, 202, 204, 404}:
             return
         msg = f"Management API user deletion failed: HTTP {response.status_code}"
-        raise Auth0ManagementError(msg)
+        raise Auth0ManagementError(msg, cause=f"http_{response.status_code}")
 
     def _search_request(
-        self, parameters: Mapping[str, str], token: str
+        self, http_client: httpx.Client, parameters: Mapping[str, str], token: str
     ) -> httpx.Response:
-        return self._request(
-            "GET",
-            f"{self._base_url}/api/v2/users",
-            params=dict(parameters),
-            headers={"Authorization": f"Bearer {token}"},
+        return self._send(
+            http_client,
+            http_client.build_request(
+                "GET",
+                f"{self._base_url}/api/v2/users",
+                params={**parameters, "sort": USER_SEARCH_SORT},
+                headers={"Authorization": f"Bearer {token}"},
+            ),
         )
 
-    def _search_users(self, parameters: Mapping[str, str]) -> list[object]:
+    def _authorized_search(
+        self, http_client: httpx.Client, parameters: Mapping[str, str]
+    ) -> httpx.Response:
+        """Search with the cached token; after a 401, once more with a fresh one.
+
+        A 401 means the cached token was revoked or rotated.
+        """
+        token = self._access_token(http_client)
+        response = self._search_request(http_client, parameters, token)
+        if response.status_code == HTTPStatus.UNAUTHORIZED:
+            self._discard_token(token)
+            response = self._search_request(
+                http_client, parameters, self._access_token(http_client)
+            )
+        return response
+
+    def _rate_limit_wait(self, response: httpx.Response) -> float | None:
+        """Return the seconds a rate-limited answer asks to wait, or None.
+
+        ``Retry-After`` gives them directly; otherwise ``X-RateLimit-Reset``
+        gives the Unix time the limit resets.
+        """
+        retry_after = _seconds(response.headers.get("Retry-After"))
+        if retry_after is not None:
+            return max(0.0, retry_after)
+        reset_at = _seconds(response.headers.get("X-RateLimit-Reset"))
+        if reset_at is not None:
+            return max(0.0, reset_at - self._clock())
+        return None
+
+    def _search_users(
+        self, http_client: httpx.Client, parameters: Mapping[str, str]
+    ) -> list[object]:
         """Run one user search; raise Auth0UserProfilesUnavailableError on failure.
 
-        A 401 means the cached token was revoked or rotated, so it is dropped
-        and the search is retried once with a fresh token.
+        A rate-limited search (429) is retried once, after the wait Auth0
+        gives, when that wait is at most 2 seconds.
         """
         try:
-            token = self._access_token()
-            response = self._search_request(parameters, token)
-            if response.status_code == HTTPStatus.UNAUTHORIZED:
-                self._discard_token(token)
-                response = self._search_request(parameters, self._access_token())
-        # A token answer that isn't JSON raises ValueError.
-        except (Auth0ManagementError, ValueError) as error:
-            msg = f"Auth0 user profiles are unavailable: {type(error).__name__}"
-            raise Auth0UserProfilesUnavailableError(msg) from error
+            response = self._authorized_search(http_client, parameters)
+            if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                wait = self._rate_limit_wait(response)
+                if wait is not None and wait <= MAXIMUM_RATE_LIMIT_WAIT_SECONDS:
+                    self._sleep(wait)
+                    response = self._authorized_search(http_client, parameters)
+        except Auth0ManagementError as error:
+            msg = f"Auth0 user profiles are unavailable: {error.cause}"
+            raise Auth0UserProfilesUnavailableError(msg, cause=error.cause) from error
         if response.status_code != HTTPStatus.OK:
             msg = f"Auth0 user profiles are unavailable: HTTP {response.status_code}"
-            raise Auth0UserProfilesUnavailableError(msg)
+            raise Auth0UserProfilesUnavailableError(
+                msg, cause=f"http_{response.status_code}"
+            )
         try:
             users = response.json()
         except ValueError as error:
             msg = "Auth0 user profiles are unavailable: the answer is not JSON"
-            raise Auth0UserProfilesUnavailableError(msg) from error
+            raise Auth0UserProfilesUnavailableError(
+                msg, cause="unreadable_answer"
+            ) from error
         if not isinstance(users, list):
             msg = "Auth0 user profiles are unavailable: the answer is not a list"
-            raise Auth0UserProfilesUnavailableError(msg)
+            raise Auth0UserProfilesUnavailableError(msg, cause="unreadable_answer")
         return users
 
     def read_user_profiles(
@@ -453,29 +568,33 @@ class Auth0ManagementClient:
     ) -> dict[str, Auth0UserProfile]:
         """Return the profiles Auth0 has for these user IDs, by user ID.
 
-        One search reads each group of at most 50 IDs. IDs Auth0 doesn't know
-        are left out. Raise Auth0UserProfilesUnavailableError when any search
-        fails.
+        One search reads each group of at most 50 IDs, all through one HTTP
+        client. IDs Auth0 doesn't know are left out. Raise
+        Auth0UserProfilesUnavailableError when any search fails.
         """
         requested = list(dict.fromkeys(user_ids))
         profiles: dict[str, Auth0UserProfile] = {}
-        for start in range(0, len(requested), USER_SEARCH_PAGE_SIZE):
-            group = requested[start : start + USER_SEARCH_PAGE_SIZE]
-            query = " OR ".join(_quoted_user_id(user_id) for user_id in group)
-            users = self._search_users(
-                {
-                    "q": f"user_id:({query})",
-                    "search_engine": "v3",
-                    "fields": USER_PROFILE_FIELDS,
-                    "include_fields": "true",
-                    "per_page": str(len(group)),
-                }
-            )
-            wanted = set(group)
-            for payload in users:
-                profile = _user_profile(payload)
-                if profile is not None and profile.user_id in wanted:
-                    profiles[profile.user_id] = profile
+        if not requested:
+            return profiles
+        with self._operation_http_client() as http_client:
+            for start in range(0, len(requested), USER_SEARCH_PAGE_SIZE):
+                group = requested[start : start + USER_SEARCH_PAGE_SIZE]
+                query = " OR ".join(_quoted_user_id(user_id) for user_id in group)
+                users = self._search_users(
+                    http_client,
+                    {
+                        "q": f"user_id:({query})",
+                        "search_engine": "v3",
+                        "fields": USER_PROFILE_FIELDS,
+                        "include_fields": "true",
+                        "per_page": str(len(group)),
+                    },
+                )
+                wanted = set(group)
+                for payload in users:
+                    profile = _user_profile(payload)
+                    if profile is not None and profile.user_id in wanted:
+                        profiles[profile.user_id] = profile
         return profiles
 
     def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
@@ -490,25 +609,27 @@ class Auth0ManagementClient:
         """
         query = email_search_query(text)
         user_ids: list[str] = []
-        for page in range(USER_SEARCH_RESULT_LIMIT // USER_SEARCH_PAGE_SIZE):
-            users = self._search_users(
-                {
-                    "q": query,
-                    "search_engine": "v3",
-                    "fields": "user_id",
-                    "include_fields": "true",
-                    "per_page": str(USER_SEARCH_PAGE_SIZE),
-                    "page": str(page),
-                }
-            )
-            for payload in users:
-                profile = _user_profile(payload)
-                if profile is not None:
-                    user_ids.append(profile.user_id)
-            if len(users) < USER_SEARCH_PAGE_SIZE:
-                return Auth0UserIdSearch(
-                    user_ids=tuple(dict.fromkeys(user_ids)), limit_reached=False
+        with self._operation_http_client() as http_client:
+            for page in range(USER_SEARCH_RESULT_LIMIT // USER_SEARCH_PAGE_SIZE):
+                users = self._search_users(
+                    http_client,
+                    {
+                        "q": query,
+                        "search_engine": "v3",
+                        "fields": "user_id",
+                        "include_fields": "true",
+                        "per_page": str(USER_SEARCH_PAGE_SIZE),
+                        "page": str(page),
+                    },
                 )
+                for payload in users:
+                    profile = _user_profile(payload)
+                    if profile is not None:
+                        user_ids.append(profile.user_id)
+                if len(users) < USER_SEARCH_PAGE_SIZE:
+                    return Auth0UserIdSearch(
+                        user_ids=tuple(dict.fromkeys(user_ids)), limit_reached=False
+                    )
         return Auth0UserIdSearch(
             user_ids=tuple(dict.fromkeys(user_ids)), limit_reached=True
         )
