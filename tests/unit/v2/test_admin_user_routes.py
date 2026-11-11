@@ -21,6 +21,7 @@ from policyengine_api.services.v2.user_types.types import (
     UserTypeChangeRead,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserProfilesUnavailableError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
@@ -325,3 +326,42 @@ def test_an_unreadable_caller_type_answers_503() -> None:
         "status": "error",
         "message": "V2 user persistence is unavailable",
     }
+
+
+def test_an_email_search_answers_503_when_auth0_profiles_are_unavailable() -> None:
+    error = AdminUserProfilesUnavailableError(
+        "Users can't be searched by email now: their emails could not be read "
+        "from Auth0. Try again shortly."
+    )
+
+    def unavailable(name: str, kwargs: dict):
+        if name == "require_minimum_user_type":
+            return UserType.ADMIN
+        raise error
+
+    client, _service = _client(RecordingService(unavailable))
+
+    response = client.get("/v2/admin/users?email=bob")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "error", "message": str(error)}
+
+
+def test_openapi_says_where_admins_read_emails_and_names() -> None:
+    client, _service = _client()
+
+    document = client.get("/v2/openapi.json").json()
+
+    list_users = document["paths"]["/v2/admin/users"]["get"]
+    read_user = document["paths"]["/v2/admin/users/{user_id}"]["get"]
+    user_item = document["components"]["schemas"]["AdminUserItem"]
+    change_item = document["components"]["schemas"]["UserTypeChangeItem"]
+    for description in (
+        list_users["description"],
+        read_user["description"],
+        user_item["description"],
+        change_item["description"],
+    ):
+        assert "Auth0" in description
+    assert "stored" in user_item["description"]
+    assert "email search" in list_users["responses"]["503"]["description"]
