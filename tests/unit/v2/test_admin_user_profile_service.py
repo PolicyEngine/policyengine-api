@@ -370,14 +370,33 @@ def test_identities_from_another_issuer_are_never_looked_up(store: V2Store) -> N
 
 
 @pytest.mark.parametrize(
-    "failure",
+    ("failure", "cause"),
     [
-        Auth0UserProfilesUnavailableError("Auth0 user profiles are unavailable"),
-        RuntimeError("unexpected failure naming google-oauth2|bob"),
+        # A client without read:users, and rate limiting, are told apart.
+        (
+            Auth0UserProfilesUnavailableError(
+                "Auth0 user profiles are unavailable: HTTP 403", cause="http_403"
+            ),
+            "http_403",
+        ),
+        (
+            Auth0UserProfilesUnavailableError(
+                "Auth0 user profiles are unavailable: HTTP 429", cause="http_429"
+            ),
+            "http_429",
+        ),
+        (
+            Auth0UserProfilesUnavailableError(
+                "Auth0 user profiles are unavailable: timeout", cause="timeout"
+            ),
+            "timeout",
+        ),
+        # An error without a cause names none; its message is never recorded.
+        (RuntimeError("unexpected failure naming google-oauth2|bob"), "unknown"),
     ],
 )
 def test_unavailable_profiles_keep_stored_values_and_record_a_warning(
-    store: V2Store, failure: Exception
+    store: V2Store, failure: Exception, cause: str
 ) -> None:
     alice = _principal("alice")
     alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
@@ -420,7 +439,11 @@ def test_unavailable_profiles_keep_stored_values_and_record_a_warning(
         (
             logging.WARNING,
             "admin_user_profiles_unavailable",
-            {"operation": "read_profiles", "error_type": type(failure).__name__},
+            {
+                "operation": "read_profiles",
+                "error_type": type(failure).__name__,
+                "cause": cause,
+            },
         )
     ] * 4
     logged = _logged_text(records)
@@ -432,6 +455,9 @@ def test_a_broken_profile_configuration_keeps_stored_values(store: V2Store) -> N
     alice = _principal("alice", email="alice@stored.example.test")
     alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
     _make_admin(store, alice_id)
+    bob_id = _sign_in(
+        store, _principal("bob", email="bob@stored.example.test"), created_at=LATER
+    )
 
     def broken_configuration() -> UserProfileSource:
         msg = "Auth0 user profile reads are partially configured"
@@ -441,12 +467,31 @@ def test_a_broken_profile_configuration_keeps_stored_values(store: V2Store) -> N
 
     with _recorded_logs() as records:
         page = user_types.list_users(principal=alice, search=AdminUserSearch())
+        bob = user_types.get_user(principal=alice, user_id=bob_id)
+        changed = user_types.change_user_type(
+            principal=alice,
+            user_id=bob_id,
+            user_type=UserType.AUTHOR,
+            expected_user_type=UserType.STANDARD,
+        )
+        (change,) = user_types.list_user_type_changes(principal=alice, user_id=bob_id)
         with pytest.raises(AdminUserProfilesUnavailableError):
             user_types.list_users(
                 principal=alice, search=AdminUserSearch(email="alice")
             )
 
-    assert [user.email for user in page.items] == ["alice@stored.example.test"]
+    assert [user.email for user in page.items] == [
+        "bob@stored.example.test",
+        "alice@stored.example.test",
+    ]
+    assert bob.email == "bob@stored.example.test"
+    assert (changed.user_type, changed.email) == (
+        UserType.AUTHOR,
+        "bob@stored.example.test",
+    )
+    assert change.changed_by_email == "alice@stored.example.test"
+    # The list, the single read, the change and the history each answer;
+    # only the email search is refused.
     assert [
         (record.getMessage(), record.policyengine_attributes) for record in records
     ] == [
@@ -455,9 +500,43 @@ def test_a_broken_profile_configuration_keeps_stored_values(store: V2Store) -> N
             {
                 "operation": "configure",
                 "error_type": "Auth0ManagementConfigurationError",
+                "cause": "invalid_settings",
             },
         )
-    ] * 2
+    ] * 5
+
+
+def test_the_history_never_looks_up_an_admins_identities_from_another_issuer(
+    store: V2Store,
+) -> None:
+    alice = _principal("alice")
+    alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
+    _make_admin(store, alice_id)
+    # Alice also has an identity from another tenant, seen more recently.
+    _add_identity(
+        store,
+        alice_id,
+        "google-oauth2|alice-elsewhere",
+        last_seen_at=LATER,
+        issuer=OTHER_ISSUER,
+    )
+    bob_id = _sign_in(store, _principal("bob"), created_at=LATER)
+    reader = StandInProfileReader(
+        [_profile("google-oauth2|alice", email="alice@auth0.example.test")]
+    )
+    user_types = _user_types(store, reader)
+    user_types.change_user_type(
+        principal=alice,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+    reader.profile_reads.clear()
+
+    (change,) = user_types.list_user_type_changes(principal=alice, user_id=bob_id)
+
+    assert change.changed_by_email == "alice@auth0.example.test"
+    assert reader.profile_reads == [("google-oauth2|alice",)]
 
 
 def _signed_in_people(store: V2Store) -> dict[str, UUID]:
@@ -527,7 +606,7 @@ def test_an_email_search_answers_unavailable_when_auth0_fails(
     _signed_in_people(store)
     reader = StandInProfileReader(
         failure=Auth0UserProfilesUnavailableError(
-            "Auth0 user profiles are unavailable: HTTP 429"
+            "Auth0 user profiles are unavailable: HTTP 429", cause="http_429"
         )
     )
 
@@ -547,6 +626,7 @@ def test_an_email_search_answers_unavailable_when_auth0_fails(
             {
                 "operation": "search_by_email",
                 "error_type": "Auth0UserProfilesUnavailableError",
+                "cause": "http_429",
             },
         )
     ]
