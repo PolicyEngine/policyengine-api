@@ -8,6 +8,8 @@ module level.
 
 from __future__ import annotations
 
+import math
+
 # An admin request's Auth0 calls wait at most this many seconds in total.
 MAXIMUM_RATE_LIMIT_WAIT_SECONDS = 2.0
 
@@ -25,8 +27,17 @@ class RateLimitWaitBudget:
         self.remaining_seconds = seconds
 
     def take(self, seconds: float) -> bool:
-        """Spend ``seconds`` and return True, or return False when too few are left."""
-        if seconds > self.remaining_seconds:
+        """Spend ``seconds`` and return True, or return False and spend nothing.
+
+        A wait longer than what is left is refused, and so is one that is
+        negative or not a finite number: taken, nan would leave nan seconds,
+        which every later wait fits, and a negative wait would add seconds.
+        """
+        if (
+            not math.isfinite(seconds)
+            or seconds < 0
+            or seconds > self.remaining_seconds
+        ):
             return False
         self.remaining_seconds -= seconds
         return True
