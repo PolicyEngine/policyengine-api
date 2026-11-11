@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from policyengine_api.libs.rate_limit_wait_budget import (
     MAXIMUM_RATE_LIMIT_WAIT_SECONDS,
@@ -61,3 +64,18 @@ def test_a_wait_budget_spends_waits_that_fit_in_what_is_left() -> None:
     assert budget.take(0.5) is True
     assert budget.take(0.0) is True
     assert budget.remaining_seconds == 0.0
+
+
+@pytest.mark.parametrize("wait", [-5.0, -0.1, math.nan, math.inf, -math.inf])
+def test_a_wait_budget_refuses_negative_or_non_finite_waits(wait: float) -> None:
+    """Such a wait spends nothing, so the 429 counts as unavailable.
+
+    Taken, nan would leave nan seconds, which every later wait fits, and a
+    negative wait would add seconds.
+    """
+    budget = RateLimitWaitBudget()
+
+    assert budget.take(wait) is False
+    assert budget.remaining_seconds == 2.0
+    assert budget.take(2.0) is True
+    assert budget.take(0.1) is False
