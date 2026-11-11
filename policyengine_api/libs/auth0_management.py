@@ -79,33 +79,23 @@ class Auth0ClientSettingNames:
 
     @property
     def domain(self) -> str:
-        """The tenant's canonical domain."""
+        """Name the variable that holds the tenant's canonical domain."""
         return f"{self.prefix}_DOMAIN"
 
     @property
     def client_id(self) -> str:
-        """The machine-to-machine client's ID."""
+        """Name the variable that holds the machine-to-machine client's ID."""
         return f"{self.prefix}_CLIENT_ID"
 
     @property
     def client_secret(self) -> str:
-        """The client secret itself, for local use."""
+        """Name the variable that holds the client secret itself, for local use."""
         return f"{self.prefix}_CLIENT_SECRET"
 
     @property
     def client_secret_resource(self) -> str:
-        """The Secret Manager version that holds the client secret."""
+        """Name the variable that holds the client secret's Secret Manager version."""
         return f"{self.prefix}_CLIENT_SECRET_RESOURCE"
-
-    @property
-    def names(self) -> tuple[str, str, str, str]:
-        """Every environment variable of the group."""
-        return (
-            self.domain,
-            self.client_id,
-            self.client_secret,
-            self.client_secret_resource,
-        )
 
 
 AUTH0_MANAGEMENT_SETTING_NAMES = Auth0ClientSettingNames(
@@ -116,7 +106,6 @@ AUTH0_USER_PROFILE_SETTING_NAMES = Auth0ClientSettingNames(
     prefix="AUTH0_USER_PROFILES",
     incomplete_message="Auth0 user profile reads are partially configured",
 )
-AUTH0_USER_PROFILE_ENV_VARS = AUTH0_USER_PROFILE_SETTING_NAMES.names
 
 
 class Auth0ManagementConfigurationError(RuntimeError):
