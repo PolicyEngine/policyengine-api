@@ -15,6 +15,7 @@ from policyengine_api.fastapi_routes.v2.user_type_support import (
     minimum_user_type_dependency,
 )
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserPage,
     AdminUserRead,
     AdminUserSearch,
@@ -376,14 +377,15 @@ def test_openapi_says_where_admins_read_emails_and_names() -> None:
     # The route and its email parameter say which searches are refused.
     for description in (list_users["description"], email_text["description"]):
         assert "< or >" in description
-        assert "more than 200" in description
+        assert f"more than {MAXIMUM_EMAIL_SEARCH_MATCHES}" in description
     assert "1,000" not in list_users["description"]
 
 
 @pytest.mark.parametrize(
     "message",
     [
-        "More than 200 users match that email text; enter more of it",
+        f"More than {MAXIMUM_EMAIL_SEARCH_MATCHES} users match that email text; "
+        "enter more of it",
         "Email search text can't contain < or >: no email address holds them",
     ],
 )

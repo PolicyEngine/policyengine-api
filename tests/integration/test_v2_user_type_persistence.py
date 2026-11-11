@@ -53,6 +53,7 @@ from policyengine_api.services.v2.user_types.database_session import (
 )
 from policyengine_api.services.v2.user_types.services import V2UserTypeService
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserSearch,
     UserProfileSource,
 )
@@ -221,7 +222,7 @@ class StandInAuth0:
         self, text: str, *, match_limit: int
     ) -> Auth0UserIdSearch:
         assert self.profile.email is not None
-        assert match_limit == 200
+        assert match_limit == MAXIMUM_EMAIL_SEARCH_MATCHES
         found = text.lower() in self.profile.email
         return Auth0UserIdSearch(
             user_ids=(self.profile.user_id,) if found else (), more_than_limit=False

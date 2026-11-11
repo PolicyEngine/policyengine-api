@@ -21,11 +21,20 @@ from policyengine_api.libs.auth0_management import (
     load_auth0_management_settings,
     load_auth0_user_profile_settings,
 )
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
 DOMAIN = "policyengine.us.auth0.com"
+# The admin routes' limit; the client takes it as a parameter.
+MATCH_LIMIT = MAXIMUM_EMAIL_SEARCH_MATCHES
+# The pages that hold MATCH_LIMIT users, and the one more that shows whether
+# more match.
+FULL_PAGES = MATCH_LIMIT // 50
+SEARCH_PAGES = FULL_PAGES + 1
 SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"
 
 
@@ -534,7 +543,7 @@ def test_email_searches_escape_the_text_and_wildcards_need_three_characters(
         _token_then_users(lambda _request: httpx.Response(200, json=[]))
     )
 
-    result = client.search_user_ids_by_email(text, match_limit=200)
+    result = client.search_user_ids_by_email(text, match_limit=MATCH_LIMIT)
 
     (search,) = _searches(requests)
     assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=False)
@@ -563,7 +572,7 @@ def _pages_of_user_ids(total: int):
 def test_email_searches_page_through_results_fifty_at_a_time() -> None:
     client, requests = _client(_token_then_users(_pages_of_user_ids(120)))
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
     assert [search.url.params["page"] for search in _searches(requests)] == [
         "0",
@@ -574,32 +583,28 @@ def test_email_searches_page_through_results_fifty_at_a_time() -> None:
     assert result.more_than_limit is False
 
 
-@pytest.mark.parametrize("matching_users", [201, 250, 5000])
+@pytest.mark.parametrize("matching_users", [MATCH_LIMIT + 1, MATCH_LIMIT + 50, 5000])
 def test_email_searches_stop_once_more_users_than_the_limit_match(
     matching_users: int,
 ) -> None:
     client, requests = _client(_token_then_users(_pages_of_user_ids(matching_users)))
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
-    # Four full pages hold 200 users; the fifth shows there are more.
+    # The full pages hold MATCH_LIMIT users; one more page shows there are more.
     assert [search.url.params["page"] for search in _searches(requests)] == [
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
+        str(page) for page in range(SEARCH_PAGES)
     ]
     assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=True)
 
 
 def test_exactly_as_many_users_as_the_limit_are_not_more() -> None:
-    client, requests = _client(_token_then_users(_pages_of_user_ids(200)))
+    client, requests = _client(_token_then_users(_pages_of_user_ids(MATCH_LIMIT)))
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
-    assert len(_searches(requests)) == 5
-    assert result.user_ids == tuple(f"auth0|{number}" for number in range(200))
+    assert len(_searches(requests)) == SEARCH_PAGES
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(MATCH_LIMIT))
     assert result.more_than_limit is False
 
 
@@ -614,7 +619,7 @@ def test_email_searches_count_each_user_once_across_pages() -> None:
 
     client, _requests = _client(_token_then_users(answer))
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
     assert result.user_ids == tuple(f"auth0|{number}" for number in range(100))
 
@@ -636,7 +641,7 @@ def test_email_searches_refuse_angle_brackets_which_auth0_cannot_escape(
     client, requests = _client(_token_then_users(_pages_of_user_ids(10)))
 
     with pytest.raises(ValueError, match="< or >"):
-        client.search_user_ids_by_email(text, match_limit=200)
+        client.search_user_ids_by_email(text, match_limit=MATCH_LIMIT)
 
     assert requests == []
 
@@ -672,7 +677,7 @@ def test_profile_failures_raise_one_unavailable_error_without_personal_data(
     read_profiles_or_search = (
         (
             lambda: client.search_user_ids_by_email(
-                "secret-person@example.test", match_limit=200
+                "secret-person@example.test", match_limit=MATCH_LIMIT
             )
         )
         if operation == "search"
@@ -747,7 +752,7 @@ def test_an_unreadable_profile_answer_makes_profiles_unavailable() -> None:
     with pytest.raises(Auth0UserProfilesUnavailableError) as profile_error:
         client.read_user_profiles(["auth0|1"])
     with pytest.raises(Auth0UserProfilesUnavailableError) as search_error:
-        client.search_user_ids_by_email("example", match_limit=200)
+        client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
     assert profile_error.value.cause == "unreadable_answer"
     assert search_error.value.cause == "unreadable_answer"
@@ -813,7 +818,7 @@ def _rate_limited_client(
 
 def _read_or_search(client: Auth0ManagementClient, operation: str) -> object:
     if operation == "search":
-        return client.search_user_ids_by_email("example", match_limit=200)
+        return client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
     return client.read_user_profiles(["auth0|1"])
 
 
@@ -876,7 +881,7 @@ def test_a_search_rate_limited_again_after_its_wait_is_unavailable() -> None:
     )
 
     with pytest.raises(Auth0UserProfilesUnavailableError) as error:
-        client.search_user_ids_by_email("example", match_limit=200)
+        client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
     assert waits == [1.0]
     assert len(_searches(requests)) == 2
@@ -920,7 +925,7 @@ def test_each_profile_read_or_search_uses_one_http_client(monkeypatch) -> None:
     )
 
     client.read_user_profiles([f"auth0|{number}" for number in range(120)])
-    client.search_user_ids_by_email("example", match_limit=200)
+    client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
     # The profile read's token request and its three searches share one
     # client; the search, with the token cached, reads its three pages
@@ -1052,7 +1057,7 @@ def test_a_shared_wait_budget_spans_an_admin_requests_searches() -> None:
     wait_budget = RateLimitWaitBudget()
 
     found = client.search_user_ids_by_email(
-        "example", match_limit=200, wait_budget=wait_budget
+        "example", match_limit=MATCH_LIMIT, wait_budget=wait_budget
     )
     with pytest.raises(Auth0UserProfilesUnavailableError):
         client.read_user_profiles(found.user_ids, wait_budget=wait_budget)
@@ -1077,24 +1082,23 @@ def _user_entries(numbers: Iterable[int]) -> list[dict[str, str]]:
 
 
 def test_duplicate_entries_count_once_towards_the_match_limit() -> None:
-    """220 entries name exactly 200 users, which is not more than 200."""
-    client, requests = _client(
-        _search_answering_pages(
-            {
-                0: _user_entries(range(50)),
-                1: _user_entries(range(40, 90)),
-                2: _user_entries(range(90, 140)),
-                3: _user_entries(range(140, 190)),
-                4: _user_entries(range(180, 200)),
-            }
-        )
-    )
+    """Twenty entries more than the limit name exactly as many users as it.
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    Each full page after the first repeats ten users of the page before, and
+    the short last page repeats ten more and adds the last ten users.
+    """
+    pages = {0: _user_entries(range(50))}
+    for page in range(1, FULL_PAGES):
+        pages[page] = _user_entries(range(page * 50 - 10, page * 50 + 40))
+    pages[FULL_PAGES] = _user_entries(range(MATCH_LIMIT - 20, MATCH_LIMIT))
+    client, requests = _client(_search_answering_pages(pages))
 
-    assert len(_searches(requests)) == 5
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
+
+    assert sum(len(entries) for entries in pages.values()) == MATCH_LIMIT + 20
+    assert len(_searches(requests)) == SEARCH_PAGES
     assert result.more_than_limit is False
-    assert result.user_ids == tuple(f"auth0|{number}" for number in range(200))
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(MATCH_LIMIT))
 
 
 @pytest.mark.parametrize(
@@ -1108,12 +1112,12 @@ def test_duplicate_entries_count_once_towards_the_match_limit() -> None:
 def test_a_full_last_page_counts_as_more_than_the_limit(
     full_page: list[dict[str, str]],
 ) -> None:
-    """A full fifth page may hide more users, so it is the safe answer."""
+    """A full last page may hide more users, so more is the safe answer."""
     client, requests = _client(
-        _search_answering_pages(dict.fromkeys(range(5), full_page))
+        _search_answering_pages(dict.fromkeys(range(SEARCH_PAGES), full_page))
     )
 
-    result = client.search_user_ids_by_email("example", match_limit=200)
+    result = client.search_user_ids_by_email("example", match_limit=MATCH_LIMIT)
 
-    assert len(_searches(requests)) == 5
+    assert len(_searches(requests)) == SEARCH_PAGES
     assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=True)

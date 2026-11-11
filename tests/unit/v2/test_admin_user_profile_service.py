@@ -41,6 +41,7 @@ from policyengine_api.services.v2.user_types.database_session import (
 )
 from policyengine_api.services.v2.user_types.services import V2UserTypeService
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserSearch,
     UserProfileSource,
 )
@@ -654,13 +655,16 @@ def test_an_email_search_matching_more_than_200_auth0_users_is_refused(
 
     with pytest.raises(
         AdminUserEmailSearchRefusedError,
-        match=re.escape("More than 200 users match that email text; enter more of it"),
+        match=re.escape(
+            f"More than {MAXIMUM_EMAIL_SEARCH_MATCHES} users match that email "
+            "text; enter more of it"
+        ),
     ):
         _user_types(store, reader).list_users(
             principal=_principal("alice"), search=AdminUserSearch(email="gmail")
         )
 
-    assert reader.match_limits == [200]
+    assert reader.match_limits == [MAXIMUM_EMAIL_SEARCH_MATCHES]
     assert reader.profile_reads == []
 
 
