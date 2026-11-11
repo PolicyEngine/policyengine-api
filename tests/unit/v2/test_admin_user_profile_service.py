@@ -874,3 +874,27 @@ def test_a_cause_that_is_not_a_short_identifier_is_recorded_as_unknown(
 
     (record,) = records
     assert record.policyengine_attributes["cause"] == "unknown"
+
+
+def test_a_type_change_and_the_type_history_each_pass_a_wait_budget(
+    store: V2Store,
+) -> None:
+    people = _signed_in_people(store)
+    alice = _principal("alice")
+    reader = StandInProfileReader()
+    user_types = _user_types(store, reader)
+
+    user_types.change_user_type(
+        principal=alice,
+        user_id=people["bob"],
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+    user_types.list_user_type_changes(principal=alice, user_id=people["bob"])
+
+    # Bob's profile for the change's response, then Alice's for the history.
+    assert reader.profile_reads == [("google-oauth2|bob",), ("google-oauth2|alice",)]
+    change_budget, history_budget = reader.wait_budgets
+    assert isinstance(change_budget, RateLimitWaitBudget)
+    assert isinstance(history_budget, RateLimitWaitBudget)
+    assert change_budget is not history_budget

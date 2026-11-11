@@ -1121,3 +1121,22 @@ def test_a_full_last_page_counts_as_more_than_the_limit(
 
     assert len(_searches(requests)) == SEARCH_PAGES
     assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=True)
+
+
+@pytest.mark.parametrize("operation", ["read_user_profiles", "search"])
+def test_each_call_without_a_budget_gets_its_own_two_seconds(operation: str) -> None:
+    """The client is shared by every admin request, so a budget can't be."""
+    client, requests, waits = _rate_limited_client(
+        [
+            httpx.Response(429, headers={"Retry-After": "1.5"}),
+            httpx.Response(200, json=[]),
+            httpx.Response(429, headers={"Retry-After": "1.5"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+    _read_or_search(client, operation)
+    _read_or_search(client, operation)
+
+    assert waits == [1.5, 1.5]
+    assert len(_searches(requests)) == 4
