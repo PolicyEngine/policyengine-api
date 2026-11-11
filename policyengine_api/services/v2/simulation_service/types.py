@@ -43,10 +43,12 @@ class SimulationServiceUnavailableError(RuntimeError):
     that names none of the caller's rows (such as a catalog version missing
     while a release deploys), the service's own readable 503, and a 401,
     403, 404, 405, 413 or 429, which the gateway, Cloud Run or the service's
-    framework answers before the service's route runs. A 400's message gives
-    the service's code and reason, which describes the service's state; any
-    other gives the service's status and code, but never a 503's reason,
-    which may be an exception's text.
+    framework answers before the service's route runs. A readable 400's
+    message gives the service's code and its reason, which describes the
+    service's state rather than the caller's request. A message for any
+    other answer gives its status, and its code when that is a fixed
+    identifier, but never its reason, which for a 503 may be an exception's
+    text.
 
     Unless ``created_record_id`` is set, the service has created nothing, and
     submitting again creates one record. ``created_record_id`` is the record
@@ -66,17 +68,20 @@ class SimulationServiceUnavailableError(RuntimeError):
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service created the record, or may have, but its answer is lost.
+    """The simulation service created the record, or may have, without a usable answer.
 
-    It answered that it created the simulation or report and started its run,
-    but its answer cannot be read; or its answer was lost after the
-    submission may have reached it; or a proxy in front of it answered 502 or
-    504 in its place; or it answered 503 in a shape that cannot be read,
-    which Cloud Run's front end also answers in its place, or naming only a
-    record other than the submission's own, which shows it wrote rows; or it
-    answered a status the Public API does not expect, which its route may
-    answer after writing rows. Submitting again could create another. The
-    message gives the service's status and code, never its reason.
+    Its answer may be unreadable or lost: it answered that it created the
+    simulation or report and started its run, but its answer cannot be read;
+    or its answer was lost after the submission may have reached it; or a
+    proxy in front of it answered 502 or 504 in its place; or it answered
+    503 in a shape that cannot be read, which Cloud Run's front end also
+    answers in its place. Despite the name, it also covers answers that can
+    be read but leave open whether the record exists: a 503 naming only a
+    record other than the submission's own, which shows the service wrote
+    rows, and any status the Public API does not expect, readable or not,
+    which its route may answer after writing rows. Submitting again could
+    create another. A message naming the service's status gives its code
+    only when that is a fixed identifier, and never its reason.
     """
 
 
@@ -84,8 +89,9 @@ class SimulationServiceInternalError(RuntimeError):
     """The simulation service failed (500), possibly after creating the record.
 
     Submitting again could create another, so this is not reported as the
-    service being unavailable. The message gives the status and code, never
-    the service's reason, which may be an exception's text.
+    service being unavailable. The message gives the status, and the code
+    when that is a fixed identifier, but never the service's reason, which
+    may be an exception's text.
     """
 
 

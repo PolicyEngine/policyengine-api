@@ -119,7 +119,8 @@ def unavailable_after_creation_answer(
     """Log the simulation service's 503 that names a record it created, and answer 503.
 
     The service created the record, then failed its run, so ``answer`` gives
-    the record's ID along with the service's code and reason.
+    the record's ID with the service's status and code, but not its reason,
+    which may be an exception's text.
     """
     _log_failure(event, error)
     return JSONResponse(status_code=503, content=answer.model_dump(mode="json"))
