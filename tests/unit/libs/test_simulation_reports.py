@@ -261,7 +261,7 @@ def test_data_the_service_refuses_is_reported_with_its_reason() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request (422): "
+        "The simulation service cannot run this request: "
         "spm settings apply only to the US"
     )
 
@@ -281,7 +281,7 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request (422): "
+        "The simulation service cannot run this request: "
         "year: too late; reform.policy_id: bad"
     )
 
@@ -299,7 +299,7 @@ def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request (422 spm_unsupported): "
+        "The simulation service cannot run this request (spm_unsupported): "
         "spm settings apply only to the US"
     )
 
@@ -326,41 +326,41 @@ def test_a_row_the_caller_named_that_the_service_cannot_find_is_refused(
 
     assert route_status(refused.value) == 422
     assert str(refused.value) == (
-        f"The simulation service cannot run this request (400 {code}): {reason}"
+        f"The simulation service cannot run this request ({code}): {reason}"
     )
 
 
 @pytest.mark.parametrize(
-    ("body", "status_and_code"),
+    ("body", "stated_code"),
     [
         pytest.param(
             {
                 "code": "unknown_catalog_version",
                 "detail": "Country us has no catalog version for .py 4.2.0.",
             },
-            "400 unknown_catalog_version",
+            " (unknown_catalog_version)",
             id="catalog-version-during-a-release",
         ),
         pytest.param(
             {"code": "unknown_policy", "detail": "There is no policy p."},
-            "400 unknown_policy",
+            " (unknown_policy)",
             id="policy-the-public-api-checked",
         ),
         pytest.param(
             {"code": "missing_reference", "detail": "A row was deleted."},
-            "400 missing_reference",
+            " (missing_reference)",
             id="row-deleted-after-the-checks",
         ),
         pytest.param(
             {"detail": "Region state/zz is not in the catalog version."},
-            "400",
+            "",
             id="no-code",
         ),
     ],
 )
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_a_400_naming_none_of_the_callers_rows_is_unavailable(
-    submit, record: str, route_status, body: dict[str, str], status_and_code: str
+    submit, record: str, route_status, body: dict[str, str], stated_code: str
 ) -> None:
     # A 400 the caller cannot act on is a state of the simulation service,
     # such as a catalog version missing while a release deploys.
@@ -371,8 +371,7 @@ def test_a_400_naming_none_of_the_callers_rows_is_unavailable(
 
     assert route_status(unavailable.value) == 503
     assert str(unavailable.value) == (
-        f"The simulation service refused the {record} ({status_and_code}): "
-        f"{body['detail']}"
+        f"The simulation service refused the {record}{stated_code}: {body['detail']}"
     )
     assert unavailable.value.created_record_id is None
 

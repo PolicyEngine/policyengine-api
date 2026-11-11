@@ -185,11 +185,11 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
         ),
         (
             SimulationServiceRefusalError(
-                "The simulation service cannot run this request (400 "
-                "unknown_region): no such region"
+                "The simulation service cannot run this request (unknown_region): "
+                "no such region"
             ),
             422,
-            "The simulation service cannot run this request (400 unknown_region): "
+            "The simulation service cannot run this request (unknown_region): "
             "no such region",
         ),
         (
@@ -815,3 +815,143 @@ def test_the_services_failure_reason_never_reaches_the_caller(
     assert f"({status_code} internal_error)" in response.json()["message"]
     assert "Private household plan" not in response.text
     assert "psycopg" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("status_code", "body", "answer_status", "message"),
+    [
+        pytest.param(
+            422,
+            {"detail": "spm settings apply only to the US"},
+            422,
+            "The simulation service cannot run this request: spm settings apply "
+            "only to the US",
+            id="422",
+        ),
+        pytest.param(
+            400,
+            {
+                "code": "unknown_region",
+                "detail": "Region state/zz is not in the catalog version.",
+            },
+            422,
+            "The simulation service cannot run this request (unknown_region): "
+            "Region state/zz is not in the catalog version.",
+            id="400-for-the-callers-region",
+        ),
+        pytest.param(
+            400,
+            {
+                "code": "unknown_catalog_version",
+                "detail": "Country us has no catalog version for .py 4.2.0.",
+            },
+            503,
+            "The simulation service refused the {record} (unknown_catalog_version): "
+            "Country us has no catalog version for .py 4.2.0.",
+            id="400-for-the-services-state",
+        ),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_refusal_gives_the_services_code_and_reason_but_not_its_status(
+    record: str,
+    status_code: int,
+    body: dict[str, str],
+    answer_status: int,
+    message: str,
+) -> None:
+    # A 400's or 422's reason is passed on, as the household calculation
+    # client passes it on; the simulation service's status would only
+    # contradict the route's own.
+    response = post_through_simulation_service(record, answering(status_code, body))
+
+    assert response.status_code == answer_status
+    assert response.json() == {
+        "status": "error",
+        "message": message.format(record=record),
+    }
+
+
+# Codes that are not a fixed identifier (lower-case letters, digits and
+# underscores, starting with a letter, at most 64 characters), so a 500's or
+# 503's message leaves them out.
+CODES_LEFT_OUT = [
+    pytest.param(EXCEPTION_TEXT, id="exception-text"),
+    pytest.param("", id="empty"),
+    pytest.param("Internal_Error", id="capital-letters"),
+    pytest.param("5xx_error", id="starting-with-a-digit"),
+    pytest.param("modal-call-refused", id="hyphenated"),
+    pytest.param("internal_error\n", id="ending-in-a-newline"),
+    pytest.param("a" * 65, id="65-characters"),
+]
+
+
+def without_a_code_answer(
+    record: str, status_code: int, record_named: str | None
+) -> tuple[int, dict[str, str]]:
+    """Return the route's status and JSON for a failure whose code is left out."""
+    if status_code != 503:
+        return 502, {
+            "status": "error",
+            "message": possibly_created_message(str(status_code), record),
+        }
+    if record_named is None:
+        return 503, {
+            "status": "error",
+            "message": "The simulation service is unavailable (503).",
+        }
+    return 503, {
+        "status": "error",
+        "message": (
+            f"The simulation service created {record} {NAMED_RECORD_ID}, but is "
+            "unavailable (503)."
+        ),
+        RECORD_ID_FIELDS[record]: str(NAMED_RECORD_ID),
+    }
+
+
+@pytest.mark.parametrize("code", CODES_LEFT_OUT)
+@pytest.mark.parametrize(
+    ("status_code", "record_named"),
+    [
+        pytest.param(500, None, id="500"),
+        pytest.param(409, None, id="unexpected-409"),
+        pytest.param(503, None, id="503-naming-no-record"),
+        pytest.param(503, "own", id="503-naming-the-record"),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_code_that_is_not_a_fixed_identifier_is_left_out(
+    record: str, status_code: int, record_named: str | None, code: str
+) -> None:
+    # A 500's or 503's code is passed on without its reason, so it must not
+    # carry what the reason could: an exception's text, holding stored data.
+    body = {"code": code, "detail": "The run failed."}
+    if record_named == "own":
+        body[RECORD_ID_FIELDS[record]] = str(NAMED_RECORD_ID)
+
+    response = post_through_simulation_service(record, answering(status_code, body))
+
+    answer_status, answer = without_a_code_answer(record, status_code, record_named)
+    assert response.status_code == answer_status
+    assert response.json() == answer
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param("a" * 64, id="64-characters"),
+        pytest.param("modal_call_refused_2", id="letters-digits-and-underscores"),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_code_that_is_a_fixed_identifier_is_passed_on(record: str, code: str) -> None:
+    answer = answering(503, {"code": code, "detail": "The run failed."})
+
+    response = post_through_simulation_service(record, answer)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": f"The simulation service is unavailable (503 {code}).",
+    }
