@@ -44,6 +44,7 @@ from policyengine_api.services.v2.user_policies.validators import (
     AssociationPolicyNotFoundError,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
     LastAdminDeletionError,
     LastAdminDemotionError,
@@ -201,7 +202,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     UserResourceFailure((UserTypeBelowMinimumError,), 403),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
-        (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
+        (
+            LegacyReferenceNotFoundError,
+            AssociationLinkNotFoundError,
+            AdminUserEmailSearchRefusedError,
+        ),
+        422,
     ),
     UserResourceFailure(
         (

@@ -63,7 +63,8 @@ MAXIMUM_RATE_LIMIT_WAIT_SECONDS = 2.0
 USER_SEARCH_SORT = "user_id:1"
 
 # Auth0's user search (search engine v3) answers at most 50 users a page on
-# its public cloud, and at most 1,000 results for one query.
+# its public cloud, and at most 1,000 results for one query; an email search's
+# match limit stays below that.
 USER_SEARCH_PAGE_SIZE = 50
 USER_SEARCH_RESULT_LIMIT = 1000
 USER_PROFILE_FIELDS = "user_id,email,email_verified,given_name,family_name,name"
@@ -197,14 +198,14 @@ class Auth0UserProfile:
 
 @dataclass(frozen=True)
 class Auth0UserIdSearch:
-    """The Auth0 user IDs an email search found, in Auth0's order.
+    """The Auth0 user IDs an email search found, each once, in Auth0's order.
 
-    ``limit_reached`` is true when the search stopped at Auth0's 1,000-result
-    limit, so more users may match.
+    ``more_than_limit`` is true when more users matched than the search's
+    match limit; ``user_ids`` is then empty.
     """
 
     user_ids: tuple[str, ...]
-    limit_reached: bool
+    more_than_limit: bool
 
 
 def _load_client_settings(
@@ -279,7 +280,12 @@ def email_search_query(text: str) -> str:
 
     Matching ignores case. With fewer than three characters, a leading
     wildcard isn't allowed, so only emails that start with ``text`` match.
+    Raise ValueError for text with ``<`` or ``>``: Auth0's query syntax
+    reads them as a range, and can't escape them.
     """
+    if "<" in text or ">" in text:
+        msg = "email search text can't contain < or >"
+        raise ValueError(msg)
     lowered = text.lower()
     escaped = _escaped_search_text(lowered)
     if len(lowered) >= LEADING_WILDCARD_MINIMUM_CHARACTERS:
@@ -597,20 +603,28 @@ class Auth0ManagementClient:
                         profiles[profile.user_id] = profile
         return profiles
 
-    def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
+    def search_user_ids_by_email(
+        self, text: str, *, match_limit: int
+    ) -> Auth0UserIdSearch:
         """Return the IDs of Auth0 users whose email contains ``text``.
 
         Matching ignores case, and every character of ``text`` matches
         itself. With fewer than three characters, only emails that start with
         ``text`` match. Auth0's search is eventually consistent, so a user
         created or changed moments ago may be missing. Results are read 50 a
-        page, up to Auth0's 1,000-result limit. Raise
+        page, through one HTTP client, until a page is short or more than
+        ``match_limit`` users have matched: at most ``match_limit // 50 + 1``
+        pages. Raise ValueError for a match limit outside 1 to 999 or text
+        with ``<`` or ``>``, before any request, and
         Auth0UserProfilesUnavailableError when any page fails.
         """
+        if not 0 < match_limit < USER_SEARCH_RESULT_LIMIT:
+            msg = f"match_limit must be from 1 to {USER_SEARCH_RESULT_LIMIT - 1}"
+            raise ValueError(msg)
         query = email_search_query(text)
-        user_ids: list[str] = []
+        user_ids: dict[str, None] = {}
         with self._operation_http_client() as http_client:
-            for page in range(USER_SEARCH_RESULT_LIMIT // USER_SEARCH_PAGE_SIZE):
+            for page in range(match_limit // USER_SEARCH_PAGE_SIZE + 1):
                 users = self._search_users(
                     http_client,
                     {
@@ -625,14 +639,12 @@ class Auth0ManagementClient:
                 for payload in users:
                     profile = _user_profile(payload)
                     if profile is not None:
-                        user_ids.append(profile.user_id)
+                        user_ids[profile.user_id] = None
+                if len(user_ids) > match_limit:
+                    return Auth0UserIdSearch(user_ids=(), more_than_limit=True)
                 if len(users) < USER_SEARCH_PAGE_SIZE:
-                    return Auth0UserIdSearch(
-                        user_ids=tuple(dict.fromkeys(user_ids)), limit_reached=False
-                    )
-        return Auth0UserIdSearch(
-            user_ids=tuple(dict.fromkeys(user_ids)), limit_reached=True
-        )
+                    break
+        return Auth0UserIdSearch(user_ids=tuple(user_ids), more_than_limit=False)
 
 
 _shared_clients: dict[Auth0ManagementSettings, Auth0ManagementClient] = {}

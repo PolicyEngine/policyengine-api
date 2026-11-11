@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 
 DEFAULT_ADMIN_USER_LIMIT = 100
 MAXIMUM_ADMIN_USER_LIMIT = 500
+# An email search is refused when more Auth0 users than this match its text:
+# reading them all would need too many Management API requests.
+MAXIMUM_EMAIL_SEARCH_MATCHES = 200
 
 EmailSearchText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)
@@ -125,8 +128,13 @@ class UserProfileReader(Protocol):
         """Return the profiles Auth0 has for these sign-in subjects, by subject."""
         ...
 
-    def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
-        """Return the sign-in subjects of the users whose email contains ``text``."""
+    def search_user_ids_by_email(
+        self, text: str, *, match_limit: int
+    ) -> Auth0UserIdSearch:
+        """Return the sign-in subjects of the users whose email contains ``text``.
+
+        The result says when more than ``match_limit`` users match instead.
+        """
         ...
 
 

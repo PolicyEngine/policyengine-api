@@ -81,7 +81,10 @@ ADMIN_USER_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     422: {
         "model": V2ErrorResponse,
-        "description": "The request does not match the schema.",
+        "description": (
+            "The request does not match the schema, or an email search's text "
+            "holds < or >, or more than 200 Auth0 users match it."
+        ),
     },
     500: {
         "model": V2ErrorResponse,

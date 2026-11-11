@@ -65,6 +65,7 @@ from policyengine_api.services.v2.user_types.transformations import (
     user_type_change_read_with_profiles,
 )
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserPage,
     AdminUserRead,
     AdminUserSearch,
@@ -80,10 +81,12 @@ from policyengine_api.services.v2.user_types.validators import (
     UserTypeCheckUnavailableError,
     require_admin_after_deletion,
     require_another_admin,
+    require_email_search_within_limit,
     require_expected_user_type,
     require_listed_admin,
     require_minimum_user_type,
     require_one_user_with_email,
+    require_searchable_email_text,
     require_signed_in_user,
 )
 
@@ -176,28 +179,23 @@ class V2UserTypeService:
         """Return the users' subjects whose Auth0 email contains ``text``.
 
         Only an admin's search reaches Auth0. Raise
-        AdminUserProfilesUnavailableError when Auth0 can't answer.
+        AdminUserProfilesUnavailableError when Auth0 can't answer, and
+        AdminUserEmailSearchRefusedError when more than 200 users match.
         """
         with self._database_session.read() as session:
             _require_caller_type(session, principal, UserType.ADMIN)
         try:
-            found = source.reader.search_user_ids_by_email(text)
+            found = source.reader.search_user_ids_by_email(
+                text, match_limit=MAXIMUM_EMAIL_SEARCH_MATCHES
+            )
         except Exception as error:
             _record_profiles_unavailable("search_by_email", error)
             raise AdminUserProfilesUnavailableError(
                 EMAIL_SEARCH_UNAVAILABLE_MESSAGE
             ) from error
-        if found.limit_reached:
-            # The users beyond Auth0's limit are missing from the result.
-            logger.warning(
-                "admin_user_email_search_limit_reached",
-                extra={
-                    "policyengine_attributes": {
-                        "auth0_result_count": len(found.user_ids)
-                    }
-                },
-            )
-        return IdentitySubjects(issuer=source.issuer, subjects=found.user_ids)
+        return IdentitySubjects(
+            issuer=source.issuer, subjects=require_email_search_within_limit(found)
+        )
 
     def _read_profiles(
         self, source: UserProfileSource, subjects: tuple[str, ...]
@@ -264,12 +262,15 @@ class V2UserTypeService:
 
         With a profile source, an email search also finds users whose Auth0
         email matches; raise AdminUserProfilesUnavailableError when Auth0
-        can't answer it.
+        can't answer it. Raise AdminUserEmailSearchRefusedError for search
+        text with ``<`` or ``>``, before any Auth0 call, and for text more
+        than 200 Auth0 users match.
         """
         email_matching_identities = None
         if search.email is None:
             source = self._profile_source_for_reads()
         else:
+            require_searchable_email_text(search.email)
             source = self._profile_source()
             if source is not None:
                 email_matching_identities = self._email_matching_identities(
