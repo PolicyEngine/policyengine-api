@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
     from datetime import datetime
     from uuid import UUID
 
     from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
-    from policyengine_api.libs.auth0_management import (
-        Auth0UserIdSearch,
-        Auth0UserProfile,
-    )
+    from policyengine_api.libs.auth0_management import UserProfileReader
 
 DEFAULT_ADMIN_USER_LIMIT = 100
 MAXIMUM_ADMIN_USER_LIMIT = 500
@@ -116,31 +112,12 @@ class ScriptedUserTypeChange:
     previous_user_type: UserType
 
 
-class UserProfileReader(Protocol):
-    """Reads users' emails and names from Auth0 when an admin asks.
-
-    Nothing it returns is stored. Each method raises when Auth0 can't answer.
-    """
-
-    def read_user_profiles(
-        self, user_ids: Iterable[str]
-    ) -> Mapping[str, Auth0UserProfile]:
-        """Return the profiles Auth0 has for these sign-in subjects, by subject."""
-        ...
-
-    def search_user_ids_by_email(
-        self, text: str, *, match_limit: int
-    ) -> Auth0UserIdSearch:
-        """Return the sign-in subjects of the users whose email contains ``text``.
-
-        The result says when more than ``match_limit`` users match instead.
-        """
-        ...
-
-
 @dataclass(frozen=True)
 class UserProfileSource:
     """The Auth0 tenant admins' reads take users' emails and names from.
+
+    ``reader`` reads users' emails and names from it when an admin asks; its
+    subjects are the tenant's user IDs.
 
     ``issuer`` is the signed-in users' token issuer, normalized with a
     trailing slash as identities store it: only identities from it are users

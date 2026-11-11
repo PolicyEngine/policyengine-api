@@ -31,7 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import cache
 from http import HTTPStatus
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import quote
 
 import httpx
@@ -208,6 +208,29 @@ class Auth0UserIdSearch:
 
     user_ids: tuple[str, ...]
     more_than_limit: bool
+
+
+class UserProfileReader(Protocol):
+    """The read-only part of the client: profile reads and email searches.
+
+    Each method raises Auth0UserProfilesUnavailableError, with its cause,
+    when Auth0 can't answer. Nothing it returns is stored.
+    """
+
+    def read_user_profiles(
+        self, user_ids: Iterable[str]
+    ) -> Mapping[str, Auth0UserProfile]:
+        """Return the profiles Auth0 has for these user IDs, by user ID."""
+        ...
+
+    def search_user_ids_by_email(
+        self, text: str, *, match_limit: int
+    ) -> Auth0UserIdSearch:
+        """Return the IDs of users whose email contains ``text``.
+
+        The result says when more than ``match_limit`` users match instead.
+        """
+        ...
 
 
 def _load_client_settings(
@@ -695,12 +718,12 @@ def build_auth0_user_deleter(
 
 def build_auth0_user_profile_reader(
     environ: Mapping[str, str] | None = None,
-) -> Auth0ManagementClient | None:
+) -> UserProfileReader | None:
     """Return the profile reader for the configured tenant, or ``None``.
 
-    Like the deleter, every call with the same settings returns one shared
-    client and reuses its token; a deleter with the same settings is the same
-    client.
+    Callers get only the reads, never the deletion. Like the deleter, every
+    call with the same settings returns one shared client and reuses its
+    token; a deleter with the same settings is the same client.
     """
     settings = load_auth0_user_profile_settings(environ)
     if settings is None:
