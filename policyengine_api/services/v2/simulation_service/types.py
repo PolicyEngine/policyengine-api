@@ -9,6 +9,12 @@ it created needs no call: the Public API reads the tables.
 
 The simulation service runs every calculation on its default worker's
 PolicyEngine.py version, so no request names a version.
+
+The ``SimulationService*Error`` types are the simulation service's failures
+for every v2 route that calls it: household calculations
+(``policyengine_api.libs.simulation_household_calculations``) as well as
+reports and simulations. Each client's module docstring lists which of its
+service's answers it raises as which.
 """
 
 from __future__ import annotations
@@ -38,27 +44,31 @@ ReportDescription = Annotated[str, Field(max_length=10_000)]
 class SimulationServiceUnavailableError(RuntimeError):
     """The simulation service could not be asked, or cannot serve the request now.
 
-    That covers a connection never made, a gateway token that cannot be
-    fetched, missing configuration, a 400 or 422 that cannot be read, a 400
-    that names none of the caller's rows (such as a catalog version missing
-    while a release deploys), the service's own readable 503, and a 401,
-    403, 404, 405, 413 or 429, which the gateway, Cloud Run or the service's
-    framework answers before the service's route runs. A readable 400's
-    message gives the service's code and its reason, which describes the
-    service's state rather than the caller's request. A message for any
-    other answer gives its status, and its code when that is a fixed
-    identifier, but never its reason, which for a 503 may be an exception's
+    It covers a connection never made, a gateway token that cannot be
+    fetched, missing configuration, and every answer after which nothing the
+    submission asked for runs: a 401, 403, 404, 405, 413 or 429, which the
+    gateway, Cloud Run or the service's framework answers before the
+    service's route runs; the service's own readable 503; a 400 that
+    describes the service's state, or a row the Public API checks first,
+    rather than the caller's request (such as a catalog version missing
+    while a release deploys); and a 400 or 422 the client cannot read. The
+    route answers 503.
+
+    A message gives the service's reason only for a readable 400. For any
+    other answer it gives the status, and the code when that is a fixed
+    identifier, but never the reason, which for a 503 may be an exception's
     text.
 
-    Unless ``created_record_id`` is set, the service has created nothing, and
-    submitting again creates one record. ``created_record_id`` is the record
-    the service's readable 503 names as the submission's own: when Modal
-    refuses the run's call, the service creates the record, fails its run and
-    answers 503 with the record's ID. Submitting again then creates a second
-    record, but starts no second calculation: the record named has no running
-    calculation. A 503 that may follow a record the service created without
-    naming it, because it cannot be read or names only another record, is
-    SimulationServiceAnswerUnreadableError instead.
+    Unless ``created_record_id`` is set, the service has created nothing
+    that will run, and submitting again creates one record or job.
+    ``created_record_id`` is the report or simulation the service's readable
+    503 names as the submission's own: when Modal refuses the run's call,
+    the service creates the record, fails its run and answers 503 with the
+    record's ID. Submitting again then creates a second record, but starts
+    no second calculation: the record named has no running calculation. A
+    503 that may follow a record the service created without naming it is
+    SimulationServiceAnswerUnreadableError instead. A household
+    calculation's 503 never names its job, which the service fails at once.
     """
 
     def __init__(self, message: str, *, created_record_id: UUID | None = None) -> None:
@@ -68,40 +78,42 @@ class SimulationServiceUnavailableError(RuntimeError):
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service created the record, or may have, without a usable answer.
+    """The service created what was submitted, or may have, but gave no usable answer.
 
-    Its answer may be unreadable or lost: it answered that it created the
-    simulation or report and started its run, but its answer cannot be read;
-    or its answer was lost after the submission may have reached it; or a
-    proxy in front of it answered 502 or 504 in its place; or it answered
-    503 in a shape that cannot be read, which Cloud Run's front end also
-    answers in its place. Despite the name, it also covers answers that can
-    be read but leave open whether the record exists: a 503 naming only a
-    record other than the submission's own, which shows the service wrote
-    rows, and any status the Public API does not expect, readable or not,
-    which its route may answer after writing rows. Submitting again could
-    create another. A message naming the service's status gives its code
-    only when that is a fixed identifier, and never its reason.
+    It answered that it created the household job, simulation or report,
+    but its answer cannot be read; or its answer was lost after the
+    submission may have reached it; or a proxy in front of it answered in
+    its place (a 502 or 504, or a 503 the client reads as a proxy's). Despite
+    the name, it also covers answers that can be read but leave open whether
+    something was created: any status the Public API does not expect, which
+    the service's route may answer after writing rows, and a report's or
+    simulation's 503 naming only another record, which shows the service
+    wrote rows. Submitting again could create another, so the route answers
+    502. A message naming the service's status gives its code only when that
+    is a fixed identifier, and never its reason.
     """
 
 
 class SimulationServiceInternalError(RuntimeError):
-    """The simulation service failed (500), possibly after creating the record.
+    """The simulation service failed (500), possibly after creating what was submitted.
 
-    Submitting again could create another, so this is not reported as the
-    service being unavailable. The message gives the status, and the code
-    when that is a fixed identifier, but never the service's reason, which
-    may be an exception's text.
+    The household job, simulation or report may already exist, so submitting
+    again may create a second one; this is why it is not reported as the
+    service being unavailable, and the route answers 502. The message gives
+    the status, and the code when that is a fixed identifier, but never the
+    service's reason, which may be an exception's text, and asks the caller
+    to submit again.
     """
 
 
-class SimulationServiceRefusalError(ValueError):
-    """The simulation service refused the request's data, and said why.
+class SimulationServiceInvalidRequestError(ValueError):
+    """The simulation service refused the caller's data, and said why.
 
-    For example, a region, dataset or dynamic the catalog version its default
-    worker runs does not have. The message gives the service's code, when it
-    gave one, and its reason, which describes the caller's own request, but
-    not the service's status.
+    Such as a stored household or policy value its household contract cannot
+    take, an option it refuses, or a region, dataset or dynamic the catalog
+    version its default worker runs does not have. The message gives the
+    service's reasons, which describe the caller's own request, but not the
+    service's status. The route answers 422.
     """
 
 
@@ -211,9 +223,9 @@ class SimulationServiceClient(Protocol):
 
     Each raises:
 
-    - SimulationServiceRefusalError when the service refuses the request's
-      data (its 422, or its 400 for a region, dataset or dynamic it cannot
-      find), with its code and reasons;
+    - SimulationServiceInvalidRequestError when the service refuses the
+      request's data (its 422, or its 400 for a region, dataset or dynamic it
+      cannot find), with its code and reasons;
     - SimulationServiceInternalError when it failed (500), possibly after
       creating the record;
     - SimulationServiceAnswerUnreadableError when it created the record but

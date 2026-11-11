@@ -25,8 +25,8 @@ service runs its default worker's. The simulation service answers:
   per field as FastAPI writes them, and 400 with a code in
   ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region, dataset or
   dynamic the caller named does not exist (the Public API checks the country
-  and policies first): SimulationServiceRefusalError, with the code and
-  reasons;
+  and policies first): SimulationServiceInvalidRequestError, with the code
+  and reasons;
 - 400 with any other code, or none: a state of the service rather than the
   caller's error, such as ``unknown_catalog_version`` while a release
   deploys, or a row the Public API already checked. The service is
@@ -54,7 +54,9 @@ exception's text, which can carry stored data, so it never reaches the
 caller. The message of a 500, a 503 or any status other than a readable 400
 or 422 gives the service's status and code instead, such as
 ``503 modal_call_refused``, and gives the code only when it is a fixed
-identifier (``FIXED_IDENTIFIER_CODE``), which an exception's text is not.
+identifier (``FIXED_IDENTIFIER`` in
+``policyengine_api.libs.simulation_service_answers``), which an exception's
+text is not.
 
 Some answers may follow a record the service created, so they are never
 SimulationServiceUnavailableError, whose 503 says nothing was created:
@@ -75,6 +77,11 @@ SimulationServiceUnavailableError, whose 503 says nothing was created:
 Each of these asks the caller to submit again, and says that this creates a
 second record if the first request went through.
 
+The HTTP client, the sorting of transport errors, the refusal's reason, the
+status and code a message gives, and the lost-answer and failure messages
+come from ``policyengine_api.libs.simulation_service_answers``, which the
+household calculation client shares.
+
 Wiring the generated simulation client: ``post_simulation`` and
 ``post_report`` are the only code that sends a request, and each returns the
 status and body, which the rest of this module reads. Once a
@@ -85,22 +92,32 @@ docstring says.
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 from functools import lru_cache
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Literal, NoReturn
 from uuid import UUID
 
-import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import ValidationError
 
-from policyengine_api.libs.gateway_auth import GatewayAuthError
-from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
+from policyengine_api.libs.simulation_service_answers import (
+    PROXY_STAND_IN_STATUSES,
+    AnswerModel,
+    Refusal,
+    SimulationAnswer,
+    answer_lost,
+    created_but_failed,
+    fixed_identifier_code,
+    parsed_body,
+    refusal_reason,
+    send_to_simulation_service,
+    simulation_service_http_client,
+    status_and_code,
+    submit_again,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
-    SimulationServiceRefusalError,
+    SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
     SubmittedReport,
     SubmittedSimulation,
@@ -108,6 +125,8 @@ from policyengine_api.services.v2.simulation_service.types import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    import httpx
 
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
@@ -117,7 +136,6 @@ if TYPE_CHECKING:
 
 SIMULATIONS_PATH = "/simulations"
 REPORTS_PATH = "/reports"
-CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
 REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
 # The codes of the simulation service's 400 that name a row the caller chose
@@ -129,23 +147,6 @@ REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_E
 CALLER_ROW_REFUSAL_CODES = frozenset(
     {"unknown_region", "unknown_dataset", "unknown_dynamic"}
 )
-# The only code a message gives without the reason, as for a 500 or 503: a
-# fixed identifier of lower-case letters, digits and underscores, starting
-# with a letter, at most 64 characters. Any other code, such as an
-# exception's text, is left out.
-FIXED_IDENTIFIER_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
-UNREACHABLE = "The simulation service could not be reached."
-# The service never answers 502 or 504 itself: a proxy in front of it, such as
-# Cloud Run's front end, answers them in its place, possibly after the
-# service created the record. Cloud Run's front end also answers 503 in its
-# place, which is why a 503 that cannot be read is treated the same way.
-PROXY_STAND_IN_STATUSES = frozenset(
-    {HTTPStatus.BAD_GATEWAY, HTTPStatus.GATEWAY_TIMEOUT}
-)
-# Transport errors raised before the request could reach the service. After
-# any other, the service may have received the submission and created the
-# record.
-CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 # Statuses the gateway, Cloud Run or the service's framework answers before
 # the service's route runs, so the service has created nothing: a call not
 # authenticated or not allowed, a route or method the service does not have,
@@ -167,44 +168,17 @@ SENT_BEFORE_ROUTE_STATUSES = frozenset(
 RecordName = Literal["report", "simulation"]
 
 
-@dataclass(frozen=True)
-class SimulationAnswer:
-    """The simulation service's answer: its HTTP status and body."""
-
-    status_code: int
-    content: bytes
-
-
-class _AnswerModel(BaseModel):
-    """Base for the simulation service's answers; fields it adds are ignored."""
-
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-
-class _CreatedSimulation(_AnswerModel):
+class _CreatedSimulation(AnswerModel):
     simulation_id: UUID
     simulation_run_id: UUID
 
 
-class _CreatedReport(_AnswerModel):
+class _CreatedReport(AnswerModel):
     report_id: UUID
     report_run_id: UUID
 
 
-class _RefusedField(_AnswerModel):
-    """One request field the simulation service refuses, and why."""
-
-    loc: list[str | int]
-    msg: str
-
-
-class _AnswerCode(_AnswerModel):
-    """The ``code`` any answer whose body is a JSON object may give."""
-
-    code: str | None = None
-
-
-class _Refusal(_AnswerModel):
+class _Refusal(Refusal):
     """A refusal's or failure's body: a reason, or each refused request field.
 
     It may also name its ``code``, and a 503 after Modal refused the run's
@@ -212,7 +186,6 @@ class _Refusal(_AnswerModel):
     service's own only in this shape, but its reason is never passed on.
     """
 
-    detail: str | list[_RefusedField]
     code: str | None = None
     report_id: UUID | None = None
     simulation_id: UUID | None = None
@@ -301,22 +274,6 @@ def post_report(http_client: httpx.Client, body: dict[str, Any]) -> SimulationAn
     return SimulationAnswer(status_code=response.status_code, content=response.content)
 
 
-def _refusal_reason(refusal: _Refusal) -> str:
-    """Return the service's reason, or each refused field and why.
-
-    A field's location is given without the request's ``body`` prefix.
-    """
-    if isinstance(refusal.detail, str):
-        return refusal.detail
-    reasons = []
-    for refused_field in refusal.detail:
-        location = [str(part) for part in refused_field.loc]
-        if location[:1] == ["body"]:
-            location = location[1:]
-        reasons.append(f"{'.'.join(location)}: {refused_field.msg}")
-    return "; ".join(reasons) or "the request is invalid"
-
-
 def _refusal(answer: SimulationAnswer) -> _Refusal | None:
     try:
         return _Refusal.model_validate_json(answer.content)
@@ -328,40 +285,17 @@ def _status_and_code(answer: SimulationAnswer) -> str:
     """Return the answer's status and code, such as ``503 modal_call_refused``.
 
     Return the status alone when the body is not a JSON object with a text
-    code, or its code is not a fixed identifier (``FIXED_IDENTIFIER_CODE``),
-    such as an empty code or an exception's text. Never the body's reason.
+    code, or its code is not a fixed identifier, such as an empty code or an
+    exception's text. Never the body's reason.
     """
-    try:
-        code = _AnswerCode.model_validate_json(answer.content).code
-    except ValidationError:
-        code = None
-    if code is None or FIXED_IDENTIFIER_CODE.fullmatch(code) is None:
-        return f"{answer.status_code}"
-    return f"{answer.status_code} {code}"
+    return status_and_code(
+        answer.status_code, fixed_identifier_code(parsed_body(answer))
+    )
 
 
 def _submit_again(record: RecordName) -> str:
-    """Ask the caller to submit the ``record`` again, which may create a second.
-
-    No route finds a record by what it was submitted with, so the caller
-    cannot check whether the first request created one.
-    """
-    return (
-        f"Submit the {record} again; if the first request went through, this "
-        f"creates a second {record}."
-    )
-
-
-def _answer_lost(error: str, record: RecordName) -> str:
-    """Say the service may have received the request, but its answer was lost.
-
-    ``error`` is the transport error's type or what a proxy answered in the
-    service's place.
-    """
-    return (
-        "The simulation service may have received the request, but its answer "
-        f"was lost ({error}). {_submit_again(record)}"
-    )
+    """Ask the caller to submit the ``record`` again, which may create a second."""
+    return submit_again(record, record)
 
 
 def _failed_after_possible_creation(
@@ -372,16 +306,13 @@ def _failed_after_possible_creation(
     The message gives the answer's status and code, never its reason, which
     may be an exception's text.
     """
-    return (
-        f"The simulation service may have created the {record}, but it failed "
-        f"({_status_and_code(answer)}). {_submit_again(record)}"
-    )
+    return created_but_failed(record, _status_and_code(answer), _submit_again(record))
 
 
 def _code_and_reason(refusal: _Refusal) -> str:
     """Return `` (code): reason``, or ``: reason`` when the service gave no code."""
     code = "" if refusal.code is None else f" ({refusal.code})"
-    return f"{code}: {_refusal_reason(refusal)}"
+    return f"{code}: {refusal_reason(refusal)}"
 
 
 def _raise_for_refused_request(
@@ -401,7 +332,7 @@ def _raise_for_refused_request(
         or refusal.code in CALLER_ROW_REFUSAL_CODES
     ):
         msg = f"The simulation service cannot run this request{code_and_reason}"
-        raise SimulationServiceRefusalError(msg)
+        raise SimulationServiceInvalidRequestError(msg)
     msg = f"The simulation service refused the {record}{code_and_reason}"
     raise SimulationServiceUnavailableError(msg)
 
@@ -448,7 +379,9 @@ def _raise_for_refusal(answer: SimulationAnswer, record: RecordName) -> NoReturn
             raise SimulationServiceUnavailableError(msg)
         _raise_for_refused_request(answer, refusal, record)
     if status_code in PROXY_STAND_IN_STATUSES:
-        msg = _answer_lost(f"a proxy answered {status_code} in its place", record)
+        msg = answer_lost(
+            f"a proxy answered {status_code} in its place", _submit_again(record)
+        )
         raise SimulationServiceAnswerUnreadableError(msg)
     if status_code == HTTPStatus.SERVICE_UNAVAILABLE:
         _raise_for_unavailable(answer, _refusal(answer), record)
@@ -494,16 +427,7 @@ class SimulationServiceReportClient:
         is missing or invalid, or gateway auth is partly configured or
         required but unset.
         """
-        try:
-            entrypoint = SimulationEntrypointClient(
-                CLOUD_RUN_SIMULATION_ENTRYPOINT, transport=transport
-            )
-        except (ValueError, GatewayAuthError) as error:
-            msg = "The simulation service is not configured."
-            raise SimulationServiceUnavailableError(msg) from error
-        http_client = entrypoint.client
-        http_client.base_url = httpx.URL(entrypoint.base_url)
-        return cls(http_client)
+        return cls(simulation_service_http_client(transport=transport))
 
     def _answer(
         self,
@@ -520,13 +444,9 @@ class SimulationServiceReportClient:
         the submission may have reached the service, which may then have
         created the ``record``.
         """
-        try:
-            return send(self._http_client, body)
-        except (*CONNECTION_NEVER_MADE, GatewayAuthError) as error:
-            raise SimulationServiceUnavailableError(UNREACHABLE) from error
-        except httpx.HTTPError as error:
-            msg = _answer_lost(type(error).__name__, record)
-            raise SimulationServiceAnswerUnreadableError(msg) from error
+        return send_to_simulation_service(
+            send, self._http_client, body, submit_again_sentence=_submit_again(record)
+        )
 
     def submit_simulation(
         self, simulation: EconomySimulationCreationInput

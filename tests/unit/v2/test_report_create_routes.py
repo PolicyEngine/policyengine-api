@@ -18,7 +18,7 @@ from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
-    SimulationServiceRefusalError,
+    SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_service.validators import (
@@ -184,7 +184,7 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
             "Economy calculations are not available for country 'us'",
         ),
         (
-            SimulationServiceRefusalError(
+            SimulationServiceInvalidRequestError(
                 "The simulation service cannot run this request (unknown_region): "
                 "no such region"
             ),
@@ -281,7 +281,7 @@ def test_a_malformed_simulation_is_refused_before_the_service(
     [
         (PolicyNotFoundError("Policy p was not found"), 404),
         (EconomyCalculationsUnsupportedError("not available"), 422),
-        (SimulationServiceRefusalError("no such dataset"), 422),
+        (SimulationServiceInvalidRequestError("no such dataset"), 422),
         (SimulationServiceInternalError("failed"), 502),
         (SimulationServiceAnswerUnreadableError("answer lost"), 502),
         (SimulationServiceUnavailableError("unavailable"), 503),

@@ -25,7 +25,7 @@ from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
-    SimulationServiceRefusalError,
+    SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.simulation_service.validators import (
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
     PolicyNotFoundError,
     EconomyCalculationsUnsupportedError,
-    SimulationServiceRefusalError,
+    SimulationServiceInvalidRequestError,
 )
 # How the simulation service's answers and the submission checks are answered.
 # The service's failure (500), an unreadable created answer, an answer lost
@@ -59,7 +59,7 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
 SUBMISSION_ERROR_MAPPINGS = (
     V2ErrorMapping((PolicyNotFoundError,), 404),
     V2ErrorMapping(
-        (EconomyCalculationsUnsupportedError, SimulationServiceRefusalError), 422
+        (EconomyCalculationsUnsupportedError, SimulationServiceInvalidRequestError), 422
     ),
     V2ErrorMapping(
         (SimulationServiceInternalError, SimulationServiceAnswerUnreadableError), 502

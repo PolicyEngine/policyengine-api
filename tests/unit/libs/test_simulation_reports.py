@@ -17,15 +17,15 @@ from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_reports import (
     REPORTS_PATH,
     SIMULATIONS_PATH,
-    SimulationAnswer,
     SimulationServiceReportClient,
 )
+from policyengine_api.libs.simulation_service_answers import SimulationAnswer
 from policyengine_api.services.v2.simulation_service.types import (
     EconomyReportCreationInput,
     EconomySimulationCreationInput,
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
-    SimulationServiceRefusalError,
+    SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
     SubmittedReport,
     SubmittedSimulation,
@@ -257,7 +257,7 @@ def test_data_the_service_refuses_is_reported_with_its_reason() -> None:
         status_code=422, body={"detail": "spm settings apply only to the US"}
     )
 
-    with pytest.raises(SimulationServiceRefusalError) as refused:
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
@@ -277,7 +277,7 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
         },
     )
 
-    with pytest.raises(SimulationServiceRefusalError) as refused:
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
@@ -295,7 +295,7 @@ def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
         },
     )
 
-    with pytest.raises(SimulationServiceRefusalError) as refused:
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
@@ -321,7 +321,7 @@ def test_a_row_the_caller_named_that_the_service_cannot_find_is_refused(
     # named one the simulation service's catalog version does not have.
     service = RecordingService(status_code=400, body={"code": code, "detail": reason})
 
-    with pytest.raises(SimulationServiceRefusalError) as refused:
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
         submit(service.client())
 
     assert route_status(refused.value) == 422

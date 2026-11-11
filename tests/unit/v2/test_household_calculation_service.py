@@ -11,10 +11,6 @@ from sqlalchemy.exc import OperationalError
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
-from policyengine_api.services.v2.household_calculations.types import (
-    SimulationServiceInvalidRequestError,
-    SimulationServiceUnavailableError,
-)
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationStorageError,
@@ -24,6 +20,10 @@ from policyengine_api.services.v2.households.validators import HouseholdNotFound
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
     PolicyParametersMissingError,
+)
+from policyengine_api.services.v2.simulation_service.types import (
+    SimulationServiceInvalidRequestError,
+    SimulationServiceUnavailableError,
 )
 from tests.fixtures.household_calculation_documents import JOB_ID
 from tests.unit.v2.household_calculation_support import (

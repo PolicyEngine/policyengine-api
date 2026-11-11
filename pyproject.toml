@@ -461,6 +461,8 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.user_reports.response_models.UserReportSuccessResponse",
     "policyengine_api.fastapi_routes.v2.user_simulations.response_models.StrictUserSimulationAPIModel",
     "policyengine_api.fastapi_routes.v2.user_simulations.response_models.UserSimulationSuccessResponse",
+    "policyengine_api.libs.simulation_service_answers.AnswerModel",
+    "policyengine_api.libs.simulation_service_answers.Refusal",
     "policyengine_api.query_parameters.CatalogQuery",
     "policyengine_api.query_parameters.CountryQuery",
     "policyengine_api.query_parameters.EconomyQuery",
