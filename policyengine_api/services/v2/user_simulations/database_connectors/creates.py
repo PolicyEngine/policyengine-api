@@ -30,7 +30,7 @@ def create_user_simulation(
     Raise AssociationSimulationNotFoundError when the simulation's foreign key
     refuses the insert: the service checked the simulation in this
     transaction, so it was deleted after that check. The error names the
-    input's values, since a failed flush expires the rows the session holds.
+    input's simulation and country, the ones the service checked.
     """
     association = UserSimulationAssociation(**association_input.model_dump())
     session.add(association)

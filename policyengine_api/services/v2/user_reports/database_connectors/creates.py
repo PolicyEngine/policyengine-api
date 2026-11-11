@@ -27,8 +27,8 @@ def create_user_report(
 
     Raise AssociationReportNotFoundError when the report's foreign key refuses
     the insert: the service checked the report in this transaction, so it was
-    deleted after that check. The error names the input's values, since a
-    failed flush expires the rows the session holds.
+    deleted after that check. The error names the input's report and
+    country, the ones the service checked.
     """
     association = UserReportAssociation(**association_input.model_dump())
     session.add(association)

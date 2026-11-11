@@ -470,3 +470,8 @@ def test_a_simulation_gone_before_a_repoint_is_refused_by_its_foreign_key(
                 simulation_id=missing_simulation_id
             ),
         )
+    assert (
+        service.get_user_simulation(
+            principal=principal, country_id="uk", association_id=saved.id
+        )
+    ).simulation_id == simulation_id
