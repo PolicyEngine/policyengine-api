@@ -159,6 +159,20 @@ def runtime(monkeypatch) -> RecordingRuntime:
     return recording_runtime
 
 
+@pytest.fixture
+def account_service_log(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> pytest.LogCaptureFixture:
+    """Capture the account service's WARNING records.
+
+    Alembic tests run logging.config.fileConfig, which disables loggers that
+    already exist, so re-enable this one for the test.
+    """
+    monkeypatch.setattr(logging.getLogger(ACCOUNT_SERVICE_LOGGER), "disabled", False)
+    caplog.set_level(logging.WARNING, logger=ACCOUNT_SERVICE_LOGGER)
+    return caplog
+
+
 def _accounts(
     store: V2Store, auth0_users: RecordingAuth0Users | None = None
 ) -> V2AccountService:
@@ -464,10 +478,9 @@ def _account_service_warnings(
 @pytest.mark.usefixtures("runtime")
 @pytest.mark.parametrize("deleted_by", ["bob", "an_admin"])
 def test_every_auth0_user_is_tried_before_a_failure_is_reported(
-    store: V2Store, caplog: pytest.LogCaptureFixture, deleted_by: str
+    store: V2Store, account_service_log: pytest.LogCaptureFixture, deleted_by: str
 ) -> None:
     """Bob's first Auth0 user fails to delete, as after a rate limit."""
-    caplog.set_level(logging.WARNING, logger=ACCOUNT_SERVICE_LOGGER)
     _sign_in(store, ALICE, UserType.ADMIN)
     bob_id = _sign_in(store, BOB)
     _give_bob_saved_work_and_more_identities(store, bob_id)
@@ -496,7 +509,7 @@ def test_every_auth0_user_is_tried_before_a_failure_is_reported(
     else:
         assert str(failure.value) == _admin_auth0_failure_message(1, 2)
     assert _user_type_of(store, bob_id) is None
-    assert _account_service_warnings(caplog) == [
+    assert _account_service_warnings(account_service_log) == [
         (
             "auth0_user_deletion_failed",
             {
@@ -511,10 +524,9 @@ def test_every_auth0_user_is_tried_before_a_failure_is_reported(
 
 @pytest.mark.usefixtures("runtime")
 def test_an_admin_deletion_logs_that_no_identity_was_under_the_issuer(
-    store: V2Store, caplog: pytest.LogCaptureFixture
+    store: V2Store, account_service_log: pytest.LogCaptureFixture
 ) -> None:
     """Dana signed in through another tenant, whose users this one can't delete."""
-    caplog.set_level(logging.WARNING, logger=ACCOUNT_SERVICE_LOGGER)
     _sign_in(store, ALICE, UserType.ADMIN)
     dana_id = _sign_in(store, DANA_FROM_ANOTHER_TENANT)
     auth0_users = RecordingAuth0Users()
@@ -526,7 +538,7 @@ def test_an_admin_deletion_logs_that_no_identity_was_under_the_issuer(
     assert deletion == AccountDeletion(user_id=dana_id, auth0_subjects=())
     assert auth0_users.attempted_subjects == []
     assert _user_type_of(store, dana_id) is None
-    assert _account_service_warnings(caplog) == [
+    assert _account_service_warnings(account_service_log) == [
         (
             "auth0_user_deletion_skipped_no_identity_under_issuer",
             {"v2_user_id": str(dana_id)},
