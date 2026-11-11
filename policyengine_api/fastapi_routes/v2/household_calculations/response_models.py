@@ -182,12 +182,15 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The simulation service accepted the calculation, so its job exists, "
-            "but its answer cannot be read; it failed (500); its answer was lost "
-            "after the submission may have reached it; or a proxy in front of it "
-            "answered 502 or 504 in its place. In each case it may have created "
-            "the job, and no route finds a job without its ID. Submit the "
-            "household calculation again; if the first request went through, "
-            "this creates a second job. The message says what happened."
+            "but its answer cannot be read; it failed (500); it answered a "
+            "status the Public API does not expect, such as 200, a redirect, "
+            "408, 409 or 501; its answer was lost after the submission may have "
+            "reached it; or a proxy in front of it answered 502 or 504 in its "
+            "place. In each case it may have created the job, and no route "
+            "finds a job without its ID. Submit the household calculation "
+            "again; if the first request went through, this creates a second "
+            "job. The message gives the simulation service's status and code, "
+            "or what came in place of its answer."
         ),
     },
     422: {

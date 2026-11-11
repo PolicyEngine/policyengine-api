@@ -10,33 +10,53 @@ ID headers, transport and instrumentation as every other simulation call.
 
 The request names the country, the stored household and the stored policy
 (null for current law), ``add_missing_variables``, and the axes and SPM
-settings only when the caller gave them. The simulation service answers:
+settings only when the caller gave them. The simulation service's answers
+are read as follows.
 
-- 202 with the new job's ID and status. A 202 whose body cannot be read
-  is SimulationServiceAnswerUnreadableError: the job exists;
-- 422 with its reasons when it refuses the caller's data (a malformed
-  request, or one its household contract refuses), one per field as
-  FastAPI writes them: the reasons reach the caller as
-  SimulationServiceInvalidRequestError;
-- 500 (``internal_error``) when it failed, possibly after creating the job:
-  SimulationServiceInternalError;
-- anything else (400 for a household, policy or catalog version it cannot
-  find, which the Public API checks first; 503 when it cannot read its
-  manifest or database or Modal refuses the call, failing the job it
-  names): the service is unavailable (SimulationServiceUnavailableError),
-  with its ``code`` and reason when it gives them, as it is for no answer,
-  a refusal of another shape, a gateway token that cannot be fetched and
-  missing configuration. No answer means a connection never made
-  (``ConnectError``, ``ConnectTimeout``, ``PoolTimeout``); once the request
-  may have been sent, a lost answer (a read timeout, a dropped connection) is
-  SimulationServiceAnswerUnreadableError, since the job may exist, and so is
-  a 502 or 504 a proxy in front of the service answers in its place.
+The job was created:
 
-No route finds a household job without its ID, so after an unreadable 202, a
-500, a lost answer or a proxy's 502 or 504 the message asks the caller to
-submit the calculation again, and says that this creates a second job if the
-first request went through. Each message names what happened in place of a
-readable answer.
+- 202 with the new job's ID and status is the accepted job.
+
+Nothing was created, so the service is unavailable
+(SimulationServiceUnavailableError, which the route answers 503):
+
+- 400 when a household, policy or catalog version it names does not exist
+  (the Public API checks the first two first), with the service's reason;
+- 401, 403, 404, 405, 413 and 429, which its authentication, routing,
+  body-size and rate limits answer before its route runs;
+- 503 when it cannot read its manifest or database, or Modal refused the
+  household function's call (failing the job it had created);
+- a connection never made (``ConnectError``, ``ConnectTimeout``,
+  ``PoolTimeout``), a gateway token that cannot be fetched, and missing
+  configuration.
+
+The caller's data was refused:
+
+- 422 with its reasons (a malformed request, or one its household contract
+  refuses), one per field as FastAPI writes them, which reach the caller as
+  SimulationServiceInvalidRequestError. A 422 of another shape is
+  unavailable.
+
+The job may exist, and no route finds a household job without its ID, so the
+message asks the caller to submit the calculation again and says that this
+creates a second job if the first request went through (the route answers
+502):
+
+- the service failed after it may have created the job: its 500
+  (SimulationServiceInternalError), a 202 whose body cannot be read, and any
+  status not named above, such as 200, a redirect, 408, 409 or 501
+  (SimulationServiceAnswerUnreadableError);
+- its answer was lost once the request may have been sent (any other
+  transport error, such as a read timeout or a dropped connection), or a
+  proxy in front of it answered 502 or 504 in its place
+  (SimulationServiceAnswerUnreadableError).
+
+The service's own text may hold stored data, and the route needs no account,
+so after a 500 or 503, or a status not named above, a message gives only the
+service's status and its ``code`` when that is a fixed identifier (lower-case
+letters, digits and underscores, starting with a letter, at most 64
+characters). The 400 and 422 refusals keep the service's reasons, which name
+the caller's own household, policy and fields.
 
 Each submission carries the request's ID and observability ID headers. The
 observability ID is the request's own, else the caller's, else a new one,
@@ -59,6 +79,7 @@ the function call the generated operation, as its docstring says.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from http import HTTPStatus
@@ -99,6 +120,27 @@ PROXY_STAND_IN_STATUSES = frozenset(
 # Transport errors raised before the request could reach the service. After
 # any other, the service may have received the submission and created the job.
 CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+# Statuses the service answers before its route creates a job: its
+# authentication, routing, body-size and rate limits, and its 503 when it
+# cannot read its manifest or database or Modal refused the call.
+ANSWERED_BEFORE_A_JOB_EXISTS = frozenset(
+    {
+        HTTPStatus.UNAUTHORIZED,
+        HTTPStatus.FORBIDDEN,
+        HTTPStatus.NOT_FOUND,
+        HTTPStatus.METHOD_NOT_ALLOWED,
+        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        HTTPStatus.TOO_MANY_REQUESTS,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+    }
+)
+# A code the service names may reach the caller only when it is a fixed
+# identifier, never text that could hold stored data.
+FIXED_IDENTIFIER = re.compile(r"[a-z][a-z0-9_]{0,63}")
+SUBMIT_AGAIN = (
+    "Submit the household calculation again; if the first request went "
+    "through, this creates a second job."
+)
 
 
 def _lost_answer(what_happened: str) -> str:
@@ -111,8 +153,19 @@ def _lost_answer(what_happened: str) -> str:
     """
     return (
         "The simulation service may have received the request, but its answer "
-        f"was lost ({what_happened}). Submit the household calculation again; "
-        "if the first request went through, this creates a second job."
+        f"was lost ({what_happened}). {SUBMIT_AGAIN}"
+    )
+
+
+def _created_but_failed(status_and_code: str) -> str:
+    """Return the message for an answer the service sent once the job may exist.
+
+    ``status_and_code`` is the service's status, and its code when that is
+    a fixed identifier.
+    """
+    return (
+        "The simulation service may have created the household job, but it "
+        f"failed ({status_and_code}). {SUBMIT_AGAIN}"
     )
 
 
@@ -147,13 +200,11 @@ class _RefusedField(_AnswerModel):
 class _Refusal(_AnswerModel):
     """A refusal's body: a reason, or each refused request field.
 
-    A 400 or 503 also names its ``code``, and a 503 after Modal refused the
-    call names the household job it failed.
+    A 400, 500 or 503 also names its ``code``.
     """
 
     detail: str | list[_RefusedField]
     code: str | None = None
-    household_job_id: UUID | None = None
 
 
 def household_calculation_request(
@@ -231,33 +282,42 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
         return None
 
 
-def _internal_error(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
-    """Describe the service's failure, which may have created the job.
+def _fixed_code(refusal: _Refusal | None) -> str | None:
+    """Return the service's code when it is a fixed identifier, else None."""
+    if refusal is None or refusal.code is None:
+        return None
+    return refusal.code if FIXED_IDENTIFIER.fullmatch(refusal.code) else None
 
-    The message names the status, with the service's code and reason when it
-    gives them.
+
+def _status_and_code(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
+    """Return the service's status, and its code when that is a fixed identifier.
+
+    The service's text is left out: it may hold stored data.
     """
-    if refusal is None or not isinstance(refusal.detail, str):
-        return _lost_answer(str(answer.status_code))
-    code = "" if refusal.code is None else f" {refusal.code}"
-    reason = refusal.detail.strip().rstrip(".")
-    return _lost_answer(f"{answer.status_code}{code}: {reason}")
+    code = _fixed_code(refusal)
+    return str(answer.status_code) if code is None else f"{answer.status_code} {code}"
 
 
 def _unavailable(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
-    """Describe an answer that means the service cannot calculate now."""
-    if refusal is None or not isinstance(refusal.detail, str):
-        return f"The simulation service answered {answer.status_code}."
-    stated = (
-        "refused the calculation"
-        if answer.status_code == HTTPStatus.BAD_REQUEST
-        else "is unavailable"
+    """Describe an answer the service gives before its route creates a job."""
+    return (
+        f"The simulation service is unavailable ({_status_and_code(answer, refusal)})."
     )
-    code = "" if refusal.code is None else f" ({refusal.code})"
-    message = f"The simulation service {stated}{code}: {refusal.detail}"
-    if refusal.household_job_id is not None:
-        message += f"; it failed household job {refusal.household_job_id}"
-    return message
+
+
+def _refused(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
+    """Describe a 400: a row the request names, or a function it needs, is missing.
+
+    The service's reason names the caller's own household or policy, so it is
+    kept.
+    """
+    if refusal is None or not isinstance(refusal.detail, str):
+        return f"The simulation service refused the calculation ({answer.status_code})."
+    code = _fixed_code(refusal)
+    named_code = "" if code is None else f" ({code})"
+    return (
+        f"The simulation service refused the calculation{named_code}: {refusal.detail}"
+    )
 
 
 class SimulationHouseholdCalculationClient:
@@ -303,13 +363,15 @@ class SimulationHouseholdCalculationClient:
         """Submit the calculation and return the job the service created.
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
-        when it refuses the caller's data; SimulationServiceAnswerUnreadableError
-        when it accepted the calculation but its answer cannot be read, its
-        answer was lost after the submission may have reached it, or a proxy in
-        front of it answered 502 or 504 in its place;
+        when it refuses the caller's data (422);
+        SimulationServiceUnavailableError when nothing was created (its 400,
+        the statuses it answers before its route runs, its 503, a connection
+        never made or a gateway token that cannot be fetched);
         SimulationServiceInternalError when it failed (500); and
-        SimulationServiceUnavailableError otherwise, including a connection
-        never made.
+        SimulationServiceAnswerUnreadableError when it accepted the
+        calculation but its answer cannot be read, it answered any other
+        status, its answer was lost after the submission may have reached it,
+        or a proxy in front of it answered 502 or 504 in its place.
         """
         start_observability_id()
         try:
@@ -323,28 +385,42 @@ class SimulationHouseholdCalculationClient:
             raise SimulationServiceAnswerUnreadableError(
                 _lost_answer(type(error).__name__)
             ) from error
-        if answer.status_code == HTTPStatus.ACCEPTED:
-            try:
-                accepted = _AcceptedJob.model_validate_json(answer.content)
-            except ValidationError as error:
-                raise SimulationServiceAnswerUnreadableError(
-                    _lost_answer(f"{answer.status_code} with an unreadable body")
-                ) from error
-            return HouseholdCalculationAccepted(
-                calculation_id=accepted.job_id, status=accepted.status
-            )
-        refusal = _refusal(answer)
-        if answer.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-            if refusal is None:
-                raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
-            raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
-        if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-            raise SimulationServiceInternalError(_internal_error(answer, refusal))
-        if answer.status_code in PROXY_STAND_IN_STATUSES:
+        return _accepted_job(answer)
+
+
+def _accepted_job(answer: SimulationAnswer) -> HouseholdCalculationAccepted:
+    """Return the job the service's answer accepts, or raise what it means.
+
+    The errors are those ``SimulationHouseholdCalculationClient.submit``
+    raises, apart from the transport errors it handles itself.
+    """
+    if answer.status_code == HTTPStatus.ACCEPTED:
+        try:
+            accepted = _AcceptedJob.model_validate_json(answer.content)
+        except ValidationError as error:
             raise SimulationServiceAnswerUnreadableError(
-                _lost_answer(f"a proxy answered {answer.status_code}")
-            )
+                _created_but_failed(str(answer.status_code))
+            ) from error
+        return HouseholdCalculationAccepted(
+            calculation_id=accepted.job_id, status=accepted.status
+        )
+    if answer.status_code in PROXY_STAND_IN_STATUSES:
+        raise SimulationServiceAnswerUnreadableError(
+            _lost_answer(f"a proxy answered {answer.status_code}")
+        )
+    refusal = _refusal(answer)
+    if answer.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+        if refusal is None:
+            raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
+        raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
+    if answer.status_code == HTTPStatus.BAD_REQUEST:
+        raise SimulationServiceUnavailableError(_refused(answer, refusal))
+    if answer.status_code in ANSWERED_BEFORE_A_JOB_EXISTS:
         raise SimulationServiceUnavailableError(_unavailable(answer, refusal))
+    failure = _created_but_failed(_status_and_code(answer, refusal))
+    if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
+        raise SimulationServiceInternalError(failure)
+    raise SimulationServiceAnswerUnreadableError(failure)
 
 
 @lru_cache(maxsize=1)

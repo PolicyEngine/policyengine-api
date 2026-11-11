@@ -321,20 +321,34 @@ It then sends the simulation service's `POST /household-calculations` the
 IDs and options, with the request's ID and observability ID headers. The
 answer is 202 with the new job's `calculation_id` and `status`; each
 submission creates a new job. The simulation service's 422 reasons reach the
-caller as 422. A 202 whose body the Public API can't read is 502, since the
-job exists. So is a 500 from the simulation service (`internal_error`), an
-answer lost after the submission may have been sent (a read timeout or a
-dropped connection), and a 502 or 504 a proxy in front of the simulation
-service answered in its place, since each may come after it created the job.
-No route finds a household job without its ID, so the 502's message asks the
-caller to submit the household calculation again, and says that this
-creates a second job if the first request went through; in parentheses it
-names what happened (the transport error, the proxy's status, the simulation
-service's 500 code and reason, or the unreadable 202). Any other refusal
-(with the simulation service's `code` and reason in the message, and the
-failed job's ID when Modal refused the call), a connection never made, a
-refusal the Public API can't read, missing configuration or a gateway token
-it can't fetch is 503. A failed catalog query in the policy check is 503 too. Every
+caller as 422.
+
+Answers given before the simulation service's route creates a job are 503:
+its 400 (a household, policy or catalog version it can't find, with its
+reason), its 401, 403, 404, 405, 413 and 429 (its authentication, routing,
+body-size and rate limits), its 503 (its manifest or database can't be read,
+or Modal refused the call), a refusal the Public API can't read, a
+connection never made, missing configuration and a gateway token it can't
+fetch. A failed catalog query in the policy check is 503 too.
+
+Answers that may come after it created the job are 502: a 202 whose body the
+Public API can't read, its 500 (`internal_error`), any status not named
+above (such as 200, a redirect, 408, 409 or 501), an answer lost after the
+submission may have been sent (a read timeout or a dropped connection), and
+a 502 or 504 a proxy in front of it answered in its place. No route finds a
+household job without its ID, so the 502's message asks the caller to submit
+the household calculation again, and says that this creates a second job if
+the first request went through.
+
+The simulation service's text may hold stored data, and the route needs no
+account, so after its 500 or 503, or a status not named above, the message
+gives only its status and its `code` when that is a fixed identifier
+(lower-case letters, digits and underscores, starting with a letter, at most
+64 characters), for example "The simulation service may have created the
+household job, but it failed (500 internal_error)." The 400 and 422 refusals
+keep its reasons, which name the caller's own household, policy and fields.
+After a lost answer or a proxy's status, the message says "its answer was
+lost" and names the transport error or the proxy's status. Every
 answer given once the call was attempted carries
 `X-PolicyEngine-Observability-Id` with the attempt's ID, which the
 simulation service never received after a connection never made or a token
