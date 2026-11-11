@@ -32,6 +32,9 @@ from policyengine_api.spm import (
     validate_spm_calculation_provenance,
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
+from policyengine_api.utils.household_policy_validation import (
+    find_unreadable_policy_inputs,
+)
 from policyengine_api.utils.input_validation import find_invalid_inputs
 
 if TYPE_CHECKING:
@@ -97,8 +100,9 @@ class HouseholdNotFoundError(LookupError):
 class InvalidHouseholdInputsError(ValueError):
     """Raised when a household or policy has inputs the country model cannot use.
 
-    These are names the country model does not know and axes policyengine-core
-    cannot expand.
+    These are names the country model does not know, axes policyengine-core
+    cannot expand and, for a calculation request, parts of the policy the
+    calculation cannot read.
     """
 
     def __init__(self, invalid_inputs: list[Any]) -> None:
@@ -426,12 +430,18 @@ class HouseholdCalculationService:
         deprecated_inputs = drop_deprecated_inputs(household_json)
         household_json = deprecated_inputs.household
         # The axes are checked as policyengine-core receives them, after the
-        # deprecated ones are dropped.
-        invalid_inputs = find_invalid_inputs(
-            household_json,
-            policy_json,
-            country.metadata,
-        )
+        # deprecated ones are dropped. The policy's shape, period keys and
+        # values are checked here, before parsing copies the model's
+        # tax-benefit system; a stored policy, which the caller didn't send,
+        # isn't (calculate_stored_household).
+        invalid_inputs = [
+            *find_invalid_inputs(
+                household_json,
+                policy_json,
+                country.metadata,
+            ),
+            *find_unreadable_policy_inputs(policy_json, country.metadata),
+        ]
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
