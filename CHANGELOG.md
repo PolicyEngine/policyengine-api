@@ -1,3 +1,10 @@
+## [5.39.1] - 2026-11-11
+
+### Changed
+
+- The release workflow's tests of the deployed staging and production candidates send the CI server credential, so they keep passing once the Public API requires one.
+
+
 ## [5.39.0] - 2026-11-10
 
 ### Added
