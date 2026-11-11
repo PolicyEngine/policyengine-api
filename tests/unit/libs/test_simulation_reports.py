@@ -124,6 +124,12 @@ def submit_simulation(client: SimulationServiceReportClient) -> object:
     return client.submit_simulation(simulation_input())
 
 
+# The field naming each record in the simulation service's answers, and the
+# record's ID in these tests.
+CREATED_RECORD_IDS = {
+    "report": ("report_id", REPORT_ID),
+    "simulation": ("simulation_id", SIMULATION_ID),
+}
 # Each submission, the record it creates and the status its route answers with.
 SUBMISSIONS = [
     pytest.param(submit_report, "report", _report_route_status, id="report"),
@@ -269,14 +275,94 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
     )
 
 
-def test_a_row_the_service_cannot_find_is_refused_with_its_reason() -> None:
+def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
     service = RecordingService(
-        status_code=400,
-        body={"detail": "region state/zz is not in the current catalog version"},
+        status_code=422,
+        body={
+            "code": "spm_unsupported",
+            "detail": "spm settings apply only to the US",
+        },
     )
 
-    with pytest.raises(SimulationServiceRefusalError, match="state/zz"):
+    with pytest.raises(SimulationServiceRefusalError) as refused:
         service.client().submit_report(report_input())
+
+    assert str(refused.value) == (
+        "The simulation service cannot run this request (spm_unsupported): "
+        "spm settings apply only to the US"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "reason"),
+    [
+        ("unknown_region", "Region state/zz is not in the catalog version."),
+        ("unknown_dataset", "Dataset cps_1999 is not in the catalog version."),
+        ("unknown_dynamic", f"Dynamic {DYNAMIC_ID} is not stored in the country."),
+    ],
+    ids=["region", "dataset", "dynamic"],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_row_the_caller_named_that_the_service_cannot_find_is_refused(
+    submit, record: str, route_status, code: str, reason: str
+) -> None:
+    # The Public API does not check regions, datasets or dynamics: the caller
+    # named one the simulation service's catalog version does not have.
+    service = RecordingService(status_code=400, body={"code": code, "detail": reason})
+
+    with pytest.raises(SimulationServiceRefusalError) as refused:
+        submit(service.client())
+
+    assert route_status(refused.value) == 422
+    assert str(refused.value) == (
+        f"The simulation service cannot run this request ({code}): {reason}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("body", "stated_code"),
+    [
+        pytest.param(
+            {
+                "code": "unknown_catalog_version",
+                "detail": "Country us has no catalog version for .py 4.2.0.",
+            },
+            " (unknown_catalog_version)",
+            id="catalog-version-during-a-release",
+        ),
+        pytest.param(
+            {"code": "unknown_policy", "detail": "There is no policy p."},
+            " (unknown_policy)",
+            id="policy-the-public-api-checked",
+        ),
+        pytest.param(
+            {"code": "missing_reference", "detail": "A row was deleted."},
+            " (missing_reference)",
+            id="row-deleted-after-the-checks",
+        ),
+        pytest.param(
+            {"detail": "Region state/zz is not in the catalog version."},
+            "",
+            id="no-code",
+        ),
+    ],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_400_naming_none_of_the_callers_rows_is_unavailable(
+    submit, record: str, route_status, body: dict[str, str], stated_code: str
+) -> None:
+    # A 400 the caller cannot act on is a state of the simulation service,
+    # such as a catalog version missing while a release deploys.
+    service = RecordingService(status_code=400, body=body)
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        submit(service.client())
+
+    assert route_status(unavailable.value) == 503
+    assert str(unavailable.value) == (
+        f"The simulation service refused the {record}{stated_code}: {body['detail']}"
+    )
+    assert unavailable.value.created_record_id is None
 
 
 @pytest.mark.parametrize(
@@ -344,7 +430,7 @@ def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
     )
 
 
-@pytest.mark.parametrize("status_code", [200, 302, 404, 409, 503])
+@pytest.mark.parametrize("status_code", [200, 302, 404, 409])
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_any_other_answer_is_unavailable(
     submit, record: str, route_status, status_code: int
@@ -357,6 +443,83 @@ def test_any_other_answer_is_unavailable(
         submit(service.client())
 
     assert route_status(unavailable.value) == 503
+
+
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_the_services_unavailability_is_passed_on_with_its_code_and_reason(
+    submit, record: str, route_status
+) -> None:
+    service = RecordingService(
+        status_code=503,
+        body={
+            "code": "manifest_unavailable",
+            "detail": "The v2 version manifest could not be read.",
+        },
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        submit(service.client())
+
+    assert route_status(unavailable.value) == 503
+    assert str(unavailable.value) == (
+        "The simulation service is unavailable (manifest_unavailable): The v2 "
+        "version manifest could not be read."
+    )
+    assert unavailable.value.created_record_id is None
+
+
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_record_the_unavailable_service_created_is_named(
+    submit, record: str, route_status
+) -> None:
+    # The service created the record, then Modal refused the call and the
+    # service failed its run: the caller gets the record's ID.
+    id_field, record_id = CREATED_RECORD_IDS[record]
+    service = RecordingService(
+        status_code=503,
+        body={
+            "code": "modal_call_refused",
+            "detail": "Modal refused the call, and the run was failed.",
+            id_field: str(record_id),
+        },
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        submit(service.client())
+
+    assert route_status(unavailable.value) == 503
+    assert str(unavailable.value) == (
+        f"The simulation service created {record} {record_id}, but is "
+        "unavailable (modal_call_refused): Modal refused the call, and the run "
+        "was failed."
+    )
+    assert unavailable.value.created_record_id == record_id
+
+
+def test_a_report_503_naming_only_another_records_id_names_no_report() -> None:
+    service = RecordingService(
+        status_code=503,
+        body={
+            "code": "modal_call_refused",
+            "detail": "Modal refused the call.",
+            "simulation_id": str(SIMULATION_ID),
+        },
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        service.client().submit_report(report_input())
+
+    assert unavailable.value.created_record_id is None
+
+
+@pytest.mark.parametrize("body", [b"Service Unavailable", {"other": "shape"}])
+def test_a_503_that_cannot_be_read_is_unavailable(body: object) -> None:
+    service = RecordingService(status_code=503, body=body)
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        service.client().submit_report(report_input())
+
+    assert str(unavailable.value) == "The simulation service answered 503."
 
 
 @pytest.mark.parametrize(

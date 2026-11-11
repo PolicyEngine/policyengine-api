@@ -35,6 +35,17 @@ from tests.unit.v2.stored_report_support import (
     report_route_client,
 )
 
+ROUTE_SUPPORT_LOGGER = "policyengine_api.fastapi_routes.v2.simulation_resources_support"
+
+
+def logged_events(caplog) -> list[str]:
+    """Return the events the report and simulation routes logged."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == ROUTE_SUPPORT_LOGGER
+    ]
+
 
 def report_body(**changes: Any) -> dict[str, Any]:
     values: dict[str, Any] = {
@@ -302,20 +313,88 @@ def test_a_created_simulation_that_cannot_be_read_back_answers_its_id() -> None:
     }
 
 
+def test_a_report_the_unavailable_service_created_answers_its_id(caplog) -> None:
+    message = (
+        f"The simulation service created report {REPORT_ID}, but is unavailable "
+        "(modal_call_refused): Modal refused the call."
+    )
+    error = SimulationServiceUnavailableError(message, created_record_id=REPORT_ID)
+    client = report_route_client(reports=FakeReportService(error=error))
+
+    with caplog.at_level("ERROR", logger=ROUTE_SUPPORT_LOGGER):
+        response = client.post("/v2/reports?country_id=us", json=report_body())
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": message,
+        "report_id": str(REPORT_ID),
+    }
+    assert logged_events(caplog) == ["v2_report_unavailable_after_creation"]
+
+
+def test_a_simulation_the_unavailable_service_created_answers_its_id(
+    caplog,
+) -> None:
+    simulation_id = FakeSimulationService().simulation.id
+    message = (
+        f"The simulation service created simulation {simulation_id}, but is "
+        "unavailable (modal_call_refused): Modal refused the call."
+    )
+    error = SimulationServiceUnavailableError(message, created_record_id=simulation_id)
+    client = report_route_client(simulations=FakeSimulationService(error=error))
+
+    with caplog.at_level("ERROR", logger=ROUTE_SUPPORT_LOGGER):
+        response = client.post("/v2/simulations?country_id=us", json=simulation_body())
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": message,
+        "simulation_id": str(simulation_id),
+    }
+    assert logged_events(caplog) == ["v2_simulation_unavailable_after_creation"]
+
+
 @pytest.mark.parametrize(
-    ("path", "schema", "id_field"),
+    ("path", "status_code", "schema", "id_field"),
     [
-        ("/v2/reports", "CreatedReportUnreadableResponse", "report_id"),
-        ("/v2/simulations", "CreatedSimulationUnreadableResponse", "simulation_id"),
+        pytest.param(
+            "/v2/reports",
+            "502",
+            "CreatedReportUnreadableResponse",
+            "report_id",
+            id="report-502",
+        ),
+        pytest.param(
+            "/v2/simulations",
+            "502",
+            "CreatedSimulationUnreadableResponse",
+            "simulation_id",
+            id="simulation-502",
+        ),
+        pytest.param(
+            "/v2/reports",
+            "503",
+            "UnavailableAfterReportCreatedResponse",
+            "report_id",
+            id="report-503",
+        ),
+        pytest.param(
+            "/v2/simulations",
+            "503",
+            "UnavailableAfterSimulationCreatedResponse",
+            "simulation_id",
+            id="simulation-503",
+        ),
     ],
-    ids=["report", "simulation"],
 )
-def test_the_openapi_document_gives_the_created_records_id_with_a_502(
-    path: str, schema: str, id_field: str
+def test_the_openapi_document_gives_the_created_records_id(
+    path: str, status_code: str, schema: str, id_field: str
 ) -> None:
     document = report_route_client().get("/v2/openapi.json").json()
 
-    answer = document["paths"][path]["post"]["responses"]["502"]
+    answer = document["paths"][path]["post"]["responses"][status_code]
     assert {"$ref": f"#/components/schemas/{schema}"} in answer["content"][
         "application/json"
     ]["schema"]["anyOf"]
