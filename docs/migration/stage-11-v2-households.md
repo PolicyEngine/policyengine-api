@@ -323,11 +323,12 @@ answer is 202 with the new job's `calculation_id` and `status`; each
 submission creates a new job. The simulation service's 422 reasons reach the
 caller as 422.
 
-Answers given before the simulation service's route creates a job are 503:
-its 400 (a household, policy or catalog version it can't find, with its
-reason), its 401, 403, 404, 405, 413 and 429 (its authentication, routing,
-body-size and rate limits), its 503 (its manifest or database can't be read,
-or Modal refused the call), a refusal the Public API can't read, a
+Answers after which no job of the submission runs are 503: its 400 (a
+household, policy or catalog version it can't find, with its reason), its
+401, 403, 404, 405, 413 and 429 (its authentication, routing, body-size and
+rate limits, before its route runs), its own 503, which names its code (its
+manifest or database can't be read, or Modal refused the call, after which
+it fails the job it had created), a refusal the Public API can't read, a
 connection never made, missing configuration and a gateway token it can't
 fetch. A failed catalog query in the policy check is 503 too.
 
@@ -335,7 +336,8 @@ Answers that may come after it created the job are 502: a 202 whose body the
 Public API can't read, its 500 (`internal_error`), any status not named
 above (such as 200, a redirect, 408, 409 or 501), an answer lost after the
 submission may have been sent (a read timeout or a dropped connection), and
-a 502 or 504 a proxy in front of it answered in its place. No route finds a
+an answer a proxy in front of it gave in its place: a 502 or 504, which it
+never answers itself, or a 503 without its code. No route finds a
 household job without its ID, so the 502's message asks the caller to submit
 the household calculation again, and says that this creates a second job if
 the first request went through.

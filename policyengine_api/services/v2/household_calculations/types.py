@@ -318,38 +318,40 @@ class HouseholdCalculationSubmitter(Protocol):
 
         Raise SimulationServiceInvalidRequestError when the service refuses
         the caller's data, with its reasons;
-        SimulationServiceUnavailableError when nothing was created;
+        SimulationServiceUnavailableError when no job of the submission will
+        run;
         SimulationServiceInternalError when it failed (500), possibly after
         creating the job; and SimulationServiceAnswerUnreadableError when it
         accepted the calculation but its answer cannot be read, it answered a
         status the Public API does not expect, its answer was lost after the
         submission may have reached it, or a proxy in front of it answered
-        502 or 504 in its place.
+        in its place.
         """
         ...
 
 
 class SimulationServiceUnavailableError(RuntimeError):
-    """The simulation service could not be reached, or refused before any job.
+    """The simulation service could not be reached, or refused so no job runs.
 
     It covers a connection never made, a gateway token that cannot be
-    fetched, missing configuration, and every answer the service gives before
-    its route creates a job: a household, policy or catalog version it cannot
+    fetched, missing configuration, and every answer after which no job of
+    the submission runs: a household, policy or catalog version it cannot
     find (which the Public API checks first), its authentication, routing,
-    body-size and rate limits, and a database or manifest it cannot read or a
-    Modal call it cannot start (503).
+    body-size and rate limits, and its own 503 for a database or manifest it
+    cannot read, or a Modal call it cannot start, after which it fails the
+    job it had created.
     """
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service received the calculation, or may have, but no answer.
+    """The simulation service may have created the job, but no usable answer came.
 
     It answered 202, so it has already created the job and started its call,
     but its answer is unreadable; it answered a status the Public API does not
-    expect, possibly after creating the job; or its answer was lost after the
-    submission may have reached it. The message asks the caller to submit
-    again, and says this creates a second job if the first request went
-    through.
+    expect, possibly after creating the job; its answer was lost after the
+    submission may have reached it; or a proxy answered in its place. The
+    message asks the caller to submit again, and says this creates a second
+    job if the first request went through.
     """
 
 
