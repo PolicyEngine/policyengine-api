@@ -11,6 +11,7 @@ being calculated, fails on, and accepts what they read.
 from __future__ import annotations
 
 import math
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -402,6 +403,22 @@ def test_the_period_key_check_agrees_with_the_countrys_reader(
     ]
 
     assert disagreements == []
+
+
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_a_month_period_too_long_to_end_before_9999_is_refused_at_once(country_id):
+    """policyengine-core finds a month period's last day a year at a time.
+
+    So a size of a billion months took about two seconds, and a size with
+    thousands of digits never finished. Any period longer than the months
+    from year 1 to 9999 ends too late to read, so the check refuses it
+    without finding its last day.
+    """
+    started = time.perf_counter()
+
+    readable = is_readable_period_key(f"month:2026-01:{10**9}", country_id)
+
+    assert (readable, time.perf_counter() - started < 0.5) == (False, True)
 
 
 def test_an_unreadable_period_key_is_reported_with_its_path():

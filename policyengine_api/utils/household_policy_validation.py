@@ -57,6 +57,10 @@ _ETERNITY_UNIT = "eternity"
 # (dated_reforms.bare_year).
 _UK_BARE_YEARS = range(1901, 2200)
 _ERRORS_READING_A_PERIOD = (TypeError, ValueError, OverflowError)
+# The months from year 1 to 9999. A longer month period ends after
+# 9999-12-31, and policyengine-core finds a month period's last day a year at
+# a time, which for a long enough period never finishes.
+_MOST_MONTHS = 9999 * 12
 
 POLICY_REQUIREMENT = (
     "an object of parameter paths, each set to an object of period keys and values"
@@ -246,12 +250,15 @@ def _is_readable_range(period_key: str, *, read_as_by_uk_model: bool) -> bool:
 def _is_readable_period(period_key: str) -> bool:
     """Say whether policyengine-core reads a key as a period of real days.
 
-    The period's last day must be before 9999-12-31, and it can't be an
-    eternity, which has no last day.
+    The period's last day must be before 9999-12-31, so a month period longer
+    than ``_MOST_MONTHS`` is refused before its last day is found, and it
+    can't be an eternity, which has no last day.
     """
     try:
         period = periods.period(period_key)
         if period.unit == _ETERNITY_UNIT:
+            return False
+        if period.unit == "month" and period.size > _MOST_MONTHS:
             return False
         _ = period.start.date
         _ = period.stop.offset(1, "day").date
