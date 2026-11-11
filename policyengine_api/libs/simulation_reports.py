@@ -22,22 +22,32 @@ service runs its default worker's. The simulation service answers:
   body cannot be read is SimulationServiceAnswerUnreadableError: the record
   exists, so the caller must not be invited to submit again;
 - 422 with its reasons when it refuses the caller's data, as text or one
-  per field as FastAPI writes them, and 400 with its reason when a row the
-  request names does not exist (a region, dataset or dynamic; the Public
-  API checks the country and policies first): SimulationServiceRefusalError;
+  per field as FastAPI writes them, and 400 with a code in
+  ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region, dataset or
+  dynamic the caller named does not exist (the Public API checks the country
+  and policies first): SimulationServiceRefusalError, with the code and
+  reasons;
+- 400 with any other code, or none: a state of the service rather than the
+  caller's error, such as ``unknown_catalog_version`` while a release
+  deploys, or a row the Public API already checked. The service is
+  unavailable (SimulationServiceUnavailableError), with its code and reason;
 - 500 (``internal_error``) when it failed, possibly after creating the
   record: SimulationServiceInternalError, which the caller must not
   resubmit after;
-- anything else (503 when it cannot read its manifest or database, Modal
-  refuses the call, or its default worker runs another version during a
-  release): the service is unavailable (SimulationServiceUnavailableError),
-  as it is for no answer, a refusal of another shape, a gateway token that
-  cannot be fetched and missing configuration. No answer means a connection
-  never made (``ConnectError``, ``ConnectTimeout``, ``PoolTimeout``); once
-  the request may have been sent, a lost answer (a read timeout, a dropped
-  connection) is SimulationServiceAnswerUnreadableError, since the record
-  may exist, and so is a 502 or 504 a proxy in front of the service answers
-  in its place.
+- 503 with its code and reason when it cannot read its manifest or
+  database, or Modal refuses the run's call. After Modal refuses, the
+  service has created the record and failed its run, and its answer names
+  the record (``report_id`` or ``simulation_id``):
+  SimulationServiceUnavailableError, with the code, the reason and the
+  record's ID;
+- anything else: the service is unavailable
+  (SimulationServiceUnavailableError), as it is for no answer, a refusal of
+  another shape, a gateway token that cannot be fetched and missing
+  configuration. No answer means a connection never made (``ConnectError``,
+  ``ConnectTimeout``, ``PoolTimeout``); once the request may have been
+  sent, a lost answer (a read timeout, a dropped connection) is
+  SimulationServiceAnswerUnreadableError, since the record may exist, and so
+  is a 502 or 504 a proxy in front of the service answers in its place.
 
 Wiring the generated simulation client: ``post_simulation`` and
 ``post_report`` are the only code that sends a request, and each returns the
@@ -52,7 +62,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, NoReturn
 from uuid import UUID
 
 import httpx
@@ -83,6 +93,15 @@ REPORTS_PATH = "/reports"
 CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
 REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
+# The codes of the simulation service's 400 that name a row the caller chose
+# and the Public API does not check: the region, the dataset, or a dynamic
+# the catalog version its default worker runs does not have. Each is the
+# caller's error and answers 422. Any other 400 is a state of the service,
+# such as a catalog version missing while a release deploys, or a row the
+# Public API already checked, and answers 503.
+CALLER_ROW_REFUSAL_CODES = frozenset(
+    {"unknown_region", "unknown_dataset", "unknown_dynamic"}
+)
 UNREACHABLE = "The simulation service could not be reached."
 # The service never answers 502 or 504 itself: a proxy in front of it, such as
 # Cloud Run's front end, answers them in its place, possibly after the
@@ -94,6 +113,10 @@ PROXY_STAND_IN_STATUSES = frozenset(
 # any other, the service may have received the submission and created the
 # record.
 CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
+# What a submission creates.
+RecordName = Literal["report", "simulation"]
 
 
 @dataclass(frozen=True)
@@ -130,11 +153,18 @@ class _RefusedField(_AnswerModel):
 class _Refusal(_AnswerModel):
     """A refusal's or failure's body: a reason, or each refused request field.
 
-    A failure may also name its ``code``.
+    It may also name its ``code``, and a 503 after Modal refused the run's
+    call names the record the service created and failed.
     """
 
     detail: str | list[_RefusedField]
     code: str | None = None
+    report_id: UUID | None = None
+    simulation_id: UUID | None = None
+
+    def created_record_id(self, record: RecordName) -> UUID | None:
+        """Return the ID the body gives the submission's own record, if any."""
+        return self.report_id if record == "report" else self.simulation_id
 
 
 def _policy_choice(choice: PolicyChoice) -> dict[str, str | None]:
@@ -234,7 +264,7 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
         return None
 
 
-def _internal_error(refusal: _Refusal | None, record: str) -> str:
+def _internal_error(refusal: _Refusal | None, record: RecordName) -> str:
     """Describe the service's failure, which may have created the record."""
     warning = (
         f"It may have created the {record}, so submitting again could create another."
@@ -245,22 +275,58 @@ def _internal_error(refusal: _Refusal | None, record: str) -> str:
     return f"The simulation service failed{code}: {refusal.detail} {warning}"
 
 
-def _raise_for_refusal(answer: SimulationAnswer, record: str) -> None:
+def _code_and_reason(refusal: _Refusal) -> str:
+    """Return `` (code): reason``, or ``: reason`` when the service gave no code."""
+    code = "" if refusal.code is None else f" ({refusal.code})"
+    return f"{code}: {_refusal_reason(refusal)}"
+
+
+def _raise_for_refused_request(
+    answer: SimulationAnswer, refusal: _Refusal, record: RecordName
+) -> NoReturn:
+    """Raise the error the service's readable 400 or 422 means.
+
+    A 422, or a 400 with a code in ``CALLER_ROW_REFUSAL_CODES``, is the
+    caller's error. Any other 400 is the service's state, so it is
+    unavailable.
+    """
+    code_and_reason = _code_and_reason(refusal)
+    if (
+        answer.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        or refusal.code in CALLER_ROW_REFUSAL_CODES
+    ):
+        msg = f"The simulation service cannot run this request{code_and_reason}"
+        raise SimulationServiceRefusalError(msg)
+    msg = f"The simulation service refused the {record}{code_and_reason}"
+    raise SimulationServiceUnavailableError(msg)
+
+
+def _unavailable(
+    refusal: _Refusal, record: RecordName
+) -> SimulationServiceUnavailableError:
+    """Describe the service's readable 503, naming the record it created, if any."""
+    created_record_id = refusal.created_record_id(record)
+    if created_record_id is None:
+        msg = f"The simulation service is unavailable{_code_and_reason(refusal)}"
+        return SimulationServiceUnavailableError(msg)
+    msg = (
+        f"The simulation service created {record} {created_record_id}, but is "
+        f"unavailable{_code_and_reason(refusal)}"
+    )
+    return SimulationServiceUnavailableError(msg, created_record_id=created_record_id)
+
+
+def _raise_for_refusal(answer: SimulationAnswer, record: RecordName) -> None:
     """Raise the error a refusal, a failure or another answer means.
 
-    ``record`` names what the submission creates (``report`` or
-    ``simulation``).
+    ``record`` names what the submission creates.
     """
     refusal = _refusal(answer)
     if answer.status_code in REFUSAL_STATUSES:
         if refusal is None:
             msg = f"The simulation service answered {answer.status_code} unreadably."
             raise SimulationServiceUnavailableError(msg)
-        msg = (
-            "The simulation service cannot run this request: "
-            f"{_refusal_reason(refusal)}"
-        )
-        raise SimulationServiceRefusalError(msg)
+        _raise_for_refused_request(answer, refusal, record)
     if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
         raise SimulationServiceInternalError(_internal_error(refusal, record))
     if answer.status_code in PROXY_STAND_IN_STATUSES:
@@ -270,6 +336,8 @@ def _raise_for_refusal(answer: SimulationAnswer, record: str) -> None:
             f"created the {record} before submitting again."
         )
         raise SimulationServiceAnswerUnreadableError(msg)
+    if answer.status_code == HTTPStatus.SERVICE_UNAVAILABLE and refusal is not None:
+        raise _unavailable(refusal, record)
     msg = f"The simulation service answered {answer.status_code}."
     raise SimulationServiceUnavailableError(msg)
 
@@ -323,7 +391,7 @@ class SimulationServiceReportClient:
         send: Callable[[httpx.Client, dict[str, Any]], SimulationAnswer],
         body: dict[str, Any],
         *,
-        record: str,
+        record: RecordName,
     ) -> SimulationAnswer:
         """Send ``body`` and return the answer, which may be a refusal.
 

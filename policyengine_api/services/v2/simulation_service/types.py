@@ -36,13 +36,27 @@ ReportDescription = Annotated[str, Field(max_length=10_000)]
 
 
 class SimulationServiceUnavailableError(RuntimeError):
-    """The simulation service could not be asked, or did not answer as expected.
+    """The simulation service could not be asked, or cannot serve the request now.
 
-    That covers a connection never made, a refusal of another shape, a
-    gateway token that cannot be fetched, missing configuration, the
-    service's own unavailability (503) and any answer no other error names.
-    The service has created nothing, so the caller may submit again.
+    That covers a connection never made, a gateway token that cannot be
+    fetched, missing configuration, a refusal of another shape, a 400 that
+    names none of the caller's rows (such as a catalog version missing while
+    a release deploys), the service's own unavailability (503) and any answer
+    no other error names. The message gives the service's code and reason
+    when it gave them.
+
+    The service has created nothing, unless its 503 names the record it
+    created first: when Modal refuses the run's call, the service fails the
+    run and answers 503 with the record's ID. ``created_record_id`` is that
+    ID, and None when the answer names no record. Submitting again creates a
+    new record either way, but starts no second calculation: the record named
+    has no running calculation.
     """
+
+    def __init__(self, message: str, *, created_record_id: UUID | None = None) -> None:
+        """Say why, and name the record the service created, if it names one."""
+        super().__init__(message)
+        self.created_record_id = created_record_id
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
@@ -66,8 +80,9 @@ class SimulationServiceInternalError(RuntimeError):
 class SimulationServiceRefusalError(ValueError):
     """The simulation service refused the request's data, and said why.
 
-    For example, a region, dataset or dynamic the current catalog version
-    does not have.
+    For example, a region, dataset or dynamic the catalog version its default
+    worker runs does not have. The message gives the service's code, when it
+    gave one, and its reason.
     """
 
 
@@ -179,7 +194,7 @@ class SimulationServiceClient(Protocol):
 
     - SimulationServiceRefusalError when the service refuses the request's
       data (its 422, or its 400 for a region, dataset or dynamic it cannot
-      find), with its reasons;
+      find), with its code and reasons;
     - SimulationServiceInternalError when it failed (500), possibly after
       creating the record;
     - SimulationServiceAnswerUnreadableError when it created the record but
@@ -187,7 +202,8 @@ class SimulationServiceClient(Protocol):
       have reached it, or a proxy answered 502 or 504 in its place;
     - SimulationServiceUnavailableError otherwise: a connection never made, a
       gateway token that cannot be fetched, missing configuration, a refusal
-      of another shape, its 503 or any other answer.
+      of another shape, any other 400, its 503 or any other answer. It names
+      the record the service created when the service's 503 names one.
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,

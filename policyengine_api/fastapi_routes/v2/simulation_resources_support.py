@@ -50,7 +50,9 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
 # The service's failure (500), an unreadable created answer, an answer lost
 # after sending and a proxy's 502 or 504 are a 502, as for household
 # calculations, not a 503: the record exists, or may, so the caller must not
-# be invited to submit again.
+# be invited to submit again. The service's 503 naming a record it created
+# and failed is still a 503, and each create route answers it with the
+# record's ID (``unavailable_after_creation_answer``).
 SUBMISSION_ERROR_MAPPINGS = (
     V2ErrorMapping((PolicyNotFoundError,), 404),
     V2ErrorMapping(
@@ -106,6 +108,18 @@ def created_record_unreadable_answer(
     cause = error.__cause__
     _log_failure(event, cause if isinstance(cause, Exception) else error)
     return JSONResponse(status_code=502, content=answer.model_dump(mode="json"))
+
+
+def unavailable_after_creation_answer(
+    event: str, error: Exception, answer: V2ErrorResponse
+) -> JSONResponse:
+    """Log the simulation service's 503 that names a record it created, and answer 503.
+
+    The service created the record, then failed its run, so ``answer`` gives
+    the record's ID along with the service's code and reason.
+    """
+    _log_failure(event, error)
+    return JSONResponse(status_code=503, content=answer.model_dump(mode="json"))
 
 
 def simulation_resource_operation(

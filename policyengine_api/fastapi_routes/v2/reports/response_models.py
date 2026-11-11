@@ -153,6 +153,16 @@ class CreatedReportUnreadableResponse(V2ErrorResponse):
     report_id: UUID
 
 
+class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
+    """The 503 answer when the simulation service failed a new report's run.
+
+    The message gives the service's code and reason. ``report_id`` names the
+    report, which ``GET /v2/reports/{report_id}`` reads with its failed run.
+    """
+
+    report_id: UUID
+
+
 # Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
@@ -177,8 +187,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response(
         "The request does not match the schema, the country has no economy "
         "reports (such as a household-only country), or the simulation service "
-        "cannot run the report (for example, no such region, dataset or "
-        "dynamic); the message says which."
+        "cannot run the report: its 422, or its 400 for a region, dataset or "
+        "dynamic it does not have. The message says which, with the service's "
+        "code and reason."
     ),
     502: {
         "model": V2ErrorResponse | CreatedReportUnreadableResponse,
@@ -193,9 +204,17 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "submitting it again."
         ),
     },
-    503: error_response(
-        "The simulation service is unavailable or cannot be reached, or "
-        "refuses in a shape the Public API cannot read; or the v2 database is "
-        "unavailable."
-    ),
+    503: {
+        "model": V2ErrorResponse | UnavailableAfterReportCreatedResponse,
+        "description": (
+            "The simulation service cannot be reached or is not configured; it "
+            "answered 503, or a 400 naming no region, dataset or dynamic of the "
+            "caller's (such as a catalog version missing while a release "
+            "deploys), and the message gives its code and reason; or it "
+            "answered in a shape the Public API cannot read. Or the v2 database "
+            "is unavailable. When the service created the report before "
+            "answering 503, as when Modal refuses the run's call and the "
+            "service fails the run, the answer gives its report_id."
+        ),
+    },
 }

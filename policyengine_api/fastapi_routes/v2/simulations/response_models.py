@@ -101,6 +101,17 @@ class CreatedSimulationUnreadableResponse(V2ErrorResponse):
     simulation_id: UUID
 
 
+class UnavailableAfterSimulationCreatedResponse(V2ErrorResponse):
+    """The 503 answer when the simulation service failed a new simulation's run.
+
+    The message gives the service's code and reason. ``simulation_id`` names
+    the simulation, which ``GET /v2/simulations/{simulation_id}`` reads with
+    its failed run.
+    """
+
+    simulation_id: UUID
+
+
 SIMULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
     500: error_response("The operation could not be completed."),
@@ -117,8 +128,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     413: error_response("The request body exceeds 16 KiB."),
     422: error_response(
         "The request does not match the schema, the country has no economy "
-        "calculations, or the simulation service cannot run the simulation; "
-        "the message says which."
+        "calculations, or the simulation service cannot run the simulation: "
+        "its 422, or its 400 for a region, dataset or dynamic it does not "
+        "have. The message says which, with the service's code and reason."
     ),
     502: {
         "model": V2ErrorResponse | CreatedSimulationUnreadableResponse,
@@ -133,9 +145,17 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "/v2/simulations/{simulation_id} rather than submitting it again."
         ),
     },
-    503: error_response(
-        "The simulation service is unavailable or cannot be reached, or "
-        "refuses in a shape the Public API cannot read; or the v2 database is "
-        "unavailable."
-    ),
+    503: {
+        "model": V2ErrorResponse | UnavailableAfterSimulationCreatedResponse,
+        "description": (
+            "The simulation service cannot be reached or is not configured; it "
+            "answered 503, or a 400 naming no region, dataset or dynamic of the "
+            "caller's (such as a catalog version missing while a release "
+            "deploys), and the message gives its code and reason; or it "
+            "answered in a shape the Public API cannot read. Or the v2 database "
+            "is unavailable. When the service created the simulation before "
+            "answering 503, as when Modal refuses the run's call and the "
+            "service fails the run, the answer gives its simulation_id."
+        ),
+    },
 }
