@@ -16,7 +16,10 @@ runs, in one query, without results.
 
 Creating a report checks the country and the policies the report names, asks
 the simulation service to create and start it, then reads it back from the
-tables. Re-runs and run lists are not here.
+tables. Once the simulation service has answered with the report's ID, the
+report exists: a failure to read it back raises CreatedReportUnreadableError,
+which names it, so the caller reads it rather than submitting it again.
+Re-runs and run lists are not here.
 """
 
 from __future__ import annotations
@@ -45,8 +48,8 @@ from policyengine_api.services.v2.stored_reports.transformations import (
     report_summary_read,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    CreatedReportUnreadableError,
     ReportStorageError,
-    StoredReportNotFoundError,
     require_economy_report,
     require_reform_run,
     require_report,
@@ -168,9 +171,10 @@ class V2StoredReportService:
         """Create the report through the simulation service and return it as stored.
 
         Raise the submission's errors (see ``SimulationSubmissionService``),
-        SimulationServiceUnavailableError when the report the simulation
-        service names cannot be read back in the country, and the read's own
-        errors.
+        and CreatedReportUnreadableError, caused by the read's own error, when
+        the report the simulation service created cannot be read back in the
+        country: not stored there, the database unavailable, or any other
+        failure of the read.
         """
         if self._submissions is None:
             msg = "The simulation service is not configured here"
@@ -180,9 +184,8 @@ class V2StoredReportService:
             return self.get_report(
                 country_id=report_input.country_id, report_id=submitted.report_id
             )
-        except StoredReportNotFoundError as error:
-            msg = (
-                f"The simulation service answered with report {submitted.report_id}, "
-                f"which is not stored in country {report_input.country_id!r}"
-            )
-            raise SimulationServiceUnavailableError(msg) from error
+        except Exception as error:
+            # The report exists whatever failed, so the caller gets its ID.
+            raise CreatedReportUnreadableError(
+                report_id=submitted.report_id, country_id=report_input.country_id
+            ) from error

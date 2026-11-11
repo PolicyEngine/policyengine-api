@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
     PackageVersionsItem,
 )
@@ -89,6 +90,17 @@ class SimulationDetailResponse(SimulationSuccessResponse[SimulationDetailResult]
     """Success response holding one simulation."""
 
 
+class CreatedSimulationUnreadableResponse(V2ErrorResponse):
+    """The 502 answer when the created simulation cannot be read back.
+
+    The simulation service created ``simulation_id``, so the caller reads it
+    with ``GET /v2/simulations/{simulation_id}`` rather than submitting it
+    again.
+    """
+
+    simulation_id: UUID
+
+
 SIMULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
     500: error_response("The operation could not be completed."),
@@ -108,13 +120,19 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "calculations, or the simulation service cannot run the simulation; "
         "the message says which."
     ),
-    502: error_response(
-        "The simulation service created the simulation, but its answer cannot "
-        "be read; it failed (500); its answer was lost after the submission may "
-        "have reached it; or a proxy in front of it answered 502 or 504 in its "
-        "place. In each case it may have created the simulation, so submitting "
-        "again could create another."
-    ),
+    502: {
+        "model": V2ErrorResponse | CreatedSimulationUnreadableResponse,
+        "description": (
+            "The simulation service created the simulation, but its answer "
+            "cannot be read; it failed (500); its answer was lost after the "
+            "submission may have reached it; or a proxy in front of it answered "
+            "502 or 504 in its place. In each case it may have created the "
+            "simulation, so submitting again could create another. Or it "
+            "created the simulation, but the simulation cannot be read back: "
+            "the answer gives its simulation_id, to read with GET "
+            "/v2/simulations/{simulation_id} rather than submitting it again."
+        ),
+    },
     503: error_response(
         "The simulation service is unavailable or cannot be reached, or "
         "refuses in a shape the Public API cannot read; or the v2 database is "

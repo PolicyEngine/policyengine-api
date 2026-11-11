@@ -27,6 +27,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     SUBMISSION_ERROR_MAPPINGS,
     SUBMISSION_REFUSALS,
+    created_record_unreadable_answer,
     simulation_resource_operation,
 )
 from policyengine_api.fastapi_routes.v2.simulations.request_models import (
@@ -36,6 +37,7 @@ from policyengine_api.fastapi_routes.v2.simulations.response_models import (
     CREATE_RESPONSES,
     READ_RESPONSES,
     SIMULATION_ERROR_RESPONSES,
+    CreatedSimulationUnreadableResponse,
     SimulationDetailResponse,
     SimulationDetailResult,
     SimulationItem,
@@ -48,6 +50,7 @@ from policyengine_api.query_parameters import (
     SimulationDetailQuery,
 )
 from policyengine_api.services.v2.stored_simulations.validators import (
+    CreatedSimulationUnreadableError,
     SimulationStorageError,
     StoredSimulationNotFoundError,
 )
@@ -125,7 +128,8 @@ def build_v2_simulation_router(dependencies: NativeRouteDependencies) -> APIRout
             "named policy, then has the simulation service create the "
             "simulation and its first run on its default worker's "
             "PolicyEngine.py version, and start the run. Answers the simulation "
-            "as stored, with its pending run."
+            "as stored, with its pending run. A created simulation that cannot "
+            "be read back answers 502 with its simulation_id."
         ),
     )
     def create_simulation(
@@ -136,8 +140,24 @@ def build_v2_simulation_router(dependencies: NativeRouteDependencies) -> APIRout
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
 
-        def create() -> SimulationDetailResponse:
-            simulation = service_factory().create_simulation(body)
+        def create() -> SimulationDetailResponse | JSONResponse:
+            try:
+                simulation = service_factory().create_simulation(body)
+            except CreatedSimulationUnreadableError as error:
+                return created_record_unreadable_answer(
+                    "v2_created_simulation_unreadable",
+                    error,
+                    CreatedSimulationUnreadableResponse(
+                        message=(
+                            f"The simulation service created simulation "
+                            f"{error.simulation_id}, but it could not be read "
+                            f"back. Read it with GET /v2/simulations/"
+                            f"{error.simulation_id}?country_id={error.country_id} "
+                            "rather than submitting it again."
+                        ),
+                        simulation_id=error.simulation_id,
+                    ),
+                )
             return SimulationDetailResponse(
                 result=SimulationDetailResult(item=SimulationItem.from_read(simulation))
             )

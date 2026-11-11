@@ -27,6 +27,25 @@ class ReportStorageError(RuntimeError):
     """The detailed-save database could not be read."""
 
 
+class CreatedReportUnreadableError(RuntimeError):
+    """The simulation service created the report, but it could not be read back.
+
+    The simulation service answered with the report's ID, so the report
+    exists and submitting it again would create another. ``report_id`` and
+    ``country_id`` say where to read it; the error's cause says why reading
+    it back failed.
+    """
+
+    def __init__(self, *, report_id: UUID, country_id: str) -> None:
+        """Name the created report and its country."""
+        super().__init__(
+            f"The simulation service created report {report_id} in country "
+            f"{country_id!r}, but it could not be read back"
+        )
+        self.report_id = report_id
+        self.country_id = country_id
+
+
 class ReportKindUnsupportedError(ValueError):
     """The report is of a kind these routes do not read yet.
 

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
@@ -142,6 +143,16 @@ class ReportListResponse(ReportSuccessResponse[ReportListResult]):
     """Success response holding the listed reports."""
 
 
+class CreatedReportUnreadableResponse(V2ErrorResponse):
+    """The 502 answer when the created report cannot be read back.
+
+    The simulation service created ``report_id``, so the caller reads it
+    with ``GET /v2/reports/{report_id}`` rather than submitting it again.
+    """
+
+    report_id: UUID
+
+
 # Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
@@ -169,17 +180,22 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "cannot run the report (for example, no such region, dataset or "
         "dynamic); the message says which."
     ),
-    502: error_response(
-        "The simulation service created the report, but its answer cannot be "
-        "read; it failed (500); its answer was lost after the submission may "
-        "have reached it; or a proxy in front of it answered 502 or 504 in its "
-        "place. In each case it may have created the report, so submitting "
-        "again could create another."
-    ),
+    502: {
+        "model": V2ErrorResponse | CreatedReportUnreadableResponse,
+        "description": (
+            "The simulation service created the report, but its answer cannot "
+            "be read; it failed (500); its answer was lost after the submission "
+            "may have reached it; or a proxy in front of it answered 502 or 504 "
+            "in its place. In each case it may have created the report, so "
+            "submitting again could create another. Or it created the report, "
+            "but the report cannot be read back: the answer gives its "
+            "report_id, to read with GET /v2/reports/{report_id} rather than "
+            "submitting it again."
+        ),
+    },
     503: error_response(
         "The simulation service is unavailable or cannot be reached, or "
-        "refuses in a shape the Public API cannot read; the v2 database is "
-        "unavailable; or the simulation service answered with a report the "
-        "Public API cannot read."
+        "refuses in a shape the Public API cannot read; or the v2 database is "
+        "unavailable."
     ),
 }

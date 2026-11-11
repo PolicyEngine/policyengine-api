@@ -13,6 +13,8 @@ import logging
 import traceback
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from starlette.responses import JSONResponse
+
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorMapping,
@@ -33,8 +35,6 @@ from policyengine_api.services.v2.simulation_service.validators import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-    from starlette.responses import JSONResponse
 
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,20 @@ def _log_failure(event: str, error: Exception) -> None:
                 }
             },
         )
+
+
+def created_record_unreadable_answer(
+    event: str, error: Exception, answer: V2ErrorResponse
+) -> JSONResponse:
+    """Log why a created record could not be read back, and answer 502.
+
+    The simulation service created the record, so ``answer`` names it for the
+    caller to read rather than submit again. The failure logged is the read's
+    own, ``error``'s cause.
+    """
+    cause = error.__cause__
+    _log_failure(event, cause if isinstance(cause, Exception) else error)
+    return JSONResponse(status_code=502, content=answer.model_dump(mode="json"))
 
 
 def simulation_resource_operation(

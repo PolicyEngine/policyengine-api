@@ -7,7 +7,10 @@ are not part of it: an economy run's output is a file, and a household
 run's result is read with household reports.
 
 Creating a simulation checks the country and its policy, asks the
-simulation service to create and start it, then reads it back.
+simulation service to create and start it, then reads it back. Once the
+simulation service has answered with the simulation's ID, the simulation
+exists: a failure to read it back raises CreatedSimulationUnreadableError,
+which names it, so the caller reads it rather than submitting it again.
 """
 
 from __future__ import annotations
@@ -27,8 +30,8 @@ from policyengine_api.services.v2.stored_simulations.transformations import (
     simulation_read,
 )
 from policyengine_api.services.v2.stored_simulations.validators import (
+    CreatedSimulationUnreadableError,
     SimulationStorageError,
-    StoredSimulationNotFoundError,
     require_simulation,
 )
 
@@ -109,9 +112,10 @@ class V2StoredSimulationService:
         """Create the simulation through the simulation service; return it as stored.
 
         Raise the submission's errors (see ``SimulationSubmissionService``),
-        SimulationServiceUnavailableError when the simulation the simulation
-        service names cannot be read back in the country, and the read's own
-        errors.
+        and CreatedSimulationUnreadableError, caused by the read's own error,
+        when the simulation the simulation service created cannot be read
+        back in the country: not stored there, the database unavailable, or
+        any other failure of the read.
         """
         if self._submissions is None:
             msg = "The simulation service is not configured here"
@@ -122,10 +126,9 @@ class V2StoredSimulationService:
                 country_id=simulation_input.country_id,
                 simulation_id=submitted.simulation_id,
             )
-        except StoredSimulationNotFoundError as error:
-            msg = (
-                "The simulation service answered with simulation "
-                f"{submitted.simulation_id}, which is not stored in country "
-                f"{simulation_input.country_id!r}"
-            )
-            raise SimulationServiceUnavailableError(msg) from error
+        except Exception as error:
+            # The simulation exists whatever failed, so the caller gets its ID.
+            raise CreatedSimulationUnreadableError(
+                simulation_id=submitted.simulation_id,
+                country_id=simulation_input.country_id,
+            ) from error

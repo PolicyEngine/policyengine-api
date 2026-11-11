@@ -32,6 +32,7 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     CREATE_RESPONSES,
     READ_RESPONSES,
     REPORT_ERROR_RESPONSES,
+    CreatedReportUnreadableResponse,
     ReportDetailResponse,
     ReportDetailResult,
     ReportItem,
@@ -42,6 +43,7 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     SUBMISSION_ERROR_MAPPINGS,
     SUBMISSION_REFUSALS,
+    created_record_unreadable_answer,
     simulation_resource_operation,
 )
 from policyengine_api.fastapi_routes.v2.user_resources_support import (
@@ -56,6 +58,7 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    CreatedReportUnreadableError,
     ReportKindUnsupportedError,
     ReportStorageError,
     StoredReportNotFoundError,
@@ -145,7 +148,8 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "policy, then has the simulation service create the report, its two "
             "simulations and their runs on its default worker's PolicyEngine.py "
             "version, and start the run. Answers the report as stored, with its "
-            "pending run; read it again to follow the run."
+            "pending run; read it again to follow the run. A created report "
+            "that cannot be read back answers 502 with its report_id."
         ),
     )
     def create_report(
@@ -156,8 +160,24 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
 
-        def create() -> ReportDetailResponse:
-            report = service_factory().create_report(body)
+        def create() -> ReportDetailResponse | JSONResponse:
+            try:
+                report = service_factory().create_report(body)
+            except CreatedReportUnreadableError as error:
+                return created_record_unreadable_answer(
+                    "v2_created_report_unreadable",
+                    error,
+                    CreatedReportUnreadableResponse(
+                        message=(
+                            f"The simulation service created report "
+                            f"{error.report_id}, but it could not be read back. "
+                            f"Read it with GET /v2/reports/{error.report_id}"
+                            f"?country_id={error.country_id} rather than "
+                            "submitting it again."
+                        ),
+                        report_id=error.report_id,
+                    ),
+                )
             return ReportDetailResponse(
                 result=ReportDetailResult(item=ReportItem.from_read(report))
             )
