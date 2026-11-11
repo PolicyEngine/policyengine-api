@@ -142,9 +142,9 @@ class Auth0UserProfilesUnavailableError(Auth0ManagementError):
 
     Timeouts, connection errors, a refused or failed token request, a missing
     ``read:users`` permission (``http_403``), rate limiting (``http_429``,
-    after at most one short wait), server errors (``http_5xx``) and an answer
-    that isn't a list of users all raise it, each with its ``cause``. The
-    message names at most that cause.
+    after at most one short wait), server errors (``http_500`` and so on)
+    and an answer that isn't a list of users all raise it, each with its
+    ``cause``. The message names at most that cause.
     """
 
 
