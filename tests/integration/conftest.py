@@ -8,7 +8,7 @@ import pytest
 
 from tests.integration.deployed_api_credentials import (
     MissingServerCredentialError,
-    server_credential_headers,
+    deployed_api_client,
 )
 
 INTEGRATION_TIMEOUT_SECONDS = float(
@@ -169,15 +169,10 @@ def api_client(api_base_url: str):
     ``Authorization`` header on a redirect to another host.
     """
     try:
-        credential_headers = server_credential_headers()
+        client = deployed_api_client(api_base_url)
     except MissingServerCredentialError as error:
         pytest.fail(str(error), pytrace=False)
-    with httpx.Client(
-        base_url=api_base_url,
-        headers=credential_headers,
-        timeout=90.0,
-        follow_redirects=True,
-    ) as client:
+    with client:
         yield client
 
 

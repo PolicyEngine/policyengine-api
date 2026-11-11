@@ -443,9 +443,11 @@ avoid depending on specific production data fixtures. The deployed-API tests
 send the CI server credential from `CI_SERVER_ACCESS_TOKEN` through the
 `api_client` fixture, and fail without it: a client-credentials token of a
 client on that environment's `PUBLIC_API_SERVER_CLIENT_IDS`
-(`tests/integration/deployed_api_credentials.py`). Only refusal checks use
-`uncredentialed_api_client`, which sends no credential. In push.yml each job that
-sets `API_BASE_URL` requests one with
+(`tests/integration/deployed_api_credentials.py`). A check that needs a client
+of its own, such as one per parallel request, builds it with that module's
+`deployed_api_client`, which also builds the fixture's client. Only refusal
+checks use `uncredentialed_api_client`, which sends no credential. In push.yml
+each job that sets `API_BASE_URL` requests one with
 `.github/scripts/request_ci_server_token.sh`, and
 `tests/unit/test_ci_server_credential_workflow.py` fails for a job that
 doesn't:

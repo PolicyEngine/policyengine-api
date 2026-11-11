@@ -1,8 +1,5 @@
 """Households and helpers for the live staging household calculation checks.
 
-They need only httpx and the standard library, because the parallel live test
-job installs nothing else.
-
 The checks call the simulation service's household calculation route through
 the staging candidate, so they pass only once that route (``POST
 /household-calculations``, answering ``job_id`` and accepting ``axes``) is
@@ -10,8 +7,9 @@ deployed to staging. Every staging promotion waits on them, so the change that
 adds them merges only after that deployment.
 
 Every request sends the CI server credential: through the ``api_client``
-fixture, or through ``deployed_api_client`` for a check that needs a client of
-its own.
+fixture, or through ``deployed_api_client`` from
+``tests/integration/deployed_api_credentials.py``, which builds that fixture's
+client, for a check that needs a client of its own.
 """
 
 from __future__ import annotations
@@ -24,8 +22,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import httpx
-
-from tests.integration.deployed_api_credentials import server_credential_headers
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -136,26 +132,6 @@ class FinishedCalculation:
     item: dict[str, Any]
     submit_seconds: float
     total_seconds: float
-
-
-def deployed_api_client(
-    api_base_url: str, *, transport: httpx.BaseTransport | None = None
-) -> httpx.Client:
-    """Return a client of the deployed Public API that sends the CI server credential.
-
-    It sends what the ``api_client`` fixture's client sends, for a check that
-    needs a client of its own, such as one per parallel calculation. Raise
-    MissingServerCredentialError without ``CI_SERVER_ACCESS_TOKEN``, so the
-    check fails rather than skips. ``transport`` replaces the network, for
-    tests.
-    """
-    return httpx.Client(
-        base_url=api_base_url,
-        headers=server_credential_headers(),
-        timeout=90.0,
-        follow_redirects=True,
-        transport=transport,
-    )
 
 
 def probe_amount(integration_probe_id: str) -> int:

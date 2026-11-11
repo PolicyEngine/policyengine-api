@@ -31,10 +31,10 @@ from tests.fixtures.integration.live_household_calculations import (
     FinishedCalculation,
     LiveHousehold,
     calculate,
-    deployed_api_client,
     probe_amount,
     store_household,
 )
+from tests.integration.deployed_api_credentials import deployed_api_client
 
 PARALLEL_CALCULATIONS = int(os.environ.get("STAGING_HOUSEHOLD_PARALLEL_COUNT", "6"))
 SUBMIT_LIMIT_SECONDS = float(

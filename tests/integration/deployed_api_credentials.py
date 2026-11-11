@@ -14,12 +14,18 @@ refuses every request without a server credential, apart from ``/health``,
 Since ``Authorization`` holds the server's own token, a signed-in user's token
 is forwarded in ``PolicyEngine-User-Authorization``, as a PolicyEngine server
 forwards a browser's (:func:`forwarded_user_headers`).
+
+:func:`deployed_api_client` builds the ``api_client`` fixture's client, and
+the client of any check that needs one of its own, such as one per parallel
+request.
 """
 
 from __future__ import annotations
 
 import os
 from typing import TYPE_CHECKING
+
+import httpx
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -51,6 +57,24 @@ def server_credential_headers(
         )
         raise MissingServerCredentialError(msg)
     return {"Authorization": f"Bearer {token}"}
+
+
+def deployed_api_client(
+    api_base_url: str, *, transport: httpx.BaseTransport | None = None
+) -> httpx.Client:
+    """Return a client of the deployed Public API that sends the CI server credential.
+
+    Raise :class:`MissingServerCredentialError` without
+    ``CI_SERVER_ACCESS_TOKEN``. httpx drops the ``Authorization`` header on a
+    redirect to another host. ``transport`` replaces the network, for tests.
+    """
+    return httpx.Client(
+        base_url=api_base_url,
+        headers=server_credential_headers(),
+        timeout=90.0,
+        follow_redirects=True,
+        transport=transport,
+    )
 
 
 def forwarded_user_headers(user_token: str) -> dict[str, str]:
