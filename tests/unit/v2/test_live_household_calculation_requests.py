@@ -5,8 +5,8 @@ made: a 502 means the simulation service accepted it, and after a read
 timeout or a dropped response the job may exist. A read is sent again after
 a 502, 503 or 504 or any transport error, since reading creates nothing.
 
-A check that opens a client of its own sends the CI server credential, as the
-``api_client`` fixture does.
+A check that opens a client of its own builds it as the ``api_client``
+fixture does, so it sends the CI server credential.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from tests.fixtures.integration.live_household_calculations import (
     LiveHousehold,
     calculate,
 )
+from tests.integration import deployed_api_credentials
 from tests.integration.deployed_api_credentials import MissingServerCredentialError
 
 HOUSEHOLD_ID = str(uuid4())
@@ -144,7 +145,7 @@ def test_a_client_of_its_own_sends_the_ci_server_credential(monkeypatch) -> None
     monkeypatch.setenv("CI_SERVER_ACCESS_TOKEN", "ci-server-token")
     public_api = ScriptedPublicApi(submissions=[202], reads=[200])
 
-    with live_household_calculations.deployed_api_client(
+    with deployed_api_credentials.deployed_api_client(
         "https://public-api.example", transport=httpx.MockTransport(public_api.answer)
     ) as client:
         calculate(client, HOUSEHOLD, HOUSEHOLD_ID)
@@ -159,4 +160,4 @@ def test_a_client_of_its_own_fails_without_the_ci_server_credential(
     monkeypatch.delenv("CI_SERVER_ACCESS_TOKEN", raising=False)
 
     with pytest.raises(MissingServerCredentialError):
-        live_household_calculations.deployed_api_client("https://public-api.example")
+        deployed_api_credentials.deployed_api_client("https://public-api.example")
