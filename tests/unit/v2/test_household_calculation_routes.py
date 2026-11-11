@@ -261,12 +261,12 @@ def test_a_malformed_request_is_refused_before_anything_is_read(
         ),
         (
             SimulationServiceAnswerUnreadableError(
-                "The simulation service accepted the calculation, but its "
-                "answer could not be read."
+                "The simulation service may have received the request, but its "
+                "answer was lost (ReadTimeout)."
             ),
             502,
-            "The simulation service accepted the calculation, but its "
-            "answer could not be read.",
+            "The simulation service may have received the request, but its "
+            "answer was lost (ReadTimeout).",
         ),
         (
             SimulationServiceInternalError("The simulation service failed."),
@@ -433,6 +433,9 @@ def test_openapi_documents_both_routes_and_the_missing_parameter_refusal(
     read = schema["paths"][f"{CALCULATIONS}/{{calculation_id}}"]["get"]
     assert set(submit["responses"]) >= {"202", "404", "422", "500", "502", "503"}
     assert set(read["responses"]) >= {"200", "404", "422", "500", "503"}
+    lost_answer = submit["responses"]["502"]["description"]
+    assert "Submit the household calculation again" in lost_answer
+    assert "creates a second job" in lost_answer
     assert "security" not in submit
     refusal_schema = submit["responses"]["422"]["content"]["application/json"]["schema"]
     refusals = {option["$ref"].rsplit("/", 1)[-1] for option in refusal_schema["anyOf"]}

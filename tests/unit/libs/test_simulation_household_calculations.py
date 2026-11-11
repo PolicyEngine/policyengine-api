@@ -47,6 +47,19 @@ ENVIRONMENT_VARIABLES = (
 ACCEPTED = {"job_id": str(JOB_ID), "status": "pending"}
 
 
+def lost_answer_message(what_happened: str) -> str:
+    """Return the 502 message for an answer lost after the request may have arrived.
+
+    No route finds a household job without its ID, so the caller is asked to
+    submit again and told that this may create a second job.
+    """
+    return (
+        "The simulation service may have received the request, but its answer "
+        f"was lost ({what_happened}). Submit the household calculation again; "
+        "if the first request went through, this creates a second job."
+    )
+
+
 @pytest.fixture(autouse=True)
 def configured_simulation_service(monkeypatch):
     """Name the Cloud Run simulation service; set no gateway credentials."""
@@ -258,22 +271,23 @@ def test_a_dependency_the_service_cannot_read_names_its_code() -> None:
                 "detail": "The service could not build the household function's "
                 "request.",
             },
-            "The simulation service failed (internal_error): The service could "
-            "not build the household function's request. It may have created "
-            "the job, so submitting again could create another.",
+            lost_answer_message(
+                "500 internal_error: The service could not build the household "
+                "function's request"
+            ),
             id="internal-error",
         ),
         pytest.param(
-            b"",
-            "The simulation service answered 500. It may have created the job, "
-            "so submitting again could create another.",
-            id="unreadable",
+            {"detail": "The service stopped."},
+            lost_answer_message("500: The service stopped"),
+            id="no-code",
         ),
+        pytest.param(b"", lost_answer_message("500"), id="unreadable"),
     ],
 )
 def test_an_internal_error_is_not_unavailable(body, message) -> None:
-    # A 500 may come after the service created the job, so the caller is not
-    # invited to submit again.
+    # A 500 may come after the service created the job, so the caller is told
+    # that submitting again may create a second job.
     service = RecordingService(500, body)
 
     with pytest.raises(SimulationServiceInternalError) as failed:
@@ -295,11 +309,7 @@ def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
         service.client().submit(calculation_input())
 
     assert _route_status(lost.value) == 502
-    assert str(lost.value) == (
-        "The simulation service may have received the submission, but "
-        f"{status_code} was answered in its place. Check whether it created the "
-        "job before submitting again."
-    )
+    assert str(lost.value) == lost_answer_message(f"a proxy answered {status_code}")
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 404, 503])
@@ -325,17 +335,14 @@ def test_any_other_answer_is_unavailable(status_code) -> None:
 )
 def test_an_accepted_answer_that_cannot_be_read_is_not_unavailable(body) -> None:
     # The service has created the job and started its call, so the caller is
-    # told the answer was unreadable rather than to try again.
+    # told that submitting again creates a second job.
     service = RecordingService(202, body)
 
     with pytest.raises(SimulationServiceAnswerUnreadableError) as unreadable:
         service.client().submit(calculation_input())
 
     assert _route_status(unreadable.value) == 502
-    assert str(unreadable.value) == (
-        "The simulation service accepted the calculation, but its answer "
-        "could not be read."
-    )
+    assert str(unreadable.value) == lost_answer_message("202 with an unreadable body")
 
 
 def _client_raising(error_type: type[httpx.TransportError]):
@@ -368,16 +375,12 @@ def test_a_connection_never_made_is_unavailable(error_type) -> None:
 )
 def test_an_answer_lost_after_sending_is_not_unavailable(error_type) -> None:
     # The service may have received the submission and created the job, so
-    # the caller is not invited to submit again.
+    # the caller is told that submitting again may create a second job.
     with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
         _client_raising(error_type).submit(calculation_input())
 
     assert _route_status(lost.value) == 502
-    assert str(lost.value) == (
-        "The simulation service may have received the submission, but its "
-        f"answer did not arrive ({error_type.__name__}). Check whether it "
-        "created the job before submitting again."
-    )
+    assert str(lost.value) == lost_answer_message(error_type.__name__)
 
 
 def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
