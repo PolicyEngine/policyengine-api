@@ -87,7 +87,8 @@ def current_versions(country_id: str) -> PackageVersions:
 class StoringSimulationService:
     """Store what the simulation service would create, and answer with its IDs.
 
-    With ``answer_unstored``, it answers with IDs it stored nothing for.
+    With ``answer_unstored``, it answers with IDs it stored nothing for, and
+    keeps them in ``unstored_ids``.
     """
 
     engine: Engine
@@ -95,11 +96,15 @@ class StoringSimulationService:
     answer_unstored: bool = False
     reports: list[EconomyReportCreationInput] = field(default_factory=list)
     simulations: list[EconomySimulationCreationInput] = field(default_factory=list)
+    unstored_ids: list[UUID] = field(default_factory=list)
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         self.reports.append(report)
         if self.answer_unstored:
-            return SubmittedReport(report_id=uuid4(), report_run_id=uuid4())
+            self.unstored_ids.append(uuid4())
+            return SubmittedReport(
+                report_id=self.unstored_ids[-1], report_run_id=uuid4()
+            )
         with self.engine.begin() as connection:
             stored = store_report(connection, self.catalog)
             run_ids = store_report_run(
@@ -116,6 +121,11 @@ class StoringSimulationService:
         self, simulation: EconomySimulationCreationInput
     ) -> SubmittedSimulation:
         self.simulations.append(simulation)
+        if self.answer_unstored:
+            self.unstored_ids.append(uuid4())
+            return SubmittedSimulation(
+                simulation_id=self.unstored_ids[-1], simulation_run_id=uuid4()
+            )
         with self.engine.begin() as connection:
             simulation_id = store_simulation(
                 connection, self.catalog, policy_id=simulation.policy_id
@@ -241,9 +251,11 @@ def test_a_report_naming_a_policy_the_country_does_not_store_is_not_sent(
     assert simulation_service.reports == []
 
 
-def test_a_created_report_that_cannot_be_read_back_is_unavailable(
+def test_a_created_report_that_cannot_be_read_back_answers_its_id(
     owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
 ) -> None:
+    # The simulation service answered that it created the report, so the
+    # record exists: the caller gets its ID and is not invited to submit again.
     simulation_service = StoringSimulationService(
         owner_engine, catalog, answer_unstored=True
     )
@@ -252,8 +264,47 @@ def test_a_created_report_that_cannot_be_read_back_is_unavailable(
         "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
     )
 
-    assert response.status_code == 503
-    assert "is not stored in country 'us'" in response.json()["message"]
+    assert response.status_code == 502
+    (report_id,) = simulation_service.unstored_ids
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created report {report_id}, but it could "
+            f"not be read back. Read it with GET /v2/reports/{report_id}"
+            "?country_id=us rather than submitting it again."
+        ),
+        "report_id": str(report_id),
+    }
+
+
+def test_a_created_simulation_that_cannot_be_read_back_answers_its_id(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    simulation_service = StoringSimulationService(
+        owner_engine, catalog, answer_unstored=True
+    )
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/simulations?country_id=us",
+        json={
+            "country_id": "us",
+            "kind": "economy",
+            "year": 2026,
+            "region_code": "state/ca",
+        },
+    )
+
+    assert response.status_code == 502
+    (simulation_id,) = simulation_service.unstored_ids
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created simulation {simulation_id}, but it "
+            f"could not be read back. Read it with GET /v2/simulations/"
+            f"{simulation_id}?country_id=us rather than submitting it again."
+        ),
+        "simulation_id": str(simulation_id),
+    }
 
 
 def test_a_created_simulation_is_answered_as_the_tables_hold_it(

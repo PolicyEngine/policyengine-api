@@ -16,6 +16,12 @@ from policyengine_api.services.v2.simulation_service.types import (
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
 )
+from policyengine_api.services.v2.stored_reports.validators import (
+    CreatedReportUnreadableError,
+)
+from policyengine_api.services.v2.stored_simulations.validators import (
+    CreatedSimulationUnreadableError,
+)
 from tests.unit.v2.stored_report_support import (
     POLICY_ID,
     REPORT_ID,
@@ -250,3 +256,65 @@ def test_simulation_creation_failures_answer_typed_errors(
 
     assert response.status_code == status_code
     assert response.json()["message"] == str(error)
+
+
+def test_a_created_report_that_cannot_be_read_back_answers_its_id() -> None:
+    error = CreatedReportUnreadableError(report_id=REPORT_ID, country_id="us")
+    client = report_route_client(reports=FakeReportService(error=error))
+
+    response = client.post("/v2/reports?country_id=us", json=report_body())
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created report {REPORT_ID}, but it could "
+            f"not be read back. Read it with GET /v2/reports/{REPORT_ID}"
+            "?country_id=us rather than submitting it again."
+        ),
+        "report_id": str(REPORT_ID),
+    }
+
+
+def test_a_created_simulation_that_cannot_be_read_back_answers_its_id() -> None:
+    simulation_id = FakeSimulationService().simulation.id
+    error = CreatedSimulationUnreadableError(
+        simulation_id=simulation_id, country_id="us"
+    )
+    client = report_route_client(simulations=FakeSimulationService(error=error))
+
+    response = client.post("/v2/simulations?country_id=us", json=simulation_body())
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created simulation {simulation_id}, but it "
+            f"could not be read back. Read it with GET /v2/simulations/"
+            f"{simulation_id}?country_id=us rather than submitting it again."
+        ),
+        "simulation_id": str(simulation_id),
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "schema", "id_field"),
+    [
+        ("/v2/reports", "CreatedReportUnreadableResponse", "report_id"),
+        ("/v2/simulations", "CreatedSimulationUnreadableResponse", "simulation_id"),
+    ],
+    ids=["report", "simulation"],
+)
+def test_the_openapi_document_gives_the_created_records_id_with_a_502(
+    path: str, schema: str, id_field: str
+) -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+
+    answer = document["paths"][path]["post"]["responses"]["502"]
+    assert {"$ref": f"#/components/schemas/{schema}"} in answer["content"][
+        "application/json"
+    ]["schema"]["anyOf"]
+    assert document["components"]["schemas"][schema]["required"] == [
+        "message",
+        id_field,
+    ]
