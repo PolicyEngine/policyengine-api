@@ -422,6 +422,7 @@ def test_profiles_are_read_with_one_search_per_fifty_user_ids() -> None:
         assert search.url.params["search_engine"] == "v3"
         assert search.url.params["fields"] == PROFILE_FIELDS
         assert search.url.params["include_fields"] == "true"
+        assert search.url.params["sort"] == "user_id:1"
     assert searches[0].url.params["q"] == (
         "user_id:(" + " OR ".join(f'"auth0|{number}"' for number in range(50)) + ")"
     )
@@ -524,6 +525,8 @@ def test_email_searches_escape_the_text_and_wildcards_need_three_characters(
     assert search.url.params["include_fields"] == "true"
     assert search.url.params["per_page"] == "50"
     assert search.url.params["page"] == "0"
+    # A stable order keeps pages from shifting between requests.
+    assert search.url.params["sort"] == "user_id:1"
 
 
 def _pages_of_user_ids(total: int):
@@ -573,12 +576,21 @@ def _failing_with(failure):
 
 
 @pytest.mark.parametrize(
-    "failure",
-    [403, 429, 500, 503, 400, httpx.ConnectTimeout, httpx.ConnectError],
+    ("failure", "cause"),
+    [
+        (403, "http_403"),
+        (429, "http_429"),
+        (500, "http_500"),
+        (503, "http_503"),
+        (400, "http_400"),
+        (httpx.ConnectTimeout, "timeout"),
+        (httpx.ReadTimeout, "timeout"),
+        (httpx.ConnectError, "connection_error"),
+    ],
 )
 @pytest.mark.parametrize("operation", ["read_user_profiles", "search"])
 def test_profile_failures_raise_one_unavailable_error_without_personal_data(
-    failure, operation: str
+    failure, cause: str, operation: str
 ) -> None:
     client, _requests = _client(_token_then_users(_failing_with(failure)))
     read_profiles_or_search = (
@@ -594,18 +606,22 @@ def test_profile_failures_raise_one_unavailable_error_without_personal_data(
     for personal_or_secret in ("secret-person", "secret-subject", "mgmt", "raw"):
         assert personal_or_secret not in message
     assert isinstance(error.value, Auth0ManagementError)
+    # The cause tells a missing read:users grant (403) from rate limiting
+    # (429) or a network failure, and names nothing personal.
+    assert error.value.cause == cause
 
 
 @pytest.mark.parametrize(
-    "token_answer",
+    ("token_answer", "cause"),
     [
-        httpx.Response(500),
-        httpx.Response(200, json={"expires_in": 3600}),
-        httpx.Response(200, content=b"not JSON"),
+        (httpx.Response(500), "token_http_500"),
+        (httpx.Response(401), "token_http_401"),
+        (httpx.Response(200, json={"expires_in": 3600}), "token_unreadable_answer"),
+        (httpx.Response(200, content=b"not JSON"), "token_unreadable_answer"),
     ],
 )
 def test_a_failed_token_request_makes_profiles_unavailable(
-    token_answer: httpx.Response,
+    token_answer: httpx.Response, cause: str
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/oauth/token":
@@ -614,8 +630,31 @@ def test_a_failed_token_request_makes_profiles_unavailable(
 
     client, _requests = _client(handler)
 
-    with pytest.raises(Auth0UserProfilesUnavailableError):
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
         client.read_user_profiles(["auth0|1"])
+
+    assert error.value.cause == cause
+
+
+def test_an_unreadable_client_secret_makes_profiles_unavailable() -> None:
+    def unreadable(_resource: str) -> str:
+        msg = "secretmanager.versions.access denied"
+        raise PermissionError(msg)
+
+    client = Auth0ManagementClient(
+        Auth0ManagementSettings(
+            domain=DOMAIN, client_id="m2m", client_secret_resource=SECRET_RESOURCE
+        ),
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(500))
+        ),
+        secret_loader=unreadable,
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        client.read_user_profiles(["auth0|1"])
+
+    assert error.value.cause == "secret_unavailable"
 
 
 def test_an_unreadable_profile_answer_makes_profiles_unavailable() -> None:
@@ -625,10 +664,13 @@ def test_an_unreadable_profile_answer_makes_profiles_unavailable() -> None:
         )
     )
 
-    with pytest.raises(Auth0UserProfilesUnavailableError):
+    with pytest.raises(Auth0UserProfilesUnavailableError) as profile_error:
         client.read_user_profiles(["auth0|1"])
-    with pytest.raises(Auth0UserProfilesUnavailableError):
+    with pytest.raises(Auth0UserProfilesUnavailableError) as search_error:
         client.search_user_ids_by_email("example")
+
+    assert profile_error.value.cause == "unreadable_answer"
+    assert search_error.value.cause == "unreadable_answer"
 
 
 def test_profile_reads_retry_once_with_a_fresh_token_after_a_401() -> None:
@@ -657,3 +699,157 @@ def test_profile_reads_retry_once_with_a_fresh_token_after_a_401() -> None:
         "Bearer mgmt-2",
         "Bearer mgmt-3",
     ]
+
+
+RATE_LIMIT_NOW = 1_000.0
+
+
+def _rate_limited_client(
+    answers: list[httpx.Response],
+) -> tuple[Auth0ManagementClient, list[httpx.Request], list[float]]:
+    """Answer searches with ``answers`` in turn; record waits instead of sleeping."""
+    requests: list[httpx.Request] = []
+    waits: list[float] = []
+    remaining_answers = list(answers)
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": "mgmt", "expires_in": 3600}
+            )
+        return remaining_answers.pop(0)
+
+    client = Auth0ManagementClient(
+        Auth0ManagementSettings(
+            domain=DOMAIN, client_id="m2m", client_secret="raw-secret"
+        ),
+        http_client=httpx.Client(transport=httpx.MockTransport(record)),
+        sleep=waits.append,
+        clock=lambda: RATE_LIMIT_NOW,
+    )
+    return client, requests, waits
+
+
+def _read_or_search(client: Auth0ManagementClient, operation: str) -> object:
+    if operation == "search":
+        return client.search_user_ids_by_email("example")
+    return client.read_user_profiles(["auth0|1"])
+
+
+@pytest.mark.parametrize(
+    ("headers", "wait"),
+    [
+        ({"Retry-After": "1"}, 1.0),
+        ({"Retry-After": "0"}, 0.0),
+        ({"Retry-After": "2"}, 2.0),
+        ({"X-RateLimit-Reset": str(int(RATE_LIMIT_NOW) + 2)}, 2.0),
+        # A reset already past needs no wait.
+        ({"X-RateLimit-Reset": str(int(RATE_LIMIT_NOW) - 5)}, 0.0),
+    ],
+)
+@pytest.mark.parametrize("operation", ["read_user_profiles", "search"])
+def test_a_rate_limited_search_is_retried_once_after_auth0s_short_wait(
+    headers: dict[str, str], wait: float, operation: str
+) -> None:
+    client, requests, waits = _rate_limited_client(
+        [httpx.Response(429, headers=headers), httpx.Response(200, json=[])]
+    )
+
+    _read_or_search(client, operation)
+
+    first_search, retried_search = _searches(requests)
+    assert waits == [wait]
+    assert retried_search.url == first_search.url
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Retry-After": "3"},
+        {"X-RateLimit-Reset": str(int(RATE_LIMIT_NOW) + 5)},
+        {"Retry-After": "soon"},
+        {},
+    ],
+)
+def test_a_long_or_unknown_rate_limit_wait_is_not_waited_for(
+    headers: dict[str, str],
+) -> None:
+    client, requests, waits = _rate_limited_client(
+        [httpx.Response(429, headers=headers)]
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        client.read_user_profiles(["auth0|1"])
+
+    assert waits == []
+    assert len(_searches(requests)) == 1
+    assert error.value.cause == "http_429"
+
+
+def test_a_search_rate_limited_again_after_its_wait_is_unavailable() -> None:
+    client, requests, waits = _rate_limited_client(
+        [
+            httpx.Response(429, headers={"Retry-After": "1"}),
+            httpx.Response(429, headers={"Retry-After": "1"}),
+        ]
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        client.search_user_ids_by_email("example")
+
+    assert waits == [1.0]
+    assert len(_searches(requests)) == 2
+    assert error.value.cause == "http_429"
+
+
+def test_each_profile_read_or_search_uses_one_http_client(monkeypatch) -> None:
+    from policyengine_api.libs import auth0_management
+
+    requests_by_http_client: list[list[httpx.Request]] = []
+    opened_http_clients: list[httpx.Client] = []
+    real_http_client = httpx.Client
+    pages = _pages_of_user_ids(120)
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": "mgmt", "expires_in": 3600}
+            )
+        if request.url.params["q"].startswith("email:"):
+            return pages(request)
+        return httpx.Response(200, json=[])
+
+    def open_http_client(**options: object) -> httpx.Client:
+        requests_of_this_client: list[httpx.Request] = []
+        requests_by_http_client.append(requests_of_this_client)
+
+        def record(request: httpx.Request) -> httpx.Response:
+            requests_of_this_client.append(request)
+            return answer(request)
+
+        http_client = real_http_client(transport=httpx.MockTransport(record), **options)
+        opened_http_clients.append(http_client)
+        return http_client
+
+    monkeypatch.setattr(auth0_management.httpx, "Client", open_http_client)
+    client = Auth0ManagementClient(
+        Auth0ManagementSettings(
+            domain=DOMAIN, client_id="m2m", client_secret="raw-secret"
+        )
+    )
+
+    client.read_user_profiles([f"auth0|{number}" for number in range(120)])
+    client.search_user_ids_by_email("example")
+
+    # The profile read's token request and its three searches share one
+    # client; the search, with the token cached, reads its three pages
+    # through another.
+    assert [
+        [request.url.path for request in requests]
+        for requests in requests_by_http_client
+    ] == [
+        ["/oauth/token", "/api/v2/users", "/api/v2/users", "/api/v2/users"],
+        ["/api/v2/users", "/api/v2/users", "/api/v2/users"],
+    ]
+    assert all(http_client.is_closed for http_client in opened_http_clients)
