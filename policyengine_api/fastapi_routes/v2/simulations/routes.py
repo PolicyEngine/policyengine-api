@@ -15,7 +15,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
-from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_stored_simulation_service_factory,
 )
@@ -82,10 +81,9 @@ SIMULATION_REFUSALS: tuple[type[Exception], ...] = (
 SIMULATION_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredSimulationNotFoundError,), 404),
     *SUBMISSION_ERROR_MAPPINGS,
+    # SUBMISSION_ERROR_MAPPINGS answers a missing v2 database configuration.
     V2ErrorMapping(
-        (V2ConfigurationError, SimulationStorageError),
-        503,
-        "V2 simulation storage is unavailable",
+        (SimulationStorageError,), 503, "V2 simulation storage is unavailable"
     ),
 )
 

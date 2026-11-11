@@ -16,7 +16,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
-from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     _default_v2_stored_report_service_factory,
 )
@@ -101,11 +100,8 @@ REPORT_ERROR_MAPPINGS = (
         500,
         "The report's stored result cannot be read",
     ),
-    V2ErrorMapping(
-        (V2ConfigurationError, ReportStorageError),
-        503,
-        "V2 report storage is unavailable",
-    ),
+    # SUBMISSION_ERROR_MAPPINGS answers a missing v2 database configuration.
+    V2ErrorMapping((ReportStorageError,), 503, "V2 report storage is unavailable"),
 )
 
 
