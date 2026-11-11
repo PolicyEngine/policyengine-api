@@ -6,12 +6,15 @@ Telemetry issue #4275: a ``policy`` that isn't an object, a parameter set to
 values, after the model's tax-benefit system had been copied, and answered 500
 with a record at ERROR.
 
-The stand-in country has the loaded US model's metadata. It parses a situation
-by converting the policy's values with the loaded model's own conversion
+The stand-in country has a loaded model's metadata, the US model's unless a
+test names the UK. It parses a situation by converting the policy's values
+with the loaded model's own conversion
 (``PolicyEngineCountry._normalize_reform_values``) and reading each parameter's
 period keys with policyengine-core's ``Reform.from_dict``, as the US model
-does, so a policy the check lets through fails as it does in production. It
-never copies the tax-benefit system or builds a simulation.
+does, so on ``/us/`` a policy the check lets through fails as it does in
+production. The UK model reads keys with its own reader, which the stand-in
+doesn't run; the UK case here is one the check refuses. It never copies the
+tax-benefit system or builds a simulation.
 """
 
 from __future__ import annotations
