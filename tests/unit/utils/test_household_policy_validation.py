@@ -4,16 +4,20 @@ A household calculation converts each policy value to the type of its
 parameter's earliest value (``PolicyEngineCountry._normalize_reform_values``)
 and the country model then reads each period key: policyengine-core's
 ``Reform.from_dict`` for the US, policyengine-uk's ``dated_reforms`` for the
-UK. The check refuses what that conversion or both readers fail on, and
-accepts whatever one of them reads.
+UK. The check refuses what that conversion, or the reader of the country
+being calculated, fails on, and accepts what they read.
 """
 
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
-from policyengine_core.parameters import Parameter
+from policyengine_core import periods
+from policyengine_core.parameters import Parameter, ParameterNode
+from policyengine_core.reforms import Reform
+from policyengine_uk.utils.dated_reforms import read_reform_dict
 
 from policyengine_api.country import COUNTRIES
 from policyengine_api.utils.household_policy_validation import (
@@ -65,7 +69,8 @@ SAMPLE_VALUES = [
 
 def _entries(policy: object) -> list[dict]:
     return [
-        entry.to_dict() for entry in find_unreadable_policy_inputs(policy, US_METADATA)
+        entry.to_dict()
+        for entry in find_unreadable_policy_inputs(policy, US_METADATA, "us")
     ]
 
 
@@ -203,7 +208,7 @@ def test_a_parameter_without_recorded_values_is_not_checked_for_its_values():
 
     policy = {"gov.example": {PERIOD: "abc"}}
 
-    assert find_unreadable_policy_inputs(policy, metadata) == []
+    assert find_unreadable_policy_inputs(policy, metadata, "us") == []
 
 
 def test_a_parameter_whose_earliest_value_is_null_is_left_to_the_calculation():
@@ -212,7 +217,9 @@ def test_a_parameter_whose_earliest_value_is_null_is_left_to_the_calculation():
     metadata = COUNTRIES["uk"].metadata
     parameter = "gov.hmrc.income_tax.rates.scotland.rates[0].threshold"
 
-    assert find_unreadable_policy_inputs({parameter: {PERIOD: 1000}}, metadata) == []
+    policy = {parameter: {PERIOD: 1000}}
+
+    assert find_unreadable_policy_inputs(policy, metadata, "uk") == []
 
 
 def test_every_problem_is_reported_in_policy_order_with_a_key_before_its_value():
@@ -238,58 +245,153 @@ def test_every_problem_is_reported_in_policy_order_with_a_key_before_its_value()
     ]
 
 
-# Each key with what policyengine-core's Reform.from_dict (US) and
-# policyengine-uk's reform reader (UK) did with it, as checked against the
-# installed models through a household calculation.
+# What each model's reader does with a period key, from household
+# calculations run with the installed models. The US model reads keys with
+# policyengine-core's Reform.from_dict, the UK model with policyengine-uk's
+# dated_reforms; the reader tests below check each list against them.
+COMMON_READABLE_KEYS = [
+    "2026-01-01.2026-12-31",
+    "2026-12-31.2026-12-31",
+    "2026.2027",
+    "2026-01.2026-06",
+    "2026-01-01",
+    "2026",
+    "2026-01",
+    "year:2026:5",
+    "year:2026",
+    "month:2026-01:3",
+    "year:2026:-1",
+    "\uff12\uff10\uff12\uff16.\uff12\uff10\uff12\uff17",
+    "2026-01-01.2026-12-31\n",
+]
+COMMON_UNREADABLE_KEYS = [
+    "2026-02-30.2026-12-31",
+    "2026-13-01.2026-12-31",
+    "2026-1-1.2026-12-31",
+    "0000-01-01.2026-12-31",
+    "2026-01-01.9999-12-31",
+    "2026-01-01.2026-12-31.2027-01-01",
+    "2026-01-01.",
+    ".2026-12-31",
+    "2026-01-01 .2026-12-31",
+    "1.5",
+    "",
+    "abc",
+    "eternity",
+    "2026-02-30",
+    "2026-00-01",
+    "02026-01-01",
+    "2026-01-01-01",
+    "2026-01-01T00:00",
+    "year:abc:1",
+    "year:9999:1",
+    "day:9999-12-31:1",
+    "month:2026-13:1",
+    "day:2026-02-30:1",
+]
+# Keys one model reads and the other doesn't.
 READABLE_PERIOD_KEYS = {
-    "2026-01-01.2026-12-31": "both",
-    "2026-12-31.2026-12-31": "both",
-    "2026-01-01": "both",
-    "2026": "both",
-    "2026-01": "both",
-    "2026.2027": "both",
-    "year:2026:5": "both",
-    "year:2026": "both",
-    "month:2026-01:3": "both",
-    "ETERNITY": "US",
-    "2026-1-1": "UK",
+    "us": [*COMMON_READABLE_KEYS, "ETERNITY", "2026-12-31.2026-01-01", "9999-12-31"],
+    "uk": [*COMMON_READABLE_KEYS, "2026-1-1", "2026-1", " 2026", "2026 "],
 }
 UNREADABLE_PERIOD_KEYS = {
-    "2026-02-30.2026-12-31": "no such day",
-    "2026-13-01.2026-12-31": "no such month",
-    "2026-1-1.2026-12-31": "unpadded date in a range",
-    "0000-01-01.2026-12-31": "year 0",
-    "2026-12-31.2026-01-01": "ends before it starts",
-    "2026-01-01.2026-12-31.2027-01-01": "three dates",
-    "2026-01-01.": "no end",
-    ".2026-12-31": "no start",
-    "2026-01-01 .2026-12-31": "space",
-    "1.5": "not dates",
-    "": "empty",
-    "abc": "text",
-    "eternity": "lowercase eternity",
-    "2026-02-30": "no such day",
-    "2026-00-01": "month 0",
-    "02026-01-01": "five-digit year",
-    "2026-01-01T00:00": "time of day",
-    "year:abc:1": "text in a period",
-    "month:2026-13:1": "no such month in a period",
-    "day:2026-02-30:1": "no such day in a period",
+    "us": [*COMMON_UNREADABLE_KEYS, "2026-1-1", "2026-1", " 2026"],
+    "uk": [
+        *COMMON_UNREADABLE_KEYS,
+        "ETERNITY",
+        "2026-12-31.2026-01-01",
+        "9999-12-31",
+    ],
 }
+UK_PARAMETER = "gov.hmrc.income_tax.rates.uk[0].rate"
 
 
-@pytest.mark.parametrize("period_key", list(READABLE_PERIOD_KEYS))
-def test_a_period_key_one_model_reads_is_accepted(period_key):
-    assert is_readable_period_key(period_key)
+def _key_cases(keys_by_country: dict[str, list[str]]) -> list:
+    return [
+        pytest.param(country_id, period_key, id=f"{country_id}-{period_key!r}")
+        for country_id, period_keys in keys_by_country.items()
+        for period_key in period_keys
+    ]
 
 
-@pytest.mark.parametrize("period_key", list(UNREADABLE_PERIOD_KEYS))
-def test_a_period_key_neither_model_reads_is_refused(period_key):
-    assert not is_readable_period_key(period_key)
+@pytest.mark.parametrize(("country_id", "period_key"), _key_cases(READABLE_PERIOD_KEYS))
+def test_a_period_key_the_countrys_model_reads_is_accepted(country_id, period_key):
+    assert is_readable_period_key(period_key, country_id)
+
+
+@pytest.mark.parametrize(
+    ("country_id", "period_key"), _key_cases(UNREADABLE_PERIOD_KEYS)
+)
+def test_a_period_key_the_countrys_model_cannot_read_is_refused(
+    country_id,
+    period_key,
+):
+    assert not is_readable_period_key(period_key, country_id)
+
+
+def _us_reader_reads(period_key: str) -> bool:
+    """Say whether policyengine-core's Reform.from_dict applies a key.
+
+    It applies the key to a parameter of its own, as the US model applies a
+    policy to its parameters; how it reads a key doesn't depend on the
+    parameter.
+    """
+    parameters = ParameterNode("", data={"p": {"values": {"2020-01-01": 1.0}}})
+    reform = Reform.from_dict({"p": {period_key: 2.0}})
+    try:
+        reform.apply(SimpleNamespace(parameters=parameters))
+    except ValueError:
+        return False
+    return True
+
+
+def _uk_reader_reads(period_key: str) -> bool:
+    """Say whether policyengine-uk reads a key and can write what it names.
+
+    ``read_reform_dict`` turns each key into the first and last days a change
+    covers, or a single day or month for a legacy override. The UK model then
+    writes the change onto the parameter's timeline from the first day to the
+    day after the last, which fails for a date that doesn't exist, year 0 or
+    a last day of 9999-12-31, and for an eternity, whose last day isn't a date.
+    """
+    try:
+        assignments, overrides = read_reform_dict(
+            {UK_PARAMETER: {period_key: 0.25}},
+            defines=lambda _path: True,
+        )
+        covered = [(change.start, change.stop) for change in assignments] + [
+            (periods.period(override.key).start, periods.period(override.key).stop)
+            for override in overrides
+        ]
+        for first_day, last_day in covered:
+            _ = first_day.date
+            _ = last_day.offset(1, "day").date
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+@pytest.mark.parametrize(
+    ("country_id", "reader_reads"),
+    [("us", _us_reader_reads), ("uk", _uk_reader_reads)],
+)
+def test_the_period_key_check_agrees_with_the_countrys_reader(
+    country_id,
+    reader_reads,
+):
+    period_keys = READABLE_PERIOD_KEYS[country_id] + UNREADABLE_PERIOD_KEYS[country_id]
+    disagreements = [
+        period_key
+        for period_key in period_keys
+        if is_readable_period_key(period_key, country_id)
+        is not reader_reads(period_key)
+    ]
+
+    assert disagreements == []
 
 
 def test_an_unreadable_period_key_is_reported_with_its_path():
-    period_key = "2026-12-31.2026-01-01"
+    period_key = "2026-02-30.2026-12-31"
     path = f"policy.{NUMBER_PARAMETER}.{period_key}"
 
     assert _entries({NUMBER_PARAMETER: {period_key: 3000}}) == [
@@ -298,9 +400,42 @@ def test_an_unreadable_period_key_is_reported_with_its_path():
             "name": NUMBER_PARAMETER,
             "path": path,
             "message": (
-                f"Period key `{period_key}` at `{path}` must be a range of two "
-                "dates (YYYY-MM-DD.YYYY-MM-DD) whose start is no later than its "
-                "end, or one period such as 2026, 2026-01-01 or year:2026:1."
+                f"Period key `{period_key}` at `{path}` must be a date range "
+                "(YYYY-MM-DD.YYYY-MM-DD) or one period, such as 2026, "
+                "2026-01-01 or year:2026:1, of real calendar dates before "
+                "9999-12-31."
+            ),
+        }
+    ]
+
+
+def test_a_range_that_ends_before_it_starts_is_refused_for_the_uk_only():
+    # The US model applies one without an error, writing the parameter's
+    # values out of date order.
+    period_key = "2026-12-31.2026-01-01"
+    path = f"policy.{UK_PARAMETER}.{period_key}"
+
+    assert (
+        find_unreadable_policy_inputs(
+            {NUMBER_PARAMETER: {period_key: 3000}}, US_METADATA, "us"
+        )
+        == []
+    )
+    assert [
+        entry.to_dict()
+        for entry in find_unreadable_policy_inputs(
+            {UK_PARAMETER: {period_key: 0.25}}, COUNTRIES["uk"].metadata, "uk"
+        )
+    ] == [
+        {
+            "type": "policy_period",
+            "name": UK_PARAMETER,
+            "path": path,
+            "message": (
+                f"Period key `{period_key}` at `{path}` must be a date range "
+                "(YYYY-MM-DD.YYYY-MM-DD) whose start is no later than its end, "
+                "or one period, such as 2026, 2026-01-01 or year:2026:1, of "
+                "real calendar dates before 9999-12-31."
             ),
         }
     ]
@@ -345,11 +480,18 @@ def test_a_value_is_refused_exactly_when_the_models_conversion_fails(
     country_id,
     parameter_name,
 ):
+    """The model converts with the same code as the check (convert_reform_value).
+
+    So this checks the type the check reads from metadata, for parameters of
+    each type, and that the check refuses every value whose conversion fails.
+    """
     country = COUNTRIES[country_id]
     disagreements = []
     for value in SAMPLE_VALUES:
         policy = {parameter_name: {PERIOD: value}}
-        refused = bool(find_unreadable_policy_inputs(policy, country.metadata))
+        refused = bool(
+            find_unreadable_policy_inputs(policy, country.metadata, country_id)
+        )
         try:
             country._normalize_reform_values(policy, country.tax_benefit_system)
         except (TypeError, ValueError, OverflowError):

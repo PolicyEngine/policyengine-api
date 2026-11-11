@@ -6,21 +6,25 @@ Telemetry issue #4275: a ``policy`` that isn't an object, a parameter set to
 values, after the model's tax-benefit system had been copied, and answered 500
 with a record at ERROR.
 
-The stand-in country has the loaded US model's metadata, and parses a situation
+The stand-in country has the loaded US model's metadata. It parses a situation
 by converting the policy's values with the loaded model's own conversion
-(``PolicyEngineCountry._normalize_reform_values``), so a policy the check lets
-through fails as it does in production. It never copies the tax-benefit system
-or builds a simulation.
+(``PolicyEngineCountry._normalize_reform_values``) and reading each parameter's
+period keys with policyengine-core's ``Reform.from_dict``, as the US model
+does, so a policy the check lets through fails as it does in production. It
+never copies the tax-benefit system or builds a simulation.
 """
 
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, NamedTuple
 from unittest.mock import patch
 
 import pytest
 from flask import Flask
+from policyengine_core.parameters import ParameterNode
+from policyengine_core.reforms import Reform
 
 from policyengine_api.country import COUNTRIES
 from policyengine_api.extensions import cache
@@ -44,8 +48,8 @@ LIST_PARAMETER = "gov.aca.ineligible_immigration_statuses"
 ENDPOINTS = ["calculate", "calculate-full"]
 NUMBER_REQUIREMENT = 'a number, or text that reads as one such as "Infinity"'
 PERIOD_KEY_REQUIREMENT = (
-    "a range of two dates (YYYY-MM-DD.YYYY-MM-DD) whose start is no later than "
-    "its end, or one period such as 2026, 2026-01-01 or year:2026:1"
+    "a date range (YYYY-MM-DD.YYYY-MM-DD) or one period, such as 2026, "
+    "2026-01-01 or year:2026:1, of real calendar dates before 9999-12-31"
 )
 
 
@@ -61,7 +65,18 @@ class ReformConvertingCountry(DummyCountry):
     def prepare_calculation(self, household, policy, **_kwargs):
         if policy:
             # Reads the parameters' values without copying or changing them.
-            self.model._normalize_reform_values(policy, self.model.tax_benefit_system)
+            converted = self.model._normalize_reform_values(
+                policy, self.model.tax_benefit_system
+            )
+            for period_values in converted.values():
+                # How Reform.from_dict reads a key doesn't depend on the
+                # parameter, so each parameter's keys go onto one of its own.
+                parameters = ParameterNode(
+                    "", data={"p": {"values": {"2020-01-01": 1.0}}}
+                )
+                Reform.from_dict({"p": period_values}).apply(
+                    SimpleNamespace(parameters=parameters)
+                )
         self.converted_policies.append(policy)
         return {"household": household}
 
@@ -107,6 +122,21 @@ def _value_entry(value_text: str) -> dict:
 
 
 UNREADABLE_PERIOD_KEY = "2026-02-30.2026-12-31"
+OPEN_ENDED_PERIOD_KEY = "2026-01-01.9999-12-31"
+
+
+def _period_key_entry(period_key: str) -> dict:
+    path = f"policy.{NUMBER_PARAMETER}.{period_key}"
+    return {
+        "type": "policy_period",
+        "name": NUMBER_PARAMETER,
+        "path": path,
+        "message": (
+            f"Period key `{period_key}` at `{path}` must be {PERIOD_KEY_REQUIREMENT}."
+        ),
+    }
+
+
 REFUSED_POLICIES = [
     pytest.param(
         5,
@@ -151,17 +181,13 @@ REFUSED_POLICIES = [
     ),
     pytest.param(
         {NUMBER_PARAMETER: {UNREADABLE_PERIOD_KEY: 3000}},
-        {
-            "type": "policy_period",
-            "name": NUMBER_PARAMETER,
-            "path": f"policy.{NUMBER_PARAMETER}.{UNREADABLE_PERIOD_KEY}",
-            "message": (
-                f"Period key `{UNREADABLE_PERIOD_KEY}` at "
-                f"`policy.{NUMBER_PARAMETER}.{UNREADABLE_PERIOD_KEY}` must be "
-                f"{PERIOD_KEY_REQUIREMENT}."
-            ),
-        },
+        _period_key_entry(UNREADABLE_PERIOD_KEY),
         id="period-key-is-not-a-date",
+    ),
+    pytest.param(
+        {NUMBER_PARAMETER: {OPEN_ENDED_PERIOD_KEY: 3000}},
+        _period_key_entry(OPEN_ENDED_PERIOD_KEY),
+        id="period-key-ends-on-the-last-date",
     ),
 ]
 
@@ -214,6 +240,8 @@ def test_calculation_refuses_a_policy_it_cannot_read(
                     "2027-01-01": "Infinity",
                     "2028": "-Infinity",
                     "2029-01-01.2029-12-31": "2500",
+                    "year:2030:2": 2600,
+                    "ETERNITY": 2000,
                 },
                 BOOLEAN_PARAMETER: {PERIOD: True},
                 LIST_PARAMETER: {PERIOD: ["DACA"]},

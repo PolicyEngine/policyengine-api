@@ -7,23 +7,26 @@ each set to an object of period keys and values:
   type of the parameter's earliest value, reading an int as a float, after
   trying ``float()`` on it. ``float()`` and ``list()`` refuse some values; a
   boolean parameter takes anything, since ``bool()`` converts any value.
-- The country model then reads each period key: the US model with
-  policyengine-core's ``Reform.from_dict``, the UK model with its own reader
-  (``policyengine_uk.utils.dated_reforms``). Both read a key with a ``.`` as
-  a range of two dates, each a zero-padded ``YYYY``, ``YYYY-MM`` or
-  ``YYYY-MM-DD`` that policyengine-core's ``instant()`` reads. Both read a key
-  with a ``:``, such as ``year:2026:5``, with policyengine-core's
-  ``period()``. A key with neither is one date: the US model reads it with
-  ``instant()`` and the UK model with ``period()``, which also reads unpadded
-  months and days. Only the US model reads ``ETERNITY``.
+- The country model then reads each period key: the UK model with its own
+  reader (``policyengine_uk.utils.dated_reforms``), the US model with
+  policyengine-core's ``Reform.from_dict``. Both read a key with a ``.`` as
+  a range of two dates, each one policyengine-core's ``instant()`` reads (a
+  zero-padded ``YYYY``, ``YYYY-MM`` or ``YYYY-MM-DD``), and a key with a
+  ``:``, such as ``year:2026:5``, with policyengine-core's ``period()``. The
+  UK model refuses a range that ends before it starts; the US model applies
+  it, writing the parameter's values out of date order. A key with neither
+  is one date: the US model reads it with ``instant()``, or reads
+  ``ETERNITY``; the UK model reads a year from 1901 to 2199, spaces around
+  it allowed, as that fiscal year, and anything else with ``period()``, which
+  also reads unpadded months and days. Both then write the change to the
+  parameter from its first day to the day after its last, so each must be a
+  real calendar date, and the last day must be before 9999-12-31.
 
 A policy that fails there fails after the model's tax-benefit system has been
 copied, which takes seconds. This module finds those problems beforehand, from
-the country metadata, so the request can be refused with a 400. It refuses
-what the conversion, or both models' readers, would fail on, and a range that
-ends before it starts, which the UK model refuses and the US model writes out
-of date order. It accepts anything one model reads, so a key only one model
-reads still fails in the other.
+the country metadata and the reader of the country being calculated, so the
+request can be refused with a 400. It refuses what the conversion or that
+reader would fail on, and accepts what they read.
 
 An empty or null ``policy`` means no policy, as the calculation reads it.
 """
@@ -31,9 +34,7 @@ An empty or null ``policy`` means no policy, as the calculation reads it.
 from __future__ import annotations
 
 import contextlib
-import re
 from dataclasses import dataclass
-from datetime import date
 
 from policyengine_core import periods
 
@@ -44,19 +45,23 @@ from policyengine_api.utils.policy_data_validation import (
 
 # Metadata writes an infinite parameter value as this text.
 _WRITTEN_INFINITIES = frozenset({"Infinity", "-Infinity"})
-# One end of a range: a zero-padded year, month or day, as policyengine-core's
-# instant() reads it.
-_RANGE_END = re.compile(r"([0-9]{4})(?:-([0-9]{2})(?:-([0-9]{2}))?)?")
-# The one eternity key the US model reads; the UK model reads none.
+# The country whose model reads keys with policyengine-uk's reader; every other
+# model reads them with policyengine-core's Reform.from_dict.
+UK_COUNTRY_ID = "uk"
+# The one eternity key policyengine-core's reader reads; the UK model reads none.
 _ETERNITY_KEY = "ETERNITY"
 _ETERNITY_UNIT = "eternity"
+# policyengine-uk reads a bare year after 1900 and before 2200 as a fiscal year
+# (dated_reforms.bare_year).
+_UK_BARE_YEARS = range(1901, 2200)
+_ERRORS_READING_A_PERIOD = (TypeError, ValueError, OverflowError)
 
 POLICY_REQUIREMENT = (
     "an object of parameter paths, each set to an object of period keys and values"
 )
-PERIOD_KEY_REQUIREMENT = (
-    "a range of two dates (YYYY-MM-DD.YYYY-MM-DD) whose start is no later than "
-    "its end, or one period such as 2026, 2026-01-01 or year:2026:1"
+_PERIOD_REQUIREMENT = (
+    "one period, such as 2026, 2026-01-01 or year:2026:1, of real calendar "
+    "dates before 9999-12-31"
 )
 NUMBER_REQUIREMENT = 'a number, or text that reads as one such as "Infinity"'
 LIST_REQUIREMENT = "a list"
@@ -108,12 +113,14 @@ class UnreadablePolicyInput:
 def find_unreadable_policy_inputs(
     policy: object,
     metadata: dict,
+    country_id: str,
 ) -> list[UnreadablePolicyInput]:
     """Return every part of a calculation's policy that the calculation can't read.
 
-    Entries follow the policy's order, and a period key that is refused comes
-    before its value. A value is checked only for a parameter whose earliest
-    value the metadata records; a name the model lacks is reported by
+    ``metadata`` and ``country_id`` are the country being calculated. Entries
+    follow the policy's order, and a period key that is refused comes before
+    its value. A value is checked only for a parameter whose earliest value
+    the metadata records; a name the model lacks is reported by
     ``find_unrecognized_policy_inputs``.
     """
     if not policy:
@@ -136,6 +143,7 @@ def find_unreadable_policy_inputs(
                 parameter_name,
                 period_values,
                 reform_value_type(parameters.get(parameter_name)),
+                country_id,
             )
         )
     return unreadable_inputs
@@ -145,6 +153,7 @@ def _unreadable_parameter_inputs(
     parameter_name: str,
     period_values: object,
     value_type: type | None,
+    country_id: str,
 ) -> list[UnreadablePolicyInput]:
     parameter_path = f"policy.{parameter_name}"
     if not isinstance(period_values, dict):
@@ -162,13 +171,13 @@ def _unreadable_parameter_inputs(
         # Both models' readers read a key that isn't text as its text.
         period_key_text = str(period_key)
         entry_path = f"{parameter_path}.{period_key_text}"
-        if not is_readable_period_key(period_key_text):
+        if not is_readable_period_key(period_key_text, country_id):
             unreadable_inputs.append(
                 UnreadablePolicyInput(
                     input_type="policy_period",
                     name=parameter_name,
                     path=entry_path,
-                    requirement=PERIOD_KEY_REQUIREMENT,
+                    requirement=period_key_requirement(country_id),
                     period_key=period_key_text,
                 )
             )
@@ -186,37 +195,73 @@ def _unreadable_parameter_inputs(
     return unreadable_inputs
 
 
-def is_readable_period_key(period_key: str) -> bool:
-    """Say whether the US or the UK model reads a period key.
+def period_key_requirement(country_id: str) -> str:
+    """Say which period keys the model of ``country_id`` reads."""
+    if country_id == UK_COUNTRY_ID:
+        return (
+            "a date range (YYYY-MM-DD.YYYY-MM-DD) whose start is no later than "
+            f"its end, or {_PERIOD_REQUIREMENT}"
+        )
+    return f"a date range (YYYY-MM-DD.YYYY-MM-DD) or {_PERIOD_REQUIREMENT}"
 
-    A range's ends are real calendar dates, and its end is no earlier than its
-    start. Any other key is ``ETERNITY`` or a period policyengine-core parses,
-    other than an eternity.
-    """
+
+def is_readable_period_key(period_key: str, country_id: str) -> bool:
+    """Say whether the model of ``country_id`` reads a period key and can apply it."""
+    uk = country_id == UK_COUNTRY_ID
     if "." in period_key:
-        start_text, _, end_text = period_key.partition(".")
-        start = _range_end_date(start_text)
-        end = _range_end_date(end_text)
-        return start is not None and end is not None and start <= end
-    if period_key == _ETERNITY_KEY:
-        return True
-    try:
-        parsed_period = periods.period(period_key)
-    except (ValueError, OverflowError):
+        return _is_readable_range(period_key, must_be_in_order=uk)
+    if ":" in period_key:
+        return _is_readable_period(period_key)
+    if uk:
+        return _is_uk_bare_year(period_key) or _is_readable_period(period_key)
+    return period_key == _ETERNITY_KEY or _is_readable_instant(period_key)
+
+
+def _is_readable_range(period_key: str, *, must_be_in_order: bool) -> bool:
+    """Say whether a ``start.end`` key names two real days before 9999-12-31."""
+    start_text, _, end_text = period_key.partition(".")
+    if "." in end_text:
         return False
-    return parsed_period.unit != _ETERNITY_UNIT
-
-
-def _range_end_date(text: str) -> date | None:
-    """Return the first day a range end names, or None if it names none."""
-    match = _RANGE_END.fullmatch(text)
-    if match is None:
-        return None
-    year, month, day = (int(part) if part else 1 for part in match.groups())
     try:
-        return date(year, month, day)
-    except ValueError:
-        return None
+        start = periods.instant(start_text)
+        end = periods.instant(end_text)
+        _ = start.date
+        _ = end.offset(1, "day").date
+    except _ERRORS_READING_A_PERIOD:
+        return False
+    return start <= end or not must_be_in_order
+
+
+def _is_readable_period(period_key: str) -> bool:
+    """Say whether policyengine-core reads a key as a period of real days.
+
+    The period's last day must be before 9999-12-31, and it can't be an
+    eternity, which has no last day.
+    """
+    try:
+        period = periods.period(period_key)
+        if period.unit == _ETERNITY_UNIT:
+            return False
+        _ = period.start.date
+        _ = period.stop.offset(1, "day").date
+    except _ERRORS_READING_A_PERIOD:
+        return False
+    return True
+
+
+def _is_readable_instant(period_key: str) -> bool:
+    """Say whether policyengine-core's ``instant()`` reads a key as a real day."""
+    try:
+        _ = periods.instant(period_key).date
+    except _ERRORS_READING_A_PERIOD:
+        return False
+    return True
+
+
+def _is_uk_bare_year(period_key: str) -> bool:
+    """Say whether policyengine-uk reads a key as a bare year."""
+    year_text = period_key.strip()
+    return year_text.isdigit() and int(year_text) in _UK_BARE_YEARS
 
 
 def reform_value_type(parameter_metadata: object) -> type | None:

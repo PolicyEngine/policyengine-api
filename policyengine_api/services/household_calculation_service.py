@@ -440,7 +440,7 @@ class HouseholdCalculationService:
                 policy_json,
                 country.metadata,
             ),
-            *find_unreadable_policy_inputs(policy_json, country.metadata),
+            *find_unreadable_policy_inputs(policy_json, country.metadata, country_id),
         ]
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
