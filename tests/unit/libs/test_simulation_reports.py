@@ -31,7 +31,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SubmittedSimulation,
 )
 from policyengine_api.spm import SPMSelection
-from tests.unit.v2.stored_report_support import (
+from tests.unit.v2.simulation_service_messages import (
     answer_lost_message,
     possibly_created_message,
 )
