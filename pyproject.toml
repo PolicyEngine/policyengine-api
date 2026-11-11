@@ -438,6 +438,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.data.v2.models.comparison_runs.Stage12RunTimestamps",
     "policyengine_api.data.v2.models.run_results.GeographicImpactBase",
     "policyengine_api.data.v2.models.run_results.UKAreaImpactBase",
+    "policyengine_api.fastapi_routes.v2.errors_support.V2ErrorResponse",
     "policyengine_api.fastapi_routes.v2.households.document_models.HouseholdEntityRecord",
     "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
     "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",
