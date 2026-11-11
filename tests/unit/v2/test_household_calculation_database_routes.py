@@ -404,6 +404,11 @@ def test_a_refusal_before_sim_is_called_echoes_no_observability_id(
             (500, {"code": "internal_error", "detail": "failed"}), 502, id="failed"
         ),
         pytest.param((202, {"unexpected": True}), 502, id="unreadable-202"),
+        pytest.param(
+            (409, {"code": "job_exists", "detail": "exists"}),
+            502,
+            id="unexpected-status",
+        ),
     ],
 )
 def test_an_answer_after_sim_was_called_returns_the_observability_id(
