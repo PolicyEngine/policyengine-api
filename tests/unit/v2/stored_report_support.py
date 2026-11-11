@@ -35,6 +35,10 @@ from tests.fixtures.economy_results import us_economy_result
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from policyengine_api.fastapi_routes.resource_service_protocols import (
+        V2StoredReportResourceService,
+        V2StoredSimulationResourceService,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
@@ -195,10 +199,10 @@ class FakeSimulationService:
 
 def report_route_client(
     *,
-    reports: FakeReportService | None = None,
-    simulations: FakeSimulationService | None = None,
+    reports: V2StoredReportResourceService | None = None,
+    simulations: V2StoredSimulationResourceService | None = None,
 ) -> TestClient:
-    """Serve the report and simulation routes over stand-in services."""
+    """Serve the report and simulation routes over these services, usually stand-ins."""
     factories: dict[str, Callable[[], Any]] = {}
     if reports is not None:
         factories["v2_stored_report_service_factory"] = lambda: reports

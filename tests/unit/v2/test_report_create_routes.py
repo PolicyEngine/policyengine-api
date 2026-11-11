@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, NoReturn
+from uuid import UUID
 
+import httpx
 import pytest
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
@@ -11,6 +13,7 @@ from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPI
 from policyengine_api.fastapi_routes.v2.simulations.routes import (
     SIMULATION_ERROR_MAPPINGS,
 )
+from policyengine_api.libs.simulation_reports import SimulationServiceReportClient
 from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
@@ -21,19 +24,31 @@ from policyengine_api.services.v2.simulation_service.types import (
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
 )
+from policyengine_api.services.v2.stored_reports.services import (
+    V2StoredReportService,
+)
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
+)
+from policyengine_api.services.v2.stored_simulations.services import (
+    V2StoredSimulationService,
 )
 from policyengine_api.services.v2.stored_simulations.validators import (
     CreatedSimulationUnreadableError,
 )
 from tests.unit.v2.stored_report_support import (
+    CURRENT_VERSIONS,
     POLICY_ID,
     REPORT_ID,
     FakeReportService,
     FakeSimulationService,
     report_route_client,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from fastapi.testclient import TestClient
 
 ROUTE_SUPPORT_LOGGER = "policyengine_api.fastapi_routes.v2.simulation_resources_support"
 
@@ -465,4 +480,200 @@ def test_missing_v2_database_configuration_is_storage_unavailable(
     assert response.json() == {
         "status": "error",
         "message": "V2 storage is unavailable",
+    }
+
+
+SIMULATION_SERVICE_URL = "https://simulation.example.test"
+# The record the simulation service names in its answers, and another record.
+NAMED_RECORD_ID = UUID("00000000-0000-0000-0000-00000000c001")
+OTHER_RECORD_ID = UUID("00000000-0000-0000-0000-00000000c002")
+# The field naming each record in the simulation service's answers.
+RECORD_ID_FIELDS = {"report": "report_id", "simulation": "simulation_id"}
+# The field naming a record other than the submission's own.
+OTHER_RECORD_ID_FIELDS = {"report": "simulation_id", "simulation": "report_id"}
+RECORDS = ["report", "simulation"]
+
+
+class UnreadDatabase:
+    """The detailed-save database, which a failed submission never reads."""
+
+    def read(self) -> NoReturn:
+        msg = "The route read the database after the submission failed."
+        raise AssertionError(msg)
+
+
+def answering(
+    status_code: int, body: object
+) -> Callable[[httpx.Request], httpx.Response]:
+    """Answer every request with ``status_code`` and ``body``; bytes as they are."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if isinstance(body, bytes):
+            return httpx.Response(status_code, content=body)
+        return httpx.Response(status_code, json=body)
+
+    return answer
+
+
+def losing_the_answer(request: httpx.Request) -> httpx.Response:
+    """Fail as a read timeout does, after the request was sent."""
+    msg = "the answer did not arrive"
+    raise httpx.ReadTimeout(msg, request=request)
+
+
+def modal_refusal_naming(id_field: str, record_id: str) -> dict[str, str]:
+    """Return the simulation service's 503 after Modal refused, naming one record."""
+    return {
+        "code": "modal_call_refused",
+        "detail": "Modal refused the call.",
+        id_field: record_id,
+    }
+
+
+def post_through_simulation_service(
+    record: str, answer: Callable[[httpx.Request], httpx.Response]
+) -> httpx.Response:
+    """Create ``record`` through the real client, its requests answered by ``answer``.
+
+    The route's stored service sends through ``SimulationServiceReportClient``
+    over a mock transport.
+    """
+    submissions = SimulationServiceReportClient(
+        httpx.Client(
+            base_url=SIMULATION_SERVICE_URL, transport=httpx.MockTransport(answer)
+        )
+    )
+    client: TestClient
+    if record == "report":
+        client = report_route_client(
+            reports=V2StoredReportService(
+                UnreadDatabase(),
+                current_versions=lambda _country_id: CURRENT_VERSIONS,
+                submissions=submissions,
+            )
+        )
+        return client.post("/v2/reports?country_id=us", json=report_body())
+    client = report_route_client(
+        simulations=V2StoredSimulationService(
+            UnreadDatabase(),
+            current_versions=lambda _country_id: CURRENT_VERSIONS,
+            submissions=submissions,
+        )
+    )
+    return client.post("/v2/simulations?country_id=us", json=simulation_body())
+
+
+def answer_lost_message(error: str, record: str) -> str:
+    """Return the message for an answer that may follow a created ``record``."""
+    return (
+        "The simulation service may have received the request, but its answer "
+        f"was lost ({error}). Submit the {record} again; if the first request "
+        f"went through, this creates a second {record}."
+    )
+
+
+@pytest.mark.parametrize(
+    ("answer_for_record", "stated_error"),
+    [
+        pytest.param(
+            lambda _record: losing_the_answer, "ReadTimeout", id="answer-lost"
+        ),
+        pytest.param(
+            lambda _record: answering(502, b"Bad Gateway"),
+            "a proxy answered 502 in its place",
+            id="proxy-502",
+        ),
+        pytest.param(
+            lambda _record: answering(504, b"upstream request timeout"),
+            "a proxy answered 504 in its place",
+            id="proxy-504",
+        ),
+        pytest.param(
+            lambda _record: answering(
+                500,
+                {"code": "internal_error", "detail": "The run could not be started."},
+            ),
+            "500 internal_error: The run could not be started.",
+            id="service-failed",
+        ),
+        pytest.param(
+            lambda _record: answering(
+                503, b"upstream connect error or disconnect/reset before headers"
+            ),
+            "an unreadable 503",
+            id="unreadable-503",
+        ),
+        pytest.param(
+            lambda record: answering(
+                503, modal_refusal_naming(RECORD_ID_FIELDS[record], "not-a-uuid")
+            ),
+            "an unreadable 503",
+            id="503-malformed-record-id",
+        ),
+        pytest.param(
+            lambda record: answering(
+                503,
+                modal_refusal_naming(
+                    OTHER_RECORD_ID_FIELDS[record], str(OTHER_RECORD_ID)
+                ),
+            ),
+            "503 modal_call_refused: Modal refused the call.",
+            id="503-naming-only-another-record",
+        ),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_an_answer_that_may_follow_a_created_record_answers_502(
+    record: str,
+    answer_for_record: Callable[[str], Callable[[httpx.Request], httpx.Response]],
+    stated_error: str,
+) -> None:
+    # Each may follow a record the service created, so none is a 503, which
+    # says it created nothing.
+    response = post_through_simulation_service(record, answer_for_record(record))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "status": "error",
+        "message": answer_lost_message(stated_error, record),
+    }
+
+
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_503_naming_the_created_record_answers_503_with_its_id(record: str) -> None:
+    id_field = RECORD_ID_FIELDS[record]
+    answer = answering(503, modal_refusal_naming(id_field, str(NAMED_RECORD_ID)))
+
+    response = post_through_simulation_service(record, answer)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created {record} {NAMED_RECORD_ID}, but is "
+            "unavailable (modal_call_refused): Modal refused the call."
+        ),
+        id_field: str(NAMED_RECORD_ID),
+    }
+
+
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_503_naming_no_record_answers_503(record: str) -> None:
+    answer = answering(
+        503,
+        {
+            "code": "manifest_unavailable",
+            "detail": "The v2 version manifest could not be read.",
+        },
+    )
+
+    response = post_through_simulation_service(record, answer)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            "The simulation service is unavailable (manifest_unavailable): The v2 "
+            "version manifest could not be read."
+        ),
     }

@@ -130,6 +130,22 @@ CREATED_RECORD_IDS = {
     "report": ("report_id", REPORT_ID),
     "simulation": ("simulation_id", SIMULATION_ID),
 }
+# The field and ID of a record other than the submission's own.
+OTHER_RECORD_IDS = {
+    "report": ("simulation_id", SIMULATION_ID),
+    "simulation": ("report_id", REPORT_ID),
+}
+
+
+def answer_lost_message(error: str, record: str) -> str:
+    """Return the message for an answer that may follow a created ``record``."""
+    return (
+        "The simulation service may have received the request, but its answer "
+        f"was lost ({error}). Submit the {record} again; if the first request "
+        f"went through, this creates a second {record}."
+    )
+
+
 # Each submission, the record it creates and the status its route answers with.
 SUBMISSIONS = [
     pytest.param(submit_report, "report", _report_route_status, id="report"),
@@ -378,36 +394,34 @@ def test_a_refusal_of_another_shape_is_unavailable(body: object) -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "message"),
+    ("body", "stated_error"),
     [
         pytest.param(
             {"code": "internal_error", "detail": "The run could not be started."},
-            "The simulation service failed (internal_error): The run could not be "
-            "started. It may have created the {record}, so submitting again could "
-            "create another.",
+            "500 internal_error: The run could not be started.",
             id="internal-error",
         ),
         pytest.param(
-            b"",
-            "The simulation service answered 500. It may have created the "
-            "{record}, so submitting again could create another.",
-            id="unreadable",
+            {"detail": "The run could not be started."},
+            "500: The run could not be started.",
+            id="no-code",
         ),
+        pytest.param(b"", "an unreadable 500", id="unreadable"),
     ],
 )
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_an_internal_error_is_not_unavailable(
-    submit, record: str, route_status, body: object, message: str
+    submit, record: str, route_status, body: object, stated_error: str
 ) -> None:
-    # A 500 may come after the service created the record, so the caller is
-    # not invited to submit again.
+    # A 500 may come after the service created the record, so it is not a
+    # 503, which says the service created nothing.
     service = RecordingService(status_code=500, body=body)
 
     with pytest.raises(SimulationServiceInternalError) as failed:
         submit(service.client())
 
     assert route_status(failed.value) == 502
-    assert str(failed.value) == message.format(record=record)
+    assert str(failed.value) == answer_lost_message(stated_error, record)
 
 
 @pytest.mark.parametrize("status_code", [502, 504])
@@ -423,10 +437,8 @@ def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
         submit(service.client())
 
     assert route_status(lost.value) == 502
-    assert str(lost.value) == (
-        "The simulation service may have received the submission, but "
-        f"{status_code} was answered in its place. Check whether it created the "
-        f"{record} before submitting again."
+    assert str(lost.value) == answer_lost_message(
+        f"a proxy answered {status_code} in its place", record
     )
 
 
@@ -496,30 +508,75 @@ def test_a_record_the_unavailable_service_created_is_named(
     assert unavailable.value.created_record_id == record_id
 
 
-def test_a_report_503_naming_only_another_records_id_names_no_report() -> None:
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_503_naming_only_another_records_id_may_have_created_the_record(
+    submit, record: str, route_status
+) -> None:
+    # A report's 503 naming only a simulation shows the service wrote rows,
+    # so the answer is not a 503, which says it created nothing.
+    other_id_field, other_record_id = OTHER_RECORD_IDS[record]
     service = RecordingService(
         status_code=503,
         body={
             "code": "modal_call_refused",
             "detail": "Modal refused the call.",
-            "simulation_id": str(SIMULATION_ID),
+            other_id_field: str(other_record_id),
         },
     )
 
-    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
-        service.client().submit_report(report_input())
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        submit(service.client())
 
-    assert unavailable.value.created_record_id is None
+    assert route_status(lost.value) == 502
+    assert str(lost.value) == answer_lost_message(
+        "503 modal_call_refused: Modal refused the call.", record
+    )
 
 
-@pytest.mark.parametrize("body", [b"Service Unavailable", {"other": "shape"}])
-def test_a_503_that_cannot_be_read_is_unavailable(body: object) -> None:
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"upstream connect error or disconnect/reset before headers",
+        {"other": "shape"},
+    ],
+    ids=["proxy-text", "no-detail"],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_503_that_cannot_be_read_may_have_created_the_record(
+    submit, record: str, route_status, body: object
+) -> None:
+    # Cloud Run's front end answers 503 in the service's place when the
+    # service's answer is malformed or the connection to its instance fails,
+    # which can follow a request the service received.
     service = RecordingService(status_code=503, body=body)
 
-    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
-        service.client().submit_report(report_input())
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        submit(service.client())
 
-    assert str(unavailable.value) == "The simulation service answered 503."
+    assert route_status(lost.value) == 502
+    assert str(lost.value) == answer_lost_message("an unreadable 503", record)
+
+
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_503_naming_a_malformed_record_id_may_have_created_the_record(
+    submit, record: str, route_status
+) -> None:
+    # The body names a record, but not one the Public API can use.
+    id_field, _record_id = CREATED_RECORD_IDS[record]
+    service = RecordingService(
+        status_code=503,
+        body={
+            "code": "modal_call_refused",
+            "detail": "Modal refused the call.",
+            id_field: "not-a-uuid",
+        },
+    )
+
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        submit(service.client())
+
+    assert route_status(lost.value) == 502
+    assert str(lost.value) == answer_lost_message("an unreadable 503", record)
 
 
 @pytest.mark.parametrize(
@@ -614,16 +671,12 @@ def test_an_answer_lost_after_sending_is_not_unavailable(
     submit, record: str, route_status, error_type: type[httpx.TransportError]
 ) -> None:
     # The service may have received the submission and created the record,
-    # so the caller is not invited to submit again.
+    # so the answer is not a 503, which says it created nothing.
     with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
         submit(_client_raising(error_type))
 
     assert route_status(lost.value) == 502
-    assert str(lost.value) == (
-        "The simulation service may have received the submission, but its "
-        f"answer did not arrive ({error_type.__name__}). Check whether it "
-        f"created the {record} before submitting again."
-    )
+    assert str(lost.value) == answer_lost_message(error_type.__name__, record)
 
 
 def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
