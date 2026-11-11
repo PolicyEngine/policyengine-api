@@ -366,6 +366,18 @@ def test_openapi_says_where_admins_read_emails_and_names() -> None:
         assert "Auth0" in description
     assert "stored" in user_item["description"]
     assert "email search" in list_users["responses"]["503"]["description"]
+    (email,) = [
+        parameter
+        for parameter in list_users["parameters"]
+        if parameter["name"] == "email"
+    ]
+    # The optional parameter's text is on its string schema.
+    (email_text, _no_email) = email["schema"]["anyOf"]
+    # The route and its email parameter say which searches are refused.
+    for description in (list_users["description"], email_text["description"]):
+        assert "< or >" in description
+        assert "more than 200" in description
+    assert "1,000" not in list_users["description"]
 
 
 @pytest.mark.parametrize(
