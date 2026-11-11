@@ -515,10 +515,10 @@ def test_email_searches_escape_the_text_and_wildcards_need_three_characters(
         _token_then_users(lambda _request: httpx.Response(200, json=[]))
     )
 
-    result = client.search_user_ids_by_email(text)
+    result = client.search_user_ids_by_email(text, match_limit=200)
 
     (search,) = _searches(requests)
-    assert result == Auth0UserIdSearch(user_ids=(), limit_reached=False)
+    assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=False)
     assert search.url.params["q"] == query
     assert search.url.params["search_engine"] == "v3"
     assert search.url.params["fields"] == "user_id"
@@ -544,7 +544,7 @@ def _pages_of_user_ids(total: int):
 def test_email_searches_page_through_results_fifty_at_a_time() -> None:
     client, requests = _client(_token_then_users(_pages_of_user_ids(120)))
 
-    result = client.search_user_ids_by_email("example")
+    result = client.search_user_ids_by_email("example", match_limit=200)
 
     assert [search.url.params["page"] for search in _searches(requests)] == [
         "0",
@@ -552,17 +552,74 @@ def test_email_searches_page_through_results_fifty_at_a_time() -> None:
         "2",
     ]
     assert result.user_ids == tuple(f"auth0|{number}" for number in range(120))
-    assert result.limit_reached is False
+    assert result.more_than_limit is False
 
 
-def test_email_searches_stop_at_auth0s_one_thousand_result_limit() -> None:
-    client, requests = _client(_token_then_users(_pages_of_user_ids(5000)))
+@pytest.mark.parametrize("matching_users", [201, 250, 5000])
+def test_email_searches_stop_once_more_users_than_the_limit_match(
+    matching_users: int,
+) -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(matching_users)))
 
-    result = client.search_user_ids_by_email("example")
+    result = client.search_user_ids_by_email("example", match_limit=200)
 
-    assert len(_searches(requests)) == 20
-    assert len(result.user_ids) == 1000
-    assert result.limit_reached is True
+    # Four full pages hold 200 users; the fifth shows there are more.
+    assert [search.url.params["page"] for search in _searches(requests)] == [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+    ]
+    assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=True)
+
+
+def test_exactly_as_many_users_as_the_limit_are_not_more() -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(200)))
+
+    result = client.search_user_ids_by_email("example", match_limit=200)
+
+    assert len(_searches(requests)) == 5
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(200))
+    assert result.more_than_limit is False
+
+
+def test_email_searches_count_each_user_once_across_pages() -> None:
+    pages = {0: range(50), 1: range(40, 90), 2: range(90, 100)}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        numbers = pages[int(request.url.params["page"])]
+        return httpx.Response(
+            200, json=[{"user_id": f"auth0|{number}"} for number in numbers]
+        )
+
+    client, _requests = _client(_token_then_users(answer))
+
+    result = client.search_user_ids_by_email("example", match_limit=200)
+
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(100))
+
+
+@pytest.mark.parametrize("match_limit", [0, 1000])
+def test_the_match_limit_stays_within_auth0s_result_limit(match_limit: int) -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(10)))
+
+    with pytest.raises(ValueError, match="match_limit"):
+        client.search_user_ids_by_email("example", match_limit=match_limit)
+
+    assert requests == []
+
+
+@pytest.mark.parametrize("text", ["<a", ">a", "a<", "ab>", "x<y@example.test"])
+def test_email_searches_refuse_angle_brackets_which_auth0_cannot_escape(
+    text: str,
+) -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(10)))
+
+    with pytest.raises(ValueError, match="< or >"):
+        client.search_user_ids_by_email(text, match_limit=200)
+
+    assert requests == []
 
 
 def _failing_with(failure):
@@ -594,7 +651,11 @@ def test_profile_failures_raise_one_unavailable_error_without_personal_data(
 ) -> None:
     client, _requests = _client(_token_then_users(_failing_with(failure)))
     read_profiles_or_search = (
-        (lambda: client.search_user_ids_by_email("secret-person@example.test"))
+        (
+            lambda: client.search_user_ids_by_email(
+                "secret-person@example.test", match_limit=200
+            )
+        )
         if operation == "search"
         else (lambda: client.read_user_profiles(["google-oauth2|secret-subject"]))
     )
@@ -667,7 +728,7 @@ def test_an_unreadable_profile_answer_makes_profiles_unavailable() -> None:
     with pytest.raises(Auth0UserProfilesUnavailableError) as profile_error:
         client.read_user_profiles(["auth0|1"])
     with pytest.raises(Auth0UserProfilesUnavailableError) as search_error:
-        client.search_user_ids_by_email("example")
+        client.search_user_ids_by_email("example", match_limit=200)
 
     assert profile_error.value.cause == "unreadable_answer"
     assert search_error.value.cause == "unreadable_answer"
@@ -733,7 +794,7 @@ def _rate_limited_client(
 
 def _read_or_search(client: Auth0ManagementClient, operation: str) -> object:
     if operation == "search":
-        return client.search_user_ids_by_email("example")
+        return client.search_user_ids_by_email("example", match_limit=200)
     return client.read_user_profiles(["auth0|1"])
 
 
@@ -796,7 +857,7 @@ def test_a_search_rate_limited_again_after_its_wait_is_unavailable() -> None:
     )
 
     with pytest.raises(Auth0UserProfilesUnavailableError) as error:
-        client.search_user_ids_by_email("example")
+        client.search_user_ids_by_email("example", match_limit=200)
 
     assert waits == [1.0]
     assert len(_searches(requests)) == 2
@@ -840,7 +901,7 @@ def test_each_profile_read_or_search_uses_one_http_client(monkeypatch) -> None:
     )
 
     client.read_user_profiles([f"auth0|{number}" for number in range(120)])
-    client.search_user_ids_by_email("example")
+    client.search_user_ids_by_email("example", match_limit=200)
 
     # The profile read's token request and its three searches share one
     # client; the search, with the token cached, reads its three pages

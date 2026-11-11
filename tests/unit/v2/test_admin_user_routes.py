@@ -21,6 +21,7 @@ from policyengine_api.services.v2.user_types.types import (
     UserTypeChangeRead,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
@@ -365,3 +366,24 @@ def test_openapi_says_where_admins_read_emails_and_names() -> None:
         assert "Auth0" in description
     assert "stored" in user_item["description"]
     assert "email search" in list_users["responses"]["503"]["description"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "More than 200 users match that email text; enter more of it",
+        "Email search text can't contain < or >: no email address holds them",
+    ],
+)
+def test_refused_email_searches_answer_422(message: str) -> None:
+    def refuse(name: str, kwargs: dict):
+        if name == "require_minimum_user_type":
+            return UserType.ADMIN
+        raise AdminUserEmailSearchRefusedError(message)
+
+    client, _service = _client(RecordingService(refuse))
+
+    response = client.get("/v2/admin/users?email=gmail")
+
+    assert response.status_code == 422
+    assert response.json() == {"status": "error", "message": message}

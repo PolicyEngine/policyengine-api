@@ -9,6 +9,7 @@ plays Auth0 here; the Management API client itself is tested in
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -43,6 +44,7 @@ from policyengine_api.services.v2.user_types.types import (
     UserProfileSource,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
     UserTypeBelowMinimumError,
 )
@@ -65,15 +67,16 @@ class StandInProfileReader:
         profiles: Iterable[Auth0UserProfile] = (),
         *,
         email_matches: Iterable[str] = (),
-        limit_reached: bool = False,
+        more_than_limit: bool = False,
         failure: Exception | None = None,
     ) -> None:
         self.profiles = {profile.user_id: profile for profile in profiles}
         self.email_matches = tuple(email_matches)
-        self.limit_reached = limit_reached
+        self.more_than_limit = more_than_limit
         self.failure = failure
         self.profile_reads: list[tuple[str, ...]] = []
         self.email_searches: list[str] = []
+        self.match_limits: list[int] = []
 
     def read_user_profiles(
         self, user_ids: Iterable[str]
@@ -88,13 +91,16 @@ class StandInProfileReader:
             if user_id in self.profiles
         }
 
-    def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
+    def search_user_ids_by_email(
+        self, text: str, *, match_limit: int
+    ) -> Auth0UserIdSearch:
         self.email_searches.append(text)
+        self.match_limits.append(match_limit)
         if self.failure is not None:
             raise self.failure
-        return Auth0UserIdSearch(
-            user_ids=self.email_matches, limit_reached=self.limit_reached
-        )
+        if self.more_than_limit:
+            return Auth0UserIdSearch(user_ids=(), more_than_limit=True)
+        return Auth0UserIdSearch(user_ids=self.email_matches, more_than_limit=False)
 
 
 def _profile(subject: str, **fields: object) -> Auth0UserProfile:
@@ -548,30 +554,45 @@ def test_an_email_search_answers_unavailable_when_auth0_fails(
     assert reader.profile_reads == []
 
 
-def test_an_email_search_at_auth0s_result_limit_answers_and_records_a_warning(
+def test_an_email_search_matching_more_than_200_auth0_users_is_refused(
     store: V2Store,
 ) -> None:
-    people = _signed_in_people(store)
-    reader = StandInProfileReader(
-        email_matches=["google-oauth2|dave"], limit_reached=True
+    _signed_in_people(store)
+    reader = StandInProfileReader(more_than_limit=True)
+
+    with pytest.raises(
+        AdminUserEmailSearchRefusedError,
+        match=re.escape("More than 200 users match that email text; enter more of it"),
+    ):
+        _user_types(store, reader).list_users(
+            principal=_principal("alice"), search=AdminUserSearch(email="gmail")
+        )
+
+    assert reader.match_limits == [200]
+    assert reader.profile_reads == []
+
+
+@pytest.mark.parametrize(
+    "text", ["<", ">a", "<ab", "a<", "ab>", "x<y@example.test", "abc>def"]
+)
+@pytest.mark.parametrize("profiles", ["configured", "not_configured"])
+def test_email_search_text_with_angle_brackets_is_refused_before_auth0(
+    store: V2Store, text: str, profiles: str
+) -> None:
+    _signed_in_people(store)
+    reader = StandInProfileReader(email_matches=["google-oauth2|bob"])
+    user_types = (
+        _user_types(store, reader)
+        if profiles == "configured"
+        else _user_types(store, None, source_factory=lambda: None)
     )
 
-    with _recorded_logs() as records:
-        page = _user_types(store, reader).list_users(
-            principal=_principal("alice"), search=AdminUserSearch(email="example")
+    with pytest.raises(AdminUserEmailSearchRefusedError, match="< or >"):
+        user_types.list_users(
+            principal=_principal("alice"), search=AdminUserSearch(email=text)
         )
 
-    assert [user.id for user in page.items] == [people["dave"], people["carol"]]
-    assert [
-        (record.levelno, record.getMessage(), record.policyengine_attributes)
-        for record in records
-    ] == [
-        (
-            logging.WARNING,
-            "admin_user_email_search_limit_reached",
-            {"auth0_result_count": 1},
-        )
-    ]
+    assert reader.email_searches == []
 
 
 def test_without_profile_settings_an_email_search_reads_only_stored_emails(
