@@ -217,11 +217,14 @@ class StandInAuth0:
     def __init__(self, profile: Auth0UserProfile) -> None:
         self.profile = profile
 
-    def search_user_ids_by_email(self, text: str) -> Auth0UserIdSearch:
+    def search_user_ids_by_email(
+        self, text: str, *, match_limit: int
+    ) -> Auth0UserIdSearch:
         assert self.profile.email is not None
+        assert match_limit == 200
         found = text.lower() in self.profile.email
         return Auth0UserIdSearch(
-            user_ids=(self.profile.user_id,) if found else (), limit_reached=False
+            user_ids=(self.profile.user_id,) if found else (), more_than_limit=False
         )
 
     def read_user_profiles(self, user_ids) -> dict[str, Auth0UserProfile]:
