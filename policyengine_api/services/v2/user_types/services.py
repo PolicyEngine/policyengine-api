@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
 )
@@ -98,10 +99,7 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import User, UserIdentity, UserTypeChange
-    from policyengine_api.libs.auth0_management import (
-        Auth0UserProfile,
-        RateLimitWaitBudget,
-    )
+    from policyengine_api.libs.auth0_management import Auth0UserProfile
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
@@ -153,19 +151,6 @@ def _record_profiles_unavailable(
     )
 
 
-def _wait_budget_for(source: UserProfileSource | None) -> RateLimitWaitBudget | None:
-    """Start the rate-limit wait budget one admin request's Auth0 calls share.
-
-    It allows 2 seconds of waiting in total. None without a profile source,
-    which makes no Auth0 call; the Auth0 module loads only when one does.
-    """
-    if source is None:
-        return None
-    from policyengine_api.libs.auth0_management import RateLimitWaitBudget
-
-    return RateLimitWaitBudget()
-
-
 class V2UserTypeService:
     """Sequence user-type checks and changes through explicit sessions."""
 
@@ -214,7 +199,7 @@ class V2UserTypeService:
         principal: AccountPrincipal,
         source: UserProfileSource,
         text: str,
-        wait_budget: RateLimitWaitBudget | None,
+        wait_budget: RateLimitWaitBudget,
     ) -> IdentitySubjects:
         """Return the users' subjects whose Auth0 email contains ``text``.
 
@@ -243,7 +228,7 @@ class V2UserTypeService:
         self,
         source: UserProfileSource,
         subjects: tuple[str, ...],
-        wait_budget: RateLimitWaitBudget | None,
+        wait_budget: RateLimitWaitBudget,
     ) -> Mapping[str, Auth0UserProfile]:
         """Raise AdminUserProfilesUnavailableError when Auth0 can't answer."""
         try:
@@ -258,7 +243,7 @@ class V2UserTypeService:
         self,
         source: UserProfileSource | None,
         subjects: Iterable[str],
-        wait_budget: RateLimitWaitBudget | None,
+        wait_budget: RateLimitWaitBudget,
     ) -> Mapping[str, Auth0UserProfile]:
         """Read these subjects' profiles in one call to the reader.
 
@@ -277,7 +262,7 @@ class V2UserTypeService:
         self,
         source: UserProfileSource | None,
         stored: Iterable[StoredAdminUser],
-        wait_budget: RateLimitWaitBudget | None,
+        wait_budget: RateLimitWaitBudget,
     ) -> tuple[AdminUserRead, ...]:
         """Fill stored users' emails and names from Auth0, after the database."""
         users = tuple(stored)
@@ -325,7 +310,8 @@ class V2UserTypeService:
         else:
             require_searchable_email_text(search.email)
             source = self._profile_source()
-        wait_budget = _wait_budget_for(source)
+        # Every Auth0 call of this admin request waits from one budget.
+        wait_budget = RateLimitWaitBudget()
         if search.email is not None and source is not None:
             email_matching_identities = self._email_matching_identities(
                 principal, source, search.email, wait_budget
@@ -356,7 +342,7 @@ class V2UserTypeService:
             _require_caller_type(session, principal, UserType.ADMIN)
             user = require_signed_in_user(read_signed_in_user(session, user_id))
             stored = _stored_admin_users(session, [user], issuer)
-        (read,) = self._with_profiles(source, stored, _wait_budget_for(source))
+        (read,) = self._with_profiles(source, stored, RateLimitWaitBudget())
         return read
 
     def change_user_type(
@@ -400,7 +386,7 @@ class V2UserTypeService:
                 ),
             )
             stored = _stored_admin_users(session, [user], issuer)
-        (read,) = self._with_profiles(source, stored, _wait_budget_for(source))
+        (read,) = self._with_profiles(source, stored, RateLimitWaitBudget())
         return read
 
     def list_user_type_changes(
@@ -448,7 +434,7 @@ class V2UserTypeService:
                 for change in stored
                 for subject in change.changed_by_profile_subjects
             ),
-            _wait_budget_for(source),
+            RateLimitWaitBudget(),
         )
         return tuple(
             user_type_change_read_with_profiles(

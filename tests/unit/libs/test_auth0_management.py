@@ -15,12 +15,12 @@ from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
     Auth0UserProfilesUnavailableError,
-    RateLimitWaitBudget,
     build_auth0_user_deleter,
     build_auth0_user_profile_reader,
     load_auth0_management_settings,
     load_auth0_user_profile_settings,
 )
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.user_types.types import (
     MAXIMUM_EMAIL_SEARCH_MATCHES,
 )

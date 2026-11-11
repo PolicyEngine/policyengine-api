@@ -28,8 +28,8 @@ from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
     Auth0UserProfilesUnavailableError,
-    RateLimitWaitBudget,
 )
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,

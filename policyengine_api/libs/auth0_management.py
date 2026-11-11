@@ -36,6 +36,7 @@ from urllib.parse import quote
 
 import httpx
 
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.libs.user_auth import PUBLIC_API_AUTH_ISSUER_ENV
 
 if TYPE_CHECKING:
@@ -58,9 +59,6 @@ DOMAIN_PATTERN = re.compile(
 SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
 HTTP_TIMEOUT_SECONDS = 10.0
 TOKEN_REFRESH_MARGIN_SECONDS = 60
-# A rate-limited (429) search is retried once, after the wait Auth0 asks for,
-# only while one operation's waits stay within this many seconds in total.
-MAXIMUM_RATE_LIMIT_WAIT_SECONDS = 2.0
 # Every search page is sorted by user ID, so pages don't shift between requests.
 USER_SEARCH_SORT = "user_id:1"
 
@@ -153,26 +151,6 @@ def _transport_cause(error: httpx.HTTPError) -> str:
     if isinstance(error, httpx.TimeoutException):
         return "timeout"
     return "connection_error"
-
-
-class RateLimitWaitBudget:
-    """The seconds of rate-limit waiting one operation may still spend.
-
-    An admin request gives every Auth0 call it makes the same budget, so
-    their waits together stay within 2 seconds. A rate-limited request waits
-    only when its whole wait fits in what is left.
-    """
-
-    def __init__(self, seconds: float = MAXIMUM_RATE_LIMIT_WAIT_SECONDS) -> None:
-        """Start with ``seconds`` to spend."""
-        self.remaining_seconds = seconds
-
-    def take(self, seconds: float) -> bool:
-        """Spend ``seconds`` and return True, or return False when too few are left."""
-        if seconds > self.remaining_seconds:
-            return False
-        self.remaining_seconds -= seconds
-        return True
 
 
 def _seconds(value: str | None) -> float | None:
