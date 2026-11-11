@@ -1,11 +1,14 @@
 """Live staging checks for native v2 policies and user-owned resources.
 
 The staging deployment runs this module against the tagged Cloud Run
-candidate. Signed-in routes use a dedicated staging Auth0 test user whose
-access token is obtained through the staging-only CI application's password
-grant. Signed-out checks send a fresh random UUID per run in the
-``PolicyEngine-Unauthenticated-User`` header and need no credential. Every
-credential comes from the GitHub ``staging`` environment:
+candidate. Every request carries the CI server credential in
+``Authorization`` (the ``api_client`` fixture), so the signed-in and
+signed-out users are forwarded as a PolicyEngine server forwards them.
+Signed-in routes use a dedicated staging Auth0 test user whose access token is
+obtained through the staging-only CI application's password grant and sent in
+``PolicyEngine-User-Authorization``. Signed-out checks send a fresh random
+UUID per run in the ``PolicyEngine-Unauthenticated-User`` header. Every
+user credential comes from the GitHub ``staging`` environment:
 
 - ``STAGING_AUTH0_TEST_DOMAIN``: Auth0 domain issuing tokens whose ``iss``
   matches the staging ``PUBLIC_API_AUTH_ISSUER`` (variable);
@@ -35,6 +38,7 @@ import httpx
 import pytest
 
 from policyengine_api.query_parameters import MAXIMUM_QUERY_LIMIT
+from tests.integration.deployed_api_credentials import forwarded_user_headers
 
 AUTH0_ENVIRONMENT = (
     "STAGING_AUTH0_TEST_DOMAIN",
@@ -86,8 +90,10 @@ def _staging_user_token() -> str:
 @pytest.fixture
 def user_headers(api_base_url: str) -> dict[str, str]:
     # Depending on api_base_url skips local runs before any token request.
+    # Authorization holds the CI server credential, so the user's token is
+    # forwarded beside it.
     del api_base_url
-    return {"Authorization": f"Bearer {_staging_user_token()}"}
+    return forwarded_user_headers(_staging_user_token())
 
 
 def _one_catalog_item(api_client, resource: str) -> dict:
@@ -179,8 +185,11 @@ def _policy_ids(api_client, headers: dict[str, str]) -> set[str]:
     return {item["id"] for item in response.json()["result"]["items"]}
 
 
-def test_live_user_routes_reject_unauthenticated_requests(api_client) -> None:
-    for method, path in (
+def test_live_user_routes_reject_unauthenticated_requests(
+    api_client, uncredentialed_api_client
+) -> None:
+    """Refuse a credentialed server that forwards no user, and a bare caller."""
+    user_routes = (
         ("GET", "/v2/me"),
         ("GET", "/v2/me/export"),
         ("POST", "/v2/me/upgrade"),
@@ -188,18 +197,20 @@ def test_live_user_routes_reject_unauthenticated_requests(api_client) -> None:
         ("GET", "/v2/user-households"),
         ("GET", "/v2/user-simulations"),
         ("GET", "/v2/user-reports"),
-    ):
-        for headers in ({}, {UNAUTHENTICATED_USER_HEADER: "not-a-uuid"}):
-            response = api_client.request(
-                method,
-                path,
-                params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
-                headers=headers,
-                json={} if method == "POST" else None,
-            )
-            assert response.status_code == 401, (path, response.text[:500])
-            assert response.headers["www-authenticate"].startswith("Bearer")
-            assert response.json()["status"] == "error"
+    )
+    for client in (api_client, uncredentialed_api_client):
+        for method, path in user_routes:
+            for headers in ({}, {UNAUTHENTICATED_USER_HEADER: "not-a-uuid"}):
+                response = client.request(
+                    method,
+                    path,
+                    params={"country_id": COUNTRY_ID, "user_id": str(uuid4())},
+                    headers=headers,
+                    json={} if method == "POST" else None,
+                )
+                assert response.status_code == 401, (path, response.text[:500])
+                assert response.headers["www-authenticate"].startswith("Bearer")
+                assert response.json()["status"] == "error"
 
 
 def test_live_native_policy_resources_and_v2_policy_save(
