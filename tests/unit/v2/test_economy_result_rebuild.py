@@ -1,16 +1,21 @@
 """Rebuild report runs' economy results from the rows the simulation service stores.
 
-Each result is stored through a port of the simulation service's writer
+Most results are stored through a port of the simulation service's writer
 (``tests.fixtures.economy_results``), so a rebuild that matches the result
-reverses that writer.
+reverses that writer. ``economy_result_rows_golden.json`` holds what the
+writer itself stored at a named commit
+(``scripts/generate_economy_result_golden.py``), so a rebuild that matches it
+reverses the real writer, and a change in the writer fails once the file is
+generated again.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -35,11 +40,18 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
     ReportRunResultColumns,
 )
+from policyengine_api.spm import SPMComparisonProvenance
 from tests.fixtures.economy_results import (
     RunIds,
     economy_result_rows,
     uk_economy_result,
     us_economy_result,
+)
+
+GOLDEN = json.loads(
+    (
+        Path(__file__).parents[2] / "fixtures" / "economy_result_rows_golden.json"
+    ).read_text()
 )
 
 TABLE_MODELS = {
@@ -92,6 +104,87 @@ def stored_rows(
 def as_json(value: Any) -> Any:
     """Return ``value`` as the simulation service serves it: through JSON."""
     return json.loads(json.dumps(value))
+
+
+def golden_rows(case: dict[str, Any]) -> EconomyResultRows:
+    """Load one golden case's stored rows as the database connectors read them.
+
+    Run IDs come back as UUIDs and each row gets a new ID, as the writer
+    draws them.
+    """
+    run_ids = {key: UUID(value) for key, value in GOLDEN["run_ids"].items()}
+
+    def loaded(table: str, row: dict[str, Any]) -> Any:
+        return TABLE_MODELS[table](
+            id=uuid4(),
+            **{
+                column: UUID(value) if column.endswith("run_id") else value
+                for column, value in row.items()
+            },
+        )
+
+    return EconomyResultRows(
+        country_id=case["country"],
+        report_run=ReportRunResultColumns(
+            country_package_version=case["output"]["model_version"],
+            **case["report_run_columns"],
+        ),
+        baseline_simulation_run_id=run_ids["baseline_simulation_run_id"],
+        reform_simulation_run_id=run_ids["reform_simulation_run_id"],
+        **{
+            table: tuple(loaded(table, row) for row in rows)
+            for table, rows in case["rows"].items()
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "case", GOLDEN["cases"], ids=[case["name"] for case in GOLDEN["cases"]]
+)
+def test_rows_the_simulation_services_own_writer_stored_rebuild_its_result(
+    case: dict[str, Any],
+) -> None:
+    rebuilt = result_transformations.economy_result(golden_rows(case))
+
+    assert rebuilt.model_dump(mode="json", by_alias=True) == case["output"]
+
+
+def test_the_golden_rows_cover_the_shapes_the_fixtures_alone_do_not() -> None:
+    cases = {case["name"]: case for case in GOLDEN["cases"]}
+    variant = cases["us-labour-supply-deciles-and-at-large-districts"]["rows"]
+
+    assert GOLDEN["writer"]["repository"] == "PolicyEngine/policyengine-sim-api"
+    assert {"us", "uk"} <= cases.keys()
+    assert {-1, 0} <= {
+        row["decile"] for row in variant["labor_supply_decile_responses"]
+    }
+    # DC (11) and Wyoming (56) each have one at-large district, stored as 0.
+    assert {(11, 0), (56, 0)} <= {
+        (row["state_fips"], row["district_number"])
+        for row in variant["congressional_district_impacts"]
+    }
+    assert cases["us-negative-budget"]["output"]["budget"]["budgetary_impact"] < 0
+
+
+def test_a_stored_spm_receipt_is_read_as_the_public_apis_comparison_type() -> None:
+    rebuilt = result_transformations.economy_result(
+        stored_rows(us_economy_result(), country="us")
+    )
+
+    assert isinstance(rebuilt.spm_provenance, SPMComparisonProvenance)
+    assert rebuilt.spm_provenance.baseline.receipt.runtime_versions.policyengine_us == (
+        "1.0.0"
+    )
+
+
+def test_a_stored_spm_receipt_of_another_shape_makes_the_result_unreadable() -> None:
+    rows = stored_rows(us_economy_result(), country="us")
+    receipt = as_json(rows.report_run.spm_provenance)
+    receipt["reform"]["receipt"]["scenario"] = "another_scenario"
+    rows = replace(rows, report_run=replace(rows.report_run, spm_provenance=receipt))
+
+    with pytest.raises(EconomyResultUnreadableError, match="SPM"):
+        result_transformations.economy_result(rows)
 
 
 @pytest.mark.parametrize(
