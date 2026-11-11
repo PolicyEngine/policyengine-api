@@ -30,22 +30,25 @@ def update_user_simulation(
     """Apply only the supplied fields, bump ``updated_at`` and return the row.
 
     Raise AssociationSimulationNotFoundError when the simulation's foreign key
-    refuses a new ``simulation_id``: the service checked the simulation in
-    this transaction, so it was deleted after that check.
+    refuses the row's new ``simulation_id``: the service checked the
+    simulation in this transaction, so it was deleted after that check. The
+    simulation and country are read before the flush, which expires the row
+    when it fails.
     """
     for field_name, value in association_input.model_dump(exclude_unset=True).items():
         setattr(association, field_name, value)
     association.updated_at = utc_now()
+    simulation_id = association.simulation_id
+    country_id = association.country_id
     session.add(association)
     try:
         session.flush()
     except IntegrityError as error:
-        if association.simulation_id is not None and violates_foreign_key(
+        if simulation_id is not None and violates_foreign_key(
             error, SAVED_SIMULATION_FOREIGN_KEY
         ):
             raise simulation_not_found(
-                simulation_id=association.simulation_id,
-                country_id=association.country_id,
+                simulation_id=simulation_id, country_id=country_id
             ) from error
         raise
     session.refresh(association)

@@ -29,19 +29,21 @@ def create_user_simulation(
 
     Raise AssociationSimulationNotFoundError when the simulation's foreign key
     refuses the insert: the service checked the simulation in this
-    transaction, so it was deleted after that check.
+    transaction, so it was deleted after that check. The error names the
+    input's values, since a failed flush expires the rows the session holds.
     """
     association = UserSimulationAssociation(**association_input.model_dump())
     session.add(association)
     try:
         session.flush()
     except IntegrityError as error:
-        if association.simulation_id is not None and violates_foreign_key(
+        simulation_id = association_input.simulation_id
+        if simulation_id is not None and violates_foreign_key(
             error, SAVED_SIMULATION_FOREIGN_KEY
         ):
             raise simulation_not_found(
-                simulation_id=association.simulation_id,
-                country_id=association.country_id,
+                simulation_id=simulation_id,
+                country_id=association_input.country_id,
             ) from error
         raise
     session.refresh(association)

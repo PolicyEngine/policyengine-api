@@ -27,6 +27,12 @@ what each of its route's answers means; this module holds what they share:
   (``answer_lost``) and for a failure after the service may have created
   what was submitted (``created_but_failed``), each ending with
   ``submit_again``'s sentence.
+
+Each client still builds its own refusal messages, and its own message for
+a 400 or 422 it cannot read, since the two routes answer them differently:
+the household calculation client names a refusal's code only when it is a
+fixed identifier, and the report and simulation client names any text
+code.
 """
 
 from __future__ import annotations

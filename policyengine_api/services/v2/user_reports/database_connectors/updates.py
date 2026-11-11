@@ -29,21 +29,24 @@ def update_user_report(
     """Set the given column values, bump ``updated_at`` and return the row.
 
     Raise AssociationReportNotFoundError when the report's foreign key refuses
-    a new ``report_id``: the service checked the report in this transaction,
-    so it was deleted after that check.
+    the row's new ``report_id``: the service checked the report in this
+    transaction, so it was deleted after that check. The report and country
+    are read before the flush, which expires the row when it fails.
     """
     for field_name, value in values.items():
         setattr(association, field_name, value)
     association.updated_at = utc_now()
+    report_id = association.report_id
+    country_id = association.country_id
     session.add(association)
     try:
         session.flush()
     except IntegrityError as error:
-        if association.report_id is not None and violates_foreign_key(
+        if report_id is not None and violates_foreign_key(
             error, SAVED_REPORT_FOREIGN_KEY
         ):
             raise report_not_found(
-                report_id=association.report_id, country_id=association.country_id
+                report_id=report_id, country_id=country_id
             ) from error
         raise
     session.refresh(association)

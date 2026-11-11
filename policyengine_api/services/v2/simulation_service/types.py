@@ -112,8 +112,9 @@ class SimulationServiceInvalidRequestError(ValueError):
     Such as a stored household or policy value its household contract cannot
     take, an option it refuses, or a region, dataset or dynamic the catalog
     version its default worker runs does not have. The message gives the
-    service's reasons, which describe the caller's own request, but not the
-    service's status. The route answers 422.
+    service's reasons, which describe the caller's own request, and, for a
+    report or simulation, the code the service gave, but not the service's
+    status. The route answers 422.
     """
 
 
