@@ -699,10 +699,12 @@ class Auth0ManagementClient:
         created or changed moments ago may be missing. Results are read 50 a
         page, through one HTTP client, until a page is short or more than
         ``match_limit`` users have matched: at most ``match_limit // 50 + 1``
-        pages. Rate-limit waits are spent from ``wait_budget``, else from a
-        budget of this call's own. Raise ValueError for a match limit outside
-        1 to 999 or text with ``<`` or ``>``, before any request, and
-        Auth0UserProfilesUnavailableError when any page fails.
+        pages. A full last page counts as more than ``match_limit``, since
+        it may hide more users. Rate-limit waits are spent from
+        ``wait_budget``, else from a budget of this call's own. Raise
+        ValueError for a match limit outside 1 to 999 or text with ``<`` or
+        ``>``, before any request, and Auth0UserProfilesUnavailableError when
+        any page fails.
         """
         if not 0 < match_limit < USER_SEARCH_RESULT_LIMIT:
             msg = f"match_limit must be from 1 to {USER_SEARCH_RESULT_LIMIT - 1}"
@@ -731,8 +733,12 @@ class Auth0ManagementClient:
                 if len(user_ids) > match_limit:
                     return Auth0UserIdSearch(user_ids=(), more_than_limit=True)
                 if len(users) < USER_SEARCH_PAGE_SIZE:
-                    break
-        return Auth0UserIdSearch(user_ids=tuple(user_ids), more_than_limit=False)
+                    return Auth0UserIdSearch(
+                        user_ids=tuple(user_ids), more_than_limit=False
+                    )
+        # The last page read was full, through duplicate or ID-less entries,
+        # so more users may match.
+        return Auth0UserIdSearch(user_ids=(), more_than_limit=True)
 
 
 _shared_clients: dict[Auth0ManagementSettings, Auth0ManagementClient] = {}
