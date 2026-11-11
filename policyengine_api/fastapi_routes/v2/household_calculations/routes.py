@@ -87,9 +87,10 @@ HOUSEHOLD_CALCULATION_ERROR_MAPPINGS = (
         404,
     ),
     V2ErrorMapping((SimulationServiceUnavailableError,), 503),
-    # The simulation service created the job, or may have, so this is not a
-    # 503: the message asks the caller to submit again and says this creates
-    # a second job if the first request went through.
+    # The simulation service created the job, or may have, so submitting
+    # again may create a second one; this is why it is not a 503. The message
+    # asks the caller to submit again and says this creates a second job if
+    # the first request went through.
     V2ErrorMapping(
         (SimulationServiceAnswerUnreadableError, SimulationServiceInternalError), 502
     ),

@@ -304,8 +304,9 @@ class SimulationHouseholdCalculationClient:
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
         when it refuses the caller's data; SimulationServiceAnswerUnreadableError
-        when it accepted the calculation but its answer cannot be read, or its
-        answer was lost after the submission may have reached it;
+        when it accepted the calculation but its answer cannot be read, its
+        answer was lost after the submission may have reached it, or a proxy in
+        front of it answered 502 or 504 in its place;
         SimulationServiceInternalError when it failed (500); and
         SimulationServiceUnavailableError otherwise, including a connection
         never made.
