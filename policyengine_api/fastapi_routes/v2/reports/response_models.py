@@ -194,27 +194,31 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     502: {
         "model": V2ErrorResponse | CreatedReportUnreadableResponse,
         "description": (
-            "The simulation service created the report, but its answer cannot "
-            "be read; it failed (500); its answer was lost after the submission "
-            "may have reached it; or a proxy in front of it answered 502 or 504 "
-            "in its place. In each case it may have created the report, so "
-            "submitting again could create another. Or it created the report, "
-            "but the report cannot be read back: the answer gives its "
-            "report_id, to read with GET /v2/reports/{report_id} rather than "
-            "submitting it again."
+            "The simulation service may have created the report, but its "
+            "answer does not say so: the answer was lost after the request may "
+            "have reached it; a proxy in front of it answered 502 or 504 in its "
+            "place; it answered 503 in a shape the Public API cannot read, or "
+            "naming only another record; or it failed (500). The message says "
+            "which, and asks the caller to submit the report again, which "
+            "creates a second report if the first request went through. Or it "
+            "created the report, but its answer cannot be read. Or it created "
+            "the report, but the report cannot be read back: the answer gives "
+            "its report_id, to read with GET /v2/reports/{report_id} rather "
+            "than submitting it again."
         ),
     },
     503: {
         "model": V2ErrorResponse | UnavailableAfterReportCreatedResponse,
         "description": (
-            "The simulation service cannot be reached or is not configured; it "
-            "answered 503, or a 400 naming no region, dataset or dynamic of the "
-            "caller's (such as a catalog version missing while a release "
-            "deploys), and the message gives its code and reason; or it "
-            "answered in a shape the Public API cannot read. Or the v2 database "
-            "is unavailable. When the service created the report before "
-            "answering 503, as when Modal refuses the run's call and the "
-            "service fails the run, the answer gives its report_id."
+            "The simulation service created nothing: it cannot be reached or is "
+            "not configured; it answered a readable 503 naming no record, or a "
+            "400 naming no region, dataset or dynamic of the caller's (such as "
+            "a catalog version missing while a release deploys), and the "
+            "message gives its code and reason; or it answered 400 or 422 in a "
+            "shape the Public API cannot read, or another status. Or the v2 "
+            "database is unavailable. Or the service created the report, then "
+            "Modal refused the run's call and the service failed the run: its "
+            "503 named the report, and the answer gives its report_id."
         ),
     },
 }

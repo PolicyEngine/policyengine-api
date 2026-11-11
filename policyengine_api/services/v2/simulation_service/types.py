@@ -39,18 +39,21 @@ class SimulationServiceUnavailableError(RuntimeError):
     """The simulation service could not be asked, or cannot serve the request now.
 
     That covers a connection never made, a gateway token that cannot be
-    fetched, missing configuration, a refusal of another shape, a 400 that
-    names none of the caller's rows (such as a catalog version missing while
-    a release deploys), the service's own unavailability (503) and any answer
+    fetched, missing configuration, a 400 or 422 that cannot be read, a 400
+    that names none of the caller's rows (such as a catalog version missing
+    while a release deploys), the service's own readable 503 and any answer
     no other error names. The message gives the service's code and reason
     when it gave them.
 
-    The service has created nothing, unless its 503 names the record it
-    created first: when Modal refuses the run's call, the service fails the
-    run and answers 503 with the record's ID. ``created_record_id`` is that
-    ID, and None when the answer names no record. Submitting again creates a
-    new record either way, but starts no second calculation: the record named
-    has no running calculation.
+    Unless ``created_record_id`` is set, the service has created nothing, and
+    submitting again creates one record. ``created_record_id`` is the record
+    the service's readable 503 names as the submission's own: when Modal
+    refuses the run's call, the service creates the record, fails its run and
+    answers 503 with the record's ID. Submitting again then creates a second
+    record, but starts no second calculation: the record named has no running
+    calculation. A 503 that may follow a record the service created without
+    naming it, because it cannot be read or names only another record, is
+    SimulationServiceAnswerUnreadableError instead.
     """
 
     def __init__(self, message: str, *, created_record_id: UUID | None = None) -> None:
@@ -65,7 +68,10 @@ class SimulationServiceAnswerUnreadableError(RuntimeError):
     It answered that it created the simulation or report and started its run,
     but its answer cannot be read; or its answer was lost after the
     submission may have reached it; or a proxy in front of it answered 502 or
-    504 in its place. Submitting again could create another.
+    504 in its place; or it answered 503 in a shape that cannot be read,
+    which Cloud Run's front end also answers in its place, or naming only a
+    record other than the submission's own, which shows it wrote rows.
+    Submitting again could create another.
     """
 
 
@@ -199,11 +205,14 @@ class SimulationServiceClient(Protocol):
       creating the record;
     - SimulationServiceAnswerUnreadableError when it created the record but
       its answer cannot be read, its answer was lost after the submission may
-      have reached it, or a proxy answered 502 or 504 in its place;
+      have reached it, a proxy answered 502 or 504 in its place, or it
+      answered 503 in a shape that cannot be read or naming only another
+      record;
     - SimulationServiceUnavailableError otherwise: a connection never made, a
-      gateway token that cannot be fetched, missing configuration, a refusal
-      of another shape, any other 400, its 503 or any other answer. It names
-      the record the service created when the service's 503 names one.
+      gateway token that cannot be fetched, missing configuration, a 400 or
+      422 that cannot be read, any other 400, its readable 503 or any other
+      answer. It names the record the service created when the service's 503
+      names the submission's own.
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,

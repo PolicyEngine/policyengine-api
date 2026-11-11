@@ -187,9 +187,17 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
             "The simulation service cannot run this request: no such region",
         ),
         (
-            SimulationServiceInternalError("The simulation service failed"),
+            SimulationServiceInternalError(
+                "The simulation service may have received the request, but its "
+                "answer was lost (500 internal_error: The run failed.). Submit the "
+                "report again; if the first request went through, this creates a "
+                "second report."
+            ),
             502,
-            "The simulation service failed",
+            "The simulation service may have received the request, but its answer "
+            "was lost (500 internal_error: The run failed.). Submit the report "
+            "again; if the first request went through, this creates a second "
+            "report.",
         ),
         (
             SimulationServiceAnswerUnreadableError(
@@ -201,9 +209,13 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
             "not be read.",
         ),
         (
-            SimulationServiceUnavailableError("The simulation service answered 503."),
+            SimulationServiceUnavailableError(
+                "The simulation service is unavailable (manifest_unavailable): The "
+                "v2 version manifest could not be read."
+            ),
             503,
-            "The simulation service answered 503.",
+            "The simulation service is unavailable (manifest_unavailable): The v2 "
+            "version manifest could not be read.",
         ),
     ],
     ids=[

@@ -135,11 +135,14 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     502: {
         "model": V2ErrorResponse | CreatedSimulationUnreadableResponse,
         "description": (
-            "The simulation service created the simulation, but its answer "
-            "cannot be read; it failed (500); its answer was lost after the "
-            "submission may have reached it; or a proxy in front of it answered "
-            "502 or 504 in its place. In each case it may have created the "
-            "simulation, so submitting again could create another. Or it "
+            "The simulation service may have created the simulation, but its "
+            "answer does not say so: the answer was lost after the request may "
+            "have reached it; a proxy in front of it answered 502 or 504 in its "
+            "place; it answered 503 in a shape the Public API cannot read, or "
+            "naming only another record; or it failed (500). The message says "
+            "which, and asks the caller to submit the simulation again, which "
+            "creates a second simulation if the first request went through. Or "
+            "it created the simulation, but its answer cannot be read. Or it "
             "created the simulation, but the simulation cannot be read back: "
             "the answer gives its simulation_id, to read with GET "
             "/v2/simulations/{simulation_id} rather than submitting it again."
@@ -148,14 +151,16 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: {
         "model": V2ErrorResponse | UnavailableAfterSimulationCreatedResponse,
         "description": (
-            "The simulation service cannot be reached or is not configured; it "
-            "answered 503, or a 400 naming no region, dataset or dynamic of the "
-            "caller's (such as a catalog version missing while a release "
-            "deploys), and the message gives its code and reason; or it "
-            "answered in a shape the Public API cannot read. Or the v2 database "
-            "is unavailable. When the service created the simulation before "
-            "answering 503, as when Modal refuses the run's call and the "
-            "service fails the run, the answer gives its simulation_id."
+            "The simulation service created nothing: it cannot be reached or is "
+            "not configured; it answered a readable 503 naming no record, or a "
+            "400 naming no region, dataset or dynamic of the caller's (such as "
+            "a catalog version missing while a release deploys), and the "
+            "message gives its code and reason; or it answered 400 or 422 in a "
+            "shape the Public API cannot read, or another status. Or the v2 "
+            "database is unavailable. Or the service created the simulation, "
+            "then Modal refused the run's call and the service failed the run: "
+            "its 503 named the simulation, and the answer gives its "
+            "simulation_id."
         ),
     },
 }
