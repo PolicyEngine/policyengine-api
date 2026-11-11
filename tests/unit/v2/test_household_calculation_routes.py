@@ -439,6 +439,7 @@ def test_openapi_documents_both_routes_and_the_missing_parameter_refusal(
     assert "a status the Public API does not expect" in lost_answer
     unavailable = submit["responses"]["503"]["description"]
     assert "otherwise only its status and code" in unavailable
+    assert "its own 503, naming its code, because it is not configured" in (unavailable)
     assert "security" not in submit
     refusal_schema = submit["responses"]["422"]["content"]["application/json"]["schema"]
     refusals = {option["$ref"].rsplit("/", 1)[-1] for option in refusal_schema["anyOf"]}

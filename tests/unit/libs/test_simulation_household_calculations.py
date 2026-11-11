@@ -60,6 +60,10 @@ def lost_answer_message(what_happened: str) -> str:
     )
 
 
+# Deeper than any JSON parser's recursion or depth limit.
+DEEPLY_NESTED_BODY = b"[" * 100_000 + b"]" * 100_000
+
+
 def created_but_failed_message(status_and_code: str) -> str:
     """Return the 502 message for an answer sent after the job may exist.
 
@@ -441,6 +445,40 @@ def test_an_answer_given_before_a_job_is_created_is_unavailable(
 
 
 @pytest.mark.parametrize(
+    ("status_code", "error_type", "message"),
+    [
+        pytest.param(
+            400,
+            SimulationServiceUnavailableError,
+            "The simulation service refused the calculation (400).",
+            id="400",
+        ),
+        pytest.param(
+            409,
+            SimulationServiceAnswerUnreadableError,
+            created_but_failed_message("409"),
+            id="409",
+        ),
+        pytest.param(
+            500,
+            SimulationServiceInternalError,
+            created_but_failed_message("500"),
+            id="500",
+        ),
+    ],
+)
+def test_a_deeply_nested_body_is_read_as_an_unreadable_one(
+    status_code, error_type, message
+) -> None:
+    service = RecordingService(status_code, DEEPLY_NESTED_BODY)
+
+    with pytest.raises(error_type) as unreadable:
+        service.client().submit(calculation_input())
+
+    assert str(unreadable.value) == message
+
+
+@pytest.mark.parametrize(
     "body",
     [
         pytest.param(b"", id="empty"),
@@ -448,6 +486,12 @@ def test_an_answer_given_before_a_job_is_created_is_unavailable(
         pytest.param({"detail": "Service Unavailable"}, id="no-code"),
         pytest.param({"code": "Not An Identifier", "detail": "x"}, id="bad-code"),
         pytest.param({"code": 7, "detail": "x"}, id="number-code"),
+        pytest.param(b"[]", id="array"),
+        pytest.param(b"5", id="number"),
+        pytest.param(b"null", id="null"),
+        pytest.param(b'"database_unavailable"', id="string"),
+        pytest.param(b"\xff\xfe{}", id="not-utf-8"),
+        pytest.param(DEEPLY_NESTED_BODY, id="deeply-nested"),
     ],
 )
 def test_a_503_without_the_services_code_came_from_a_proxy(body) -> None:
