@@ -1,0 +1,1 @@
+The admin user routes show each user's email and names from Auth0, read when an admin asks and never stored, and an email search finds users by their Auth0 email; the optional, read-only `AUTH0_USER_PROFILES_*` settings configure it in staging and production.
