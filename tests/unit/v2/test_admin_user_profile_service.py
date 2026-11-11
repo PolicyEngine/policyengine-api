@@ -28,6 +28,7 @@ from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
     Auth0UserProfilesUnavailableError,
+    RateLimitWaitBudget,
 )
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
@@ -77,12 +78,18 @@ class StandInProfileReader:
         self.profile_reads: list[tuple[str, ...]] = []
         self.email_searches: list[str] = []
         self.match_limits: list[int] = []
+        # The rate-limit wait budget each call was given, in call order.
+        self.wait_budgets: list[RateLimitWaitBudget | None] = []
 
     def read_user_profiles(
-        self, user_ids: Iterable[str]
+        self,
+        user_ids: Iterable[str],
+        *,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> dict[str, Auth0UserProfile]:
         requested = tuple(user_ids)
         self.profile_reads.append(requested)
+        self.wait_budgets.append(wait_budget)
         if self.failure is not None:
             raise self.failure
         return {
@@ -92,10 +99,15 @@ class StandInProfileReader:
         }
 
     def search_user_ids_by_email(
-        self, text: str, *, match_limit: int
+        self,
+        text: str,
+        *,
+        match_limit: int,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> Auth0UserIdSearch:
         self.email_searches.append(text)
         self.match_limits.append(match_limit)
+        self.wait_budgets.append(wait_budget)
         if self.failure is not None:
             raise self.failure
         if self.more_than_limit:
@@ -787,3 +799,24 @@ def test_the_default_profile_source_needs_profile_settings_and_the_users_issuer(
     assert source is not None
     assert source.issuer == "https://auth.example.test/"
     assert source.reader is auth0_management.build_auth0_user_profile_reader()
+
+
+def test_each_admin_request_gives_its_auth0_calls_one_shared_wait_budget(
+    store: V2Store,
+) -> None:
+    people = _signed_in_people(store)
+    alice = _principal("alice")
+    reader = StandInProfileReader(email_matches=["google-oauth2|bob"])
+    user_types = _user_types(store, reader)
+
+    user_types.list_users(principal=alice, search=AdminUserSearch(email="bob"))
+    user_types.get_user(principal=alice, user_id=people["bob"])
+
+    # The search and the page's profile read share one budget of 2 seconds;
+    # the next admin request gets a budget of its own.
+    search_budget, page_budget, next_request_budget = reader.wait_budgets
+    assert isinstance(search_budget, RateLimitWaitBudget)
+    assert search_budget.remaining_seconds == 2.0
+    assert page_budget is search_budget
+    assert isinstance(next_request_budget, RateLimitWaitBudget)
+    assert next_request_budget is not search_budget

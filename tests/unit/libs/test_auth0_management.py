@@ -13,6 +13,7 @@ from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
     Auth0UserProfilesUnavailableError,
+    RateLimitWaitBudget,
     build_auth0_user_deleter,
     build_auth0_user_profile_reader,
     load_auth0_management_settings,
@@ -927,3 +928,131 @@ def test_each_profile_read_or_search_uses_one_http_client(monkeypatch) -> None:
         ["/api/v2/users", "/api/v2/users", "/api/v2/users"],
     ]
     assert all(http_client.is_closed for http_client in opened_http_clients)
+
+
+@pytest.mark.parametrize(
+    ("headers", "retried_after"),
+    [
+        # Retry-After comes first when Auth0 sends both.
+        (
+            {"Retry-After": "1", "X-RateLimit-Reset": str(int(RATE_LIMIT_NOW) + 2)},
+            1.0,
+        ),
+        (
+            {"Retry-After": "3", "X-RateLimit-Reset": str(int(RATE_LIMIT_NOW) + 1)},
+            None,
+        ),
+    ],
+)
+def test_retry_after_takes_precedence_over_the_rate_limit_reset(
+    headers: dict[str, str], retried_after: float | None
+) -> None:
+    client, requests, waits = _rate_limited_client(
+        [httpx.Response(429, headers=headers), httpx.Response(200, json=[])]
+    )
+
+    if retried_after is None:
+        with pytest.raises(Auth0UserProfilesUnavailableError):
+            client.read_user_profiles(["auth0|1"])
+    else:
+        client.read_user_profiles(["auth0|1"])
+
+    assert waits == ([] if retried_after is None else [retried_after])
+    assert len(_searches(requests)) == (1 if retried_after is None else 2)
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Retry-After": "nan"},
+        {"Retry-After": "inf"},
+        {"Retry-After": "-inf"},
+        {"X-RateLimit-Reset": "nan"},
+        {"X-RateLimit-Reset": "inf"},
+        {"X-RateLimit-Reset": "-inf"},
+    ],
+)
+def test_a_wait_that_is_not_a_finite_number_is_not_waited_for(
+    headers: dict[str, str],
+) -> None:
+    client, requests, waits = _rate_limited_client(
+        [httpx.Response(429, headers=headers), httpx.Response(200, json=[])]
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        client.read_user_profiles(["auth0|1"])
+
+    assert waits == []
+    assert len(_searches(requests)) == 1
+    assert error.value.cause == "http_429"
+
+
+def test_a_rate_limited_retry_after_a_token_refresh_sends_the_fresh_token() -> None:
+    issued_tokens: list[str] = []
+    search_answers = [
+        httpx.Response(401),
+        httpx.Response(429, headers={"Retry-After": "0"}),
+        httpx.Response(200, json=[]),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            issued_tokens.append(f"mgmt-{len(issued_tokens) + 1}")
+            return httpx.Response(
+                200, json={"access_token": issued_tokens[-1], "expires_in": 86400}
+            )
+        return search_answers.pop(0)
+
+    client, requests = _client(handler)
+
+    client.read_user_profiles(["auth0|1"])
+
+    assert [search.headers["authorization"] for search in _searches(requests)] == [
+        "Bearer mgmt-1",
+        "Bearer mgmt-2",
+        "Bearer mgmt-2",
+    ]
+
+
+def test_rate_limit_waits_share_one_two_second_budget_per_operation() -> None:
+    """Three groups of IDs are each rate limited; their waits total 2 seconds."""
+    client, requests, waits = _rate_limited_client(
+        [
+            httpx.Response(429, headers={"Retry-After": "1.5"}),
+            httpx.Response(200, json=[]),
+            httpx.Response(429, headers={"Retry-After": "0.5"}),
+            httpx.Response(200, json=[]),
+            httpx.Response(429, headers={"Retry-After": "0.1"}),
+        ]
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        client.read_user_profiles([f"auth0|{number}" for number in range(120)])
+
+    # The first short wait still retries, and so does the second, which uses
+    # the rest of the budget; the third is not waited for.
+    assert waits == [1.5, 0.5]
+    assert len(_searches(requests)) == 5
+    assert error.value.cause == "http_429"
+
+
+def test_a_shared_wait_budget_spans_an_admin_requests_searches() -> None:
+    client, requests, waits = _rate_limited_client(
+        [
+            httpx.Response(429, headers={"Retry-After": "1.5"}),
+            httpx.Response(200, json=[{"user_id": "auth0|1"}]),
+            httpx.Response(429, headers={"Retry-After": "1"}),
+        ]
+    )
+    wait_budget = RateLimitWaitBudget()
+
+    found = client.search_user_ids_by_email(
+        "example", match_limit=200, wait_budget=wait_budget
+    )
+    with pytest.raises(Auth0UserProfilesUnavailableError):
+        client.read_user_profiles(found.user_ids, wait_budget=wait_budget)
+
+    assert found.user_ids == ("auth0|1",)
+    assert waits == [1.5]
+    assert len(_searches(requests)) == 3
+    assert wait_budget.remaining_seconds == 0.5
