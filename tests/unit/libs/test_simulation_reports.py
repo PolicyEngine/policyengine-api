@@ -9,6 +9,10 @@ from uuid import UUID
 import httpx
 import pytest
 
+from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPINGS
+from policyengine_api.fastapi_routes.v2.simulations.routes import (
+    SIMULATION_ERROR_MAPPINGS,
+)
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_reports import (
     REPORTS_PATH,
@@ -92,6 +96,41 @@ def simulation_input(**changes: Any) -> EconomySimulationCreationInput:
         "policy_id": str(POLICY_ID),
     }
     return EconomySimulationCreationInput.model_validate({**values, **changes})
+
+
+def _report_route_status(error: Exception) -> int:
+    """Return the status the report route answers ``error`` with."""
+    return next(
+        mapping.status_code
+        for mapping in REPORT_ERROR_MAPPINGS
+        if isinstance(error, mapping.error_types)
+    )
+
+
+def _simulation_route_status(error: Exception) -> int:
+    """Return the status the simulation route answers ``error`` with."""
+    return next(
+        mapping.status_code
+        for mapping in SIMULATION_ERROR_MAPPINGS
+        if isinstance(error, mapping.error_types)
+    )
+
+
+def submit_report(client: SimulationServiceReportClient) -> object:
+    return client.submit_report(report_input())
+
+
+def submit_simulation(client: SimulationServiceReportClient) -> object:
+    return client.submit_simulation(simulation_input())
+
+
+# Each submission, the record it creates and the status its route answers with.
+SUBMISSIONS = [
+    pytest.param(submit_report, "report", _report_route_status, id="report"),
+    pytest.param(
+        submit_simulation, "simulation", _simulation_route_status, id="simulation"
+    ),
+]
 
 
 class RecordingService:
@@ -252,46 +291,176 @@ def test_a_refusal_of_another_shape_is_unavailable(body: object) -> None:
         service.client().submit_report(report_input())
 
 
-def test_an_internal_error_is_not_unavailable() -> None:
-    service = RecordingService(status_code=500, body={"detail": "internal_error"})
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param(
+            {"code": "internal_error", "detail": "The run could not be started."},
+            "The simulation service failed (internal_error): The run could not be "
+            "started. It may have created the {record}, so submitting again could "
+            "create another.",
+            id="internal-error",
+        ),
+        pytest.param(
+            b"",
+            "The simulation service answered 500. It may have created the "
+            "{record}, so submitting again could create another.",
+            id="unreadable",
+        ),
+    ],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_an_internal_error_is_not_unavailable(
+    submit, record: str, route_status, body: object, message: str
+) -> None:
+    # A 500 may come after the service created the record, so the caller is
+    # not invited to submit again.
+    service = RecordingService(status_code=500, body=body)
 
-    with pytest.raises(SimulationServiceInternalError):
-        service.client().submit_report(report_input())
+    with pytest.raises(SimulationServiceInternalError) as failed:
+        submit(service.client())
+
+    assert route_status(failed.value) == 502
+    assert str(failed.value) == message.format(record=record)
+
+
+@pytest.mark.parametrize("status_code", [502, 504])
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
+    submit, record: str, route_status, status_code: int
+) -> None:
+    # A proxy in front of the service, such as Cloud Run's front end, may
+    # answer 502 or 504 after the service created the record.
+    service = RecordingService(status_code=status_code, body=b"upstream timeout")
+
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        submit(service.client())
+
+    assert route_status(lost.value) == 502
+    assert str(lost.value) == (
+        "The simulation service may have received the submission, but "
+        f"{status_code} was answered in its place. Check whether it created the "
+        f"{record} before submitting again."
+    )
 
 
 @pytest.mark.parametrize("status_code", [200, 302, 404, 409, 503])
-def test_any_other_answer_is_unavailable(status_code: int) -> None:
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_any_other_answer_is_unavailable(
+    submit, record: str, route_status, status_code: int
+) -> None:
     service = RecordingService(status_code=status_code, body={"detail": "busy"})
 
-    with pytest.raises(SimulationServiceUnavailableError, match=str(status_code)):
-        service.client().submit_report(report_input())
+    with pytest.raises(
+        SimulationServiceUnavailableError, match=str(status_code)
+    ) as unavailable:
+        submit(service.client())
+
+    assert route_status(unavailable.value) == 503
 
 
 @pytest.mark.parametrize(
-    "body",
-    [b"not json", {"report_id": "not-a-uuid"}, {"status": "pending"}],
-    ids=["not-json", "malformed-id", "no-id"],
+    ("body", "submit", "record", "route_status"),
+    [
+        pytest.param(b"not json", submit_report, "report", _report_route_status),
+        pytest.param(
+            {"report_id": "not-a-uuid", "report_run_id": str(REPORT_RUN_ID)},
+            submit_report,
+            "report",
+            _report_route_status,
+        ),
+        pytest.param(
+            {"status": "pending"}, submit_report, "report", _report_route_status
+        ),
+        pytest.param(
+            b"not json", submit_simulation, "simulation", _simulation_route_status
+        ),
+        pytest.param(
+            {"simulation_id": str(SIMULATION_ID)},
+            submit_simulation,
+            "simulation",
+            _simulation_route_status,
+        ),
+    ],
+    ids=[
+        "report-not-json",
+        "report-malformed-id",
+        "report-no-id",
+        "simulation-not-json",
+        "simulation-no-run-id",
+    ],
 )
 def test_a_created_answer_that_cannot_be_read_is_not_unavailable(
-    body: object,
+    body: object, submit, record: str, route_status
 ) -> None:
+    # The service has created the record and started its run, so the caller
+    # is told the answer was unreadable rather than to try again.
     service = RecordingService(status_code=201, body=body)
 
-    with pytest.raises(SimulationServiceAnswerUnreadableError):
-        service.client().submit_report(report_input())
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as unreadable:
+        submit(service.client())
 
-
-def test_an_unreachable_service_is_unavailable() -> None:
-    def refuse(request: httpx.Request) -> httpx.Response:
-        msg = "connection refused"
-        raise httpx.ConnectError(msg, request=request)
-
-    client = SimulationServiceReportClient.from_environment(
-        transport=httpx.MockTransport(refuse)
+    assert route_status(unreadable.value) == 502
+    assert str(unreadable.value) == (
+        f"The simulation service created the {record}, but its answer could not "
+        "be read."
     )
 
-    with pytest.raises(SimulationServiceUnavailableError, match="could not be reached"):
-        client.submit_simulation(simulation_input())
+
+def _client_raising(
+    error_type: type[httpx.TransportError],
+) -> SimulationServiceReportClient:
+    """Return a client whose every request fails with ``error_type``."""
+
+    def fail(request: httpx.Request) -> httpx.Response:
+        msg = "the transport failed"
+        raise error_type(msg, request=request)
+
+    return SimulationServiceReportClient.from_environment(
+        transport=httpx.MockTransport(fail)
+    )
+
+
+@pytest.mark.parametrize(
+    "error_type", [httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout]
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_a_connection_never_made_is_unavailable(
+    submit, record: str, route_status, error_type: type[httpx.TransportError]
+) -> None:
+    with pytest.raises(
+        SimulationServiceUnavailableError, match="could not be reached"
+    ) as unavailable:
+        submit(_client_raising(error_type))
+
+    assert route_status(unavailable.value) == 503
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        httpx.ReadTimeout,
+        httpx.WriteTimeout,
+        httpx.ReadError,
+        httpx.WriteError,
+        httpx.RemoteProtocolError,
+    ],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_an_answer_lost_after_sending_is_not_unavailable(
+    submit, record: str, route_status, error_type: type[httpx.TransportError]
+) -> None:
+    # The service may have received the submission and created the record,
+    # so the caller is not invited to submit again.
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        submit(_client_raising(error_type))
+
+    assert route_status(lost.value) == 502
+    assert str(lost.value) == (
+        "The simulation service may have received the submission, but its "
+        f"answer did not arrive ({error_type.__name__}). Check whether it "
+        f"created the {record} before submitting again."
+    )
 
 
 def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
@@ -305,8 +474,12 @@ def test_a_gateway_token_that_cannot_be_fetched_is_unavailable() -> None:
         httpx.Client(base_url=SIMULATION_URL), send_report=refuse_token
     )
 
-    with pytest.raises(SimulationServiceUnavailableError, match="could not be reached"):
+    with pytest.raises(
+        SimulationServiceUnavailableError, match="could not be reached"
+    ) as unavailable:
         client.submit_report(report_input())
+
+    assert _report_route_status(unavailable.value) == 503
 
 
 def test_each_request_is_sent_through_its_one_replaceable_send_function() -> None:

@@ -151,7 +151,7 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
         ),
         (
             SimulationServiceInternalError("The simulation service failed"),
-            500,
+            502,
             "The simulation service failed",
         ),
         (
@@ -159,7 +159,7 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
                 "The simulation service created the report, but its answer "
                 "could not be read."
             ),
-            500,
+            502,
             "The simulation service created the report, but its answer could "
             "not be read.",
         ),
@@ -235,10 +235,11 @@ def test_a_malformed_simulation_is_refused_before_the_service(
         (PolicyNotFoundError("Policy p was not found"), 404),
         (EconomyCalculationsUnsupportedError("not available"), 422),
         (SimulationServiceRefusalError("no such dataset"), 422),
-        (SimulationServiceInternalError("failed"), 500),
+        (SimulationServiceInternalError("failed"), 502),
+        (SimulationServiceAnswerUnreadableError("answer lost"), 502),
         (SimulationServiceUnavailableError("unavailable"), 503),
     ],
-    ids=["policy", "country", "refusal", "failure", "unavailable"],
+    ids=["policy", "country", "refusal", "failure", "unreadable", "unavailable"],
 )
 def test_simulation_creation_failures_answer_typed_errors(
     error: Exception, status_code: int
