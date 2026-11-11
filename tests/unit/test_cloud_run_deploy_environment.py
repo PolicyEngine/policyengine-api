@@ -367,6 +367,10 @@ def test_deployment_validation_rejects_shared_staging_database_targets(
         ({"PUBLIC_API_AUTH_ISSUER": "http://auth.example.test/"}, "HTTPS"),
         ({"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"}, "or none"),
         (
+            {"AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader"},
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE together, or none",
+        ),
+        (
             {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a,"},
             "PUBLIC_API_SERVER_CLIENT_IDS must be",
         ),
@@ -454,6 +458,26 @@ def test_validate_cloud_run_deploy_env_keeps_auth0_management_out_of_staging():
     assert staging_result.returncode == 1
     assert "production-only" in staging_result.stderr
     assert production_result.returncode == 0, production_result.stderr
+
+
+def test_validate_cloud_run_deploy_env_allows_auth0_user_profiles_everywhere():
+    """The read-only profile client may serve staging, unlike deletion."""
+    profiles = {
+        "AUTH0_USER_PROFILES_DOMAIN": "policyengine.us.auth0.com",
+        "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+        "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": TEST_AUTH0_SECRET_RESOURCE,
+    }
+
+    results = [
+        _run_script(
+            ".github/scripts/validate_cloud_run_deploy_env.sh",
+            _script_env(**environment, **profiles),
+        )
+        for environment in (_staging_runtime_env(), _required_runtime_env())
+    ]
+
+    for result in results:
+        assert result.returncode == 0, result.stderr
 
 
 def test_validate_cloud_run_deploy_env_accepts_disabled_user_auth():

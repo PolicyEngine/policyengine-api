@@ -210,6 +210,23 @@ if (( auth0_management_count != 0 )) && [[ "${DEPLOYMENT_ENVIRONMENT}" != "produ
   exit 1
 fi
 
+# Optional: the admin user routes read users' emails and names from Auth0
+# through a read-only (read:users) client. It can't delete users, so staging
+# and production may both configure it.
+auth0_user_profiles_count=0
+for name in \
+  AUTH0_USER_PROFILES_DOMAIN \
+  AUTH0_USER_PROFILES_CLIENT_ID \
+  AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE; do
+  if [[ -n "${!name:-}" ]]; then
+    auth0_user_profiles_count=$((auth0_user_profiles_count + 1))
+  fi
+done
+if (( auth0_user_profiles_count != 0 && auth0_user_profiles_count != 3 )); then
+  echo "Set AUTH0_USER_PROFILES_DOMAIN, AUTH0_USER_PROFILES_CLIENT_ID, and AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE together, or none" >&2
+  exit 1
+fi
+
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
 )"
