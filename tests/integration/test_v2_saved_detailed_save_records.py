@@ -283,6 +283,44 @@ def test_a_report_gone_after_the_check_is_refused_by_its_foreign_key(
         )
 
 
+def test_a_report_gone_before_a_repoint_is_refused_by_its_foreign_key(
+    monkeypatch: pytest.MonkeyPatch,
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    browsers: list[UUID],
+    runtime_sessions: sessionmaker,
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalogs["us"])
+    service = report_service(runtime_sessions)
+    principal = browser(browsers)
+    saved = service.create_user_report(
+        principal=principal,
+        association_input=UserReportCreateFields(
+            country_id="us", report_id=report.report_id
+        ),
+    )
+    # As if the new report were deleted between the check and the update.
+    monkeypatch.setattr(
+        report_services, "read_report_exists", lambda *_args, **_kwargs: True
+    )
+    missing_report_id = uuid4()
+
+    with pytest.raises(
+        AssociationReportNotFoundError,
+        match=f"Report {missing_report_id} was not found in country 'us'",
+    ):
+        service.patch_user_report(
+            principal=principal,
+            country_id="us",
+            association_id=saved.id,
+            association_input=UserReportUpdateInput(report_id=missing_report_id),
+        )
+    assert (
+        service.get_shared_user_report(country_id="us", association_id=saved.id)
+    ).report_id == report.report_id
+
+
 def test_a_saved_simulation_names_a_stored_simulation_of_its_country(
     owner_engine: Engine,
     catalogs: dict[str, CatalogRows],
@@ -391,5 +429,44 @@ def test_a_simulation_gone_after_the_check_is_refused_by_its_foreign_key(
             principal=browser(browsers),
             association_input=UserSimulationCreateFields(
                 country_id="us", simulation_id=missing_simulation_id
+            ),
+        )
+
+
+def test_a_simulation_gone_before_a_repoint_is_refused_by_its_foreign_key(
+    monkeypatch: pytest.MonkeyPatch,
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    browsers: list[UUID],
+    runtime_sessions: sessionmaker,
+) -> None:
+    with owner_engine.begin() as connection:
+        simulation_id = store_simulation(connection, catalogs["uk"], policy_id=None)
+    service = simulation_service(runtime_sessions)
+    principal = browser(browsers)
+    saved = service.create_user_simulation(
+        principal=principal,
+        association_input=UserSimulationCreateFields(
+            country_id="uk", simulation_id=simulation_id
+        ),
+    )
+    # As if the new simulation were deleted between the check and the update.
+    monkeypatch.setattr(
+        simulation_services,
+        "read_simulation_exists",
+        lambda *_args, **_kwargs: True,
+    )
+    missing_simulation_id = uuid4()
+
+    with pytest.raises(
+        AssociationSimulationNotFoundError,
+        match=f"Simulation {missing_simulation_id} was not found in country 'uk'",
+    ):
+        service.patch_user_simulation(
+            principal=principal,
+            country_id="uk",
+            association_id=saved.id,
+            association_input=UserSimulationUpdateInput(
+                simulation_id=missing_simulation_id
             ),
         )
