@@ -48,14 +48,14 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
 )
 # How the simulation service's answers and the submission checks are answered.
 # The service's failure (500), an unreadable created answer, an answer lost
-# after sending, a proxy's 502 or 504, and a 503 that cannot be read or names
-# only another record are a 502, as for household calculations: the record
-# exists, or may, and a 503 says the service created nothing. The message of
-# each but the unreadable created answer asks the caller to submit again, and
-# says this creates a second record if the first request went through. The
-# service's 503 naming the record it created and failed is still a 503, and
-# each create route answers it with the record's ID
-# (``unavailable_after_creation_answer``).
+# after sending, a proxy's 502 or 504, a 503 that cannot be read or names
+# only another record, and any status the client does not expect are a 502,
+# as for household calculations: the record exists, or may, and a 503 says
+# the service created nothing. The message of each but the unreadable
+# created answer asks the caller to submit again, and says this creates a
+# second record if the first request went through. The service's 503 naming
+# the record it created and failed is still a 503, and each create route
+# answers it with the record's ID (``unavailable_after_creation_answer``).
 SUBMISSION_ERROR_MAPPINGS = (
     V2ErrorMapping((PolicyNotFoundError,), 404),
     V2ErrorMapping(

@@ -41,9 +41,11 @@ class SimulationServiceUnavailableError(RuntimeError):
     That covers a connection never made, a gateway token that cannot be
     fetched, missing configuration, a 400 or 422 that cannot be read, a 400
     that names none of the caller's rows (such as a catalog version missing
-    while a release deploys), the service's own readable 503 and any answer
-    no other error names. The message gives the service's code and reason
-    when it gave them.
+    while a release deploys), the service's own readable 503, and a 401,
+    403, 404, 405, 413 or 429, which the gateway, Cloud Run or the service's
+    framework answers before the service's route runs. The message gives the
+    service's status and code, and a 400's reason, but never a 503's reason,
+    which may be an exception's text.
 
     Unless ``created_record_id`` is set, the service has created nothing, and
     submitting again creates one record. ``created_record_id`` is the record
@@ -70,8 +72,10 @@ class SimulationServiceAnswerUnreadableError(RuntimeError):
     submission may have reached it; or a proxy in front of it answered 502 or
     504 in its place; or it answered 503 in a shape that cannot be read,
     which Cloud Run's front end also answers in its place, or naming only a
-    record other than the submission's own, which shows it wrote rows.
-    Submitting again could create another.
+    record other than the submission's own, which shows it wrote rows; or it
+    answered a status the Public API does not expect, which its route may
+    answer after writing rows. Submitting again could create another. The
+    message gives the service's status and code, never its reason.
     """
 
 
@@ -79,7 +83,8 @@ class SimulationServiceInternalError(RuntimeError):
     """The simulation service failed (500), possibly after creating the record.
 
     Submitting again could create another, so this is not reported as the
-    service being unavailable.
+    service being unavailable. The message gives the status and code, never
+    the service's reason, which may be an exception's text.
     """
 
 
@@ -87,8 +92,9 @@ class SimulationServiceRefusalError(ValueError):
     """The simulation service refused the request's data, and said why.
 
     For example, a region, dataset or dynamic the catalog version its default
-    worker runs does not have. The message gives the service's code, when it
-    gave one, and its reason.
+    worker runs does not have. The message gives the service's status, its
+    code when it gave one, and its reason, which describes the caller's own
+    request.
     """
 
 
@@ -200,19 +206,21 @@ class SimulationServiceClient(Protocol):
 
     - SimulationServiceRefusalError when the service refuses the request's
       data (its 422, or its 400 for a region, dataset or dynamic it cannot
-      find), with its code and reasons;
+      find), with its status, code and reasons;
     - SimulationServiceInternalError when it failed (500), possibly after
       creating the record;
     - SimulationServiceAnswerUnreadableError when it created the record but
       its answer cannot be read, its answer was lost after the submission may
-      have reached it, a proxy answered 502 or 504 in its place, or it
-      answered 503 in a shape that cannot be read or naming only another
-      record;
+      have reached it, a proxy answered 502 or 504 in its place, it answered
+      503 in a shape that cannot be read or naming only another record, or
+      it answered a status the client does not expect, which its route may
+      answer after writing rows;
     - SimulationServiceUnavailableError otherwise: a connection never made, a
       gateway token that cannot be fetched, missing configuration, a 400 or
-      422 that cannot be read, any other 400, its readable 503 or any other
-      answer. It names the record the service created when the service's 503
-      names the submission's own.
+      422 that cannot be read, any other 400, its readable 503, or a 401,
+      403, 404, 405, 413 or 429, sent before its route runs. It names the
+      record the service created when the service's 503 names the
+      submission's own.
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,

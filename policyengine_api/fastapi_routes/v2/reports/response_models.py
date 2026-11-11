@@ -156,7 +156,7 @@ class CreatedReportUnreadableResponse(V2ErrorResponse):
 class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
     """The 503 answer when the simulation service failed a new report's run.
 
-    The message gives the service's code and reason. ``report_id`` names the
+    The message gives the service's status and code. ``report_id`` names the
     report, which ``GET /v2/reports/{report_id}`` reads with its failed run.
     """
 
@@ -194,31 +194,36 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     502: {
         "model": V2ErrorResponse | CreatedReportUnreadableResponse,
         "description": (
-            "The simulation service may have created the report, but its "
-            "answer does not say so: the answer was lost after the request may "
-            "have reached it; a proxy in front of it answered 502 or 504 in its "
-            "place; it answered 503 in a shape the Public API cannot read, or "
-            "naming only another record; or it failed (500). The message says "
-            "which, and asks the caller to submit the report again, which "
-            "creates a second report if the first request went through. Or it "
-            "created the report, but its answer cannot be read. Or it created "
-            "the report, but the report cannot be read back: the answer gives "
-            "its report_id, to read with GET /v2/reports/{report_id} rather "
-            "than submitting it again."
+            "The simulation service may have created the report, but its answer does "
+            "not say so. The answer was lost after the request may have reached it, or "
+            "a proxy in front of it answered 502 or 504 in its place: the message says "
+            "the service may have received the request, but its answer was lost. Or it "
+            "failed (500), answered 503 in a shape the Public API cannot read or "
+            "naming only another record, or answered a status the Public API does not "
+            "expect, which its route may answer after writing rows: the message says "
+            "it may have created the report, but failed, with its status and code but "
+            "not its reason. Either message asks the caller to submit the report "
+            "again, which creates a second report if the first request went through. "
+            "Or it created the report, but its answer cannot be read. Or it created "
+            "the report, but the report cannot be read back: the answer gives its "
+            "report_id, to read with GET /v2/reports/{report_id} rather than "
+            "submitting it again."
         ),
     },
     503: {
         "model": V2ErrorResponse | UnavailableAfterReportCreatedResponse,
         "description": (
-            "The simulation service created nothing: it cannot be reached or is "
-            "not configured; it answered a readable 503 naming no record, or a "
-            "400 naming no region, dataset or dynamic of the caller's (such as "
-            "a catalog version missing while a release deploys), and the "
-            "message gives its code and reason; or it answered 400 or 422 in a "
-            "shape the Public API cannot read, or another status. Or the v2 "
-            "database is unavailable. Or the service created the report, then "
-            "Modal refused the run's call and the service failed the run: its "
-            "503 named the report, and the answer gives its report_id."
+            "The simulation service created nothing: it cannot be reached or is not "
+            "configured; it answered a readable 503 naming no record, and the message "
+            "gives its status and code; it answered a 400 naming no region, dataset or "
+            "dynamic of the caller's (such as a catalog version missing while a "
+            "release deploys), and the message gives its status, code and reason; it "
+            "answered 400 or 422 in a shape the Public API cannot read; or it answered "
+            "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
+            "the v2 database is unavailable. Or the service created the report, then "
+            "Modal refused the run's call and the service failed the run: its 503 "
+            "named the report, with its status and code, and the answer gives its "
+            "report_id."
         ),
     },
 }
