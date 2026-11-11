@@ -208,14 +208,15 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "No job of the submission will run: the simulation service cannot "
-            "be reached or is not configured; it refuses a household, policy or "
-            "catalog version the Public API has already checked (400); its "
-            "authentication, routing, body-size or rate limits refuse the "
-            "request; it answers its own 503, naming its code, because it cannot "
-            "read its manifest or database or Modal refused the call; or it "
-            "refuses in a shape the Public API cannot read. Or v2 storage is "
-            "unavailable. The message gives the simulation service's reason "
-            "only for a 400, otherwise only its status and code."
+            "be reached, or the Public API has no URL or credentials for it; it "
+            "refuses a household, policy or catalog version the Public API has "
+            "already checked (400); its authentication, routing, body-size or "
+            "rate limits refuse the request; it answers its own 503, naming its "
+            "code, because it is not configured, cannot read its manifest or "
+            "database, or Modal refused the call; or it refuses in a shape the "
+            "Public API cannot read. Or v2 storage is unavailable. Of the "
+            "simulation service's answers, the message gives the reason only "
+            "for a 400, otherwise only its status and code."
         ),
     },
 }

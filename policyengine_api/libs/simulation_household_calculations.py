@@ -24,9 +24,9 @@ No job of the submission will run, so the service is unavailable
   (the Public API checks the first two first), with the service's reason;
 - 401, 403, 404, 405, 413 and 429, which its authentication, routing,
   body-size and rate limits answer before its route runs;
-- its own 503, which names its code, when it cannot read its manifest or
-  database, or Modal refused the household function's call, after which it
-  failed the job it had created at once;
+- its own 503, which names its code, when it is not configured, cannot read
+  its manifest or database, or Modal refused the household function's call,
+  after which it failed the job it had created at once;
 - a connection never made (``ConnectError``, ``ConnectTimeout``,
   ``PoolTimeout``), a gateway token that cannot be fetched, and missing
   configuration.
@@ -81,7 +81,6 @@ the function call the generated operation, as its docstring says.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -90,7 +89,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
@@ -126,7 +125,9 @@ CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTim
 # Statuses after which no job of the submission runs: the service's
 # authentication, routing, body-size and rate limits answer them before its
 # route runs, and its own 503 comes before it creates the job, or after it
-# failed the job whose call Modal refused.
+# failed the job whose call Modal refused. Only the service's own 503, which
+# names its code, reaches this set: ``_accepted_job`` first answers a 503
+# without one as a proxy's.
 STATUSES_AFTER_WHICH_NO_JOB_RUNS = frozenset(
     {
         HTTPStatus.UNAUTHORIZED,
@@ -141,6 +142,8 @@ STATUSES_AFTER_WHICH_NO_JOB_RUNS = frozenset(
 # A code the service names may reach the caller only when it is a fixed
 # identifier, never text that could hold stored data.
 FIXED_IDENTIFIER = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Any JSON value, parsed by pydantic's parser, which has a depth limit.
+ANY_JSON: TypeAdapter[Any] = TypeAdapter(Any)
 SUBMIT_AGAIN = (
     "Submit the household calculation again; if the first request went "
     "through, this creates a second job."
@@ -204,7 +207,7 @@ class _RefusedField(_AnswerModel):
 class _Refusal(_AnswerModel):
     """A refusal's body: a reason, or each refused request field.
 
-    Its ``code`` is read on its own (``_fixed_code``), so a code of another
+    Its ``code`` is read on its own (``_read_answer``), so a code of another
     type never makes the reason unreadable.
     """
 
@@ -279,68 +282,78 @@ def _invalid_request_reason(refusal: _Refusal) -> str:
     return f"The simulation service cannot calculate this household: {reason}"
 
 
-def _refusal(answer: SimulationAnswer) -> _Refusal | None:
-    try:
-        return _Refusal.model_validate_json(answer.content)
-    except ValidationError:
-        return None
+@dataclass(frozen=True)
+class _ReadAnswer:
+    """An answer other than 202, its body parsed once.
 
-
-def _fixed_code(answer: SimulationAnswer) -> str | None:
-    """Return the code the answer's body names when it is a fixed identifier."""
-    try:
-        body = json.loads(answer.content)
-    except ValueError:
-        return None
-    code = body.get("code") if isinstance(body, dict) else None
-    if isinstance(code, str) and FIXED_IDENTIFIER.fullmatch(code):
-        return code
-    return None
-
-
-def _status_and_code(answer: SimulationAnswer) -> str:
-    """Return the service's status, and its code when that is a fixed identifier.
-
-    The service's text is left out: it may hold stored data.
+    ``code`` is the code the body names when it is a fixed identifier, and
+    ``refusal`` its reason or refused fields when the body has that shape.
     """
-    code = _fixed_code(answer)
-    return str(answer.status_code) if code is None else f"{answer.status_code} {code}"
+
+    status_code: int
+    code: str | None
+    refusal: _Refusal | None
+
+    @property
+    def status_and_code(self) -> str:
+        """The status, and the code when there is one; never the service's text."""
+        if self.code is None:
+            return str(self.status_code)
+        return f"{self.status_code} {self.code}"
 
 
-def _answered_by_a_proxy(answer: SimulationAnswer) -> bool:
+def _read_answer(answer: SimulationAnswer) -> _ReadAnswer:
+    """Parse the answer's body once; a body that is not JSON reads as none.
+
+    pydantic's parser reports a body nested past its depth limit, or bytes
+    that are not UTF-8, as a ValidationError, so no body can raise anything
+    else.
+    """
+    try:
+        body = ANY_JSON.validate_json(answer.content)
+    except ValidationError:
+        body = None
+    code = body.get("code") if isinstance(body, dict) else None
+    fixed_code = (
+        code if isinstance(code, str) and FIXED_IDENTIFIER.fullmatch(code) else None
+    )
+    try:
+        refusal = _Refusal.model_validate(body)
+    except ValidationError:
+        refusal = None
+    return _ReadAnswer(answer.status_code, fixed_code, refusal)
+
+
+def _answered_by_a_proxy(read: _ReadAnswer) -> bool:
     """Whether a proxy in front of the service answered in its place.
 
     The service never answers 502 or 504 itself, and its own 503 always
     names its code.
     """
-    if answer.status_code in PROXY_STAND_IN_STATUSES:
+    if read.status_code in PROXY_STAND_IN_STATUSES:
         return True
-    return (
-        answer.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-        and _fixed_code(answer) is None
-    )
+    return read.status_code == HTTPStatus.SERVICE_UNAVAILABLE and read.code is None
 
 
-def _unavailable(answer: SimulationAnswer) -> str:
+def _unavailable(read: _ReadAnswer) -> str:
     """Describe an answer after which no job of the submission runs."""
-    return f"The simulation service is unavailable ({_status_and_code(answer)})."
+    return f"The simulation service is unavailable ({read.status_and_code})."
 
 
-def _refused(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
+def _refused(read: _ReadAnswer) -> str:
     """Describe a 400: a row the request names, or a function it needs, is missing.
 
     The service's reason names the caller's own household or policy, so it is
     kept.
     """
-    if refusal is None or not isinstance(refusal.detail, str):
+    if read.refusal is None or not isinstance(read.refusal.detail, str):
         return (
-            "The simulation service refused the calculation "
-            f"({_status_and_code(answer)})."
+            f"The simulation service refused the calculation ({read.status_and_code})."
         )
-    code = _fixed_code(answer)
-    named_code = "" if code is None else f" ({code})"
+    named_code = "" if read.code is None else f" ({read.code})"
     return (
-        f"The simulation service refused the calculation{named_code}: {refusal.detail}"
+        f"The simulation service refused the calculation{named_code}: "
+        f"{read.refusal.detail}"
     )
 
 
@@ -428,21 +441,23 @@ def _accepted_job(answer: SimulationAnswer) -> HouseholdCalculationAccepted:
         return HouseholdCalculationAccepted(
             calculation_id=accepted.job_id, status=accepted.status
         )
-    if _answered_by_a_proxy(answer):
+    read = _read_answer(answer)
+    if _answered_by_a_proxy(read):
         raise SimulationServiceAnswerUnreadableError(
-            _lost_answer(f"a proxy answered {answer.status_code}")
+            _lost_answer(f"a proxy answered {read.status_code}")
         )
-    refusal = _refusal(answer)
-    if answer.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
-        if refusal is None:
+    if read.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
+        if read.refusal is None:
             raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
-        raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
-    if answer.status_code == HTTPStatus.BAD_REQUEST:
-        raise SimulationServiceUnavailableError(_refused(answer, refusal))
-    if answer.status_code in STATUSES_AFTER_WHICH_NO_JOB_RUNS:
-        raise SimulationServiceUnavailableError(_unavailable(answer))
-    failure = _created_but_failed(_status_and_code(answer))
-    if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
+        raise SimulationServiceInvalidRequestError(
+            _invalid_request_reason(read.refusal)
+        )
+    if read.status_code == HTTPStatus.BAD_REQUEST:
+        raise SimulationServiceUnavailableError(_refused(read))
+    if read.status_code in STATUSES_AFTER_WHICH_NO_JOB_RUNS:
+        raise SimulationServiceUnavailableError(_unavailable(read))
+    failure = _created_but_failed(read.status_and_code)
+    if read.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
         raise SimulationServiceInternalError(failure)
     raise SimulationServiceAnswerUnreadableError(failure)
 

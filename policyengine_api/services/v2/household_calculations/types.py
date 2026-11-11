@@ -337,9 +337,9 @@ class SimulationServiceUnavailableError(RuntimeError):
     fetched, missing configuration, and every answer after which no job of
     the submission runs: a household, policy or catalog version it cannot
     find (which the Public API checks first), its authentication, routing,
-    body-size and rate limits, and its own 503 for a database or manifest it
-    cannot read, or a Modal call it cannot start, after which it fails the
-    job it had created.
+    body-size and rate limits, and its own 503 when it is not configured,
+    cannot read a database or manifest, or cannot start a Modal call, after
+    which it fails the job it had created.
     """
 
 

@@ -326,11 +326,11 @@ caller as 422.
 Answers after which no job of the submission runs are 503: its 400 (a
 household, policy or catalog version it can't find, with its reason), its
 401, 403, 404, 405, 413 and 429 (its authentication, routing, body-size and
-rate limits, before its route runs), its own 503, which names its code (its
-manifest or database can't be read, or Modal refused the call, after which
-it fails the job it had created), a refusal the Public API can't read, a
-connection never made, missing configuration and a gateway token it can't
-fetch. A failed catalog query in the policy check is 503 too.
+rate limits, before its route runs), its own 503, which names its code (it
+isn't configured, its manifest or database can't be read, or Modal refused
+the call, after which it fails the job it had created), a refusal the Public
+API can't read, a connection never made, missing configuration and a gateway
+token it can't fetch. A failed catalog query in the policy check is 503 too.
 
 Answers that may come after it created the job are 502: a 202 whose body the
 Public API can't read, its 500 (`internal_error`), any status not named
