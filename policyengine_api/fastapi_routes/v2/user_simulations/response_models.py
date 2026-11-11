@@ -29,8 +29,11 @@ class UserSimulationItem(StrictUserSimulationAPIModel):
     ``simulation_id`` is the detailed-save simulation it saves, and
     ``legacy_simulation_id`` the v1 simulation; one of them is set, and only
     saved simulations the production migration wrote hold both. Associations
-    can be renamed, pointed at another simulation of the same kind and
-    country, or deleted.
+    can be renamed or deleted, and pointed at another simulation of the same
+    country through the reference they hold: another detailed-save simulation
+    through ``simulation_id``, another v1 simulation through
+    ``legacy_simulation_id``. An update that would leave both set is refused,
+    and the simulation's own kind (economy or household) is not checked.
     """
 
     id: UUID
