@@ -43,8 +43,9 @@ class SimulationServiceUnavailableError(RuntimeError):
     that names none of the caller's rows (such as a catalog version missing
     while a release deploys), the service's own readable 503, and a 401,
     403, 404, 405, 413 or 429, which the gateway, Cloud Run or the service's
-    framework answers before the service's route runs. The message gives the
-    service's status and code, and a 400's reason, but never a 503's reason,
+    framework answers before the service's route runs. A 400's message gives
+    the service's code and reason, which describes the service's state; any
+    other gives the service's status and code, but never a 503's reason,
     which may be an exception's text.
 
     Unless ``created_record_id`` is set, the service has created nothing, and
@@ -92,9 +93,9 @@ class SimulationServiceRefusalError(ValueError):
     """The simulation service refused the request's data, and said why.
 
     For example, a region, dataset or dynamic the catalog version its default
-    worker runs does not have. The message gives the service's status, its
-    code when it gave one, and its reason, which describes the caller's own
-    request.
+    worker runs does not have. The message gives the service's code, when it
+    gave one, and its reason, which describes the caller's own request, but
+    not the service's status.
     """
 
 
@@ -206,7 +207,7 @@ class SimulationServiceClient(Protocol):
 
     - SimulationServiceRefusalError when the service refuses the request's
       data (its 422, or its 400 for a region, dataset or dynamic it cannot
-      find), with its status, code and reasons;
+      find), with its code and reasons;
     - SimulationServiceInternalError when it failed (500), possibly after
       creating the record;
     - SimulationServiceAnswerUnreadableError when it created the record but

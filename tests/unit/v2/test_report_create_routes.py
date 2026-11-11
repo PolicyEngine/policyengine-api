@@ -860,9 +860,8 @@ def test_a_refusal_gives_the_services_code_and_reason_but_not_its_status(
     answer_status: int,
     message: str,
 ) -> None:
-    # A 400's or 422's reason is passed on, as the household calculation
-    # client passes it on; the simulation service's status would only
-    # contradict the route's own.
+    # A 400's or 422's code and reason are passed on, but not its status,
+    # since the route answers with its own.
     response = post_through_simulation_service(record, answering(status_code, body))
 
     assert response.status_code == answer_status

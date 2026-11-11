@@ -188,8 +188,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "The request does not match the schema, the country has no economy "
         "reports (such as a household-only country), or the simulation service "
         "cannot run the report: its 422, or its 400 for a region, dataset or "
-        "dynamic it does not have. The message says which, with the service's "
-        "code and reason."
+        "dynamic it does not have. The message says which; for the simulation "
+        "service's refusal, it gives the service's code, when it gave one, and "
+        "its reason, but not its status."
     ),
     502: {
         "model": V2ErrorResponse | CreatedReportUnreadableResponse,
@@ -217,7 +218,7 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "configured; it answered a readable 503 naming no record, and the message "
             "gives its status and code; it answered a 400 naming no region, dataset or "
             "dynamic of the caller's (such as a catalog version missing while a "
-            "release deploys), and the message gives its status, code and reason; it "
+            "release deploys), and the message gives its code and reason; it "
             "answered 400 or 422 in a shape the Public API cannot read; or it answered "
             "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
             "the v2 database is unavailable. Or the service created the report, then "

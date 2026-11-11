@@ -25,13 +25,12 @@ service runs its default worker's. The simulation service answers:
   per field as FastAPI writes them, and 400 with a code in
   ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region, dataset or
   dynamic the caller named does not exist (the Public API checks the country
-  and policies first): SimulationServiceRefusalError, with the status, code
-  and reasons;
+  and policies first): SimulationServiceRefusalError, with the code and
+  reasons;
 - 400 with any other code, or none: a state of the service rather than the
   caller's error, such as ``unknown_catalog_version`` while a release
   deploys, or a row the Public API already checked. The service is
-  unavailable (SimulationServiceUnavailableError), with its status, code and
-  reason;
+  unavailable (SimulationServiceUnavailableError), with its code and reason;
 - 503 with its code when it cannot read its manifest or database, before
   creating anything: SimulationServiceUnavailableError, with the status and
   code. When Modal refuses the run's call, the service has created the
@@ -46,10 +45,16 @@ service runs its default worker's. The simulation service answers:
   connection never made (``ConnectError``, ``ConnectTimeout``,
   ``PoolTimeout``).
 
-A 400's or 422's reason describes the caller's own request, so it is passed
-on. A 500's or 503's ``detail`` may hold an exception's text, which can carry
-stored data, so only its ``code`` reaches the caller. Each message writes the
-service's status and code the same way, such as ``503 modal_call_refused``.
+A readable 400's or 422's message gives the service's code, when it gave
+one, and its reason, but not the service's status, since the route answers
+with its own. A 422's reason, and a 400's with a code in
+``CALLER_ROW_REFUSAL_CODES``, describes the caller's own request; any other
+400's describes the service's state. A 500's or 503's ``detail`` may hold an
+exception's text, which can carry stored data, so it never reaches the
+caller. The message of a 500, a 503 or any status other than a readable 400
+or 422 gives the service's status and code instead, such as
+``503 modal_call_refused``, and gives the code only when it is a fixed
+identifier (``FIXED_IDENTIFIER_CODE``), which an exception's text is not.
 
 Some answers may follow a record the service created, so they are never
 SimulationServiceUnavailableError, whose 503 says nothing was created:
@@ -80,6 +85,7 @@ docstring says.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from http import HTTPStatus
@@ -123,6 +129,11 @@ REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_E
 CALLER_ROW_REFUSAL_CODES = frozenset(
     {"unknown_region", "unknown_dataset", "unknown_dynamic"}
 )
+# The only code a message gives without the reason, as for a 500 or 503: a
+# fixed identifier of lower-case letters, digits and underscores, starting
+# with a letter, at most 64 characters. Any other code, such as an
+# exception's text, is left out.
+FIXED_IDENTIFIER_CODE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 UNREACHABLE = "The simulation service could not be reached."
 # The service never answers 502 or 504 itself: a proxy in front of it, such as
 # Cloud Run's front end, answers them in its place, possibly after the
@@ -316,14 +327,17 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
 def _status_and_code(answer: SimulationAnswer) -> str:
     """Return the answer's status and code, such as ``503 modal_call_refused``.
 
-    Without a code, or when the body is not a JSON object with a text code,
-    return the status alone. Never the body's reason.
+    Return the status alone when the body is not a JSON object with a text
+    code, or its code is not a fixed identifier (``FIXED_IDENTIFIER_CODE``),
+    such as an empty code or an exception's text. Never the body's reason.
     """
     try:
         code = _AnswerCode.model_validate_json(answer.content).code
     except ValidationError:
         code = None
-    return f"{answer.status_code}" if code is None else f"{answer.status_code} {code}"
+    if code is None or FIXED_IDENTIFIER_CODE.fullmatch(code) is None:
+        return f"{answer.status_code}"
+    return f"{answer.status_code} {code}"
 
 
 def _submit_again(record: RecordName) -> str:
@@ -364,24 +378,31 @@ def _failed_after_possible_creation(
     )
 
 
+def _code_and_reason(refusal: _Refusal) -> str:
+    """Return `` (code): reason``, or ``: reason`` when the service gave no code."""
+    code = "" if refusal.code is None else f" ({refusal.code})"
+    return f"{code}: {_refusal_reason(refusal)}"
+
+
 def _raise_for_refused_request(
     answer: SimulationAnswer, refusal: _Refusal, record: RecordName
 ) -> NoReturn:
     """Raise the error the service's readable 400 or 422 means.
 
     A 422, or a 400 with a code in ``CALLER_ROW_REFUSAL_CODES``, is the
-    caller's error. Any other 400 is the service's state, so it is
-    unavailable. Either message gives the reason, which describes the
-    caller's own request.
+    caller's error, and its reason describes the caller's own request. Any
+    other 400 is the service's state, so it is unavailable, and its reason
+    describes that state. Either message gives the service's code and
+    reason, but not its status, since the route answers with its own.
     """
-    status_code_and_reason = f"({_status_and_code(answer)}): {_refusal_reason(refusal)}"
+    code_and_reason = _code_and_reason(refusal)
     if (
         answer.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
         or refusal.code in CALLER_ROW_REFUSAL_CODES
     ):
-        msg = f"The simulation service cannot run this request {status_code_and_reason}"
+        msg = f"The simulation service cannot run this request{code_and_reason}"
         raise SimulationServiceRefusalError(msg)
-    msg = f"The simulation service refused the {record} {status_code_and_reason}"
+    msg = f"The simulation service refused the {record}{code_and_reason}"
     raise SimulationServiceUnavailableError(msg)
 
 
