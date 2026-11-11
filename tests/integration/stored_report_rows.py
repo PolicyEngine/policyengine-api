@@ -9,7 +9,7 @@ Results are stored through the port of the simulation service's writer in
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -133,12 +133,17 @@ def store_simulation(
 
 @dataclass(frozen=True)
 class RunSettings:
-    """A run's package versions, status, creation time and failure message."""
+    """A run's package versions, status, creation time and failure message.
+
+    ``run_id`` is the run's ID, a new one when None; a report run's
+    simulation runs always get new ones.
+    """
 
     versions: dict[str, str]
     status: str = "succeeded"
     created_at: datetime = STARTED_AT
     error_message: str | None = None
+    run_id: UUID | None = None
 
     @property
     def finished(self) -> bool:
@@ -152,7 +157,7 @@ def store_simulation_run(
     settings: RunSettings,
 ) -> UUID:
     """Store one run of the simulation; a finished one has a completion time."""
-    run_id = uuid4()
+    run_id = uuid4() if settings.run_id is None else settings.run_id
     created_at = settings.created_at
     insert_row(
         connection,
@@ -239,13 +244,14 @@ def store_report_run(
     With ``result``, the run's result columns and rows are stored as the
     simulation service's writer stores that economy result.
     """
+    simulation_run_settings = replace(settings, run_id=None)
     run_ids = RunIds(
-        report_run_id=uuid4(),
+        report_run_id=uuid4() if settings.run_id is None else settings.run_id,
         baseline_simulation_run_id=store_simulation_run(
-            connection, catalog, report.baseline_simulation_id, settings
+            connection, catalog, report.baseline_simulation_id, simulation_run_settings
         ),
         reform_simulation_run_id=store_simulation_run(
-            connection, catalog, report.reform_simulation_id, settings
+            connection, catalog, report.reform_simulation_id, simulation_run_settings
         ),
     )
     stored = (

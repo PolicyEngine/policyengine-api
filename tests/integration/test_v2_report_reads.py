@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -65,6 +65,10 @@ if TYPE_CHECKING:
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
 OLDER_VERSIONS = {"country_package_version": "1.4.0", "policyengine_version": "4.1.0"}
+# Two run IDs: of two runs created at the same time, the one with the larger
+# ID is the newest, whichever was stored first.
+LARGER_RUN_ID = UUID("ffffffff-0000-4000-8000-000000000001")
+SMALLER_RUN_ID = UUID("00000000-0000-4000-8000-000000000001")
 
 
 def current_versions(country_id: str) -> PackageVersions:
@@ -418,3 +422,70 @@ def test_a_simulation_with_no_run_answers_its_definition(
     assert item["run"] is None
     assert item["policy_id"] is None
     assert item["year"] == 2026
+
+
+def test_of_two_report_runs_created_together_the_larger_id_is_the_newest(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    catalog = catalogs["us"]
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+        store_report_run(
+            connection,
+            catalog,
+            report,
+            RunSettings(
+                versions=CURRENT_VERSIONS,
+                status="failed",
+                error_message="The worker stopped",
+                run_id=LARGER_RUN_ID,
+            ),
+        )
+        store_report_run(
+            connection,
+            catalog,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS, run_id=SMALLER_RUN_ID),
+            result=us_economy_result(),
+        )
+
+    read = client.get(f"/v2/reports/{report.report_id}?country_id=us")
+    listed = client.get(f"/v2/reports?country_id=us&report_id={report.report_id}")
+
+    assert read.status_code == 200, read.text
+    item = read.json()["result"]["item"]
+    assert item["run"]["id"] == str(LARGER_RUN_ID)
+    assert item["status"] == "failed"
+    assert item["result"] is None
+    assert listed.status_code == 200, listed.text
+    (summary,) = listed.json()["result"]["items"]
+    assert summary["run"]["id"] == str(LARGER_RUN_ID)
+
+
+def test_of_two_simulation_runs_created_together_the_larger_id_is_the_newest(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    catalog = catalogs["us"]
+    with owner_engine.begin() as connection:
+        simulation_id = store_simulation(connection, catalog, policy_id=None)
+        store_simulation_run(
+            connection,
+            catalog,
+            simulation_id,
+            RunSettings(
+                versions=CURRENT_VERSIONS, status="pending", run_id=LARGER_RUN_ID
+            ),
+        )
+        store_simulation_run(
+            connection,
+            catalog,
+            simulation_id,
+            RunSettings(versions=OLDER_VERSIONS, run_id=SMALLER_RUN_ID),
+        )
+
+    response = client.get(f"/v2/simulations/{simulation_id}?country_id=us")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    assert item["run"]["id"] == str(LARGER_RUN_ID)
+    assert item["status"] == "pending"
