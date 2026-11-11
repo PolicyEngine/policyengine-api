@@ -341,15 +341,19 @@ class SimulationServiceAnswerUnreadableError(RuntimeError):
 
     Either it answered 202, so it has already created the job and started its
     call, but its answer is unreadable; or its answer was lost after the
-    submission may have reached it. Submitting again could create another job.
+    submission may have reached it. The message asks the caller to submit
+    again, and says this creates a second job if the first request went
+    through.
     """
 
 
 class SimulationServiceInternalError(RuntimeError):
     """The simulation service failed (500), possibly after creating the job.
 
-    Submitting again could create another job, so this is not reported as
-    the service being unavailable.
+    It is not reported as the service being unavailable: like
+    SimulationServiceAnswerUnreadableError, its message asks the caller to
+    submit again and says this creates a second job if the first request went
+    through.
     """
 
 

@@ -13,14 +13,13 @@ The request names the country, the stored household and the stored policy
 settings only when the caller gave them. The simulation service answers:
 
 - 202 with the new job's ID and status. A 202 whose body cannot be read
-  is SimulationServiceAnswerUnreadableError: the job exists, so the caller
-  must not be invited to submit again;
+  is SimulationServiceAnswerUnreadableError: the job exists;
 - 422 with its reasons when it refuses the caller's data (a malformed
   request, or one its household contract refuses), one per field as
   FastAPI writes them: the reasons reach the caller as
   SimulationServiceInvalidRequestError;
 - 500 (``internal_error``) when it failed, possibly after creating the job:
-  SimulationServiceInternalError, which the caller must not resubmit after;
+  SimulationServiceInternalError;
 - anything else (400 for a household, policy or catalog version it cannot
   find, which the Public API checks first; 503 when it cannot read its
   manifest or database or Modal refuses the call, failing the job it
@@ -32,6 +31,12 @@ settings only when the caller gave them. The simulation service answers:
   may have been sent, a lost answer (a read timeout, a dropped connection) is
   SimulationServiceAnswerUnreadableError, since the job may exist, and so is
   a 502 or 504 a proxy in front of the service answers in its place.
+
+No route finds a household job without its ID, so after an unreadable 202, a
+500, a lost answer or a proxy's 502 or 504 the message asks the caller to
+submit the calculation again, and says that this creates a second job if the
+first request went through. Each message names what happened in place of a
+readable answer.
 
 Each submission carries the request's ID and observability ID headers. The
 observability ID is the request's own, else the caller's, else a new one,
@@ -85,9 +90,6 @@ if TYPE_CHECKING:
 HOUSEHOLD_CALCULATIONS_PATH = "/household-calculations"
 CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 UNREADABLE_ANSWER = "The simulation service's answer could not be read."
-UNREADABLE_ACCEPTANCE = (
-    "The simulation service accepted the calculation, but its answer could not be read."
-)
 # The service never answers 502 or 504 itself: a proxy in front of it, such as
 # Cloud Run's front end, answers them in its place, possibly after the
 # service created the job.
@@ -97,6 +99,21 @@ PROXY_STAND_IN_STATUSES = frozenset(
 # Transport errors raised before the request could reach the service. After
 # any other, the service may have received the submission and created the job.
 CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
+def _lost_answer(what_happened: str) -> str:
+    """Return the message for an answer lost after the request may have arrived.
+
+    The service may have created the job, and no route finds a household job
+    without its ID, so the message says that submitting again creates a
+    second job if the first request went through. ``what_happened`` names
+    what came in place of a readable answer.
+    """
+    return (
+        "The simulation service may have received the request, but its answer "
+        f"was lost ({what_happened}). Submit the household calculation again; "
+        "if the first request went through, this creates a second job."
+    )
 
 
 @dataclass(frozen=True)
@@ -214,19 +231,17 @@ def _refusal(answer: SimulationAnswer) -> _Refusal | None:
         return None
 
 
-RESUBMISSION_WARNING = (
-    "It may have created the job, so submitting again could create another."
-)
+def _internal_error(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
+    """Describe the service's failure, which may have created the job.
 
-
-def _internal_error(refusal: _Refusal | None) -> str:
-    """Describe the service's failure, which may have created the job."""
+    The message names the status, with the service's code and reason when it
+    gives them.
+    """
     if refusal is None or not isinstance(refusal.detail, str):
-        return f"The simulation service answered 500. {RESUBMISSION_WARNING}"
-    code = "" if refusal.code is None else f" ({refusal.code})"
-    return (
-        f"The simulation service failed{code}: {refusal.detail} {RESUBMISSION_WARNING}"
-    )
+        return _lost_answer(str(answer.status_code))
+    code = "" if refusal.code is None else f" {refusal.code}"
+    reason = refusal.detail.strip().rstrip(".")
+    return _lost_answer(f"{answer.status_code}{code}: {reason}")
 
 
 def _unavailable(answer: SimulationAnswer, refusal: _Refusal | None) -> str:
@@ -304,18 +319,15 @@ class SimulationHouseholdCalculationClient:
             msg = "The simulation service could not be reached."
             raise SimulationServiceUnavailableError(msg) from error
         except httpx.HTTPError as error:
-            msg = (
-                "The simulation service may have received the submission, but "
-                f"its answer did not arrive ({type(error).__name__}). Check "
-                "whether it created the job before submitting again."
-            )
-            raise SimulationServiceAnswerUnreadableError(msg) from error
+            raise SimulationServiceAnswerUnreadableError(
+                _lost_answer(type(error).__name__)
+            ) from error
         if answer.status_code == HTTPStatus.ACCEPTED:
             try:
                 accepted = _AcceptedJob.model_validate_json(answer.content)
             except ValidationError as error:
                 raise SimulationServiceAnswerUnreadableError(
-                    UNREADABLE_ACCEPTANCE
+                    _lost_answer(f"{answer.status_code} with an unreadable body")
                 ) from error
             return HouseholdCalculationAccepted(
                 calculation_id=accepted.job_id, status=accepted.status
@@ -326,14 +338,11 @@ class SimulationHouseholdCalculationClient:
                 raise SimulationServiceUnavailableError(UNREADABLE_ANSWER)
             raise SimulationServiceInvalidRequestError(_invalid_request_reason(refusal))
         if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-            raise SimulationServiceInternalError(_internal_error(refusal))
+            raise SimulationServiceInternalError(_internal_error(answer, refusal))
         if answer.status_code in PROXY_STAND_IN_STATUSES:
-            msg = (
-                "The simulation service may have received the submission, but "
-                f"{answer.status_code} was answered in its place. Check whether "
-                "it created the job before submitting again."
+            raise SimulationServiceAnswerUnreadableError(
+                _lost_answer(f"a proxy answered {answer.status_code}")
             )
-            raise SimulationServiceAnswerUnreadableError(msg)
         raise SimulationServiceUnavailableError(_unavailable(answer, refusal))
 
 

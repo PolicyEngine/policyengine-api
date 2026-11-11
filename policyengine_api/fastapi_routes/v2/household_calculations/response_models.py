@@ -185,7 +185,9 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
             "but its answer cannot be read; it failed (500); its answer was lost "
             "after the submission may have reached it; or a proxy in front of it "
             "answered 502 or 504 in its place. In each case it may have created "
-            "the job, so submitting again could create another."
+            "the job, and no route finds a job without its ID. Submit the "
+            "household calculation again; if the first request went through, "
+            "this creates a second job. The message says what happened."
         ),
     },
     422: {
