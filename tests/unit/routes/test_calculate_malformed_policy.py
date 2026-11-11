@@ -54,11 +54,11 @@ PERIOD_KEY_REQUIREMENT = (
 
 
 class ReformConvertingCountry(DummyCountry):
-    """The loaded US model's metadata and value conversion, without a simulation."""
+    """A loaded model's metadata and value conversion, without a simulation."""
 
-    def __init__(self) -> None:
+    def __init__(self, country_id: str = "us") -> None:
         super().__init__()
-        self.model = COUNTRIES["us"]
+        self.model = COUNTRIES[country_id]
         self.metadata = self.model.metadata
         self.converted_policies: list[object] = []
 
@@ -90,11 +90,15 @@ class CalculationHarness(NamedTuple):
 
 @pytest.fixture
 def harness(monkeypatch) -> CalculationHarness:
-    country = ReformConvertingCountry()
+    return _harness(monkeypatch, "us")
+
+
+def _harness(monkeypatch, country_id: str) -> CalculationHarness:
+    country = ReformConvertingCountry(country_id)
     monkeypatch.setattr(
         household_routes,
         "household_calculation_service",
-        HouseholdCalculationService(country_provider=lambda: {"us": country}),
+        HouseholdCalculationService(country_provider=lambda: {country_id: country}),
     )
     # calculate-full adds the variables a household leaves out; these tests
     # are about the policy.
@@ -271,3 +275,33 @@ def test_calculation_accepts_a_policy_it_can_read(
     assert (response.status_code, error_records) == (200, [])
     assert harness.country.converted_policies == [policy]
     assert response.get_json()["result"]["policy"] == policy
+
+
+def test_period_keys_are_checked_as_the_calculated_countrys_model_reads_them(
+    monkeypatch,
+):
+    # Only the US model reads ETERNITY; the UK model fails on it.
+    uk_parameter = "gov.hmrc.income_tax.rates.uk[0].rate"
+    uk_harness = _harness(monkeypatch, "uk")
+
+    uk_response = uk_harness.client.post(
+        "/uk/calculate",
+        json={"household": HOUSEHOLD, "policy": {uk_parameter: {"ETERNITY": 0.25}}},
+    )
+
+    assert uk_response.status_code == 400
+    assert [entry["path"] for entry in uk_response.get_json()["errors"]] == [
+        f"policy.{uk_parameter}.ETERNITY"
+    ]
+    assert uk_harness.country.converted_policies == []
+
+    us_harness = _harness(monkeypatch, "us")
+    us_policy = {NUMBER_PARAMETER: {"ETERNITY": 2000}}
+
+    us_response = us_harness.client.post(
+        "/us/calculate",
+        json={"household": HOUSEHOLD, "policy": us_policy},
+    )
+
+    assert us_response.status_code == 200
+    assert us_harness.country.converted_policies == [us_policy]

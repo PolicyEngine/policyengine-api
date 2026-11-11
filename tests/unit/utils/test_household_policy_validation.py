@@ -265,6 +265,8 @@ COMMON_READABLE_KEYS = [
     "2026-01-01.2026-12-31\n",
 ]
 COMMON_UNREADABLE_KEYS = [
+    "\u00b2",
+    "\u2460",
     "2026-02-30.2026-12-31",
     "2026-13-01.2026-12-31",
     "2026-1-1.2026-12-31",
@@ -291,13 +293,22 @@ COMMON_UNREADABLE_KEYS = [
 ]
 # Keys one model reads and the other doesn't.
 READABLE_PERIOD_KEYS = {
-    "us": [*COMMON_READABLE_KEYS, "ETERNITY", "2026-12-31.2026-01-01", "9999-12-31"],
+    "us": [
+        *COMMON_READABLE_KEYS,
+        "ETERNITY",
+        "2026-12-31.2026-01-01",
+        "9999-12-31",
+        # policyengine-core rolls a range's last day over to the next real
+        # day after it (2026-03-03), so the US model applies this.
+        "2026-01-01.2026-02-30",
+    ],
     "uk": [*COMMON_READABLE_KEYS, "2026-1-1", "2026-1", " 2026", "2026 "],
 }
 UNREADABLE_PERIOD_KEYS = {
     "us": [*COMMON_UNREADABLE_KEYS, "2026-1-1", "2026-1", " 2026"],
     "uk": [
         *COMMON_UNREADABLE_KEYS,
+        "2026-01-01.2026-02-30",
         "ETERNITY",
         "2026-12-31.2026-01-01",
         "9999-12-31",
@@ -351,8 +362,10 @@ def _uk_reader_reads(period_key: str) -> bool:
     ``read_reform_dict`` turns each key into the first and last days a change
     covers, or a single day or month for a legacy override. The UK model then
     writes the change onto the parameter's timeline from the first day to the
-    day after the last, which fails for a date that doesn't exist, year 0 or
-    a last day of 9999-12-31, and for an eternity, whose last day isn't a date.
+    day after the last. That fails for a first or last day that doesn't exist,
+    year 0, a last day of 9999-12-31 and an eternity, whose last day isn't a
+    date; household calculations with the installed UK model showed each of
+    these, and this helper repeats the date arithmetic.
     """
     try:
         assignments, overrides = read_reform_dict(
@@ -365,6 +378,7 @@ def _uk_reader_reads(period_key: str) -> bool:
         ]
         for first_day, last_day in covered:
             _ = first_day.date
+            _ = last_day.date
             _ = last_day.offset(1, "day").date
     except (TypeError, ValueError):
         return False

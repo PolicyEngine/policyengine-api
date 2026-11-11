@@ -19,8 +19,10 @@ each set to an object of period keys and values:
   ``ETERNITY``; the UK model reads a year from 1901 to 2199, spaces around
   it allowed, as that fiscal year, and anything else with ``period()``, which
   also reads unpadded months and days. Both then write the change to the
-  parameter from its first day to the day after its last, so each must be a
-  real calendar date, and the last day must be before 9999-12-31.
+  parameter from its first day to the day after its last, so the first day
+  must be a real calendar date and the last day before 9999-12-31. The UK
+  model needs a real last day too; policyengine-core rolls one that doesn't
+  exist, such as 2026-02-30, over to the real day after it.
 
 A policy that fails there fails after the model's tax-benefit system has been
 copied, which takes seconds. This module finds those problems beforehand, from
@@ -209,7 +211,7 @@ def is_readable_period_key(period_key: str, country_id: str) -> bool:
     """Say whether the model of ``country_id`` reads a period key and can apply it."""
     uk = country_id == UK_COUNTRY_ID
     if "." in period_key:
-        return _is_readable_range(period_key, must_be_in_order=uk)
+        return _is_readable_range(period_key, read_as_by_uk_model=uk)
     if ":" in period_key:
         return _is_readable_period(period_key)
     if uk:
@@ -217,8 +219,15 @@ def is_readable_period_key(period_key: str, country_id: str) -> bool:
     return period_key == _ETERNITY_KEY or _is_readable_instant(period_key)
 
 
-def _is_readable_range(period_key: str, *, must_be_in_order: bool) -> bool:
-    """Say whether a ``start.end`` key names two real days before 9999-12-31."""
+def _is_readable_range(period_key: str, *, read_as_by_uk_model: bool) -> bool:
+    """Say whether a model applies a ``start.end`` key.
+
+    Both models need a real first day, and a last day whose next day is real,
+    so it is before 9999-12-31. policyengine-core rolls a last day that
+    doesn't exist, such as 2026-02-30, over to the real day after it, so the
+    US model applies such a key; the UK model needs a real last day no
+    earlier than the first.
+    """
     start_text, _, end_text = period_key.partition(".")
     if "." in end_text:
         return False
@@ -227,9 +236,11 @@ def _is_readable_range(period_key: str, *, must_be_in_order: bool) -> bool:
         end = periods.instant(end_text)
         _ = start.date
         _ = end.offset(1, "day").date
+        if read_as_by_uk_model:
+            _ = end.date
     except _ERRORS_READING_A_PERIOD:
         return False
-    return start <= end or not must_be_in_order
+    return start <= end or not read_as_by_uk_model
 
 
 def _is_readable_period(period_key: str) -> bool:
@@ -259,9 +270,18 @@ def _is_readable_instant(period_key: str) -> bool:
 
 
 def _is_uk_bare_year(period_key: str) -> bool:
-    """Say whether policyengine-uk reads a key as a bare year."""
+    """Say whether policyengine-uk reads a key as a bare year.
+
+    ``isdigit()`` is true for characters such as ``²`` that ``int()`` refuses.
+    policyengine-uk fails on those, so the key is refused.
+    """
     year_text = period_key.strip()
-    return year_text.isdigit() and int(year_text) in _UK_BARE_YEARS
+    if not year_text.isdigit():
+        return False
+    try:
+        return int(year_text) in _UK_BARE_YEARS
+    except ValueError:
+        return False
 
 
 def reform_value_type(parameter_metadata: object) -> type | None:
