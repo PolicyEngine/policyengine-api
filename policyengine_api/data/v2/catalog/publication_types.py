@@ -42,6 +42,38 @@ class CatalogPruningFailure:
 
 
 @dataclass(frozen=True, slots=True)
+class SPMAvailabilityRecording:
+    """What one publication recorded of its catalog versions' SPM availability.
+
+    ``recorded`` lists each version it recorded: country, model version and
+    whether SPM settings are available. ``not_recorded`` lists each of its
+    versions whose availability is still unrecorded after it, so unknown to
+    ``/v2/model-catalog``: one the simulation service doesn't serve yet, or
+    any when ``versions_unreadable`` says why the service's versions
+    couldn't be read. A version an earlier publication recorded keeps its
+    value and is listed in neither.
+    """
+
+    recorded: tuple[tuple[str, str, bool], ...] = ()
+    not_recorded: tuple[tuple[str, str], ...] = ()
+    versions_unreadable: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the recording as it appears in the publication evidence."""
+        return {
+            "recorded": [
+                {"country_id": country_id, "version": version, "available": available}
+                for country_id, version, available in self.recorded
+            ],
+            "not_recorded": [
+                {"country_id": country_id, "version": version}
+                for country_id, version in self.not_recorded
+            ],
+            "versions_unreadable": self.versions_unreadable,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PublicationEvidence:
     """Non-secret facts emitted after a successful publication."""
 
@@ -78,6 +110,9 @@ class PublicationEvidence:
     catalog_pruning_failures: tuple[CatalogPruningFailure, ...] = ()
     # Chosen versions beyond the run's limit, which the next publications prune.
     catalog_versions_left_to_prune: int = 0
+    # The SPM availability recorded after the publication committed; None
+    # until initialization records it.
+    spm_availability: SPMAvailabilityRecording | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the evidence as the JSON object printed after a publication."""
@@ -167,5 +202,10 @@ class PublicationEvidence:
                 for failure in self.catalog_pruning_failures
             ],
             "catalog_versions_left_to_prune": self.catalog_versions_left_to_prune,
+            "spm_availability": (
+                None
+                if self.spm_availability is None
+                else self.spm_availability.as_dict()
+            ),
             "elapsed_seconds": round(self.elapsed_seconds, 3),
         }

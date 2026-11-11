@@ -30,6 +30,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataRegion,
     MetadataRegionOption,
     MetadataRegionType,
+    MetadataSPMAvailability,
     MetadataTimePeriodOption,
     MetadataVariable,
     ParameterNodeLabelRow,
@@ -427,7 +428,8 @@ def metadata_model_catalog(
 
     Without a national dataset (a catalog without regions) the economy choices
     are empty. Entities and basic inputs a version published before catalog
-    format 2 lacks are empty lists.
+    format 2 lacks are empty lists, and a version whose SPM availability is
+    not recorded yet reports it as unknown.
     """
     model_version = selected.model_version
     return MetadataModelCatalogResult(
@@ -448,5 +450,8 @@ def metadata_model_catalog(
             )
             if national_dataset is not None
             else MetadataEconomyOptions(region=[], time_period=[], datasets=[])
+        ),
+        spm=MetadataSPMAvailability.model_validate(
+            model_version.spm_availability or {"available": None}
         ),
     )

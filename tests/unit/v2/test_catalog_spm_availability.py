@@ -1,0 +1,323 @@
+"""Each catalog version's SPM availability, from the simulation service's versions."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
+import httpx
+import pytest
+
+from policyengine_api.data.v2.catalog import spm_availability
+from policyengine_api.data.v2.catalog.publication_types import (
+    CatalogPublicationError,
+    SPMAvailabilityRecording,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.spm import SPMSelection
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+POLICYENGINE_VERSION = "6.10.0"
+DEFAULTS = {
+    "forecast_content_sha256": "3d" * 32,
+    "scenario": "ce_trend",
+    "geography_kind": "county",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+ROUTES = {"latest": POLICYENGINE_VERSION, POLICYENGINE_VERSION: "policyengine-v6-10-0"}
+VERSIONS = {
+    "policyengine": ROUTES,
+    "spm_capabilities": {
+        POLICYENGINE_VERSION: {
+            "contract_version": "canonical-spm-v1",
+            "defaults": DEFAULTS,
+        }
+    },
+}
+
+
+def test_a_us_version_with_a_certified_capability_offers_spm() -> None:
+    availability = spm_availability.spm_availability(
+        "us", POLICYENGINE_VERSION, VERSIONS
+    )
+
+    assert availability == {
+        "available": True,
+        "settings_schema": SPMSelection.model_json_schema(),
+        "defaults": DEFAULTS,
+    }
+
+
+@pytest.mark.parametrize(
+    ("country_id", "policyengine_version", "versions"),
+    [
+        ("uk", POLICYENGINE_VERSION, VERSIONS),
+        ("us", POLICYENGINE_VERSION, {"policyengine": ROUTES}),
+        ("us", POLICYENGINE_VERSION, {"policyengine": ROUTES, "spm_capabilities": []}),
+        (
+            "us",
+            POLICYENGINE_VERSION,
+            {
+                "policyengine": ROUTES,
+                "spm_capabilities": {
+                    POLICYENGINE_VERSION: {
+                        "contract_version": "canonical-spm-v0",
+                        "defaults": DEFAULTS,
+                    }
+                },
+            },
+        ),
+        (
+            "us",
+            POLICYENGINE_VERSION,
+            {
+                "policyengine": ROUTES,
+                "spm_capabilities": {
+                    POLICYENGINE_VERSION: {
+                        "contract_version": "canonical-spm-v1",
+                        "defaults": {**DEFAULTS, "scenario": None},
+                    }
+                },
+            },
+        ),
+    ],
+    ids=[
+        "uk",
+        "no-capability",
+        "malformed-capabilities",
+        "other-contract",
+        "unpinned-defaults",
+    ],
+)
+def test_anything_else_offers_no_spm(
+    country_id: str, policyengine_version: str, versions: object
+) -> None:
+    assert spm_availability.spm_availability(
+        country_id, policyengine_version, versions
+    ) == {"available": False}
+
+
+@pytest.mark.parametrize(
+    "versions",
+    [
+        {**VERSIONS, "policyengine": {"latest": "6.11.0", "6.11.0": "app"}},
+        {"spm_capabilities": VERSIONS["spm_capabilities"]},
+        [],
+    ],
+    ids=["version-not-served", "no-route-map", "not-an-object"],
+)
+def test_a_us_version_the_service_does_not_serve_is_not_known_yet(
+    versions: object,
+) -> None:
+    assert (
+        spm_availability.spm_availability("us", POLICYENGINE_VERSION, versions) is None
+    )
+
+
+def _catalog(*country_ids: str) -> SimpleNamespace:
+    """Return a published catalog of version 1.0.0 of each country's model."""
+    return SimpleNamespace(
+        policyengine_version=POLICYENGINE_VERSION,
+        countries=[
+            SimpleNamespace(
+                country_id=country_id,
+                model=SimpleNamespace(name=f"policyengine-{country_id}"),
+                model_version=SimpleNamespace(version="1.0.0"),
+            )
+            for country_id in country_ids
+        ],
+    )
+
+
+def _store_unrecorded(monkeypatch: pytest.MonkeyPatch, *model_names: str) -> None:
+    """Make version 1.0.0 of these models the only ones still unrecorded."""
+    monkeypatch.setattr(
+        spm_availability,
+        "read_unrecorded_versions",
+        lambda _connection, versions: {
+            (model_name, version)
+            for model_name, version in versions
+            if model_name in model_names
+        },
+    )
+
+
+class RecordingEngine:
+    """An engine whose transactions are only counted."""
+
+    def __init__(self) -> None:
+        """Start with no transaction."""
+        self.transactions = 0
+
+    @contextmanager
+    def begin(self) -> Iterator[str]:
+        """Count one transaction and hand out a placeholder connection."""
+        self.transactions += 1
+        yield "connection"
+
+
+def test_publication_records_only_what_is_known(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[tuple[str, dict]] = []
+
+    def record(_connection, *, model_name, version, availability) -> bool:
+        recorded.append((model_name, dict(availability)))
+        return True
+
+    monkeypatch.setattr(spm_availability, "record_spm_availability", record)
+    _store_unrecorded(monkeypatch, "policyengine-us")
+    not_served = {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}
+
+    recording = spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        _catalog("uk", "us"),
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=lambda _url: not_served,
+    )
+
+    assert recorded == [("policyengine-uk", {"available": False})]
+    assert recording == SPMAvailabilityRecording(
+        recorded=(("uk", "1.0.0", False),), not_recorded=(("us", "1.0.0"),)
+    )
+
+
+@pytest.mark.parametrize(
+    "versions",
+    [VERSIONS, {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}],
+    ids=["served", "not-served-now"],
+)
+def test_a_version_recorded_by_an_earlier_publication_is_not_listed(
+    monkeypatch: pytest.MonkeyPatch, versions: object
+) -> None:
+    monkeypatch.setattr(
+        spm_availability,
+        "record_spm_availability",
+        lambda _connection, *, model_name, version, availability: False,
+    )
+    _store_unrecorded(monkeypatch)
+
+    recording = spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        _catalog("us"),
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=lambda _url: versions,
+    )
+
+    assert recording == SPMAvailabilityRecording()
+
+
+def test_the_versions_come_from_the_simulation_services_public_route() -> None:
+    requests: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=VERSIONS)
+
+    with httpx.Client(transport=httpx.MockTransport(answer)) as client:
+        versions = spm_availability.fetch_simulation_versions(
+            "https://simulation.example/", client=client
+        )
+
+    assert versions == VERSIONS
+    assert [str(request.url) for request in requests] == [
+        "https://simulation.example/versions"
+    ]
+    assert "authorization" not in requests[0].headers
+
+
+def test_an_unreadable_versions_answer_stops_the_recording() -> None:
+    with (
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(503))
+        ) as client,
+        pytest.raises(CatalogPublicationError, match="versions"),
+    ):
+        spm_availability.fetch_simulation_versions(
+            "https://simulation.example", client=client
+        )
+
+
+def test_recording_needs_the_simulation_service_url() -> None:
+    with pytest.raises(V2ConfigurationError, match="SIMULATION_ENTRYPOINT_URL"):
+        spm_availability.simulation_entrypoint_url({})
+
+    assert (
+        spm_availability.simulation_entrypoint_url(
+            {"SIMULATION_ENTRYPOINT_URL": " https://simulation.example/ "}
+        )
+        == "https://simulation.example"
+    )
+
+
+def test_an_unreadable_versions_answer_lists_only_versions_still_unrecorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        spm_availability,
+        "record_spm_availability",
+        lambda _connection, *, model_name, version, availability: recorded.append(
+            model_name
+        ),
+    )
+    # An earlier publication recorded the US version.
+    _store_unrecorded(monkeypatch, "policyengine-uk")
+
+    def unreadable(_url: str) -> object:
+        msg = "the simulation service's versions could not be read"
+        raise CatalogPublicationError(msg)
+
+    recording = spm_availability.record_published_spm_availability(
+        RecordingEngine(),
+        _catalog("uk", "us"),
+        {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+        fetch_versions=unreadable,
+    )
+
+    assert recorded == []
+    assert recording == SPMAvailabilityRecording(
+        not_recorded=(("uk", "1.0.0"),),
+        versions_unreadable="the simulation service's versions could not be read",
+    )
+
+
+@pytest.mark.parametrize(
+    ("still_unrecorded", "warnings_expected"),
+    [(("policyengine-uk",), 1), ((), 0)],
+    ids=["some-unrecorded", "all-recorded-earlier"],
+)
+def test_an_unreadable_versions_answer_warns_only_when_versions_are_unrecorded(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    still_unrecorded: tuple[str, ...],
+    warnings_expected: int,
+) -> None:
+    _store_unrecorded(monkeypatch, *still_unrecorded)
+    # Alembic's logging setup, which another test may have run in this
+    # process, disables loggers that existed before it.
+    monkeypatch.setattr(spm_availability.LOGGER, "disabled", False)
+
+    def unreadable(_url: str) -> object:
+        msg = "the simulation service's versions could not be read"
+        raise CatalogPublicationError(msg)
+
+    with caplog.at_level("WARNING", logger=spm_availability.LOGGER.name):
+        spm_availability.record_published_spm_availability(
+            RecordingEngine(),
+            _catalog("uk", "us"),
+            {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
+            fetch_versions=unreadable,
+        )
+
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == spm_availability.LOGGER.name
+    ]
+    assert len(warnings) == warnings_expected

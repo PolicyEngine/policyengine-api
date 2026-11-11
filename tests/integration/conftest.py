@@ -8,7 +8,7 @@ import pytest
 
 from tests.integration.deployed_api_credentials import (
     MissingServerCredentialError,
-    server_credential_headers,
+    deployed_api_client,
 )
 
 INTEGRATION_TIMEOUT_SECONDS = float(
@@ -164,20 +164,15 @@ def api_base_url() -> str:
 def api_client(api_base_url: str):
     """Call the deployed Public API with the CI server credential on every request.
 
-    The test fails, rather than skips, without ``CI_SERVER_ACCESS_TOKEN``
-    (``tests/integration/deployed_api_credentials.py``). httpx drops the
-    ``Authorization`` header on a redirect to another host.
+    The client is ``deployed_api_client``'s
+    (``tests/integration/deployed_api_credentials.py``). The test fails, rather
+    than skips, without ``CI_SERVER_ACCESS_TOKEN``.
     """
     try:
-        credential_headers = server_credential_headers()
+        client = deployed_api_client(api_base_url)
     except MissingServerCredentialError as error:
         pytest.fail(str(error), pytrace=False)
-    with httpx.Client(
-        base_url=api_base_url,
-        headers=credential_headers,
-        timeout=90.0,
-        follow_redirects=True,
-    ) as client:
+    with client:
         yield client
 
 

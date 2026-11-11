@@ -36,7 +36,16 @@ version (with the current-law policy id and the years offered), the entities
 input dataset, and the economy choices. A catalog without regions, such as a
 household-only country's, has empty region, dataset and economy-choice lists
 rather than an error. A version published before catalog format 2 has a null
-`catalog_format` and empty entities and basic inputs. The result names the
+`catalog_format` and empty entities and basic inputs. `spm` says whether the
+version offers SPM settings for a household: `available`, and when it does,
+`settings_schema` (the JSON schema of a household's `spm` selection) and
+`defaults` (the certified selection for every field a household leaves out).
+Catalog publication records it for each US version from the simulation
+service's public `GET /versions`, after publishing the version. Any other
+country, and a bundle without a certified capability, has `available` false;
+a version whose availability no publication has recorded yet (the simulation
+service didn't serve its PolicyEngine.py version, or its versions couldn't be
+read) has `available` null, unknown. The result names the
 selected PolicyEngine.py version, so a client that starts without a version
 learns the running one and requests every other part for that exact version.
 The query uses the shared `CatalogQuery` model: unknown and repeated
@@ -159,7 +168,11 @@ dropped first; the 6.10.0 US variables body is 4,190,824 bytes uncompressed,
 so eight entries hold about 12 MB for both countries' two routes at two
 versions). A response is kept under the exact version it was read from,
 so a request without `policyengine_version` (the process's running version,
-which never changes while it runs) and one naming that version share it. Only
+which never changes while it runs) and one naming that version share it. A
+version's SPM availability is the one part recorded after publication: a
+process that built a version's `/v2/model-catalog` body before publication
+recorded it keeps reporting its availability as unknown until it restarts, normally at the
+deployment that follows the publication run. Only
 the first successful request per process reads the database. Requests that
 arrive while that read is in progress wait for it and all receive its outcome,
 the kept response or a copy of its error response, so one failing read is not
@@ -205,14 +218,21 @@ must execute in this order:
    Alembic chain, confirms all heads are current, and detects ungenerated model
    changes.
 3. Remove the migration URL from the command environment.
-4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity and
+4. Supply only `V2_DATA_WRITE_DATABASE_URL`, the same target identity,
    `HUGGING_FACE_TOKEN` (from the organization secret
-   `PE_UK_PRIVATE_HF_READ_TOKEN`), then run
-   `uv run python scripts/publish_v2_metadata_catalog.py`. Before publishing a
-   catalog version that is not stored yet, the command reads the certified data
-   artifacts its regions' filters use and stops if one cannot select a region.
-   It stops before reading anything if a UK version needs checking and
-   `HUGGING_FACE_TOKEN` is unset, because the UK data repository is private.
+   `PE_UK_PRIVATE_HF_READ_TOKEN`) and `SIMULATION_ENTRYPOINT_URL` (the
+   environment's secret, the same simulation service the candidate calls),
+   then run `uv run python scripts/publish_v2_metadata_catalog.py`. It stops
+   before reading anything if `SIMULATION_ENTRYPOINT_URL` is unset. Before
+   publishing a catalog version that is not stored yet, the command reads the
+   certified data artifacts its regions' filters use and stops if one cannot
+   select a region. It stops before reading anything if a UK version needs
+   checking and `HUGGING_FACE_TOKEN` is unset, because the UK data repository
+   is private. After publishing, it records each version's SPM availability
+   from the simulation service's public `GET /versions`; when that can't be
+   read, the command still succeeds, its evidence's `spm_availability` lists
+   the versions not recorded with the reason, and it prints the reason to
+   stderr.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and

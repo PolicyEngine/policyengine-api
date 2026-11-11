@@ -21,3 +21,19 @@ uv run --frozen --extra dev python -m pytest \
   tests/integration/test_live_calculate.py \
   tests/integration/test_live_economy.py \
   -v
+
+# The household calculation checks run afterwards, on 4 workers, so they never
+# share the candidate with the tests above. They call the simulation service's
+# household calculation route, so they pass only once that route is deployed
+# to staging; staging promotion waits on them, so the change that adds them
+# merges only after that deployment. Their requests are short (a
+# submission, then a poll every few seconds) apart from the parity tests'
+# /calculate requests, but the parallel check submits 6 calculations at once:
+# with the 3 other workers' requests, at most 3 wait for a free slot, as above.
+uv run --frozen --extra dev python -m pytest \
+  -n 4 \
+  --dist load \
+  --maxschedchunk=1 \
+  tests/integration/test_live_v2_household_calculations.py \
+  tests/integration/test_live_v2_household_parity.py \
+  -v
