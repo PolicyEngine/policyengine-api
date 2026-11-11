@@ -10,8 +10,13 @@ from policyengine_api.libs.auth0_management import (
     Auth0ManagementConfigurationError,
     Auth0ManagementError,
     Auth0ManagementSettings,
+    Auth0UserIdSearch,
+    Auth0UserProfile,
+    Auth0UserProfilesUnavailableError,
     build_auth0_user_deleter,
+    build_auth0_user_profile_reader,
     load_auth0_management_settings,
+    load_auth0_user_profile_settings,
 )
 
 DOMAIN = "policyengine.us.auth0.com"
@@ -237,3 +242,417 @@ def test_prepare_deletion_fails_when_the_secret_cannot_be_read() -> None:
     with pytest.raises(Auth0ManagementError, match="could not be loaded"):
         client.prepare_deletion()
     assert requests == []
+
+
+PROFILE_ENVIRONMENT = {
+    "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
+    "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+    "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": SECRET_RESOURCE,
+}
+PROFILE_FIELDS = "user_id,email,email_verified,given_name,family_name,name"
+
+
+def test_user_profile_settings_are_optional_all_or_none_and_validated() -> None:
+    assert load_auth0_user_profile_settings({}) is None
+    assert build_auth0_user_profile_reader({}) is None
+    # The deletion settings never configure profile reads, or the reverse.
+    assert (
+        load_auth0_user_profile_settings(
+            {
+                "AUTH0_MANAGEMENT_DOMAIN": DOMAIN,
+                "AUTH0_MANAGEMENT_CLIENT_ID": "m2m",
+                "AUTH0_MANAGEMENT_CLIENT_SECRET": "raw",
+            }
+        )
+        is None
+    )
+    assert load_auth0_management_settings(PROFILE_ENVIRONMENT) is None
+    with pytest.raises(
+        Auth0ManagementConfigurationError, match="profile reads are partially"
+    ):
+        load_auth0_user_profile_settings({"AUTH0_USER_PROFILES_DOMAIN": DOMAIN})
+    with pytest.raises(
+        Auth0ManagementConfigurationError,
+        match="AUTH0_USER_PROFILES_CLIENT_SECRET or "
+        "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE",
+    ):
+        load_auth0_user_profile_settings(
+            {**PROFILE_ENVIRONMENT, "AUTH0_USER_PROFILES_CLIENT_SECRET": "raw"}
+        )
+    with pytest.raises(
+        Auth0ManagementConfigurationError,
+        match="AUTH0_USER_PROFILES_DOMAIN must be a bare host name",
+    ):
+        load_auth0_user_profile_settings(
+            {**PROFILE_ENVIRONMENT, "AUTH0_USER_PROFILES_DOMAIN": f"https://{DOMAIN}/"}
+        )
+    with pytest.raises(
+        Auth0ManagementConfigurationError,
+        match="AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE is invalid",
+    ):
+        load_auth0_user_profile_settings(
+            {
+                **PROFILE_ENVIRONMENT,
+                "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": "auth0-profiles",
+            }
+        )
+    from_resource = load_auth0_user_profile_settings(PROFILE_ENVIRONMENT)
+    direct = load_auth0_user_profile_settings(
+        {
+            "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
+            "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET": "raw-profile-secret",
+        }
+    )
+
+    assert from_resource == Auth0ManagementSettings(
+        domain=DOMAIN,
+        client_id="profile-reader",
+        client_secret_resource=SECRET_RESOURCE,
+    )
+    assert direct is not None
+    assert direct.client_secret == "raw-profile-secret"
+    assert "raw-profile-secret" not in repr(direct)
+
+
+def test_profile_readers_share_one_client_and_its_token(monkeypatch) -> None:
+    from policyengine_api.libs import auth0_management
+
+    requests: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": "mgmt", "expires_in": 3600}
+            )
+        return httpx.Response(200, json=[])
+
+    mock_client = httpx.Client
+    monkeypatch.setattr(
+        auth0_management.httpx,
+        "Client",
+        lambda **kwargs: mock_client(transport=httpx.MockTransport(record), **kwargs),
+    )
+    monkeypatch.setattr(auth0_management, "_shared_clients", {})
+    environment = {
+        "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
+        "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+        "AUTH0_USER_PROFILES_CLIENT_SECRET": "raw-profile-secret",
+    }
+
+    first = build_auth0_user_profile_reader(environment)
+    second = build_auth0_user_profile_reader(environment)
+    assert first is not None
+    assert second is not None
+    first.read_user_profiles(["auth0|1"])
+    second.read_user_profiles(["auth0|2"])
+
+    assert first is second
+    assert isinstance(first, Auth0ManagementClient)
+    assert [request.url.path for request in requests] == [
+        "/oauth/token",
+        "/api/v2/users",
+        "/api/v2/users",
+    ]
+    assert b"profile-reader" in requests[0].content
+
+
+def _profile_payload(user_id: str, **fields: object) -> dict[str, object]:
+    return {"user_id": user_id, **fields}
+
+
+def _token_then_users(answer_users):
+    """Issue a token, then answer each user search with ``answer_users``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": "mgmt", "expires_in": 3600}
+            )
+        assert request.url.path == "/api/v2/users"
+        return answer_users(request)
+
+    return handler
+
+
+def _searches(requests: list[httpx.Request]) -> list[httpx.Request]:
+    return [request for request in requests if request.url.path == "/api/v2/users"]
+
+
+def test_profiles_are_read_with_one_search_per_fifty_user_ids() -> None:
+    user_ids = [f"auth0|{number}" for number in range(120)]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        requested = [
+            quoted.strip('"')
+            for quoted in request.url.params["q"]
+            .removeprefix("user_id:(")
+            .removesuffix(")")
+            .split(" OR ")
+        ]
+        return httpx.Response(
+            200,
+            json=[
+                _profile_payload(
+                    user_id,
+                    email=f"{user_id.split('|')[1]}@example.test",
+                    email_verified=True,
+                    given_name="Given",
+                    family_name="Family",
+                    name="Given Family",
+                )
+                for user_id in requested
+            ],
+        )
+
+    client, requests = _client(_token_then_users(answer))
+
+    profiles = client.read_user_profiles([*user_ids, user_ids[0]])
+
+    searches = _searches(requests)
+    assert [search.url.params["per_page"] for search in searches] == [
+        "50",
+        "50",
+        "20",
+    ]
+    for search in searches:
+        assert search.method == "GET"
+        assert search.headers["authorization"] == "Bearer mgmt"
+        assert search.url.params["search_engine"] == "v3"
+        assert search.url.params["fields"] == PROFILE_FIELDS
+        assert search.url.params["include_fields"] == "true"
+    assert searches[0].url.params["q"] == (
+        "user_id:(" + " OR ".join(f'"auth0|{number}"' for number in range(50)) + ")"
+    )
+    assert set(profiles) == set(user_ids)
+    assert profiles["auth0|7"] == Auth0UserProfile(
+        user_id="auth0|7",
+        email="7@example.test",
+        email_verified=True,
+        given_name="Given",
+        family_name="Family",
+        name="Given Family",
+    )
+
+
+def test_profile_reads_escape_quotes_and_backslashes_in_user_ids() -> None:
+    client, requests = _client(
+        _token_then_users(lambda _request: httpx.Response(200, json=[]))
+    )
+
+    profiles = client.read_user_profiles(['auth0|quote"d', "auth0|back\\slash"])
+
+    (search,) = _searches(requests)
+    assert profiles == {}
+    assert search.url.params["q"] == (
+        'user_id:("auth0|quote\\"d" OR "auth0|back\\\\slash")'
+    )
+
+
+def test_profile_reads_keep_only_requested_well_formed_users() -> None:
+    answered = [
+        _profile_payload(
+            "auth0|kept",
+            email="  kept@example.test ",
+            email_verified="true",
+            given_name="",
+            family_name=7,
+        ),
+        _profile_payload("auth0|not-requested", email="other@example.test"),
+        {"email": "no-id@example.test"},
+        "not a user",
+    ]
+    client, _requests = _client(
+        _token_then_users(lambda _request: httpx.Response(200, json=answered))
+    )
+
+    profiles = client.read_user_profiles(["auth0|kept"])
+
+    assert profiles == {
+        "auth0|kept": Auth0UserProfile(
+            user_id="auth0|kept",
+            email="kept@example.test",
+            email_verified=False,
+            given_name=None,
+            family_name=None,
+            name=None,
+        )
+    }
+
+
+def test_no_user_ids_need_no_request() -> None:
+    client, requests = _client(_token_then_users(lambda _request: httpx.Response(500)))
+
+    assert client.read_user_profiles([]) == {}
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("text", "query"),
+    [
+        ("ant", "email:*ant*"),
+        ("an", "email:an*"),
+        ("Ant", "email:*ant*"),
+        ("@policyengine.org", "email:*@policyengine.org*"),
+        ("a+b", "email:*a\\+b*"),
+        ("a b", "email:*a\\ b*"),
+        ("x:y", "email:*x\\:y*"),
+        ("*?", "email:\\*\\?*"),
+        (
+            '+-&|!(){}[]^"~*?:\\/ ',
+            "email:*"
+            + "".join(f"\\{character}" for character in '+-&|!(){}[]^"~*?:\\/ ')
+            + "*",
+        ),
+    ],
+)
+def test_email_searches_escape_the_text_and_wildcards_need_three_characters(
+    text: str, query: str
+) -> None:
+    client, requests = _client(
+        _token_then_users(lambda _request: httpx.Response(200, json=[]))
+    )
+
+    result = client.search_user_ids_by_email(text)
+
+    (search,) = _searches(requests)
+    assert result == Auth0UserIdSearch(user_ids=(), limit_reached=False)
+    assert search.url.params["q"] == query
+    assert search.url.params["search_engine"] == "v3"
+    assert search.url.params["fields"] == "user_id"
+    assert search.url.params["include_fields"] == "true"
+    assert search.url.params["per_page"] == "50"
+    assert search.url.params["page"] == "0"
+
+
+def _pages_of_user_ids(total: int):
+    def answer(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        per_page = int(request.url.params["per_page"])
+        numbers = range(page * per_page, min(total, (page + 1) * per_page))
+        return httpx.Response(
+            200, json=[{"user_id": f"auth0|{number}"} for number in numbers]
+        )
+
+    return answer
+
+
+def test_email_searches_page_through_results_fifty_at_a_time() -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(120)))
+
+    result = client.search_user_ids_by_email("example")
+
+    assert [search.url.params["page"] for search in _searches(requests)] == [
+        "0",
+        "1",
+        "2",
+    ]
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(120))
+    assert result.limit_reached is False
+
+
+def test_email_searches_stop_at_auth0s_one_thousand_result_limit() -> None:
+    client, requests = _client(_token_then_users(_pages_of_user_ids(5000)))
+
+    result = client.search_user_ids_by_email("example")
+
+    assert len(_searches(requests)) == 20
+    assert len(result.user_ids) == 1000
+    assert result.limit_reached is True
+
+
+def _failing_with(failure):
+    def answer(request: httpx.Request) -> httpx.Response:
+        if isinstance(failure, int):
+            return httpx.Response(failure, json={"message": "refused"})
+        message = "the Management API did not answer"
+        raise failure(message, request=request)
+
+    return answer
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [403, 429, 500, 503, 400, httpx.ConnectTimeout, httpx.ConnectError],
+)
+@pytest.mark.parametrize("operation", ["read_user_profiles", "search"])
+def test_profile_failures_raise_one_unavailable_error_without_personal_data(
+    failure, operation: str
+) -> None:
+    client, _requests = _client(_token_then_users(_failing_with(failure)))
+    read_profiles_or_search = (
+        (lambda: client.search_user_ids_by_email("secret-person@example.test"))
+        if operation == "search"
+        else (lambda: client.read_user_profiles(["google-oauth2|secret-subject"]))
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as error:
+        read_profiles_or_search()
+
+    message = str(error.value)
+    for personal_or_secret in ("secret-person", "secret-subject", "mgmt", "raw"):
+        assert personal_or_secret not in message
+    assert isinstance(error.value, Auth0ManagementError)
+
+
+@pytest.mark.parametrize(
+    "token_answer",
+    [
+        httpx.Response(500),
+        httpx.Response(200, json={"expires_in": 3600}),
+    ],
+)
+def test_a_failed_token_request_makes_profiles_unavailable(
+    token_answer: httpx.Response,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            return token_answer
+        return httpx.Response(200, json=[])
+
+    client, _requests = _client(handler)
+
+    with pytest.raises(Auth0UserProfilesUnavailableError):
+        client.read_user_profiles(["auth0|1"])
+
+
+def test_an_unreadable_profile_answer_makes_profiles_unavailable() -> None:
+    client, _requests = _client(
+        _token_then_users(
+            lambda _request: httpx.Response(200, json={"users": "not a list"})
+        )
+    )
+
+    with pytest.raises(Auth0UserProfilesUnavailableError):
+        client.read_user_profiles(["auth0|1"])
+    with pytest.raises(Auth0UserProfilesUnavailableError):
+        client.search_user_ids_by_email("example")
+
+
+def test_profile_reads_retry_once_with_a_fresh_token_after_a_401() -> None:
+    issued_tokens: list[str] = []
+    search_statuses = [401, 200, 401, 401]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            issued_tokens.append(f"mgmt-{len(issued_tokens) + 1}")
+            return httpx.Response(
+                200, json={"access_token": issued_tokens[-1], "expires_in": 86400}
+            )
+        status = search_statuses.pop(0)
+        return httpx.Response(status, json=[] if status == 200 else None)
+
+    client, requests = _client(handler)
+
+    assert client.read_user_profiles(["auth0|1"]) == {}
+    with pytest.raises(Auth0UserProfilesUnavailableError, match="HTTP 401"):
+        client.read_user_profiles(["auth0|1"])
+
+    searches = _searches(requests)
+    assert [search.headers["authorization"] for search in searches] == [
+        "Bearer mgmt-1",
+        "Bearer mgmt-2",
+        "Bearer mgmt-2",
+        "Bearer mgmt-3",
+    ]
