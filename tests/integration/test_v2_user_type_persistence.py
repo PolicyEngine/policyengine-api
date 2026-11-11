@@ -34,6 +34,7 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
+    RateLimitWaitBudget,
 )
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
@@ -219,16 +220,24 @@ class StandInAuth0:
         self.profile = profile
 
     def search_user_ids_by_email(
-        self, text: str, *, match_limit: int
+        self,
+        text: str,
+        *,
+        match_limit: int,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> Auth0UserIdSearch:
         assert self.profile.email is not None
         assert match_limit == MAXIMUM_EMAIL_SEARCH_MATCHES
+        assert isinstance(wait_budget, RateLimitWaitBudget)
         found = text.lower() in self.profile.email
         return Auth0UserIdSearch(
             user_ids=(self.profile.user_id,) if found else (), more_than_limit=False
         )
 
-    def read_user_profiles(self, user_ids) -> dict[str, Auth0UserProfile]:
+    def read_user_profiles(
+        self, user_ids, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> dict[str, Auth0UserProfile]:
+        assert isinstance(wait_budget, RateLimitWaitBudget)
         return {
             user_id: self.profile
             for user_id in user_ids
