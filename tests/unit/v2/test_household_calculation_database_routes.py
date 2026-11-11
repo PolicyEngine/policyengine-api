@@ -409,6 +409,7 @@ def test_a_refusal_before_sim_is_called_echoes_no_observability_id(
             502,
             id="unexpected-status",
         ),
+        pytest.param((503, {"detail": "Service Unavailable"}), 502, id="proxy-503"),
     ],
 )
 def test_an_answer_after_sim_was_called_returns_the_observability_id(

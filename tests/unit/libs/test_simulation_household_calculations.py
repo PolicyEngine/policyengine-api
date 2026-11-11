@@ -223,8 +223,26 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
 def test_a_refusal_of_another_shape_is_unavailable(body) -> None:
     service = RecordingService(422, body)
 
-    with pytest.raises(SimulationServiceUnavailableError, match="could not be read"):
+    with pytest.raises(SimulationServiceUnavailableError) as unreadable:
         service.client().submit(calculation_input())
+
+    assert _route_status(unreadable.value) == 503
+    assert str(unreadable.value) == (
+        "The simulation service's answer could not be read."
+    )
+
+
+def test_a_field_refusal_with_a_code_that_is_not_text_keeps_its_reasons() -> None:
+    service = RecordingService(
+        422, {"code": 5, "detail": [{"loc": ["body", "spm"], "msg": "refused"}]}
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit(calculation_input())
+
+    assert str(refused.value) == (
+        "The simulation service cannot calculate this household: spm: refused"
+    )
 
 
 def test_a_reference_the_service_cannot_find_is_unavailable_with_its_reason() -> None:
@@ -278,36 +296,59 @@ def test_a_dependency_the_service_cannot_read_names_its_code() -> None:
 @pytest.mark.parametrize(
     ("code", "shown"),
     [
-        pytest.param("database_unavailable", "503 database_unavailable", id="kept"),
-        pytest.param("a" * 64, f"503 {'a' * 64}", id="64-characters"),
-        pytest.param("a" * 65, "503", id="65-characters"),
-        pytest.param("Database_unavailable", "503", id="capital"),
-        pytest.param("1st_failure", "503", id="leading-digit"),
-        pytest.param("_failure", "503", id="leading-underscore"),
-        pytest.param("database-unavailable", "503", id="hyphen"),
-        pytest.param("database unavailable: row 7", "503", id="text"),
-        pytest.param("", "503", id="empty"),
+        pytest.param("internal_error", "500 internal_error", id="kept"),
+        pytest.param("a" * 64, f"500 {'a' * 64}", id="64-characters"),
+        pytest.param("a" * 65, "500", id="65-characters"),
+        pytest.param("Internal_error", "500", id="capital"),
+        pytest.param("1st_failure", "500", id="leading-digit"),
+        pytest.param("_failure", "500", id="leading-underscore"),
+        pytest.param("internal-error", "500", id="hyphen"),
+        pytest.param("internal error: row 7", "500", id="text"),
+        pytest.param("internal_error\n", "500", id="trailing-newline"),
+        pytest.param("", "500", id="empty"),
+        pytest.param(5, "500", id="number"),
+        pytest.param(None, "500", id="null"),
     ],
 )
 def test_only_a_code_that_is_a_fixed_identifier_is_shown(code, shown) -> None:
-    service = RecordingService(503, {"code": code, "detail": "The database is down"})
+    service = RecordingService(500, {"code": code, "detail": "The household is 52000"})
 
-    with pytest.raises(SimulationServiceUnavailableError) as refused:
+    with pytest.raises(SimulationServiceInternalError) as failed:
         service.client().submit(calculation_input())
 
-    assert str(refused.value) == f"The simulation service is unavailable ({shown})."
+    assert str(failed.value) == created_but_failed_message(shown)
 
 
-def test_a_refusal_code_that_is_not_a_fixed_identifier_is_left_out() -> None:
-    service = RecordingService(
-        400, {"code": "Unknown Household", "detail": "Household not found"}
-    )
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param("Unknown Household", id="not-an-identifier"),
+        pytest.param(5, id="number"),
+        pytest.param(["unknown_household"], id="list"),
+    ],
+)
+def test_a_refusal_code_that_is_not_a_fixed_identifier_is_left_out(code) -> None:
+    service = RecordingService(400, {"code": code, "detail": "Household not found"})
 
     with pytest.raises(SimulationServiceUnavailableError) as refused:
         service.client().submit(calculation_input())
 
     assert str(refused.value) == (
         "The simulation service refused the calculation: Household not found"
+    )
+
+
+def test_a_refusal_without_a_textual_reason_gives_its_status_and_code() -> None:
+    service = RecordingService(
+        400,
+        {"code": "unknown_household", "detail": [{"loc": ["body"], "msg": "x"}]},
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as refused:
+        service.client().submit(calculation_input())
+
+    assert str(refused.value) == (
+        "The simulation service refused the calculation (400 unknown_household)."
     )
 
 
@@ -360,27 +401,37 @@ def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
 
 
 @pytest.mark.parametrize(
-    ("status_code", "message"),
+    ("status_code", "body", "message"),
     [
         # The service's authentication, routing, body-size and rate limits
         # answer these before its route creates a job.
         *(
             pytest.param(
                 status_code,
+                b"",
                 f"The simulation service is unavailable ({status_code}).",
                 id=str(status_code),
             )
-            for status_code in (401, 403, 404, 405, 413, 429, 503)
+            for status_code in (401, 403, 404, 405, 413, 429)
         ),
         pytest.param(
-            400, "The simulation service refused the calculation (400).", id="400"
+            403,
+            {"detail": "Forbidden"},
+            "The simulation service is unavailable (403).",
+            id="403-from-fastapi",
+        ),
+        pytest.param(
+            400,
+            b"",
+            "The simulation service refused the calculation (400).",
+            id="400",
         ),
     ],
 )
 def test_an_answer_given_before_a_job_is_created_is_unavailable(
-    status_code, message
+    status_code, body, message
 ) -> None:
-    service = RecordingService(status_code, b"")
+    service = RecordingService(status_code, body)
 
     with pytest.raises(SimulationServiceUnavailableError) as unavailable:
         service.client().submit(calculation_input())
@@ -390,11 +441,34 @@ def test_an_answer_given_before_a_job_is_created_is_unavailable(
 
 
 @pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(b"", id="empty"),
+        pytest.param(b"<html>Service Unavailable</html>", id="html"),
+        pytest.param({"detail": "Service Unavailable"}, id="no-code"),
+        pytest.param({"code": "Not An Identifier", "detail": "x"}, id="bad-code"),
+        pytest.param({"code": 7, "detail": "x"}, id="number-code"),
+    ],
+)
+def test_a_503_without_the_services_code_came_from_a_proxy(body) -> None:
+    # The service's own 503 always names its code. Without one, Cloud Run's
+    # front end answered in its place, possibly after the service created the
+    # job.
+    service = RecordingService(503, body)
+
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as lost:
+        service.client().submit(calculation_input())
+
+    assert _route_status(lost.value) == 502
+    assert str(lost.value) == lost_answer_message("a proxy answered 503")
+
+
+@pytest.mark.parametrize(
     ("status_code", "body", "status_and_code"),
     [
         *(
             pytest.param(status_code, b"", str(status_code), id=str(status_code))
-            for status_code in (200, 201, 204, 302, 307, 408, 409, 410, 501)
+            for status_code in (199, 200, 201, 204, 302, 307, 408, 409, 410, 501, 600)
         ),
         pytest.param(
             409,
