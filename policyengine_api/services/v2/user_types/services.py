@@ -30,6 +30,7 @@ before its response reads Auth0.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -112,10 +113,28 @@ EMAIL_SEARCH_UNAVAILABLE_MESSAGE = (
     "from Auth0. Try again shortly."
 )
 PROFILES_UNREADABLE_MESSAGE = "Users' emails and names could not be read from Auth0"
+# A recorded cause is a short identifier such as http_403 or timeout, so no
+# email address or subject can pass as one.
+SAFE_CAUSE_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,39}")
 
 
-def _record_profiles_unavailable(operation: str, error: Exception) -> None:
-    """Record why Auth0 couldn't answer, by error type only.
+def _safe_cause(error: Exception) -> str:
+    """Return the cause the profile reader's error names, else ``unknown``.
+
+    The reader's errors carry a ``cause`` such as an HTTP status
+    (``http_403``, ``http_429``), ``timeout``, ``connection_error`` or
+    ``unreadable_answer``.
+    """
+    cause = getattr(error, "cause", None)
+    if isinstance(cause, str) and SAFE_CAUSE_PATTERN.fullmatch(cause):
+        return cause
+    return "unknown"
+
+
+def _record_profiles_unavailable(
+    operation: str, error: Exception, *, cause: str | None = None
+) -> None:
+    """Record why Auth0 couldn't answer, by error type and safe cause only.
 
     An error's message may name a subject or an email, so it is left out.
     """
@@ -125,6 +144,7 @@ def _record_profiles_unavailable(operation: str, error: Exception) -> None:
             "policyengine_attributes": {
                 "operation": operation,
                 "error_type": type(error).__name__,
+                "cause": _safe_cause(error) if cause is None else cause,
             }
         },
     )
@@ -160,7 +180,7 @@ class V2UserTypeService:
         try:
             return self._user_profile_source_factory()
         except Exception as error:
-            _record_profiles_unavailable("configure", error)
+            _record_profiles_unavailable("configure", error, cause="invalid_settings")
             raise AdminUserProfilesUnavailableError(
                 EMAIL_SEARCH_UNAVAILABLE_MESSAGE
             ) from error
