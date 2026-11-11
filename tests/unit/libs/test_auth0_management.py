@@ -601,6 +601,7 @@ def test_profile_failures_raise_one_unavailable_error_without_personal_data(
     [
         httpx.Response(500),
         httpx.Response(200, json={"expires_in": 3600}),
+        httpx.Response(200, content=b"not JSON"),
     ],
 )
 def test_a_failed_token_request_makes_profiles_unavailable(

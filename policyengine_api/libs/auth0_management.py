@@ -442,9 +442,8 @@ class Auth0ManagementClient:
             if response.status_code == HTTPStatus.UNAUTHORIZED:
                 self._discard_token(token)
                 response = self._search_request(parameters, self._access_token())
-        except Auth0UserProfilesUnavailableError:
-            raise
-        except Auth0ManagementError as error:
+        # A token answer that isn't JSON raises ValueError.
+        except (Auth0ManagementError, ValueError) as error:
             msg = f"Auth0 user profiles are unavailable: {type(error).__name__}"
             raise Auth0UserProfilesUnavailableError(msg) from error
         if response.status_code != HTTPStatus.OK:
