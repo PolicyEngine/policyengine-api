@@ -820,3 +820,53 @@ def test_each_admin_request_gives_its_auth0_calls_one_shared_wait_budget(
     assert page_budget is search_budget
     assert isinstance(next_request_budget, RateLimitWaitBudget)
     assert next_request_budget is not search_budget
+
+
+def test_angle_brackets_are_refused_before_the_profile_settings_are_read(
+    store: V2Store,
+) -> None:
+    """With unusable settings, the text is still refused (422), not 503."""
+    _signed_in_people(store)
+    settings_reads: list[str] = []
+
+    def broken_configuration() -> UserProfileSource:
+        settings_reads.append("read")
+        msg = "Auth0 user profile reads are partially configured"
+        raise Auth0ManagementConfigurationError(msg)
+
+    user_types = _user_types(store, None, source_factory=broken_configuration)
+
+    with _recorded_logs() as records, pytest.raises(AdminUserEmailSearchRefusedError):
+        user_types.list_users(
+            principal=_principal("alice"), search=AdminUserSearch(email="<a")
+        )
+
+    assert settings_reads == []
+    assert records == []
+
+
+class ProfileReadNamingACauseError(RuntimeError):
+    """A reader failure whose ``cause`` may be anything."""
+
+    def __init__(self, cause: object) -> None:
+        super().__init__("Auth0 user profiles are unavailable")
+        self.cause = cause
+
+
+@pytest.mark.parametrize(
+    "unsafe_cause",
+    ["bob@example.test", "google-oauth2|bob", "HTTP_403", "x" * 41, "", 403],
+)
+def test_a_cause_that_is_not_a_short_identifier_is_recorded_as_unknown(
+    store: V2Store, unsafe_cause: object
+) -> None:
+    alice = _principal("alice")
+    alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
+    _make_admin(store, alice_id)
+    reader = StandInProfileReader(failure=ProfileReadNamingACauseError(unsafe_cause))
+
+    with _recorded_logs() as records:
+        _user_types(store, reader).get_user(principal=alice, user_id=alice_id)
+
+    (record,) = records
+    assert record.policyengine_attributes["cause"] == "unknown"

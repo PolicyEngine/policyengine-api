@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import httpx
 import pytest
 
@@ -19,6 +21,9 @@ from policyengine_api.libs.auth0_management import (
     load_auth0_management_settings,
     load_auth0_user_profile_settings,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 DOMAIN = "policyengine.us.auth0.com"
 SECRET_RESOURCE = "projects/p/secrets/auth0-management/versions/latest"
@@ -1056,3 +1061,59 @@ def test_a_shared_wait_budget_spans_an_admin_requests_searches() -> None:
     assert waits == [1.5]
     assert len(_searches(requests)) == 3
     assert wait_budget.remaining_seconds == 0.5
+
+
+def _search_answering_pages(pages: dict[int, list[dict[str, str]]]):
+    """Answer each search page with ``pages[page]``, or no users."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=pages.get(int(request.url.params["page"]), []))
+
+    return _token_then_users(answer)
+
+
+def _user_entries(numbers: Iterable[int]) -> list[dict[str, str]]:
+    return [{"user_id": f"auth0|{number}"} for number in numbers]
+
+
+def test_duplicate_entries_count_once_towards_the_match_limit() -> None:
+    """220 entries name exactly 200 users, which is not more than 200."""
+    client, requests = _client(
+        _search_answering_pages(
+            {
+                0: _user_entries(range(50)),
+                1: _user_entries(range(40, 90)),
+                2: _user_entries(range(90, 140)),
+                3: _user_entries(range(140, 190)),
+                4: _user_entries(range(180, 200)),
+            }
+        )
+    )
+
+    result = client.search_user_ids_by_email("example", match_limit=200)
+
+    assert len(_searches(requests)) == 5
+    assert result.more_than_limit is False
+    assert result.user_ids == tuple(f"auth0|{number}" for number in range(200))
+
+
+@pytest.mark.parametrize(
+    "full_page",
+    [
+        _user_entries(range(50)),
+        [{"email": "no-id@example.test"}] * 50,
+    ],
+    ids=["the_same_users_again", "entries_without_user_ids"],
+)
+def test_a_full_last_page_counts_as_more_than_the_limit(
+    full_page: list[dict[str, str]],
+) -> None:
+    """A full fifth page may hide more users, so it is the safe answer."""
+    client, requests = _client(
+        _search_answering_pages(dict.fromkeys(range(5), full_page))
+    )
+
+    result = client.search_user_ids_by_email("example", match_limit=200)
+
+    assert len(_searches(requests)) == 5
+    assert result == Auth0UserIdSearch(user_ids=(), more_than_limit=True)
