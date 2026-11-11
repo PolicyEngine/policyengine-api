@@ -354,9 +354,10 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
 def _default_user_profile_source() -> UserProfileSource | None:
     """Return the users' Auth0 tenant to read admins' user profiles from.
 
-    None without the AUTH0_USER_PROFILES_* settings, or without the users'
-    issuer, which says which identities are that tenant's users. Settings are
-    read on each call, and raise when they are unusable.
+    None without the AUTH0_USER_PROFILES_* settings. The users' issuer says
+    which identities are that tenant's users; the settings are refused
+    without it. Settings are read on each call, and raise when they are
+    unusable.
     """
     from policyengine_api.libs.auth0_management import (
         build_auth0_user_profile_reader,
@@ -365,10 +366,7 @@ def _default_user_profile_source() -> UserProfileSource | None:
     reader = build_auth0_user_profile_reader()
     if reader is None:
         return None
-    issuer = load_user_auth_settings().issuer
-    if not issuer:
-        return None
-    return UserProfileSource(issuer=issuer, reader=reader)
+    return UserProfileSource(issuer=load_user_auth_settings().issuer, reader=reader)
 
 
 def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:

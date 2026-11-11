@@ -36,6 +36,8 @@ from urllib.parse import quote
 
 import httpx
 
+from policyengine_api.libs.user_auth import PUBLIC_API_AUTH_ISSUER_ENV
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Mapping
 
@@ -255,8 +257,22 @@ def load_auth0_management_settings(
 def load_auth0_user_profile_settings(
     environ: Mapping[str, str] | None = None,
 ) -> Auth0ManagementSettings | None:
-    """Return complete user-profile settings, or ``None`` when absent."""
-    return _load_client_settings(AUTH0_USER_PROFILE_SETTING_NAMES, environ)
+    """Return complete user-profile settings, or ``None`` when absent.
+
+    Raise when they are set without ``PUBLIC_API_AUTH_ISSUER``: only
+    identities from the users' issuer are users of the tenant, so without it
+    profiles would be read for nobody.
+    """
+    values = os.environ if environ is None else environ
+    settings = _load_client_settings(AUTH0_USER_PROFILE_SETTING_NAMES, values)
+    if settings is not None and not values.get(PUBLIC_API_AUTH_ISSUER_ENV, "").strip():
+        msg = (
+            f"{AUTH0_USER_PROFILE_SETTING_NAMES.prefix}_* settings need "
+            f"{PUBLIC_API_AUTH_ISSUER_ENV}: only identities from the users' "
+            "issuer are looked up"
+        )
+        raise Auth0ManagementConfigurationError(msg)
+    return settings
 
 
 def _quoted_user_id(user_id: str) -> str:

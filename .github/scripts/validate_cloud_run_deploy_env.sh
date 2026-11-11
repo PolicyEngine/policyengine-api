@@ -226,6 +226,12 @@ if (( auth0_user_profiles_count != 0 && auth0_user_profiles_count != 3 )); then
   echo "Set AUTH0_USER_PROFILES_DOMAIN, AUTH0_USER_PROFILES_CLIENT_ID, and AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE together, or none" >&2
   exit 1
 fi
+# Only identities from the users' issuer are looked up, so without it the
+# profiles would be read for nobody.
+if (( auth0_user_profiles_count != 0 )) && [[ -z "${PUBLIC_API_AUTH_ISSUER:-}" ]]; then
+  echo "AUTH0_USER_PROFILES_* settings need PUBLIC_API_AUTH_ISSUER" >&2
+  exit 1
+fi
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
