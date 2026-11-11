@@ -164,9 +164,9 @@ def api_base_url() -> str:
 def api_client(api_base_url: str):
     """Call the deployed Public API with the CI server credential on every request.
 
-    The test fails, rather than skips, without ``CI_SERVER_ACCESS_TOKEN``
-    (``tests/integration/deployed_api_credentials.py``). httpx drops the
-    ``Authorization`` header on a redirect to another host.
+    The client is ``deployed_api_client``'s
+    (``tests/integration/deployed_api_credentials.py``). The test fails, rather
+    than skips, without ``CI_SERVER_ACCESS_TOKEN``.
     """
     try:
         client = deployed_api_client(api_base_url)

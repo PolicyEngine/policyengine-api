@@ -16,8 +16,8 @@ is forwarded in ``PolicyEngine-User-Authorization``, as a PolicyEngine server
 forwards a browser's (:func:`forwarded_user_headers`).
 
 :func:`deployed_api_client` builds the ``api_client`` fixture's client, and
-the client of any check that needs one of its own, such as one per parallel
-request.
+the client of any check that needs clients of its own, such as one per
+thread of a parallel check.
 """
 
 from __future__ import annotations
