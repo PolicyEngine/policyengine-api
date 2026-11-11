@@ -3,26 +3,45 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
+from policyengine_api.data.v2.models import (
+    UserReportAssociation,
+    UserSimulationAssociation,
+)
 from policyengine_api.services.v2.associations.validators import (
     AssociationReferenceConflictError,
     require_one_reference,
     violates_foreign_key,
 )
+from policyengine_api.services.v2.user_reports.database_connectors.creates import (
+    create_user_report,
+)
+from policyengine_api.services.v2.user_reports.database_connectors.updates import (
+    update_user_report,
+)
 from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
+    UserReportCreationInput,
     UserReportUpdateInput,
 )
 from policyengine_api.services.v2.user_reports.validators import (
     AssociationReportNotFoundError,
 )
+from policyengine_api.services.v2.user_simulations.database_connectors.creates import (
+    create_user_simulation,
+)
+from policyengine_api.services.v2.user_simulations.database_connectors.updates import (
+    update_user_simulation,
+)
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
+    UserSimulationCreationInput,
     UserSimulationUpdateInput,
 )
 from policyengine_api.services.v2.user_simulations.validators import (
@@ -30,7 +49,16 @@ from policyengine_api.services.v2.user_simulations.validators import (
 )
 from tests.unit.v2.user_route_support import user_route_client
 
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from sqlmodel import Session
+
 REPORT_KEY = "fk_user_report_associations_report_id_reports"
+SIMULATION_KEY = "fk_user_simulation_associations_simulation_id_simulations"
+# Another foreign key of the same rows, which the write's checks don't cover.
+SAVED_REPORT_OWNER_KEY = "fk_user_report_associations_user_id_users"
+SAVED_SIMULATION_OWNER_KEY = "fk_user_simulation_associations_user_id_users"
 
 
 def integrity_error(sqlstate: str, constraint_name: str | None) -> IntegrityError:
@@ -91,6 +119,134 @@ def test_only_the_named_foreign_key_violation_counts() -> None:
         REPORT_KEY,
     )
     assert not violates_foreign_key(integrity_error("23505", REPORT_KEY), REPORT_KEY)
+
+
+class RefusingFlushSession:
+    """A session whose flush fails with ``error``, as PostgreSQL refusing a write."""
+
+    def __init__(self, error: IntegrityError) -> None:
+        self.error = error
+
+    def add(self, _row: object) -> None:
+        """Accept the row; the database refuses it at flush."""
+
+    def flush(self) -> None:
+        raise self.error
+
+    def refresh(self, _row: object) -> None:
+        msg = "a refused write is never read back"
+        raise AssertionError(msg)
+
+
+def refusing_session(sqlstate: str, constraint_name: str) -> Session:
+    """Return a session whose flush fails with that SQLSTATE on that constraint."""
+    return cast(
+        "Session", RefusingFlushSession(integrity_error(sqlstate, constraint_name))
+    )
+
+
+def save_report(session: Session, *, operation: str, report_id: UUID) -> None:
+    """Save a new report naming ``report_id``, or repoint a saved one to it."""
+    if operation == "create":
+        create_user_report(
+            session,
+            UserReportCreationInput(
+                country_id="us", user_id=uuid4(), report_id=report_id
+            ),
+        )
+        return
+    saved = UserReportAssociation(user_id=uuid4(), country_id="us", report_id=uuid4())
+    update_user_report(session, saved, {"report_id": report_id})
+
+
+def save_simulation(session: Session, *, operation: str, simulation_id: UUID) -> None:
+    """Save a new simulation naming ``simulation_id``, or repoint a saved one."""
+    if operation == "create":
+        create_user_simulation(
+            session,
+            UserSimulationCreationInput(
+                country_id="uk", user_id=uuid4(), simulation_id=simulation_id
+            ),
+        )
+        return
+    saved = UserSimulationAssociation(
+        user_id=uuid4(), country_id="uk", simulation_id=uuid4()
+    )
+    update_user_simulation(
+        session, saved, UserSimulationUpdateInput(simulation_id=simulation_id)
+    )
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+def test_a_report_deleted_before_the_saved_report_is_written_is_not_found(
+    operation: str,
+) -> None:
+    report_id = uuid4()
+
+    with pytest.raises(
+        AssociationReportNotFoundError,
+        match=f"Report {report_id} was not found in country 'us'",
+    ) as raised:
+        save_report(
+            refusing_session("23503", REPORT_KEY),
+            operation=operation,
+            report_id=report_id,
+        )
+
+    assert isinstance(raised.value.__cause__, IntegrityError)
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+def test_a_simulation_deleted_before_the_saved_one_is_written_is_not_found(
+    operation: str,
+) -> None:
+    simulation_id = uuid4()
+
+    with pytest.raises(
+        AssociationSimulationNotFoundError,
+        match=f"Simulation {simulation_id} was not found in country 'uk'",
+    ) as raised:
+        save_simulation(
+            refusing_session("23503", SIMULATION_KEY),
+            operation=operation,
+            simulation_id=simulation_id,
+        )
+
+    assert isinstance(raised.value.__cause__, IntegrityError)
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize(
+    ("sqlstate", "constraint_name"),
+    [("23503", SAVED_REPORT_OWNER_KEY), ("23505", REPORT_KEY)],
+    ids=["owner-key", "not-a-foreign-key-violation"],
+)
+def test_a_saved_reports_other_integrity_errors_are_raised_unchanged(
+    operation: str, sqlstate: str, constraint_name: str
+) -> None:
+    with pytest.raises(IntegrityError):
+        save_report(
+            refusing_session(sqlstate, constraint_name),
+            operation=operation,
+            report_id=uuid4(),
+        )
+
+
+@pytest.mark.parametrize("operation", ["create", "update"])
+@pytest.mark.parametrize(
+    ("sqlstate", "constraint_name"),
+    [("23503", SAVED_SIMULATION_OWNER_KEY), ("23505", SIMULATION_KEY)],
+    ids=["owner-key", "not-a-foreign-key-violation"],
+)
+def test_a_saved_simulations_other_integrity_errors_are_raised_unchanged(
+    operation: str, sqlstate: str, constraint_name: str
+) -> None:
+    with pytest.raises(IntegrityError):
+        save_simulation(
+            refusing_session(sqlstate, constraint_name),
+            operation=operation,
+            simulation_id=uuid4(),
+        )
 
 
 class RefusingReports:
