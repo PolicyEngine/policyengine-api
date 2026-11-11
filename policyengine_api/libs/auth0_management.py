@@ -58,8 +58,8 @@ DOMAIN_PATTERN = re.compile(
 SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
 HTTP_TIMEOUT_SECONDS = 10.0
 TOKEN_REFRESH_MARGIN_SECONDS = 60
-# A rate-limited (429) search is retried once, only when Auth0 asks for a wait
-# no longer than this.
+# A rate-limited (429) search is retried once, after the wait Auth0 asks for,
+# only while one operation's waits stay within this many seconds in total.
 MAXIMUM_RATE_LIMIT_WAIT_SECONDS = 2.0
 # Every search page is sorted by user ID, so pages don't shift between requests.
 USER_SEARCH_SORT = "user_id:1"
@@ -155,6 +155,26 @@ def _transport_cause(error: httpx.HTTPError) -> str:
     return "connection_error"
 
 
+class RateLimitWaitBudget:
+    """The seconds of rate-limit waiting one operation may still spend.
+
+    An admin request gives every Auth0 call it makes the same budget, so
+    their waits together stay within 2 seconds. A rate-limited request waits
+    only when its whole wait fits in what is left.
+    """
+
+    def __init__(self, seconds: float = MAXIMUM_RATE_LIMIT_WAIT_SECONDS) -> None:
+        """Start with ``seconds`` to spend."""
+        self.remaining_seconds = seconds
+
+    def take(self, seconds: float) -> bool:
+        """Spend ``seconds`` and return True, or return False when too few are left."""
+        if seconds > self.remaining_seconds:
+            return False
+        self.remaining_seconds -= seconds
+        return True
+
+
 def _seconds(value: str | None) -> float | None:
     """Read a header's number of seconds, or None when it isn't one."""
     if value is None:
@@ -218,17 +238,30 @@ class UserProfileReader(Protocol):
     """
 
     def read_user_profiles(
-        self, user_ids: Iterable[str]
+        self,
+        user_ids: Iterable[str],
+        *,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> Mapping[str, Auth0UserProfile]:
-        """Return the profiles Auth0 has for these user IDs, by user ID."""
+        """Return the profiles Auth0 has for these user IDs, by user ID.
+
+        Rate-limit waits are spent from ``wait_budget``, else from a budget
+        of this call's own.
+        """
         ...
 
     def search_user_ids_by_email(
-        self, text: str, *, match_limit: int
+        self,
+        text: str,
+        *,
+        match_limit: int,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> Auth0UserIdSearch:
         """Return the IDs of users whose email contains ``text``.
 
         The result says when more than ``match_limit`` users match instead.
+        Rate-limit waits are spent from ``wait_budget``, else from a budget
+        of this call's own.
         """
         ...
 
@@ -574,18 +607,21 @@ class Auth0ManagementClient:
         return None
 
     def _search_users(
-        self, http_client: httpx.Client, parameters: Mapping[str, str]
+        self,
+        http_client: httpx.Client,
+        parameters: Mapping[str, str],
+        wait_budget: RateLimitWaitBudget,
     ) -> list[object]:
         """Run one user search; raise Auth0UserProfilesUnavailableError on failure.
 
         A rate-limited search (429) is retried once, after the wait Auth0
-        gives, when that wait is at most 2 seconds.
+        gives, when that wait fits in what is left of ``wait_budget``.
         """
         try:
             response = self._authorized_search(http_client, parameters)
             if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
                 wait = self._rate_limit_wait(response)
-                if wait is not None and wait <= MAXIMUM_RATE_LIMIT_WAIT_SECONDS:
+                if wait is not None and wait_budget.take(wait):
                     self._sleep(wait)
                     response = self._authorized_search(http_client, parameters)
         except Auth0ManagementError as error:
@@ -609,18 +645,23 @@ class Auth0ManagementClient:
         return users
 
     def read_user_profiles(
-        self, user_ids: Iterable[str]
+        self,
+        user_ids: Iterable[str],
+        *,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> dict[str, Auth0UserProfile]:
         """Return the profiles Auth0 has for these user IDs, by user ID.
 
         One search reads each group of at most 50 IDs, all through one HTTP
-        client. IDs Auth0 doesn't know are left out. Raise
-        Auth0UserProfilesUnavailableError when any search fails.
+        client. IDs Auth0 doesn't know are left out. Rate-limit waits are
+        spent from ``wait_budget``, else from a budget of this call's own.
+        Raise Auth0UserProfilesUnavailableError when any search fails.
         """
         requested = list(dict.fromkeys(user_ids))
         profiles: dict[str, Auth0UserProfile] = {}
         if not requested:
             return profiles
+        budget = RateLimitWaitBudget() if wait_budget is None else wait_budget
         with self._operation_http_client() as http_client:
             for start in range(0, len(requested), USER_SEARCH_PAGE_SIZE):
                 group = requested[start : start + USER_SEARCH_PAGE_SIZE]
@@ -634,6 +675,7 @@ class Auth0ManagementClient:
                         "include_fields": "true",
                         "per_page": str(len(group)),
                     },
+                    budget,
                 )
                 wanted = set(group)
                 for payload in users:
@@ -643,7 +685,11 @@ class Auth0ManagementClient:
         return profiles
 
     def search_user_ids_by_email(
-        self, text: str, *, match_limit: int
+        self,
+        text: str,
+        *,
+        match_limit: int,
+        wait_budget: RateLimitWaitBudget | None = None,
     ) -> Auth0UserIdSearch:
         """Return the IDs of Auth0 users whose email contains ``text``.
 
@@ -653,14 +699,16 @@ class Auth0ManagementClient:
         created or changed moments ago may be missing. Results are read 50 a
         page, through one HTTP client, until a page is short or more than
         ``match_limit`` users have matched: at most ``match_limit // 50 + 1``
-        pages. Raise ValueError for a match limit outside 1 to 999 or text
-        with ``<`` or ``>``, before any request, and
+        pages. Rate-limit waits are spent from ``wait_budget``, else from a
+        budget of this call's own. Raise ValueError for a match limit outside
+        1 to 999 or text with ``<`` or ``>``, before any request, and
         Auth0UserProfilesUnavailableError when any page fails.
         """
         if not 0 < match_limit < USER_SEARCH_RESULT_LIMIT:
             msg = f"match_limit must be from 1 to {USER_SEARCH_RESULT_LIMIT - 1}"
             raise ValueError(msg)
         query = email_search_query(text)
+        budget = RateLimitWaitBudget() if wait_budget is None else wait_budget
         user_ids: dict[str, None] = {}
         with self._operation_http_client() as http_client:
             for page in range(match_limit // USER_SEARCH_PAGE_SIZE + 1):
@@ -674,6 +722,7 @@ class Auth0ManagementClient:
                         "per_page": str(USER_SEARCH_PAGE_SIZE),
                         "page": str(page),
                     },
+                    budget,
                 )
                 for payload in users:
                     profile = _user_profile(payload)

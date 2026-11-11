@@ -98,7 +98,10 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import User, UserIdentity, UserTypeChange
-    from policyengine_api.libs.auth0_management import Auth0UserProfile
+    from policyengine_api.libs.auth0_management import (
+        Auth0UserProfile,
+        RateLimitWaitBudget,
+    )
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
@@ -150,6 +153,19 @@ def _record_profiles_unavailable(
     )
 
 
+def _wait_budget_for(source: UserProfileSource | None) -> RateLimitWaitBudget | None:
+    """Start the rate-limit wait budget one admin request's Auth0 calls share.
+
+    It allows 2 seconds of waiting in total. None without a profile source,
+    which makes no Auth0 call; the Auth0 module loads only when one does.
+    """
+    if source is None:
+        return None
+    from policyengine_api.libs.auth0_management import RateLimitWaitBudget
+
+    return RateLimitWaitBudget()
+
+
 class V2UserTypeService:
     """Sequence user-type checks and changes through explicit sessions."""
 
@@ -194,7 +210,11 @@ class V2UserTypeService:
             return None
 
     def _email_matching_identities(
-        self, principal: AccountPrincipal, source: UserProfileSource, text: str
+        self,
+        principal: AccountPrincipal,
+        source: UserProfileSource,
+        text: str,
+        wait_budget: RateLimitWaitBudget | None,
     ) -> IdentitySubjects:
         """Return the users' subjects whose Auth0 email contains ``text``.
 
@@ -206,7 +226,9 @@ class V2UserTypeService:
             _require_caller_type(session, principal, UserType.ADMIN)
         try:
             found = source.reader.search_user_ids_by_email(
-                text, match_limit=MAXIMUM_EMAIL_SEARCH_MATCHES
+                text,
+                match_limit=MAXIMUM_EMAIL_SEARCH_MATCHES,
+                wait_budget=wait_budget,
             )
         except Exception as error:
             _record_profiles_unavailable("search_by_email", error)
@@ -218,11 +240,14 @@ class V2UserTypeService:
         )
 
     def _read_profiles(
-        self, source: UserProfileSource, subjects: tuple[str, ...]
+        self,
+        source: UserProfileSource,
+        subjects: tuple[str, ...],
+        wait_budget: RateLimitWaitBudget | None,
     ) -> Mapping[str, Auth0UserProfile]:
         """Raise AdminUserProfilesUnavailableError when Auth0 can't answer."""
         try:
-            return source.reader.read_user_profiles(subjects)
+            return source.reader.read_user_profiles(subjects, wait_budget=wait_budget)
         except Exception as error:
             _record_profiles_unavailable("read_profiles", error)
             raise AdminUserProfilesUnavailableError(
@@ -230,7 +255,10 @@ class V2UserTypeService:
             ) from error
 
     def _profiles(
-        self, source: UserProfileSource | None, subjects: Iterable[str]
+        self,
+        source: UserProfileSource | None,
+        subjects: Iterable[str],
+        wait_budget: RateLimitWaitBudget | None,
     ) -> Mapping[str, Auth0UserProfile]:
         """Read these subjects' profiles in one call to the reader.
 
@@ -241,17 +269,22 @@ class V2UserTypeService:
         if source is None or not unique_subjects:
             return {}
         try:
-            return self._read_profiles(source, unique_subjects)
+            return self._read_profiles(source, unique_subjects, wait_budget)
         except AdminUserProfilesUnavailableError:
             return {}
 
     def _with_profiles(
-        self, source: UserProfileSource | None, stored: Iterable[StoredAdminUser]
+        self,
+        source: UserProfileSource | None,
+        stored: Iterable[StoredAdminUser],
+        wait_budget: RateLimitWaitBudget | None,
     ) -> tuple[AdminUserRead, ...]:
         """Fill stored users' emails and names from Auth0, after the database."""
         users = tuple(stored)
         profiles = self._profiles(
-            source, (subject for user in users for subject in user.profile_subjects)
+            source,
+            (subject for user in users for subject in user.profile_subjects),
+            wait_budget,
         )
         return tuple(
             admin_user_read_with_profiles(
@@ -292,10 +325,11 @@ class V2UserTypeService:
         else:
             require_searchable_email_text(search.email)
             source = self._profile_source()
-            if source is not None:
-                email_matching_identities = self._email_matching_identities(
-                    principal, source, search.email
-                )
+        wait_budget = _wait_budget_for(source)
+        if search.email is not None and source is not None:
+            email_matching_identities = self._email_matching_identities(
+                principal, source, search.email, wait_budget
+            )
         issuer = None if source is None else source.issuer
         with self._database_session.read() as session:
             _require_caller_type(session, principal, UserType.ADMIN)
@@ -308,7 +342,7 @@ class V2UserTypeService:
             )
             stored = _stored_admin_users(session, users[: search.limit], issuer)
         return AdminUserPage(
-            items=self._with_profiles(source, stored),
+            items=self._with_profiles(source, stored, wait_budget),
             offset=search.offset,
             limit=search.limit,
             has_more=len(users) > search.limit,
@@ -322,7 +356,7 @@ class V2UserTypeService:
             _require_caller_type(session, principal, UserType.ADMIN)
             user = require_signed_in_user(read_signed_in_user(session, user_id))
             stored = _stored_admin_users(session, [user], issuer)
-        (read,) = self._with_profiles(source, stored)
+        (read,) = self._with_profiles(source, stored, _wait_budget_for(source))
         return read
 
     def change_user_type(
@@ -366,7 +400,7 @@ class V2UserTypeService:
                 ),
             )
             stored = _stored_admin_users(session, [user], issuer)
-        (read,) = self._with_profiles(source, stored)
+        (read,) = self._with_profiles(source, stored, _wait_budget_for(source))
         return read
 
     def list_user_type_changes(
@@ -414,6 +448,7 @@ class V2UserTypeService:
                 for change in stored
                 for subject in change.changed_by_profile_subjects
             ),
+            _wait_budget_for(source),
         )
         return tuple(
             user_type_change_read_with_profiles(
