@@ -197,7 +197,9 @@ API when an admin asks, and store none of them:
   after the wait Auth0 gives, from `Retry-After` (which comes first) or
   `X-RateLimit-Reset` less the current time, when that wait fits in what is
   left of the admin request's budget: 2 seconds of waiting in total, shared
-  by the email search and the profile read of one admin request. Otherwise,
+  by the email search and the profile read of one admin request
+  (`policyengine_api.libs.rate_limit_wait_budget`; a negative or non-finite
+  wait is never taken). Otherwise,
   or when the retry is rate limited too, or the wait isn't a finite number,
   Auth0 counts as unable to answer. A page of 100 users needs at least two
   profile searches, and an email search at most five pages more.
