@@ -169,12 +169,17 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "cannot run the report (for example, no such region, dataset or "
         "dynamic); the message says which."
     ),
-    500: error_response(
-        "The simulation service failed, or created the report but answered "
-        "unreadably; do not submit again before reading the saved reports."
+    502: error_response(
+        "The simulation service created the report, but its answer cannot be "
+        "read; it failed (500); its answer was lost after the submission may "
+        "have reached it; or a proxy in front of it answered 502 or 504 in its "
+        "place. In each case it may have created the report, so submitting "
+        "again could create another."
     ),
     503: error_response(
-        "The simulation service or the v2 database is unavailable, or the "
-        "simulation service answered with a report the Public API cannot read."
+        "The simulation service is unavailable or cannot be reached, or "
+        "refuses in a shape the Public API cannot read; the v2 database is "
+        "unavailable; or the simulation service answered with a report the "
+        "Public API cannot read."
     ),
 }

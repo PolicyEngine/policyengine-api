@@ -108,9 +108,16 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "calculations, or the simulation service cannot run the simulation; "
         "the message says which."
     ),
-    500: error_response(
-        "The simulation service failed, or created the simulation but answered "
-        "unreadably."
+    502: error_response(
+        "The simulation service created the simulation, but its answer cannot "
+        "be read; it failed (500); its answer was lost after the submission may "
+        "have reached it; or a proxy in front of it answered 502 or 504 in its "
+        "place. In each case it may have created the simulation, so submitting "
+        "again could create another."
     ),
-    503: error_response("The simulation service or the v2 database is unavailable."),
+    503: error_response(
+        "The simulation service is unavailable or cannot be reached, or "
+        "refuses in a shape the Public API cannot read; or the v2 database is "
+        "unavailable."
+    ),
 }

@@ -25,13 +25,19 @@ service runs its default worker's. The simulation service answers:
   per field as FastAPI writes them, and 400 with its reason when a row the
   request names does not exist (a region, dataset or dynamic; the Public
   API checks the country and policies first): SimulationServiceRefusalError;
-- 500 when it failed, possibly after creating the record:
-  SimulationServiceInternalError;
+- 500 (``internal_error``) when it failed, possibly after creating the
+  record: SimulationServiceInternalError, which the caller must not
+  resubmit after;
 - anything else (503 when it cannot read its manifest or database, Modal
   refuses the call, or its default worker runs another version during a
   release): the service is unavailable (SimulationServiceUnavailableError),
   as it is for no answer, a refusal of another shape, a gateway token that
-  cannot be fetched and missing configuration.
+  cannot be fetched and missing configuration. No answer means a connection
+  never made (``ConnectError``, ``ConnectTimeout``, ``PoolTimeout``); once
+  the request may have been sent, a lost answer (a read timeout, a dropped
+  connection) is SimulationServiceAnswerUnreadableError, since the record
+  may exist, and so is a 502 or 504 a proxy in front of the service answers
+  in its place.
 
 Wiring the generated simulation client: ``post_simulation`` and
 ``post_report`` are the only code that sends a request, and each returns the
@@ -78,6 +84,16 @@ CLOUD_RUN_SIMULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
 CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
 REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
 UNREACHABLE = "The simulation service could not be reached."
+# The service never answers 502 or 504 itself: a proxy in front of it, such as
+# Cloud Run's front end, answers them in its place, possibly after the
+# service created the record.
+PROXY_STAND_IN_STATUSES = frozenset(
+    {HTTPStatus.BAD_GATEWAY, HTTPStatus.GATEWAY_TIMEOUT}
+)
+# Transport errors raised before the request could reach the service. After
+# any other, the service may have received the submission and created the
+# record.
+CONNECTION_NEVER_MADE = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
 @dataclass(frozen=True)
@@ -112,9 +128,13 @@ class _RefusedField(_AnswerModel):
 
 
 class _Refusal(_AnswerModel):
-    """A refusal's body: a reason, or each refused request field."""
+    """A refusal's or failure's body: a reason, or each refused request field.
+
+    A failure may also name its ``code``.
+    """
 
     detail: str | list[_RefusedField]
+    code: str | None = None
 
 
 def _policy_choice(choice: PolicyChoice) -> dict[str, str | None]:
@@ -207,22 +227,49 @@ def _refusal_reason(refusal: _Refusal) -> str:
     return "; ".join(reasons) or "the request is invalid"
 
 
-def _raise_for_refusal(answer: SimulationAnswer) -> None:
-    """Raise the error a refusal, a failure or another answer means."""
+def _refusal(answer: SimulationAnswer) -> _Refusal | None:
+    try:
+        return _Refusal.model_validate_json(answer.content)
+    except ValidationError:
+        return None
+
+
+def _internal_error(refusal: _Refusal | None, record: str) -> str:
+    """Describe the service's failure, which may have created the record."""
+    warning = (
+        f"It may have created the {record}, so submitting again could create another."
+    )
+    if refusal is None or not isinstance(refusal.detail, str):
+        return f"The simulation service answered 500. {warning}"
+    code = "" if refusal.code is None else f" ({refusal.code})"
+    return f"The simulation service failed{code}: {refusal.detail} {warning}"
+
+
+def _raise_for_refusal(answer: SimulationAnswer, record: str) -> None:
+    """Raise the error a refusal, a failure or another answer means.
+
+    ``record`` names what the submission creates (``report`` or
+    ``simulation``).
+    """
+    refusal = _refusal(answer)
     if answer.status_code in REFUSAL_STATUSES:
-        try:
-            refusal = _Refusal.model_validate_json(answer.content)
-        except ValidationError as error:
+        if refusal is None:
             msg = f"The simulation service answered {answer.status_code} unreadably."
-            raise SimulationServiceUnavailableError(msg) from error
+            raise SimulationServiceUnavailableError(msg)
         msg = (
             "The simulation service cannot run this request: "
             f"{_refusal_reason(refusal)}"
         )
         raise SimulationServiceRefusalError(msg)
     if answer.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
-        msg = "The simulation service failed while creating the record."
-        raise SimulationServiceInternalError(msg)
+        raise SimulationServiceInternalError(_internal_error(refusal, record))
+    if answer.status_code in PROXY_STAND_IN_STATUSES:
+        msg = (
+            "The simulation service may have received the submission, but "
+            f"{answer.status_code} was answered in its place. Check whether it "
+            f"created the {record} before submitting again."
+        )
+        raise SimulationServiceAnswerUnreadableError(msg)
     msg = f"The simulation service answered {answer.status_code}."
     raise SimulationServiceUnavailableError(msg)
 
@@ -275,19 +322,41 @@ class SimulationServiceReportClient:
         self,
         send: Callable[[httpx.Client, dict[str, Any]], SimulationAnswer],
         body: dict[str, Any],
+        *,
+        record: str,
     ) -> SimulationAnswer:
+        """Send ``body`` and return the answer, which may be a refusal.
+
+        Raise SimulationServiceUnavailableError when the connection was never
+        made or the gateway token cannot be fetched, and
+        SimulationServiceAnswerUnreadableError when the answer was lost after
+        the submission may have reached the service, which may then have
+        created the ``record``.
+        """
         try:
             return send(self._http_client, body)
-        except (httpx.HTTPError, GatewayAuthError) as error:
+        except (*CONNECTION_NEVER_MADE, GatewayAuthError) as error:
             raise SimulationServiceUnavailableError(UNREACHABLE) from error
+        except httpx.HTTPError as error:
+            msg = (
+                "The simulation service may have received the submission, but "
+                f"its answer did not arrive ({type(error).__name__}). Check "
+                f"whether it created the {record} before submitting again."
+            )
+            raise SimulationServiceAnswerUnreadableError(msg) from error
 
     def submit_simulation(
         self, simulation: EconomySimulationCreationInput
     ) -> SubmittedSimulation:
-        """Create the simulation and its first run; return their IDs."""
-        answer = self._answer(self._send_simulation, simulation_request(simulation))
+        """Create the simulation and its first run; return their IDs.
+
+        Raise the errors ``SimulationServiceClient`` names.
+        """
+        answer = self._answer(
+            self._send_simulation, simulation_request(simulation), record="simulation"
+        )
         if answer.status_code not in CREATED_STATUSES:
-            _raise_for_refusal(answer)
+            _raise_for_refusal(answer, "simulation")
         try:
             created = _CreatedSimulation.model_validate_json(answer.content)
         except ValidationError as error:
@@ -302,10 +371,15 @@ class SimulationServiceReportClient:
         )
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
-        """Create the report, its simulations and runs; return the report's IDs."""
-        answer = self._answer(self._send_report, report_request(report))
+        """Create the report, its simulations and runs; return the report's IDs.
+
+        Raise the errors ``SimulationServiceClient`` names.
+        """
+        answer = self._answer(
+            self._send_report, report_request(report), record="report"
+        )
         if answer.status_code not in CREATED_STATUSES:
-            _raise_for_refusal(answer)
+            _raise_for_refusal(answer, "report")
         try:
             created = _CreatedReport.model_validate_json(answer.content)
         except ValidationError as error:

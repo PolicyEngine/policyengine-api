@@ -47,15 +47,17 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
     SimulationServiceRefusalError,
 )
 # How the simulation service's answers and the submission checks are answered.
-# An internal error or an unreadable created answer is a 500, not a 503: the
-# record may exist, so the caller must not be invited to submit again.
+# The service's failure (500), an unreadable created answer, an answer lost
+# after sending and a proxy's 502 or 504 are a 502, as for household
+# calculations, not a 503: the record exists, or may, so the caller must not
+# be invited to submit again.
 SUBMISSION_ERROR_MAPPINGS = (
     V2ErrorMapping((PolicyNotFoundError,), 404),
     V2ErrorMapping(
         (EconomyCalculationsUnsupportedError, SimulationServiceRefusalError), 422
     ),
     V2ErrorMapping(
-        (SimulationServiceInternalError, SimulationServiceAnswerUnreadableError), 500
+        (SimulationServiceInternalError, SimulationServiceAnswerUnreadableError), 502
     ),
     V2ErrorMapping((SimulationServiceUnavailableError,), 503),
     V2ErrorMapping(

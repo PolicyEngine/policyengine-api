@@ -38,17 +38,20 @@ ReportDescription = Annotated[str, Field(max_length=10_000)]
 class SimulationServiceUnavailableError(RuntimeError):
     """The simulation service could not be asked, or did not answer as expected.
 
-    That covers no answer, an answer of another shape, a gateway token that
-    cannot be fetched, missing configuration and the service's own
-    unavailability.
+    That covers a connection never made, a refusal of another shape, a
+    gateway token that cannot be fetched, missing configuration, the
+    service's own unavailability (503) and any answer no other error names.
+    The service has created nothing, so the caller may submit again.
     """
 
 
 class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service created the record, but its answer is unreadable.
+    """The simulation service created the record, or may have, but its answer is lost.
 
     It answered that it created the simulation or report and started its run,
-    so submitting again would create another.
+    but its answer cannot be read; or its answer was lost after the
+    submission may have reached it; or a proxy in front of it answered 502 or
+    504 in its place. Submitting again could create another.
     """
 
 
@@ -172,8 +175,23 @@ class SubmittedReport:
 class SimulationServiceClient(Protocol):
     """The simulation service's routes that create and start calculations.
 
-    Each raises SimulationServiceRefusalError when the service refuses the
-    request's data, and SimulationServiceUnavailableError otherwise.
+    Each raises:
+
+    - SimulationServiceRefusalError when the service refuses the request's
+      data (its 422, or its 400 for a region, dataset or dynamic it cannot
+      find), with its reasons;
+    - SimulationServiceInternalError when it failed (500), possibly after
+      creating the record;
+    - SimulationServiceAnswerUnreadableError when it created the record but
+      its answer cannot be read, its answer was lost after the submission may
+      have reached it, or a proxy answered 502 or 504 in its place;
+    - SimulationServiceUnavailableError otherwise: a connection never made, a
+      gateway token that cannot be fetched, missing configuration, a refusal
+      of another shape, its 503 or any other answer.
+
+    ``SimulationSubmissionService``, which checks a submission before sending
+    it through a client, also raises EconomyCalculationsUnsupportedError,
+    PolicyNotFoundError and SubmissionStorageError from its checks.
     """
 
     def submit_simulation(
