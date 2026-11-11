@@ -31,6 +31,10 @@ from policyengine_api.services.v2.simulation_service.types import (
     SubmittedSimulation,
 )
 from policyengine_api.spm import SPMSelection
+from tests.unit.v2.stored_report_support import (
+    answer_lost_message,
+    possibly_created_message,
+)
 
 SIMULATION_URL = "https://simulation.example.test"
 ENVIRONMENT_VARIABLES = (
@@ -135,15 +139,6 @@ OTHER_RECORD_IDS = {
     "report": ("simulation_id", SIMULATION_ID),
     "simulation": ("report_id", REPORT_ID),
 }
-
-
-def answer_lost_message(error: str, record: str) -> str:
-    """Return the message for an answer that may follow a created ``record``."""
-    return (
-        "The simulation service may have received the request, but its answer "
-        f"was lost ({error}). Submit the {record} again; if the first request "
-        f"went through, this creates a second {record}."
-    )
 
 
 # Each submission, the record it creates and the status its route answers with.
@@ -266,7 +261,7 @@ def test_data_the_service_refuses_is_reported_with_its_reason() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request: "
+        "The simulation service cannot run this request (422): "
         "spm settings apply only to the US"
     )
 
@@ -286,7 +281,7 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request: "
+        "The simulation service cannot run this request (422): "
         "year: too late; reform.policy_id: bad"
     )
 
@@ -304,7 +299,7 @@ def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
         service.client().submit_report(report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request (spm_unsupported): "
+        "The simulation service cannot run this request (422 spm_unsupported): "
         "spm settings apply only to the US"
     )
 
@@ -331,41 +326,41 @@ def test_a_row_the_caller_named_that_the_service_cannot_find_is_refused(
 
     assert route_status(refused.value) == 422
     assert str(refused.value) == (
-        f"The simulation service cannot run this request ({code}): {reason}"
+        f"The simulation service cannot run this request (400 {code}): {reason}"
     )
 
 
 @pytest.mark.parametrize(
-    ("body", "stated_code"),
+    ("body", "status_and_code"),
     [
         pytest.param(
             {
                 "code": "unknown_catalog_version",
                 "detail": "Country us has no catalog version for .py 4.2.0.",
             },
-            " (unknown_catalog_version)",
+            "400 unknown_catalog_version",
             id="catalog-version-during-a-release",
         ),
         pytest.param(
             {"code": "unknown_policy", "detail": "There is no policy p."},
-            " (unknown_policy)",
+            "400 unknown_policy",
             id="policy-the-public-api-checked",
         ),
         pytest.param(
             {"code": "missing_reference", "detail": "A row was deleted."},
-            " (missing_reference)",
+            "400 missing_reference",
             id="row-deleted-after-the-checks",
         ),
         pytest.param(
             {"detail": "Region state/zz is not in the catalog version."},
-            "",
+            "400",
             id="no-code",
         ),
     ],
 )
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_a_400_naming_none_of_the_callers_rows_is_unavailable(
-    submit, record: str, route_status, body: dict[str, str], stated_code: str
+    submit, record: str, route_status, body: dict[str, str], status_and_code: str
 ) -> None:
     # A 400 the caller cannot act on is a state of the simulation service,
     # such as a catalog version missing while a release deploys.
@@ -376,7 +371,8 @@ def test_a_400_naming_none_of_the_callers_rows_is_unavailable(
 
     assert route_status(unavailable.value) == 503
     assert str(unavailable.value) == (
-        f"The simulation service refused the {record}{stated_code}: {body['detail']}"
+        f"The simulation service refused the {record} ({status_and_code}): "
+        f"{body['detail']}"
     )
     assert unavailable.value.created_record_id is None
 
@@ -394,24 +390,20 @@ def test_a_refusal_of_another_shape_is_unavailable(body: object) -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "stated_error"),
+    ("body", "status_and_code"),
     [
         pytest.param(
             {"code": "internal_error", "detail": "The run could not be started."},
-            "500 internal_error: The run could not be started.",
+            "500 internal_error",
             id="internal-error",
         ),
-        pytest.param(
-            {"detail": "The run could not be started."},
-            "500: The run could not be started.",
-            id="no-code",
-        ),
-        pytest.param(b"", "an unreadable 500", id="unreadable"),
+        pytest.param({"detail": "The run could not be started."}, "500", id="no-code"),
+        pytest.param(b"", "500", id="unreadable"),
     ],
 )
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_an_internal_error_is_not_unavailable(
-    submit, record: str, route_status, body: object, stated_error: str
+    submit, record: str, route_status, body: object, status_and_code: str
 ) -> None:
     # A 500 may come after the service created the record, so it is not a
     # 503, which says the service created nothing.
@@ -421,7 +413,7 @@ def test_an_internal_error_is_not_unavailable(
         submit(service.client())
 
     assert route_status(failed.value) == 502
-    assert str(failed.value) == answer_lost_message(stated_error, record)
+    assert str(failed.value) == possibly_created_message(status_and_code, record)
 
 
 @pytest.mark.parametrize("status_code", [502, 504])
@@ -442,40 +434,91 @@ def test_a_proxys_answer_in_place_of_the_services_is_not_unavailable(
     )
 
 
-@pytest.mark.parametrize("status_code", [200, 302, 404, 409])
+@pytest.mark.parametrize("status_code", [401, 403, 404, 405, 413, 429])
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
-def test_any_other_answer_is_unavailable(
+def test_a_status_sent_before_the_services_route_runs_is_unavailable(
     submit, record: str, route_status, status_code: int
 ) -> None:
-    service = RecordingService(status_code=status_code, body={"detail": "busy"})
-
-    with pytest.raises(
-        SimulationServiceUnavailableError, match=str(status_code)
-    ) as unavailable:
-        submit(service.client())
-
-    assert route_status(unavailable.value) == 503
-
-
-@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
-def test_the_services_unavailability_is_passed_on_with_its_code_and_reason(
-    submit, record: str, route_status
-) -> None:
-    service = RecordingService(
-        status_code=503,
-        body={
-            "code": "manifest_unavailable",
-            "detail": "The v2 version manifest could not be read.",
-        },
-    )
+    # The gateway, Cloud Run or the service's framework answers these before
+    # the service's route runs, so nothing was created.
+    service = RecordingService(status_code=status_code, body={"detail": "Not Found"})
 
     with pytest.raises(SimulationServiceUnavailableError) as unavailable:
         submit(service.client())
 
     assert route_status(unavailable.value) == 503
     assert str(unavailable.value) == (
-        "The simulation service is unavailable (manifest_unavailable): The v2 "
-        "version manifest could not be read."
+        f"The simulation service is unavailable ({status_code})."
+    )
+    assert unavailable.value.created_record_id is None
+
+
+@pytest.mark.parametrize(
+    ("status_and_body", "status_and_code"),
+    [
+        pytest.param((200, REPORT_CREATED), "200", id="200-naming-a-record"),
+        pytest.param((204, b""), "204", id="204"),
+        pytest.param((302, b""), "302", id="302"),
+        pytest.param((408, {"detail": "busy"}), "408", id="408"),
+        pytest.param(
+            (409, {"code": "label_taken", "detail": "The label is taken."}),
+            "409 label_taken",
+            id="409-with-a-code",
+        ),
+        pytest.param((501, b"Not Implemented"), "501", id="501"),
+    ],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_an_unexpected_status_may_have_created_the_record(
+    submit,
+    record: str,
+    route_status,
+    status_and_body: tuple[int, object],
+    status_and_code: str,
+) -> None:
+    # The service's route may have written rows before answering a status
+    # the Public API does not expect, so the answer is not a 503, which says
+    # it created nothing.
+    status_code, body = status_and_body
+    service = RecordingService(status_code=status_code, body=body)
+
+    with pytest.raises(SimulationServiceAnswerUnreadableError) as unexpected:
+        submit(service.client())
+
+    assert route_status(unexpected.value) == 502
+    assert str(unexpected.value) == possibly_created_message(status_and_code, record)
+
+
+@pytest.mark.parametrize(
+    ("body", "status_and_code"),
+    [
+        pytest.param(
+            {
+                "code": "manifest_unavailable",
+                "detail": "The v2 version manifest could not be read.",
+            },
+            "503 manifest_unavailable",
+            id="with-a-code",
+        ),
+        pytest.param(
+            {"detail": "The v2 version manifest could not be read."},
+            "503",
+            id="no-code",
+        ),
+    ],
+)
+@pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
+def test_the_services_unavailability_is_passed_on_with_its_code(
+    submit, record: str, route_status, body: object, status_and_code: str
+) -> None:
+    service = RecordingService(status_code=503, body=body)
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        submit(service.client())
+
+    assert route_status(unavailable.value) == 503
+    assert str(unavailable.value) == (
+        f"The simulation service is unavailable ({status_and_code})."
     )
     assert unavailable.value.created_record_id is None
 
@@ -502,8 +545,7 @@ def test_a_record_the_unavailable_service_created_is_named(
     assert route_status(unavailable.value) == 503
     assert str(unavailable.value) == (
         f"The simulation service created {record} {record_id}, but is "
-        "unavailable (modal_call_refused): Modal refused the call, and the run "
-        "was failed."
+        "unavailable (503 modal_call_refused)."
     )
     assert unavailable.value.created_record_id == record_id
 
@@ -528,22 +570,28 @@ def test_a_503_naming_only_another_records_id_may_have_created_the_record(
         submit(service.client())
 
     assert route_status(lost.value) == 502
-    assert str(lost.value) == answer_lost_message(
-        "503 modal_call_refused: Modal refused the call.", record
-    )
+    assert str(lost.value) == possibly_created_message("503 modal_call_refused", record)
 
 
 @pytest.mark.parametrize(
-    "body",
+    ("body", "status_and_code"),
     [
-        b"upstream connect error or disconnect/reset before headers",
-        {"other": "shape"},
+        pytest.param(
+            b"upstream connect error or disconnect/reset before headers",
+            "503",
+            id="proxy-text",
+        ),
+        pytest.param({"other": "shape"}, "503", id="no-detail"),
+        pytest.param(
+            {"code": "modal_call_refused"},
+            "503 modal_call_refused",
+            id="no-detail-with-a-code",
+        ),
     ],
-    ids=["proxy-text", "no-detail"],
 )
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
 def test_a_503_that_cannot_be_read_may_have_created_the_record(
-    submit, record: str, route_status, body: object
+    submit, record: str, route_status, body: object, status_and_code: str
 ) -> None:
     # Cloud Run's front end answers 503 in the service's place when the
     # service's answer is malformed or the connection to its instance fails,
@@ -554,7 +602,7 @@ def test_a_503_that_cannot_be_read_may_have_created_the_record(
         submit(service.client())
 
     assert route_status(lost.value) == 502
-    assert str(lost.value) == answer_lost_message("an unreadable 503", record)
+    assert str(lost.value) == possibly_created_message(status_and_code, record)
 
 
 @pytest.mark.parametrize(("submit", "record", "route_status"), SUBMISSIONS)
@@ -576,7 +624,7 @@ def test_a_503_naming_a_malformed_record_id_may_have_created_the_record(
         submit(service.client())
 
     assert route_status(lost.value) == 502
-    assert str(lost.value) == answer_lost_message("an unreadable 503", record)
+    assert str(lost.value) == possibly_created_message("503 modal_call_refused", record)
 
 
 @pytest.mark.parametrize(

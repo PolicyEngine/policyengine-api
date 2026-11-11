@@ -42,6 +42,8 @@ from tests.unit.v2.stored_report_support import (
     REPORT_ID,
     FakeReportService,
     FakeSimulationService,
+    answer_lost_message,
+    possibly_created_message,
     report_route_client,
 )
 
@@ -181,23 +183,19 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
         ),
         (
             SimulationServiceRefusalError(
-                "The simulation service cannot run this request: no such region"
+                "The simulation service cannot run this request (400 "
+                "unknown_region): no such region"
             ),
             422,
-            "The simulation service cannot run this request: no such region",
+            "The simulation service cannot run this request (400 unknown_region): "
+            "no such region",
         ),
         (
             SimulationServiceInternalError(
-                "The simulation service may have received the request, but its "
-                "answer was lost (500 internal_error: The run failed.). Submit the "
-                "report again; if the first request went through, this creates a "
-                "second report."
+                possibly_created_message("500 internal_error", "report")
             ),
             502,
-            "The simulation service may have received the request, but its answer "
-            "was lost (500 internal_error: The run failed.). Submit the report "
-            "again; if the first request went through, this creates a second "
-            "report.",
+            possibly_created_message("500 internal_error", "report"),
         ),
         (
             SimulationServiceAnswerUnreadableError(
@@ -210,12 +208,10 @@ def test_a_report_body_over_16_kib_is_refused() -> None:
         ),
         (
             SimulationServiceUnavailableError(
-                "The simulation service is unavailable (manifest_unavailable): The "
-                "v2 version manifest could not be read."
+                "The simulation service is unavailable (503 manifest_unavailable)."
             ),
             503,
-            "The simulation service is unavailable (manifest_unavailable): The v2 "
-            "version manifest could not be read.",
+            "The simulation service is unavailable (503 manifest_unavailable).",
         ),
     ],
     ids=[
@@ -343,7 +339,7 @@ def test_a_created_simulation_that_cannot_be_read_back_answers_its_id() -> None:
 def test_a_report_the_unavailable_service_created_answers_its_id(caplog) -> None:
     message = (
         f"The simulation service created report {REPORT_ID}, but is unavailable "
-        "(modal_call_refused): Modal refused the call."
+        "(503 modal_call_refused)."
     )
     error = SimulationServiceUnavailableError(message, created_record_id=REPORT_ID)
     client = report_route_client(reports=FakeReportService(error=error))
@@ -366,7 +362,7 @@ def test_a_simulation_the_unavailable_service_created_answers_its_id(
     simulation_id = FakeSimulationService().simulation.id
     message = (
         f"The simulation service created simulation {simulation_id}, but is "
-        "unavailable (modal_call_refused): Modal refused the call."
+        "unavailable (503 modal_call_refused)."
     )
     error = SimulationServiceUnavailableError(message, created_record_id=simulation_id)
     client = report_route_client(simulations=FakeSimulationService(error=error))
@@ -575,51 +571,94 @@ def post_through_simulation_service(
     return client.post("/v2/simulations?country_id=us", json=simulation_body())
 
 
-def answer_lost_message(error: str, record: str) -> str:
-    """Return the message for an answer that may follow a created ``record``."""
-    return (
-        "The simulation service may have received the request, but its answer "
-        f"was lost ({error}). Submit the {record} again; if the first request "
-        f"went through, this creates a second {record}."
-    )
+# A reason holding stored data, as an exception's text can.
+EXCEPTION_TEXT = (
+    "psycopg.errors.UniqueViolation: Key (label)=(Private household plan) "
+    "already exists."
+)
+CREATED_BODIES = {
+    "report": {
+        "report_id": str(NAMED_RECORD_ID),
+        "report_run_id": str(OTHER_RECORD_ID),
+    },
+    "simulation": {
+        "simulation_id": str(NAMED_RECORD_ID),
+        "simulation_run_id": str(OTHER_RECORD_ID),
+    },
+}
 
 
 @pytest.mark.parametrize(
-    ("answer_for_record", "stated_error"),
+    ("answer", "stated_error"),
     [
+        pytest.param(losing_the_answer, "ReadTimeout", id="answer-lost"),
         pytest.param(
-            lambda _record: losing_the_answer, "ReadTimeout", id="answer-lost"
-        ),
-        pytest.param(
-            lambda _record: answering(502, b"Bad Gateway"),
+            answering(502, b"Bad Gateway"),
             "a proxy answered 502 in its place",
             id="proxy-502",
         ),
         pytest.param(
-            lambda _record: answering(504, b"upstream request timeout"),
+            answering(504, b"upstream request timeout"),
             "a proxy answered 504 in its place",
             id="proxy-504",
         ),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_an_answer_lost_after_sending_answers_502(
+    record: str,
+    answer: Callable[[httpx.Request], httpx.Response],
+    stated_error: str,
+) -> None:
+    # The service may have received the request and created the record, so
+    # the answer is not a 503, which says it created nothing.
+    response = post_through_simulation_service(record, answer)
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "status": "error",
+        "message": answer_lost_message(stated_error, record),
+    }
+
+
+@pytest.mark.parametrize(
+    ("answer_for_record", "status_and_code"),
+    [
         pytest.param(
             lambda _record: answering(
                 500,
                 {"code": "internal_error", "detail": "The run could not be started."},
             ),
-            "500 internal_error: The run could not be started.",
-            id="service-failed",
+            "500 internal_error",
+            id="500",
+        ),
+        pytest.param(
+            lambda _record: answering(500, {"detail": "The run could not be started."}),
+            "500",
+            id="500-without-a-code",
+        ),
+        pytest.param(
+            lambda _record: answering(500, b"Internal Server Error"),
+            "500",
+            id="unreadable-500",
         ),
         pytest.param(
             lambda _record: answering(
                 503, b"upstream connect error or disconnect/reset before headers"
             ),
-            "an unreadable 503",
+            "503",
             id="unreadable-503",
+        ),
+        pytest.param(
+            lambda _record: answering(503, {"code": "modal_call_refused"}),
+            "503 modal_call_refused",
+            id="503-without-detail",
         ),
         pytest.param(
             lambda record: answering(
                 503, modal_refusal_naming(RECORD_ID_FIELDS[record], "not-a-uuid")
             ),
-            "an unreadable 503",
+            "503 modal_call_refused",
             id="503-malformed-record-id",
         ),
         pytest.param(
@@ -629,25 +668,38 @@ def answer_lost_message(error: str, record: str) -> str:
                     OTHER_RECORD_ID_FIELDS[record], str(OTHER_RECORD_ID)
                 ),
             ),
-            "503 modal_call_refused: Modal refused the call.",
+            "503 modal_call_refused",
             id="503-naming-only-another-record",
+        ),
+        pytest.param(
+            lambda record: answering(200, CREATED_BODIES[record]),
+            "200",
+            id="200-naming-the-record",
+        ),
+        pytest.param(lambda _record: answering(204, b""), "204", id="204"),
+        pytest.param(
+            lambda _record: answering(
+                409, {"code": "label_taken", "detail": "The label is taken."}
+            ),
+            "409 label_taken",
+            id="409-with-a-code",
         ),
     ],
 )
 @pytest.mark.parametrize("record", RECORDS)
-def test_an_answer_that_may_follow_a_created_record_answers_502(
+def test_a_failure_that_may_follow_a_created_record_answers_502(
     record: str,
     answer_for_record: Callable[[str], Callable[[httpx.Request], httpx.Response]],
-    stated_error: str,
+    status_and_code: str,
 ) -> None:
-    # Each may follow a record the service created, so none is a 503, which
-    # says it created nothing.
+    # The service's route may have written rows before answering each of
+    # these, so none is a 503, which says it created nothing.
     response = post_through_simulation_service(record, answer_for_record(record))
 
     assert response.status_code == 502
     assert response.json() == {
         "status": "error",
-        "message": answer_lost_message(stated_error, record),
+        "message": possibly_created_message(status_and_code, record),
     }
 
 
@@ -663,7 +715,35 @@ def test_a_503_naming_the_created_record_answers_503_with_its_id(record: str) ->
         "status": "error",
         "message": (
             f"The simulation service created {record} {NAMED_RECORD_ID}, but is "
-            "unavailable (modal_call_refused): Modal refused the call."
+            "unavailable (503 modal_call_refused)."
+        ),
+        id_field: str(NAMED_RECORD_ID),
+    }
+
+
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_503_naming_both_records_answers_503_with_the_submissions_own_id(
+    record: str,
+) -> None:
+    # A report's 503 may also name a simulation it created; the answer names
+    # the submission's own record.
+    id_field = RECORD_ID_FIELDS[record]
+    answer = answering(
+        503,
+        {
+            **modal_refusal_naming(id_field, str(NAMED_RECORD_ID)),
+            OTHER_RECORD_ID_FIELDS[record]: str(OTHER_RECORD_ID),
+        },
+    )
+
+    response = post_through_simulation_service(record, answer)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"The simulation service created {record} {NAMED_RECORD_ID}, but is "
+            "unavailable (503 modal_call_refused)."
         ),
         id_field: str(NAMED_RECORD_ID),
     }
@@ -684,8 +764,52 @@ def test_a_503_naming_no_record_answers_503(record: str) -> None:
     assert response.status_code == 503
     assert response.json() == {
         "status": "error",
-        "message": (
-            "The simulation service is unavailable (manifest_unavailable): The v2 "
-            "version manifest could not be read."
-        ),
+        "message": "The simulation service is unavailable (503 manifest_unavailable).",
     }
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 404, 405, 413, 429])
+@pytest.mark.parametrize("record", RECORDS)
+def test_a_status_sent_before_the_services_route_runs_answers_503(
+    record: str, status_code: int
+) -> None:
+    # The gateway, Cloud Run or the service's framework answers these before
+    # the service's route runs, so nothing was created.
+    response = post_through_simulation_service(
+        record, answering(status_code, {"detail": "Not Found"})
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": f"The simulation service is unavailable ({status_code}).",
+    }
+
+
+@pytest.mark.parametrize(
+    ("status_code", "record_named", "answer_status"),
+    [
+        pytest.param(500, None, 502, id="500"),
+        pytest.param(503, None, 503, id="503-naming-no-record"),
+        pytest.param(503, "own", 503, id="503-naming-the-record"),
+        pytest.param(503, "other", 502, id="503-naming-another-record"),
+    ],
+)
+@pytest.mark.parametrize("record", RECORDS)
+def test_the_services_failure_reason_never_reaches_the_caller(
+    record: str, status_code: int, record_named: str | None, answer_status: int
+) -> None:
+    # A 500's or 503's reason may be an exception's text holding stored data,
+    # which must not reach an anonymous caller. Only the code is passed on.
+    body = {"code": "internal_error", "detail": EXCEPTION_TEXT}
+    if record_named == "own":
+        body[RECORD_ID_FIELDS[record]] = str(NAMED_RECORD_ID)
+    if record_named == "other":
+        body[OTHER_RECORD_ID_FIELDS[record]] = str(OTHER_RECORD_ID)
+
+    response = post_through_simulation_service(record, answering(status_code, body))
+
+    assert response.status_code == answer_status
+    assert f"({status_code} internal_error)" in response.json()["message"]
+    assert "Private household plan" not in response.text
+    assert "psycopg" not in response.text
