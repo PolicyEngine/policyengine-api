@@ -773,8 +773,12 @@ def test_the_default_profile_source_needs_profile_settings_and_the_users_issuer(
     monkeypatch.setenv("AUTH0_USER_PROFILES_DOMAIN", "policyengine.us.auth0.com")
     monkeypatch.setenv("AUTH0_USER_PROFILES_CLIENT_ID", "profile-reader")
     monkeypatch.setenv("AUTH0_USER_PROFILES_CLIENT_SECRET", "raw-profile-secret")
-    # Without the users' issuer no identity can be matched to an Auth0 user.
-    assert dependencies._default_user_profile_source() is None
+    # Without the users' issuer no identity can be matched to an Auth0 user,
+    # so the settings are unusable rather than quietly unused.
+    with pytest.raises(
+        Auth0ManagementConfigurationError, match="need PUBLIC_API_AUTH_ISSUER"
+    ):
+        dependencies._default_user_profile_source()
     monkeypatch.setenv("PUBLIC_API_AUTH_ISSUER", "https://auth.example.test")
     monkeypatch.setenv("PUBLIC_API_AUTH_AUDIENCE", "https://api.policyengine.org/")
 

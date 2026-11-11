@@ -371,6 +371,19 @@ def test_deployment_validation_rejects_shared_staging_database_targets(
             "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE together, or none",
         ),
         (
+            {
+                "PUBLIC_API_AUTH_REQUIRED": "0",
+                "PUBLIC_API_AUTH_ISSUER": None,
+                "PUBLIC_API_AUTH_AUDIENCE": None,
+                "AUTH0_USER_PROFILES_DOMAIN": "policyengine.us.auth0.com",
+                "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+                "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": (
+                    TEST_AUTH0_SECRET_RESOURCE
+                ),
+            },
+            "AUTH0_USER_PROFILES_* settings need PUBLIC_API_AUTH_ISSUER",
+        ),
+        (
             {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a,"},
             "PUBLIC_API_SERVER_CLIENT_IDS must be",
         ),

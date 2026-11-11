@@ -244,10 +244,12 @@ def test_prepare_deletion_fails_when_the_secret_cannot_be_read() -> None:
     assert requests == []
 
 
+USERS_ISSUER = "https://auth.example.test/"
 PROFILE_ENVIRONMENT = {
     "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
     "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
     "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": SECRET_RESOURCE,
+    "PUBLIC_API_AUTH_ISSUER": USERS_ISSUER,
 }
 PROFILE_FIELDS = "user_id,email,email_verified,given_name,family_name,name"
 
@@ -296,12 +298,22 @@ def test_user_profile_settings_are_optional_all_or_none_and_validated() -> None:
                 "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": "auth0-profiles",
             }
         )
+    # Only identities from the users' issuer are looked up, so profiles
+    # without it would be read for nobody.
+    for issuer in ("", "  "):
+        with pytest.raises(
+            Auth0ManagementConfigurationError, match="need PUBLIC_API_AUTH_ISSUER"
+        ):
+            load_auth0_user_profile_settings(
+                {**PROFILE_ENVIRONMENT, "PUBLIC_API_AUTH_ISSUER": issuer}
+            )
     from_resource = load_auth0_user_profile_settings(PROFILE_ENVIRONMENT)
     direct = load_auth0_user_profile_settings(
         {
             "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
             "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
             "AUTH0_USER_PROFILES_CLIENT_SECRET": "raw-profile-secret",
+            "PUBLIC_API_AUTH_ISSUER": USERS_ISSUER,
         }
     )
 
@@ -339,6 +351,7 @@ def test_profile_readers_share_one_client_and_its_token(monkeypatch) -> None:
         "AUTH0_USER_PROFILES_DOMAIN": DOMAIN,
         "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
         "AUTH0_USER_PROFILES_CLIENT_SECRET": "raw-profile-secret",
+        "PUBLIC_API_AUTH_ISSUER": USERS_ISSUER,
     }
 
     first = build_auth0_user_profile_reader(environment)

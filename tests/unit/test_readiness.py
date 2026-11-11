@@ -174,6 +174,16 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
                 "projects/p/secrets/auth0-profiles/versions/latest"
             ),
         },
+        # Complete profile settings need the users' issuer: without it no
+        # identity is a user of the tenant, and profiles would silently be
+        # read for nobody.
+        {
+            "AUTH0_USER_PROFILES_DOMAIN": "policyengine.us.auth0.com",
+            "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": (
+                "projects/p/secrets/auth0-profiles/versions/latest"
+            ),
+        },
         # An allow list of server clients needs the Auth0 settings that check
         # their tokens, and must be a comma-separated list of client IDs.
         {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a"},
