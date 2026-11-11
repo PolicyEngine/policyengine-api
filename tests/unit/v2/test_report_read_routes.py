@@ -54,6 +54,21 @@ def test_a_report_answers_its_definition_newest_run_versions_and_result() -> Non
     ]
 
 
+def test_a_reports_spm_receipts_are_answered_with_package_names_as_keys() -> None:
+    client = report_route_client(reports=FakeReportService())
+
+    item = client.get(f"/v2/reports/{REPORT_ID}?country_id=us").json()["result"]["item"]
+
+    receipts = item["result"]["spm_provenance"]
+    assert receipts == json.loads(json.dumps(us_economy_result()["spm_provenance"]))
+    assert set(receipts["baseline"]["receipt"]["runtime_versions"]) == {
+        "policyengine",
+        "policyengine-core",
+        "policyengine-us",
+        "spm-calculator",
+    }
+
+
 def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
     service = FakeReportService()
     service.report = replace(service.report, status="not_run", run=None, result=None)

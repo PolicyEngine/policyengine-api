@@ -23,7 +23,8 @@ This reverses the simulation service's writer
   ``local_authority_impact`` from their tables, in district or area code
   order.
 - ``cliff_impact``, ``spm_provenance``, ``data_version`` and
-  ``model_version`` from the report run's own columns.
+  ``model_version`` from the report run's own columns; the SPM receipts are
+  read as ``SPMComparisonProvenance``.
 
 An optional part with no rows is null. The writer stores no rows for an empty
 list either, so a UK result whose areas were all withheld reads back with
@@ -33,6 +34,8 @@ null areas, and a UK wealth breakdown without deciles as no breakdown.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
+
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     AgePoverty,
@@ -61,10 +64,13 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     ProgramBudget,
     RacePoverty,
 )
+from policyengine_api.spm import SPMComparisonProvenance
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from uuid import UUID
+
+    from pydantic import JsonValue
 
     from policyengine_api.data.v2.models import (
         CongressionalDistrictImpact as CongressionalDistrictImpactRow,
@@ -172,11 +178,29 @@ def _figure(value: float | None, *, name: str) -> float:
     return value
 
 
+def _spm_provenance(
+    stored: dict[str, JsonValue] | None,
+) -> SPMComparisonProvenance | None:
+    """Return the report run's stored SPM receipts, or None without any.
+
+    Raise EconomyResultUnreadableError for receipts of another shape, such as
+    a baseline and reform whose receipts differ.
+    """
+    if stored is None:
+        return None
+    try:
+        return SPMComparisonProvenance.model_validate(stored)
+    except ValidationError as error:
+        msg = "the report run's SPM receipts are of another shape"
+        raise EconomyResultUnreadableError(msg) from error
+
+
 def economy_result(rows: EconomyResultRows) -> EconomyResult:
     """Return the economy result ``rows`` hold.
 
     Raise EconomyResultUnreadableError when the rows lack a part every
-    economy result has, or the country has no known poverty measures.
+    economy result has, the stored SPM receipts are of another shape, or the
+    country has no known poverty measures.
     """
     country_id = rows.country_id
     if country_id not in POVERTY_TYPES:
@@ -195,7 +219,7 @@ def economy_result(rows: EconomyResultRows) -> EconomyResult:
         row.decile_type == "wealth" for row in rows.intra_decile_impacts
     )
     return EconomyResult(
-        spm_provenance=report_run.spm_provenance,
+        spm_provenance=_spm_provenance(report_run.spm_provenance),
         model_version=report_run.country_package_version,
         data_version=report_run.data_version,
         budget=_budget(rows),

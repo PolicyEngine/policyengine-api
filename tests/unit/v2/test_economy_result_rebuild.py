@@ -202,7 +202,8 @@ def test_result_rows_rebuild_the_result_the_simulation_service_stored(
         stored_rows(output, country=country)
     )
 
-    assert rebuilt.model_dump(mode="json") == as_json(output)
+    # The SPM receipts name their runtime packages, as the Public API serves them.
+    assert rebuilt.model_dump(mode="json", by_alias=True) == as_json(output)
 
 
 @pytest.mark.parametrize(
@@ -220,7 +221,8 @@ def test_result_rows_in_any_order_rebuild_the_same_result(
         stored_rows(output, country=country, reverse_rows=True)
     )
 
-    assert rebuilt.model_dump(mode="json") == as_json(output)
+    # The SPM receipts name their runtime packages, as the Public API serves them.
+    assert rebuilt.model_dump(mode="json", by_alias=True) == as_json(output)
 
 
 def test_rebuilt_result_lists_its_parts_in_the_simulation_service_order() -> None:

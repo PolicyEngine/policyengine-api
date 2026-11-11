@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from policyengine_api.spm import SPMComparisonProvenance
+
 if TYPE_CHECKING:
     from uuid import UUID
 
@@ -301,16 +303,18 @@ class EconomyResult(EconomyResultModel):
     """A report run's single-year economy result, in the format the app reads.
 
     ``model_version`` is the country package version the run used, and
-    ``data_version`` the data release. ``spm_provenance`` is the SPM
-    calculation receipt the simulation service stored, as it stored it, or
-    null. ``wealth_decile`` and ``intra_wealth_decile`` are UK-only;
+    ``data_version`` the data release. ``spm_provenance`` is the baseline's
+    and reform's SPM calculation receipts the simulation service stored, as
+    the Public API's ``SPMComparisonProvenance`` (serialized, as the Public
+    API serializes it elsewhere, with package names as its runtime version
+    keys), or null. ``wealth_decile`` and ``intra_wealth_decile`` are UK-only;
     ``poverty_by_race`` and ``congressional_district_impact`` US-only; the
     constituency and local-authority impacts are UK-only and null when the
     run did not compute them. ``labor_supply_response`` and ``cliff_impact``
     are null when the run did not compute them.
     """
 
-    spm_provenance: dict[str, JsonValue] | None
+    spm_provenance: SPMComparisonProvenance | None
     model_version: str
     data_version: str
     budget: BudgetaryImpact
