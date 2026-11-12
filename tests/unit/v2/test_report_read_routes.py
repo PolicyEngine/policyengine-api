@@ -12,7 +12,6 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
-    ReportKindUnsupportedError,
     ReportStorageError,
     StoredReportNotFoundError,
 )
@@ -91,11 +90,6 @@ def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
             StoredReportNotFoundError("Report x was not found in country 'us'"),
             404,
             "Report x was not found in country 'us'",
-        ),
-        (
-            ReportKindUnsupportedError("Report x is a budget window"),
-            422,
-            "Report x is a budget window",
         ),
         (
             EconomyResultUnreadableError("the budget summary has no household_tax row"),

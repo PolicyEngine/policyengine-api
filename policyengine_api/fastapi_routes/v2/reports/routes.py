@@ -70,7 +70,6 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
-    ReportKindUnsupportedError,
     ReportStorageError,
     StoredReportNotFoundError,
 )
@@ -100,12 +99,10 @@ ReportDetailQueryDependency = Annotated[
 # Refusals a caller can act on carry their own message and are not logged.
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
-    ReportKindUnsupportedError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError,), 404),
-    V2ErrorMapping((ReportKindUnsupportedError,), 422),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (

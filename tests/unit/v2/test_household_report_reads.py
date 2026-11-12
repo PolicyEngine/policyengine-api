@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, get_args
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -54,11 +54,9 @@ from policyengine_api.services.v2.stored_reports.services import V2StoredReportS
 from policyengine_api.services.v2.stored_reports.types import (
     HouseholdReportRead,
     HouseholdReportSummaryRead,
-    ReportKind,
     ReportSummaryRead,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
-    KIND_NAMES,
     CreatedReportUnreadableError,
     StoredReportNotFoundError,
 )
@@ -666,7 +664,3 @@ def test_a_created_household_report_that_cannot_be_read_back_is_named(
 
     assert unreadable.value.country_id == "us"
     assert isinstance(unreadable.value.__cause__, StoredReportNotFoundError)
-
-
-def test_every_report_kind_has_a_name_for_the_unsupported_kind_message() -> None:
-    assert set(KIND_NAMES) == set(get_args(ReportKind))

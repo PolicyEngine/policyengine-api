@@ -79,7 +79,6 @@ from policyengine_api.services.v2.stored_reports.transformations import (
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportStorageError,
-    require_readable_report,
     require_reform_run,
     require_report,
 )
@@ -179,7 +178,7 @@ class V2StoredReportService:
                 report_id=report_id,
                 country_id=country_id,
             )
-            kind = require_readable_report(stored)
+            kind = report_kind(stored.report)
             if kind == "budget_window":
                 return self._budget_window(session, stored)
             if kind == "household":

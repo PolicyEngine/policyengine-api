@@ -47,11 +47,6 @@ if TYPE_CHECKING:
         StoredReportRows,
     )
 
-# The kinds of report the report routes read: every kind there is.
-READABLE_KINDS: frozenset[ReportKind] = frozenset(
-    {"economy", "household", "budget_window"}
-)
-
 
 def report_kind(report: Report) -> ReportKind:
     """Return what the report compares, from the columns its kind sets."""
@@ -253,16 +248,11 @@ def budget_window_read(
 def listed_reports(
     rows: Iterable[StoredReportRows], *, report_ids: Sequence[UUID]
 ) -> list[StoredReportRows]:
-    """Return the reports among ``rows`` these routes read, as named.
+    """Return the reports among ``rows`` in the order of ``report_ids``.
 
-    They are in the order of ``report_ids``. A report named twice is listed
-    once, where it is first named.
+    A report named twice is listed once, where it is first named.
     """
-    by_id = {
-        stored.report.id: stored
-        for stored in rows
-        if report_kind(stored.report) in READABLE_KINDS
-    }
+    by_id = {stored.report.id: stored for stored in rows}
     listed: list[StoredReportRows] = []
     for report_id in dict.fromkeys(report_ids):
         stored = by_id.get(report_id)
