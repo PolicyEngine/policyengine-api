@@ -160,7 +160,11 @@ class StoredHouseholdReport:
 
 @dataclass(frozen=True)
 class RunToStore:
-    """A report run to store: its status, and each simulation run's result."""
+    """A report run to store: its status, and each simulation run's result.
+
+    Each simulation run has the status its document records, as the
+    household function writes it, or the report run's without one.
+    """
 
     status: ReportRunStatus = ReportRunStatus.SUCCEEDED
     baseline_result: dict[str, Any] | None = None
@@ -241,18 +245,24 @@ def store_household_report(
     report_run_id = baseline_run_id = reform_run_id = None
     if run is not None:
         completed_at = STORED_AT + timedelta(minutes=1) if run.finished else None
-        simulation_status = SimulationStatus(run.status.value)
 
         def simulation_run(
             simulation_id: UUID, document: dict[str, Any] | None
         ) -> SimulationRun:
+            recorded_status = (document or {}).get("status")
+            status = SimulationStatus(
+                recorded_status
+                if recorded_status in {"succeeded", "failed"}
+                else run.status.value
+            )
+            finished = status in {SimulationStatus.SUCCEEDED, SimulationStatus.FAILED}
             return SimulationRun(
                 simulation_id=simulation_id,
                 year=2026,
                 tax_benefit_model_version_id=version.id,
-                status=simulation_status,
+                status=status,
                 started_at=STORED_AT,
-                completed_at=completed_at,
+                completed_at=completed_at or (STORED_AT if finished else None),
                 household_result=document,
                 **RUN_VERSIONS,
             )
