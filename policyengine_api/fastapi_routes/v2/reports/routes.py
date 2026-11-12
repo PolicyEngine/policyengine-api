@@ -111,13 +111,11 @@ ReportRunsQueryDependency = Annotated[
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
     ReportKindUnsupportedError,
-    SimulationServiceConflictError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError,), 404),
     V2ErrorMapping((ReportKindUnsupportedError,), 422),
-    V2ErrorMapping((SimulationServiceConflictError,), 409),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (EconomyResultUnreadableError,),
@@ -253,9 +251,10 @@ def _add_report_run_routes(
             "it. Every earlier run is kept. Without force, each side reuses a "
             "run of its own simulation that succeeded on those versions; with "
             "force, both simulations are calculated again. Answers the report as "
-            "stored, with the new run as its newest; read it again to follow the "
-            "run. A report with a run pending or running answers 409 naming "
-            "that run."
+            "stored, whose newest run is then the new one, since no other run "
+            "starts while it is pending or running: a report with a run pending "
+            "or running answers 409 naming that run. Read the report again to "
+            "follow the run."
         ),
     )
     def rerun_report(

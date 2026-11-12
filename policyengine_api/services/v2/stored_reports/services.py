@@ -68,6 +68,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
     RerunReportUnreadableError,
     require_economy_report,
+    require_economy_report_runs,
     require_reform_run,
     require_report,
 )
@@ -122,7 +123,7 @@ def _stored_report(
 
 
 class V2StoredReportService:
-    """Read v2 reports and their results, and create economy reports."""
+    """Read v2 reports and their results; create economy reports and run them again."""
 
     def __init__(
         self,
@@ -235,7 +236,7 @@ class V2StoredReportService:
         submissions = self._configured_submissions()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            require_economy_report(stored)
+            require_economy_report_runs(stored)
         submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -261,7 +262,7 @@ class V2StoredReportService:
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            require_economy_report(stored)
+            require_economy_report_runs(stored)
             return report_runs_read(
                 stored,
                 read_report_runs(session, report_id=report_id),

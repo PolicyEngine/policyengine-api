@@ -17,6 +17,11 @@ if TYPE_CHECKING:
 
 READABLE_KIND = "economy"
 KIND_NAMES = {"household": "a household report", "budget_window": "a budget window"}
+# The kinds of report whose runs the run routes do not start or list yet.
+KINDS_WITHOUT_RUN_ROUTES = {
+    "household": "a household report",
+    "budget_window": "a budget window",
+}
 
 
 class StoredReportNotFoundError(LookupError):
@@ -89,6 +94,22 @@ def require_economy_report(rows: StoredReportRows) -> None:
         msg = (
             f"Report {rows.report.id} is {KIND_NAMES[kind]}, which this route "
             "cannot read yet"
+        )
+        raise ReportKindUnsupportedError(msg)
+
+
+def require_economy_report_runs(rows: StoredReportRows) -> None:
+    """Raise ReportKindUnsupportedError unless the run routes take the report's kind.
+
+    They start and list runs of economy reports. They take household
+    reports and budget windows once their own PRs add them, separately from
+    the read routes' kinds.
+    """
+    kind = report_kind(rows.report)
+    if kind in KINDS_WITHOUT_RUN_ROUTES:
+        msg = (
+            f"Report {rows.report.id} is {KINDS_WITHOUT_RUN_ROUTES[kind]}, whose "
+            "runs these routes do not start or list yet"
         )
         raise ReportKindUnsupportedError(msg)
 

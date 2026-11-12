@@ -7,7 +7,7 @@ country's ``countries`` row allows economy calculations (a household-only
 country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
 none), and that none of those policies sets a parameter the running catalog
-version lacks (``require_runnable_policies``, which re-runs should call too).
+version lacks (``require_runnable_policies``, which re-runs call too).
 Only then is the simulation service asked. The dynamics a submission names,
 its region and its dataset are checked by the simulation service, which reads
 them in the catalog version its default worker runs. Running a stored report
@@ -75,7 +75,7 @@ def require_runnable_policies(
     names no policy, and a policy the running catalog could not check passes.
     Raise SubmissionStorageError when the database or its catalog cannot be
     read. Anything else that starts a run of stored policies, such as a re-run,
-    should check them here first.
+    checks them here first.
     """
     with _storage_failures():
         stored_policies = [

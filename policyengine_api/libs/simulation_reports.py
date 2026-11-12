@@ -90,8 +90,8 @@ Wiring the generated simulation client: ``post_simulation``,
 ``post_report`` and ``post_report_rerun`` are the only code that sends a
 request, and each returns the status and body, which the rest of these
 modules read. Once a
-``policyengine-api-simulation-client`` release has the two routes, depend on
-that release and make each function call the generated operation, as its
+``policyengine-api-simulation-client`` release has the three routes, depend
+on that release and make each function call the generated operation, as its
 docstring says.
 """
 
@@ -383,7 +383,7 @@ def _raise_for_refusal(answer: SimulationAnswer, record: RecordName) -> NoReturn
 
 
 class SimulationServiceReportClient:
-    """Create simulations and reports through the simulation service."""
+    """Create simulations and reports, and run reports again, through the service."""
 
     def __init__(
         self,

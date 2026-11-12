@@ -92,8 +92,8 @@ class RerunReportUnreadableResponse(V2ErrorResponse):
 
 NOT_FOUND = "No report has this ID in this country."
 OTHER_KIND = (
-    "or the report is a household report or a budget window, which these routes "
-    "do not run or list yet"
+    "or the report is a household report or a budget window, whose runs these "
+    "routes do not start or list yet"
 )
 RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),
@@ -141,9 +141,14 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     503: error_response(
         "The simulation service started nothing that runs: it cannot be reached "
-        "or is not configured, or answered that it is unavailable, with its "
-        "status and code; when Modal refused the new run's call, the service "
-        "failed that run, and the message names it. Or the v2 database, or the "
-        "catalog the policies are checked against, cannot be read."
+        "or is not configured; it answered a readable 503, and the message gives "
+        "its status and code, and names the new run it failed when Modal refused "
+        "the run's call; it answered a 400 about its own state rather than a row "
+        "the report names (such as a catalog version missing while a release "
+        "deploys), and the message gives its code and reason; it answered 400, "
+        "409 or 422 in a shape the Public API cannot read; or it answered 401, "
+        "403, 404, 405, 413 or 429, which it sends before writing anything. Or "
+        "the v2 database, or the catalog the policies are checked against, "
+        "cannot be read."
     ),
 }

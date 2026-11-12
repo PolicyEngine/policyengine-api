@@ -53,8 +53,9 @@ class SimulationServiceUnavailableError(RuntimeError):
     service's route runs; the service's own readable 503; a 400 that
     describes the service's state, or a row the Public API checks first,
     rather than the caller's request (such as a catalog version missing
-    while a release deploys); and a 400 or 422 the client cannot read. The
-    route answers 503.
+    while a release deploys); a 400 or 422 the client cannot read; and a
+    re-run's 409 the client cannot read, which the service answers only
+    before writing anything. The route answers 503.
 
     A message gives the service's reason only for a readable 400. For any
     other answer it gives the status, and the code when that is a fixed
