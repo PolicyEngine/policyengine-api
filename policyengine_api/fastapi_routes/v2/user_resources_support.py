@@ -50,6 +50,8 @@ from policyengine_api.services.v2.user_simulations.validators import (
     AssociationSimulationNotFoundError,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserEmailSearchRefusedError,
+    AdminUserProfilesUnavailableError,
     LastAdminDeletionError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
@@ -210,7 +212,12 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     UserResourceFailure((UserTypeBelowMinimumError,), 403),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
-        (LegacyReferenceNotFoundError, AssociationLinkNotFoundError), 422
+        (
+            LegacyReferenceNotFoundError,
+            AssociationLinkNotFoundError,
+            AdminUserEmailSearchRefusedError,
+        ),
+        422,
     ),
     UserResourceFailure(
         (
@@ -237,7 +244,9 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         (IntegrityError,), 409, "The record conflicts with stored state"
     ),
     UserResourceFailure((AccountIdentityDeletionError,), 502),
-    UserResourceFailure((AccountDeletionUnavailableError,), 503),
+    UserResourceFailure(
+        (AccountDeletionUnavailableError, AdminUserProfilesUnavailableError), 503
+    ),
     # Schema drift and rejected data surface here too, so keep a record.
     UserResourceFailure(
         (V2ConfigurationError, SQLAlchemyError),

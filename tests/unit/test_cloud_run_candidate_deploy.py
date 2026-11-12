@@ -432,6 +432,46 @@ def test_deploy_cloud_run_candidate_passes_user_auth_settings():
     )
 
 
+def test_deploy_cloud_run_candidate_passes_auth0_user_profile_settings_when_set():
+    without_profiles = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            AUTH0_USER_PROFILES_DOMAIN="",
+            AUTH0_USER_PROFILES_CLIENT_ID="",
+            AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE="",
+        ),
+    )
+    with_profiles = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            AUTH0_USER_PROFILES_DOMAIN="policyengine.us.auth0.com",
+            AUTH0_USER_PROFILES_CLIENT_ID="profile-reader",
+            AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE=TEST_AUTH0_SECRET_RESOURCE,
+        ),
+    )
+
+    assert without_profiles.returncode == 0, without_profiles.stderr
+    assert "AUTH0_USER_PROFILES" not in without_profiles.stdout
+    assert with_profiles.returncode == 0, with_profiles.stderr
+    # The command trace escapes the list's separators.
+    for setting in (
+        "AUTH0_USER_PROFILES_DOMAIN=policyengine.us.auth0.com",
+        "AUTH0_USER_PROFILES_CLIENT_ID=profile-reader",
+        f"AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE={TEST_AUTH0_SECRET_RESOURCE}",
+    ):
+        assert rf"\|{setting}" in with_profiles.stdout
+    # The resource names the secret's version; the secret itself never
+    # reaches the deploy.
+    assert "AUTH0_USER_PROFILES_CLIENT_SECRET=" not in with_profiles.stdout
+    assert "AUTH0_MANAGEMENT" not in with_profiles.stdout
+
+
 def test_deploy_cloud_run_candidate_passes_the_server_client_allow_list():
     result = _run_script(
         ".github/scripts/deploy_cloud_run_candidate.sh",

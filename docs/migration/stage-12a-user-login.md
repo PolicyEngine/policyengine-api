@@ -116,17 +116,96 @@ type first, and each operation checks it again in its own transaction.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's email, ignoring case, with `%` and `_` matching themselves. |
+| `GET /v2/admin/users?email=&offset=&limit=` | Signed-in users, newest first; `email` matches any part of the user's own or any identity's stored email, or, with Auth0 user profiles configured, of the user's Auth0 email (see "Emails and names from Auth0"), ignoring case, with every character, `%` and `_` included, matching itself. |
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
-primary_country, created_at, last_seen_at}`: `email` is that of the most
-recently seen of the user's identities that has one, else the user's own, and
+primary_country, created_at, last_seen_at}`. Without Auth0 user profiles,
+`email` is that of the most recently seen of the user's identities that has
+one, else the user's own, and the names are the user's stored ones;
 `last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
 never listed, read or changed (404), since their IDs are their browsers'
 credentials.
+
+### Emails and names from Auth0
+
+Auth0 access tokens carry no email claim, and the Public API stores no email
+it doesn't receive, so stored emails are mostly empty. With the
+`AUTH0_USER_PROFILES_*` settings (see "Settings"), the admin routes read each
+user's email and names from the users' Auth0 tenant through its Management
+API when an admin asks, and store none of them:
+
+- Only identities whose issuer equals `PUBLIC_API_AUTH_ISSUER`, normalized
+  with a trailing `/` as identities store it, are looked up; their subjects
+  are Auth0 user IDs. Identities from any other issuer keep their stored
+  values. The profile settings are refused without `PUBLIC_API_AUTH_ISSUER`
+  (readiness and the deploy validation fail), since no identity could be
+  looked up.
+- `GET /v2/admin/users` reads the page from the database as before, then
+  reads the page's profiles with one `GET /api/v2/users` search for each
+  group of at most 50 user IDs (`q=user_id:("…" OR "…")`,
+  `search_engine=v3`, `sort=user_id:1`, only `user_id`, `email`,
+  `email_verified`, `given_name`, `family_name` and `name`), all through one
+  HTTP client, so one connection serves them. `GET /v2/admin/users/{user_id}`,
+  the `PATCH` response and the history's `changed_by_email` are filled the
+  same way.
+- Each user's profiles are taken in identity order, most recently seen
+  first. `email` is the first verified email, else the first email, else the
+  stored one. `first_name` and `last_name` are the given and family names of
+  the first profile with either, each else the stored one; when neither a
+  profile nor the user has a first or last name, a profile's full `name` that
+  isn't an email address (Auth0 sets a password user's `name` to its email)
+  is the first name.
+- `GET /v2/admin/users?email=…` refuses text with `<` or `>` with 422
+  before any Auth0 call, with or without the profile settings: no email
+  address holds them unquoted, and Auth0's query syntax reads them as a
+  range (`email:>a*`) and can't escape them. It then searches Auth0 for the
+  users whose email contains the text: `email:*text*`, or `email:text*` (a
+  prefix) for fewer than three characters, since Auth0 needs three
+  characters after a leading wildcard. The text is lowercased, and every
+  Lucene special character (`+ - & | ! ( ) { } [ ] ^ " ~ * ? : \ /`) and
+  whitespace in it is escaped, so it can't change the query. Results are
+  read 50 a page, sorted by user ID so pages don't shift, through one HTTP
+  client, counting each user once. The search stops once more than 200
+  Auth0 users match (`MAXIMUM_EMAIL_SEARCH_MATCHES`), which takes at most
+  five pages, and the route answers 422 "More than 200 users match that
+  email text; enter more of it"; exactly 200 are served. A full fifth page
+  counts as more than 200 too: only duplicate or ID-less entries can make
+  it full, and it may hide more users. Otherwise the
+  route lists the users with an identity from the users' issuer among
+  those Auth0 users, together with the users whose stored email matches as
+  before, newest first, with the same `offset`, `limit` and `has_more`.
+  Auth0's search is eventually consistent, so a user created or changed
+  moments ago may be missing. Without the profile settings (local
+  development), the search reads stored emails only.
+- When the profile settings are present but Auth0 can't answer (a timeout,
+  a connection error, a failed token request, 403 for a client without
+  `read:users`, 429, a 5xx), the list, the single read, the `PATCH`
+  response and the history answer with stored values and record the WARNING
+  `admin_user_profiles_unavailable` with only the operation, the error type
+  and a cause: `http_<status>` (`http_403` for a client without
+  `read:users`, `http_429` for rate limiting), `timeout`,
+  `connection_error`, `unreadable_answer`, `token_http_<status>`,
+  `token_unreadable_answer`, `secret_unavailable`, `invalid_settings` or
+  `unknown`; never an email, a user ID, a token or a secret. A type change
+  is committed before its response reads Auth0, so it stands either way. An
+  email search can't be served without Auth0 and answers 503.
+- Each Auth0 call is a Management API request, rate limited per tenant (2 a
+  second on the Free plan). A rate-limited request (429) is retried once
+  after the wait Auth0 gives, from `Retry-After` (which comes first) or
+  `X-RateLimit-Reset` less the current time, when that wait fits in what is
+  left of the admin request's budget: 2 seconds of waiting in total, shared
+  by the email search and the profile read of one admin request
+  (`policyengine_api.libs.rate_limit_wait_budget`; a negative or non-finite
+  wait is never taken). Otherwise,
+  or when the retry is rate limited too, or the wait isn't a finite number,
+  Auth0 counts as unable to answer. A page of 100 users needs at least two
+  profile searches, and an email search at most five pages more.
+
+The response shapes are unchanged; the routes' OpenAPI descriptions say where
+the emails and names come from.
 
 Each change is a row of `user_type_changes`: the user, the previous and new
 types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
@@ -558,6 +637,9 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `AUTH0_MANAGEMENT_DOMAIN` | GitHub variable (optional, `production` only) | Canonical tenant domain (the Management API is not served on custom domains) |
 | `AUTH0_MANAGEMENT_CLIENT_ID` | GitHub variable (optional, `production` only) | M2M client with `delete:users` |
 | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `production` only) | Secret Manager version holding the M2M client secret |
+| `AUTH0_USER_PROFILES_DOMAIN` | GitHub variable (optional, `staging` and `production`) | The users' tenant's canonical domain, for reading users' emails and names for the admin routes; the group needs `PUBLIC_API_AUTH_ISSUER` |
+| `AUTH0_USER_PROFILES_CLIENT_ID` | GitHub variable (optional, `staging` and `production`) | Read-only M2M client with `read:users` |
+| `AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `staging` and `production`) | Secret Manager version holding that client's secret |
 
 > **Set the final issuer before the first sign-in.** `user_identities` is
 > keyed by `(issuer, subject)`, so `PUBLIC_API_AUTH_ISSUER` must hold its
@@ -569,17 +651,28 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 > with no sign-in that can read, export, or delete them. Nothing re-keys
 > identities automatically.
 
+The two Auth0 groups, `AUTH0_MANAGEMENT_*` and `AUTH0_USER_PROFILES_*`, are
+each all-or-none: a domain, a client ID and exactly one client-secret source
+(`…_CLIENT_SECRET_RESOURCE`, or `…_CLIENT_SECRET` for local use). Both use
+the same client code and token cache; they are separate so that staging can
+read users without being able to delete them.
+
 `readiness.validate_policy_runtime_configuration` validates the
 `PUBLIC_API_AUTH_*`, `PUBLIC_API_SERVER_AUTH_ISSUER`,
-`PUBLIC_API_SERVER_CLIENT_IDS` and `AUTH0_MANAGEMENT_*` settings. Inconsistent values fail
-readiness, which is the deploy gate. Request handling reads the
+`PUBLIC_API_SERVER_CLIENT_IDS`, `AUTH0_MANAGEMENT_*` and
+`AUTH0_USER_PROFILES_*` settings. Inconsistent values fail
+readiness, which the deploy waits on. Request handling reads the
 `PUBLIC_API_AUTH_*` settings only for a bearer token, so nothing in them
 blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
 `PUBLIC_API_AUTH_REQUIRED` (`0` or `1`) and checks the issuer, audience, and
-all-or-none Management settings, and it rejects Management settings outside
-production and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
+all-or-none Management and user profile settings, and it rejects Management
+settings outside production, user profile settings without
+`PUBLIC_API_AUTH_ISSUER` and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
+It allows the user profile settings in staging and production.
 `deploy_cloud_run_candidate.sh` writes them to the revision. The release test
-step unsets them.
+step unsets the `PUBLIC_API_AUTH_*` and `PUBLIC_API_SERVER_*` settings; the
+`release-tests` job never receives the `AUTH0_MANAGEMENT_*` or
+`AUTH0_USER_PROFILES_*` settings.
 
 Every request's `Authorization` header is checked before route matching
 (`policyengine_api.request_caller`), so a bearer token sent to any route, not
@@ -671,7 +764,8 @@ into it, and deletes everything it created, so it can run repeatedly. With
 Management API deletion configured, deleting the account would also delete
 the CI user from Auth0, so the staging deploy job never receives the
 `AUTH0_MANAGEMENT_*` settings and the deploy validation rejects them outside
-production.
+production. The `AUTH0_USER_PROFILES_*` client only reads users, so staging
+may have it.
 
 ## Auth0 prerequisites (operator)
 
@@ -700,6 +794,19 @@ Configure staging first, then production:
 
    Without the grant, every signed-in account deletion returns 503 and
    deletes nothing.
+6. **Optional read-only Management API M2M client** with only `read:users`,
+   in each environment's users' tenant (staging and production), for the
+   admin routes' emails and names. Put its domain and client ID in that
+   GitHub environment's `AUTH0_USER_PROFILES_DOMAIN` and
+   `AUTH0_USER_PROFILES_CLIENT_ID` variables, store its client secret in
+   Secret Manager, put the version's resource name in the environment's
+   `AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE` secret, and grant that
+   environment's Cloud Run runtime service account
+   (`policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com`
+   in staging, the `GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT` GitHub secret in
+   production) `roles/secretmanager.secretAccessor` on that secret, with the
+   command above. Without the grant, or without `read:users`, admins see
+   stored values and an email search answers 503.
 
 ## Rollout
 
