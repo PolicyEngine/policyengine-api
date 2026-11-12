@@ -380,5 +380,11 @@ cycle, six calculations submitted at once (each accepted within
 `STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`, 10 by default, and finished within
 `STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS`, 300), a household across 401 axis
 points, and a parity set of three US and three UK households compared value
-by value with `/calculate` and `/calculate-full`. The checks need the
-simulation service's household calculation route deployed to staging first.
+by value with `/calculate` and `/calculate-full`. The parity set waits 320 s
+for each `/calculate` or `/calculate-full` answer, longer than the candidate's
+300 s Cloud Run request timeout: `/calculate-full` calculates every variable
+the household leaves out, which took 224 s on staging. A unit test sends each
+parity household through those routes' input checks with the installed
+country models, so a household they refuse fails before a release. The checks
+need the simulation service's household calculation route deployed to staging
+first.

@@ -1,0 +1,1 @@
+Fix the live staging household parity checks: the US household's `income_tax` is on its tax unit, where `/calculate` expects it, and the checks wait longer than the candidate's 300 s request timeout for `/calculate-full`.
