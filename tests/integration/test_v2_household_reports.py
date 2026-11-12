@@ -264,7 +264,7 @@ def store_household_report(
         reform_simulation_id=reform_id,
         household_id=household_id,
         year=2026,
-        inputs=json.dumps({"add_missing_variables": True}),
+        inputs=json.dumps({}),
     )
     catalog.report_ids.append(report_id)
     report_run_id = uuid4()
@@ -389,7 +389,6 @@ def household_body(household_id: UUID, policy_id: UUID) -> dict[str, Any]:
         "household_id": str(household_id),
         "baseline": {},
         "reform": {"policy_id": str(policy_id)},
-        "add_missing_variables": True,
     }
 
 
@@ -409,7 +408,7 @@ def test_a_household_report_answers_both_calculated_households(
     item = response.json()["result"]["item"]
     assert item["kind"] == "household"
     assert item["household_id"] == str(household_id)
-    assert item["options"] == {"add_missing_variables": True}
+    assert item["options"] == {}
     assert item["status"] == "succeeded"
     assert item["run"]["id"] == str(stored.report_run_id)
     assert item["reform_simulation"]["policy_id"] == str(catalog.policy_id)
@@ -551,7 +550,6 @@ def test_a_household_only_country_creates_a_household_report(
     assert item["result"] is None
     (sent,) = simulation_service.household_reports
     assert sent.household_id == household_id
-    assert sent.add_missing_variables is True
 
 
 def test_a_household_the_country_does_not_store_is_not_sent(

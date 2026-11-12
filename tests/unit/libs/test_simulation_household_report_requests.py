@@ -77,7 +77,6 @@ def test_a_household_report_is_posted_and_the_created_report_returned() -> None:
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {"policy_id": None},
         "reform": {"policy_id": str(POLICY_ID)},
-        "add_missing_variables": False,
     }
 
 
@@ -85,7 +84,6 @@ def test_a_report_of_the_baseline_alone_sends_a_null_reform() -> None:
     body = household_report_input(
         baseline={"policy_id": str(POLICY_ID)},
         reform=None,
-        add_missing_variables=True,
     )
 
     assert household_report_request(body) == {
@@ -96,7 +94,6 @@ def test_a_report_of_the_baseline_alone_sends_a_null_reform() -> None:
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {"policy_id": str(POLICY_ID)},
         "reform": None,
-        "add_missing_variables": True,
     }
 
 

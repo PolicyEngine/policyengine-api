@@ -144,9 +144,7 @@ def test_a_household_report_is_sent_once_its_country_household_and_policies_pass
     client = RecordingHouseholdReportService()
     households = StoredHouseholds()
     policies = StoredPolicies()
-    report = household_report_input(
-        baseline={"policy_id": str(STORED_POLICY_ID)}, add_missing_variables=True
-    )
+    report = household_report_input(baseline={"policy_id": str(STORED_POLICY_ID)})
 
     submitted = household_submissions(
         lambda: client, households=households, policies=policies
@@ -316,7 +314,6 @@ def test_a_household_report_without_a_reform_is_of_the_baseline_alone() -> None:
     )
 
     assert report.reform is None
-    assert report.add_missing_variables is False
     assert report.description is None
 
 
@@ -326,7 +323,8 @@ def test_a_household_report_without_a_reform_is_of_the_baseline_alone() -> None:
         pytest.param({"label": ""}, id="empty-label"),
         # The report is for the household's default year, so it names none.
         pytest.param({"year": 2026}, id="year"),
-        pytest.param({"add_missing_variables": "true"}, id="option-not-a-boolean"),
+        # A household report always adds every variable the household lacks.
+        pytest.param({"add_missing_variables": True}, id="add-missing-variables"),
         pytest.param({"baseline": {"dynamic_id": str(uuid4())}}, id="dynamic"),
         pytest.param({"region_code": "us"}, id="region"),
         pytest.param({"household_id": "not-a-uuid"}, id="household-not-a-uuid"),

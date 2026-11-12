@@ -66,7 +66,7 @@ def household_summary_fields(**changes: Any) -> dict[str, Any]:
         "reform_simulation": ReportSimulationRead(
             id=REFORM_SIMULATION_ID, policy_id=POLICY_ID, dynamic_id=None
         ),
-        "options": {"add_missing_variables": True},
+        "options": {},
         "created_at": CREATED_AT,
         "status": "succeeded",
         "run": report_run_read(),
@@ -106,7 +106,6 @@ def household_body(**changes: Any) -> dict[str, Any]:
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {},
         "reform": {"policy_id": str(POLICY_ID)},
-        "add_missing_variables": True,
     }
     return {**values, **changes}
 
@@ -128,7 +127,7 @@ def test_a_household_report_is_created_and_answered_as_stored() -> None:
     assert item["household_id"] == str(HOUSEHOLD_ID)
     assert item["status"] == "pending"
     assert item["result"] is None
-    assert item["options"] == {"add_missing_variables": True}
+    assert item["options"] == {}
     ((name, arguments),) = service.calls
     assert name == "create_report"
     report_input = arguments["report_input"]
@@ -163,7 +162,8 @@ def test_a_household_report_of_the_baseline_alone_can_be_created() -> None:
         pytest.param({"region_code": "us"}, id="economy-field"),
         pytest.param({"include_cliffs": True}, id="economy-option"),
         pytest.param({"kind": "budget"}, id="unknown-kind"),
-        pytest.param({"add_missing_variables": "yes"}, id="option-not-a-boolean"),
+        # A household report always adds every variable the household lacks.
+        pytest.param({"add_missing_variables": True}, id="add-missing-variables"),
     ],
 )
 def test_a_household_report_outside_its_schema_is_refused_with_422(

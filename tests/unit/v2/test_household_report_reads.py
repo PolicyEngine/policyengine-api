@@ -235,7 +235,7 @@ def store_household_report(
         household_id=household.id,
         policy_id=None if reform is None else policy.id,
         year=2026,
-        inputs={"add_missing_variables": False} if inputs is None else inputs,
+        inputs={} if inputs is None else inputs,
         created_at=STORED_AT,
     )
     session.add(report)
@@ -318,9 +318,7 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
     sessions: sessionmaker[Session], reports: V2StoredReportService
 ) -> None:
     with sessions() as session:
-        stored = store_household_report(
-            session, run=succeeded_run(), inputs={"add_missing_variables": True}
-        )
+        stored = store_household_report(session, run=succeeded_run(), inputs={})
 
     report = reports.get_report(country_id="us", report_id=stored.report_id)
 
@@ -335,7 +333,7 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
         "Doubles the credit",
         2026,
     )
-    assert report.options == {"add_missing_variables": True}
+    assert report.options == {}
     assert report.baseline_simulation is not None
     assert report.baseline_simulation.id == stored.baseline_simulation_id
     assert report.baseline_simulation.policy_id is None
