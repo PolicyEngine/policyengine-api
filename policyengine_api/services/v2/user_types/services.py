@@ -22,11 +22,12 @@ or the deleted user against them, so they run one at a time and none can leave
 no admin.
 
 With a user profile source, admins see each user's email and names as Auth0
-has them, read after the database work and never stored: only identities
-from the users' issuer are looked up, and an email search also finds users
-through Auth0. When Auth0 can't answer, reads keep the stored values and
-record a warning, and an email search is refused. A type change commits
-before its response reads Auth0.
+has them (a read of a user's saved items takes only the email), read after
+the database work and never stored: only identities from the users' issuer
+are looked up, and an email search also finds users through Auth0. When
+Auth0 can't answer, reads keep the stored values and record a warning, and an
+email search is refused. A type change commits before its response reads
+Auth0.
 """
 
 from __future__ import annotations
@@ -64,8 +65,8 @@ from policyengine_api.services.v2.user_types.transformations import (
     admin_user_read_with_profiles,
     caller_user_type,
     identities_by_user,
-    known_email,
     profiles_of,
+    saved_items_with_email,
     stored_admin_user,
     stored_user_type_change,
     user_type_change_read_with_profiles,
@@ -457,8 +458,10 @@ class V2UserTypeService:
         """Return a signed-in user's account and saved items, in every country.
 
         Only an admin may read them. The result is what the user's own export
-        returns, with the email admins see for the user. Each read is recorded
-        with the admin's and the user's IDs, never with what the user saved.
+        returns, with the email admins see for the user: with a profile
+        source, its Auth0 email, read after the database work, else its stored
+        one. Each read is recorded with the admin's and the user's IDs, never
+        with what the user saved.
         """
         # Imported here: v2 services load only when used (ruff's
         # banned-module-level-imports in pyproject.toml).
@@ -466,15 +469,20 @@ class V2UserTypeService:
             export_user_in_session,
         )
 
+        source = self._profile_source_for_reads()
+        issuer = None if source is None else source.issuer
         with self._database_session.read() as session:
             admin_user_id = require_admin_caller(
                 find_principal_user_in_session(session, principal)
             )
             user = require_signed_in_user(read_signed_in_user(session, user_id))
-            email = known_email(user, read_identities_newest_first(session, [user_id]))
-            saved_items = export_user_in_session(session, user_id=user_id, email=email)
+            (stored_user,) = _stored_admin_users(session, [user], issuer)
+            saved_items = export_user_in_session(
+                session, user_id=user_id, email=stored_user.read.email
+            )
+        (read,) = self._with_profiles(source, [stored_user], RateLimitWaitBudget())
         _record_saved_items_read(admin_user_id=admin_user_id, user_id=user_id)
-        return saved_items
+        return saved_items_with_email(saved_items, read.email)
 
     def set_user_type_by_email(
         self, *, email: str, user_type: UserType

@@ -120,7 +120,7 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
-| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows. |
+| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
 primary_country, created_at, last_seen_at}`. Without Auth0 user profiles,
@@ -163,8 +163,8 @@ API when an admin asks, and store none of them:
   `search_engine=v3`, `sort=user_id:1`, only `user_id`, `email`,
   `email_verified`, `given_name`, `family_name` and `name`), all through one
   HTTP client, so one connection serves them. `GET /v2/admin/users/{user_id}`,
-  the `PATCH` response and the history's `changed_by_email` are filled the
-  same way.
+  the `PATCH` response, the history's `changed_by_email` and the saved-items
+  read's user `email` are filled the same way.
 - Each user's profiles are taken in identity order, most recently seen
   first. `email` is the first verified email, else the first email, else the
   stored one. `first_name` and `last_name` are the given and family names of
@@ -197,7 +197,8 @@ API when an admin asks, and store none of them:
 - When the profile settings are present but Auth0 can't answer (a timeout,
   a connection error, a failed token request, 403 for a client without
   `read:users`, 429, a 5xx), the list, the single read, the `PATCH`
-  response and the history answer with stored values and record the WARNING
+  response, the history and the saved-items read answer with stored values
+  and record the WARNING
   `admin_user_profiles_unavailable` with only the operation, the error type
   and a cause: `http_<status>` (`http_403` for a client without
   `read:users`, `http_429` for rate limiting), `timeout`,
