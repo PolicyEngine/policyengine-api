@@ -1,3 +1,10 @@
+## [5.41.0] - 2026-11-12
+
+### Added
+
+- The admin user routes show each user's email and names from Auth0, read when an admin asks and never stored, and an email search finds users by their Auth0 email; it refuses text with `<` or `>`, and text that more than 200 Auth0 users match. The optional, read-only `AUTH0_USER_PROFILES_*` settings, which need `PUBLIC_API_AUTH_ISSUER`, configure it in staging and production.
+
+
 ## [5.40.0] - 2026-11-11
 
 ### Added
