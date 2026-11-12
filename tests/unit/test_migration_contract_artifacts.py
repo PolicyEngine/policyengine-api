@@ -14,7 +14,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
     assert payload["metadata"] == {
         "route_group_count": 9,
         "workflow_count": 18,
-        "request_count": 97,
+        "request_count": 99,
         "db_entity_count": 6,
         "sim_flow_count": 3,
     }
@@ -141,7 +141,7 @@ def test_user_contracts_require_a_signed_in_or_signed_out_credential():
     headers_by_request = Counter(tuple(request["headers"]) for request in user_requests)
 
     assert headers_by_request == {
-        ("Authorization",): 24,
+        ("Authorization",): 26,
         ("PolicyEngine-Unauthenticated-User",): 23,
         ("Authorization", "PolicyEngine-Unauthenticated-User"): 1,
     }

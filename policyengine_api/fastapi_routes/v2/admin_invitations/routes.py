@@ -197,6 +197,7 @@ def build_v2_admin_invitation_router(
     def resend_invitation(
         invitation_id: UUID,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
+        _size: Annotated[None, Depends(enforce_user_write_request_size)],
     ) -> AdminInvitationResponse | JSONResponse:
         def resend() -> AdminInvitationResponse:
             invitation = service_factory().resend_invitation(

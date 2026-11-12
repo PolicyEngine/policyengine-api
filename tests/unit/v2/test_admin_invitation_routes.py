@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -281,3 +282,23 @@ def test_the_openapi_document_describes_the_invitation_routes() -> None:
         "404"
         in paths["/v2/admin/invitations/{invitation_id}/resend"]["post"]["responses"]
     )
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/v2/admin/invitations", f"/v2/admin/invitations/{INVITATION_ID}/resend"],
+)
+def test_invitation_writes_refuse_oversized_bodies_before_the_service(
+    path: str,
+) -> None:
+    client, invitations, _user_types = _client()
+    body = json.dumps(
+        {"email": "ada@example.org", "user_type": "author", "pad": "x" * 262_144}
+    )
+
+    response = client.post(
+        path, content=body, headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 413
+    assert invitations.calls == []

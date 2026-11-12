@@ -167,6 +167,7 @@ def build_v2_me_user_type_router(dependencies: NativeRouteDependencies) -> APIRo
         type_change_id: UUID,
         _query: CountryQueryDependency,
         principal: Annotated[UserPrincipal, Depends(require_signed_in_user)],
+        _size: Annotated[None, Depends(enforce_user_write_request_size)],
     ) -> Response | JSONResponse:
         def dismiss() -> Response:
             service_factory().dismiss_type_change(
