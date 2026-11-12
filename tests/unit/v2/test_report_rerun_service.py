@@ -144,15 +144,17 @@ def test_a_run_list_whose_report_cannot_be_read_is_storage_unavailable() -> None
     assert unavailable.value.__cause__ is database_session.error
 
 
-@pytest.mark.parametrize(
-    ("report_columns", "kind"),
-    [({}, "economy"), ({"budget_window_size": 3}, "budget_window")],
-    ids=["economy", "budget-window"],
-)
-def test_an_economy_reports_or_budget_windows_runs_can_be_run_and_listed(
-    report_columns: dict[str, object], kind: str
-) -> None:
-    assert require_run_route_kind(stored_rows(**report_columns)) == kind
+# The report columns that make a stored report of each kind.
+KIND_COLUMNS: dict[ReportKind, dict[str, object]] = {
+    "economy": {},
+    "budget_window": {"budget_window_size": 3},
+    "household": {"household_id": UUID("00000000-0000-0000-0000-00000000f002")},
+}
+
+
+@pytest.mark.parametrize("kind", get_args(RunRouteKind))
+def test_each_run_route_kinds_runs_can_be_run_and_listed(kind: ReportKind) -> None:
+    assert require_run_route_kind(stored_rows(**KIND_COLUMNS[kind])) == kind
 
 
 def test_a_household_reports_runs_are_not_run_or_listed_yet() -> None:
@@ -168,6 +170,7 @@ def test_a_household_reports_runs_are_not_run_or_listed_yet() -> None:
 def test_every_report_kind_has_a_name_and_the_run_routes_take_only_kinds() -> None:
     # A kind added later is refused with its name (422), not a KeyError (500).
     assert set(REPORT_KIND_NAMES) == set(get_args(ReportKind))
+    assert set(KIND_COLUMNS) == set(get_args(ReportKind))
     assert set(get_args(RunRouteKind)).issubset(get_args(ReportKind))
 
 

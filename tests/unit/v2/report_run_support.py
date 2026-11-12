@@ -83,6 +83,8 @@ def budget_window_runs_read() -> BudgetWindowRunsRead:
                     budget_window_year_read(
                         year,
                         id=UUID(int=year),
+                        baseline_simulation_run_id=UUID(int=year * 2 + 10_000),
+                        reform_simulation_run_id=UUID(int=year * 2 + 10_001),
                         status="pending",
                         trigger="manual",
                         created_at=rerun_at,
