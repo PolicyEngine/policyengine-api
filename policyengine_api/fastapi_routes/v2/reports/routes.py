@@ -56,6 +56,7 @@ from policyengine_api.query_parameters import (
     ReportDetailQuery,
 )
 from policyengine_api.services.v2.simulation_service.types import (
+    SimulationServiceConflictError,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
@@ -94,11 +95,13 @@ ReportDetailQueryDependency = Annotated[
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
     ReportKindUnsupportedError,
+    SimulationServiceConflictError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError,), 404),
     V2ErrorMapping((ReportKindUnsupportedError,), 422),
+    V2ErrorMapping((SimulationServiceConflictError,), 409),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (EconomyResultUnreadableError,),

@@ -2,10 +2,12 @@
 
 The simulation service creates simulations, reports and their runs in the
 detailed-save tables, and starts their calculation on Modal. Its
-``POST /simulations`` and ``POST /reports`` are reached through
-``SimulationServiceClient``; ``policyengine_api.libs.simulation_reports``
-implements it over HTTP, and tests replace it with a stand-in. Reading what
-it created needs no call: the Public API reads the tables.
+``POST /simulations``, ``POST /reports`` and ``POST
+/reports/{report_id}/runs``, which runs a stored report again, are reached
+through ``SimulationServiceClient``;
+``policyengine_api.libs.simulation_reports`` implements it over HTTP, and
+tests replace it with a stand-in. Reading what it created needs no call: the
+Public API reads the tables.
 
 The simulation service runs every calculation on its default worker's
 PolicyEngine.py version, so no request names a version.
@@ -118,6 +120,22 @@ class SimulationServiceInvalidRequestError(ValueError):
     """
 
 
+class SimulationServiceConflictError(RuntimeError):
+    """The simulation service will not run the stored report again now.
+
+    The report has a run pending or running, which ``run_id`` names, or it is
+    one the service does not run again, such as a kind of report it cannot
+    re-run yet or one whose simulation, region or dataset is gone. The
+    service wrote nothing. The message gives the service's code and reason;
+    the route answers 409, naming ``run_id`` when the service named a run.
+    """
+
+    def __init__(self, message: str, *, run_id: UUID | None = None) -> None:
+        """Say why, and name the run under way, if the service named one."""
+        super().__init__(message)
+        self.run_id = run_id
+
+
 @dataclass(frozen=True)
 class PackageVersions:
     """A country package version and the PolicyEngine.py version beside it."""
@@ -217,6 +235,24 @@ class SubmittedReport:
 
     report_id: UUID
     report_run_id: UUID
+
+
+@dataclass(frozen=True)
+class ReportRerunInput:
+    """A stored report of the country to calculate again as a new run.
+
+    The simulation service runs it on its default worker's versions. Without
+    ``force``, each side reuses a run of its own simulation that succeeded on
+    those versions; with it, both simulations are calculated again.
+    ``policy_ids`` are the policies of the report's simulations, baseline
+    first, None for current law or a simulation that is gone, for the checks
+    before the simulation service is asked.
+    """
+
+    country_id: str
+    report_id: UUID
+    force: bool
+    policy_ids: tuple[UUID | None, ...]
 
 
 class SimulationServiceClient(Protocol):

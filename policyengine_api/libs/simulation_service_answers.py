@@ -22,7 +22,12 @@ what each of its route's answers means; this module holds what they share:
   message gives in place of the service's reason (``status_and_code``), with
   the code only when it is a fixed identifier (``FIXED_IDENTIFIER``);
 - the statuses a proxy in front of the service answers in its place
-  (``PROXY_STAND_IN_STATUSES``);
+  (``PROXY_STAND_IN_STATUSES``), and, for the report and simulation client
+  and the report re-run client, the statuses of a created record
+  (``CREATED_STATUSES``), of a refusal (``REFUSAL_STATUSES``) and of an
+  answer sent before the service's route writes anything
+  (``SENT_BEFORE_ROUTE_STATUSES``), and the codes of a refusal of a row the
+  Public API does not check (``CALLER_ROW_REFUSAL_CODES``);
 - the messages for an answer lost after the request may have arrived
   (``answer_lost``) and for a failure after the service may have created
   what was submitted (``created_but_failed``), each ending with
@@ -63,6 +68,36 @@ NOT_CONFIGURED = "The simulation service is not configured."
 # service created what was submitted.
 PROXY_STAND_IN_STATUSES = frozenset(
     {HTTPStatus.BAD_GATEWAY, HTTPStatus.GATEWAY_TIMEOUT}
+)
+# The statuses of a created record and of a refusal of the request.
+CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
+REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
+# The codes of the simulation service's report and simulation routes' 400
+# that name a row the caller chose, or a stored report names, and the Public
+# API does not check: the region, the dataset, or a dynamic the catalog
+# version its default worker runs does not have. Each is the caller's error
+# and answers 422. Any other 400 is a state of the service, such as a catalog
+# version missing while a release deploys, or a row the Public API already
+# checked, and answers 503.
+CALLER_ROW_REFUSAL_CODES = frozenset(
+    {"unknown_region", "unknown_dataset", "unknown_dynamic"}
+)
+# Statuses the gateway, Cloud Run or the service's framework answers before
+# the service's report and simulation routes run, so the service has created
+# nothing: a call not authenticated or not allowed, a route or method the
+# service does not have, a body over the size limit, and too many requests.
+# A re-run route's own 404, for a record it does not find, also comes before
+# any write. The route may have written rows before answering any other
+# status the client does not expect.
+SENT_BEFORE_ROUTE_STATUSES = frozenset(
+    {
+        HTTPStatus.UNAUTHORIZED,
+        HTTPStatus.FORBIDDEN,
+        HTTPStatus.NOT_FOUND,
+        HTTPStatus.METHOD_NOT_ALLOWED,
+        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        HTTPStatus.TOO_MANY_REQUESTS,
+    }
 )
 # Transport errors raised before the request could reach the service. After
 # any other, the service may have received the submission and created what
