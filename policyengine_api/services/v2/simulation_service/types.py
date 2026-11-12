@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.households.types import HouseholdRead
     from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 
 # The bounds the simulation service and the tables accept.
@@ -203,6 +204,43 @@ class EconomyReportCreationInput(EconomyReportFields):
     country_id: CountryId
 
 
+class HouseholdPolicyChoice(StrictSubmissionModel):
+    """A household simulation's stored policy; none means current law."""
+
+    policy_id: ResourceId | None = None
+
+
+class HouseholdReportFields(StrictSubmissionModel):
+    """A household report: one stored household under a baseline and a reform.
+
+    ``household_id`` names a household stored through ``/v2/households`` in
+    the report's country, and both simulations calculate it in ``year``.
+    ``reform`` is null, or omitted, for a report of the baseline alone. With
+    ``add_missing_variables``, each simulation also calculates every yearly,
+    monthly and eternal variable the household lacks, as ``/calculate-full``
+    does; otherwise it fills in only the values the household asks for.
+    """
+
+    kind: Literal["household"]
+    label: ReportLabel
+    description: ReportDescription | None = None
+    household_id: ResourceId
+    year: SimulationYear
+    baseline: HouseholdPolicyChoice
+    reform: HouseholdPolicyChoice | None = None
+    add_missing_variables: StrictBool = False
+
+
+class HouseholdReportCreationInput(HouseholdReportFields):
+    """A household report to create in the country."""
+
+    country_id: CountryId
+
+
+# A report of any kind to create; ``kind`` says which.
+ReportCreationInput = EconomyReportCreationInput | HouseholdReportCreationInput
+
+
 @dataclass(frozen=True)
 class SubmittedSimulation:
     """The simulation the simulation service created, and the run it started."""
@@ -244,6 +282,7 @@ class SimulationServiceClient(Protocol):
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
+    HouseholdCalculationsUnsupportedError, HouseholdNotFoundError,
     PolicyNotFoundError, PolicyParametersMissingError and
     SubmissionStorageError from its checks.
     """
@@ -258,12 +297,30 @@ class SimulationServiceClient(Protocol):
         """Create the report, its simulations and their runs, and start them."""
         ...
 
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Create the household report, its simulations and runs; start them.
+
+        It goes to the same route as ``submit_report``, so it raises the same
+        errors.
+        """
+        ...
+
 
 class CountrySource(Protocol):
     """The countries list a submission checks first."""
 
     def list_countries(self) -> list[CountryRead]:
         """Return every served country and what it supports."""
+        ...
+
+
+class HouseholdSource(Protocol):
+    """The stored households a household report names (``V2HouseholdService``)."""
+
+    def get_household(self, *, country_id: str, household_id: UUID) -> HouseholdRead:
+        """Return the country's household, or raise ``HouseholdNotFoundError``."""
         ...
 
 

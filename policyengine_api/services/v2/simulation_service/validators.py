@@ -18,8 +18,15 @@ class EconomyCalculationsUnsupportedError(ValueError):
     """
 
 
+class HouseholdCalculationsUnsupportedError(ValueError):
+    """The country has no household simulations or reports.
+
+    Its countries row leaves ``household_enabled`` unset, or it has no row.
+    """
+
+
 class SubmissionStorageError(RuntimeError):
-    """A submission's countries, policies or catalog could not be read."""
+    """A submission's countries, households, policies or catalog could not be read."""
 
 
 def require_economy_country(countries: Iterable[CountryRead], country_id: str) -> None:
@@ -29,3 +36,18 @@ def require_economy_country(countries: Iterable[CountryRead], country_id: str) -
             return
     msg = f"Economy calculations are not available for country {country_id!r}"
     raise EconomyCalculationsUnsupportedError(msg)
+
+
+def require_household_country(
+    countries: Iterable[CountryRead], country_id: str
+) -> None:
+    """Raise HouseholdCalculationsUnsupportedError unless the row allows households.
+
+    A household-only country (household calculations without economy
+    reports) passes.
+    """
+    for country in countries:
+        if country.id == country_id and country.household_enabled:
+            return
+    msg = f"Household reports are not available for country {country_id!r}"
+    raise HouseholdCalculationsUnsupportedError(msg)

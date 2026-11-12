@@ -15,8 +15,12 @@ and the stored policy and dynamic (null for current law). A report request
 names the country, ``report_type`` (``economy``), the label and description,
 the year, region and dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
-caller gave them. Neither names a PolicyEngine.py version: the simulation
-service runs its default worker's. The simulation service answers:
+caller gave them. A household report goes to the same ``POST /reports`` as
+``report_type`` ``household``, naming the label and description, the stored
+household, the year, each simulation's policy (the reform null for a report
+of the baseline alone) and ``add_missing_variables``. None names a
+PolicyEngine.py version: the simulation service runs its default worker's.
+The simulation service answers:
 
 - 201 or 202 with the created record's ID and its first run's ID. One whose
   body cannot be read is SimulationServiceAnswerUnreadableError: the record
@@ -131,6 +135,8 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        HouseholdPolicyChoice,
+        HouseholdReportCreationInput,
         PolicyChoice,
     )
 
@@ -239,6 +245,30 @@ def report_request(report: EconomyReportCreationInput) -> dict[str, Any]:
     if report.spm is not None:
         body["spm"] = report.spm.model_dump(mode="json")
     return body
+
+
+def _household_policy_choice(choice: HouseholdPolicyChoice) -> dict[str, str | None]:
+    return {"policy_id": None if choice.policy_id is None else str(choice.policy_id)}
+
+
+def household_report_request(report: HouseholdReportCreationInput) -> dict[str, Any]:
+    """Return the simulation service's request body for the household report.
+
+    ``reform`` is null for a report of the baseline alone.
+    """
+    return {
+        "country": report.country_id,
+        "report_type": report.kind,
+        "label": report.label,
+        "description": report.description,
+        "household_id": str(report.household_id),
+        "year": report.year,
+        "baseline": _household_policy_choice(report.baseline),
+        "reform": (
+            None if report.reform is None else _household_policy_choice(report.reform)
+        ),
+        "add_missing_variables": report.add_missing_variables,
+    }
 
 
 def post_simulation(
@@ -478,9 +508,20 @@ class SimulationServiceReportClient:
 
         Raise the errors ``SimulationServiceClient`` names.
         """
-        answer = self._answer(
-            self._send_report, report_request(report), record="report"
-        )
+        return self._submitted_report(report_request(report))
+
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Create the household report, its simulations and runs; return its IDs.
+
+        Raise the errors ``SimulationServiceClient`` names.
+        """
+        return self._submitted_report(household_report_request(report))
+
+    def _submitted_report(self, body: dict[str, Any]) -> SubmittedReport:
+        """Send a report's request body and return the created report's IDs."""
+        answer = self._answer(self._send_report, body, record="report")
         if answer.status_code not in CREATED_STATUSES:
             _raise_for_refusal(answer, "report")
         try:
