@@ -193,18 +193,19 @@ class V2StoredReportResourceService(Protocol):
     def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
         """Return the country's report, its newest run and that run's result.
 
-        The report is an economy report or a household report. Raise
-        ``StoredReportNotFoundError`` when the country has no such report,
-        ``ReportKindUnsupportedError`` for a budget window, and
-        ``EconomyResultUnreadableError`` or ``HouseholdResultUnreadableError``
-        when a succeeded run's result cannot be read.
+        The report is an economy report, a household report or a budget
+        window. Raise ``StoredReportNotFoundError`` when the country has no
+        such report, and ``EconomyResultUnreadableError``,
+        ``HouseholdResultUnreadableError`` or
+        ``BudgetWindowResultUnreadableError`` when a succeeded run's result
+        cannot be read.
         """
         ...
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[StoredReportSummaryRead, ...]:
-        """Return the country's economy and household reports, as named."""
+        """Return the country's reports of every kind among those named, in order."""
         ...
 
     def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
@@ -602,4 +603,14 @@ class V2UserTypeResourceService(Protocol):
         self, *, principal: AccountPrincipal, user_id: UUID
     ) -> tuple[UserTypeChangeRead, ...]:
         """Return a signed-in user's recorded type changes, newest first."""
+        ...
+
+    def get_user_saved_items(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> AccountExport:
+        """Return a signed-in user's account and saved items, in every country.
+
+        The result is what the user's own export returns. Raise
+        ``SignedInUserNotFoundError`` when no signed-in user has the ID.
+        """
         ...

@@ -59,8 +59,8 @@ class CreatedReportUnreadableError(RuntimeError):
 class ReportKindUnsupportedError(ValueError):
     """The report is of a kind these routes do not read yet.
 
-    Budget windows are stored in the same tables, and are read once their own
-    routes exist.
+    Every kind of report is read now; a kind added before its reads would be
+    refused with this.
     """
 
 
@@ -75,9 +75,9 @@ def require_report(
 
 
 def require_readable_report(rows: StoredReportRows) -> ReportKind:
-    """Return the report's kind: an economy report or a household report.
+    """Return the report's kind: an economy report, a household report or a window.
 
-    Raise ReportKindUnsupportedError for a budget window.
+    Raise ReportKindUnsupportedError for a kind outside READABLE_KINDS.
     """
     kind = report_kind(rows.report)
     if kind not in READABLE_KINDS:

@@ -1,8 +1,9 @@
 """Check simulations and reports, then ask the simulation service to create them.
 
 Every submission to the simulation service's ``POST /simulations`` and
-``POST /reports`` goes through ``SimulationSubmissionService``, so checks
-that apply to both live in one place. It checks, in order, that the
+``POST /reports`` (economy reports, budget windows and household reports) goes
+through ``SimulationSubmissionService``, so checks that apply to all of them
+live in one place. It checks, in order, that the
 country's ``countries`` row allows economy calculations (a household-only
 country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
@@ -50,12 +51,14 @@ if TYPE_CHECKING:
         HouseholdSource,
     )
     from policyengine_api.services.v2.simulation_service.types import (
+        BudgetWindowReportCreationInput,
         CountrySource,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         HouseholdReportCreationInput,
         PolicySource,
         SimulationServiceClient,
+        SubmittedBudgetWindow,
         SubmittedReport,
         SubmittedSimulation,
     )
@@ -185,3 +188,17 @@ class SimulationSubmissionService:
             self._policies, country_id=country_id, policy_ids=policy_ids
         )
         return self._client_factory().submit_household_report(report)
+
+    def submit_budget_window(
+        self, report: BudgetWindowReportCreationInput
+    ) -> SubmittedBudgetWindow:
+        """Check the budget window, then have the simulation service create it.
+
+        It is checked as an economy report is, then the service creates its
+        runs and starts its years. Raise the checks' errors, then the
+        simulation service's.
+        """
+        self._check(
+            report.country_id, (report.baseline.policy_id, report.reform.policy_id)
+        )
+        return self._client_factory().submit_budget_window(report)

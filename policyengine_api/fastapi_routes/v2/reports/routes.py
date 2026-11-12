@@ -4,9 +4,9 @@ The routes need no user credential: a user keeps a report through
 ``/v2/user-reports``. Reports, their runs and results are read from the
 detailed-save tables the simulation service and its Modal workers write;
 reading never calls the simulation service and never starts a run. A report
-is an economy report or a household report, which its ``kind`` names.
-Creating a report checks it, has the simulation service create and start it,
-and reads it back.
+is an economy report, a household report or a budget window, which its
+``kind`` names. Creating a report checks it, has the simulation service
+create and start it, and reads it back.
 """
 
 from __future__ import annotations
@@ -59,6 +59,9 @@ from policyengine_api.query_parameters import (
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceUnavailableError,
 )
+from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
+    BudgetWindowResultUnreadableError,
+)
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
@@ -105,7 +108,11 @@ REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((ReportKindUnsupportedError,), 422),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
-        (EconomyResultUnreadableError, HouseholdResultUnreadableError),
+        (
+            EconomyResultUnreadableError,
+            HouseholdResultUnreadableError,
+            BudgetWindowResultUnreadableError,
+        ),
         500,
         "The report's stored result cannot be read",
     ),
@@ -186,7 +193,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         response_model=ReportDetailResponse,
         status_code=201,
         responses=CREATE_RESPONSES,
-        summary="Create an economy report or a household report",
+        summary="Create an economy report, a household report or a budget window",
         description=(
             "Checks that the country has economy reports and stores each named "
             "policy, and that the running catalog version has every parameter "
@@ -198,7 +205,9 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "household calculations instead (a household-only country does), "
             "and the household it names must be stored in the country, with a "
             "default year; its simulations each calculate that household in its "
-            "default year. "
+            "default year. A budget window (kind budget_window) is checked as an "
+            "economy report is; the simulation service creates a budget-window "
+            "run with a report run for each year, and starts its years. "
             "Answers the report as stored, with its "
             "pending run; read it again to follow the run. A created report "
             "that cannot be read back answers 502 with its report_id, and one "
@@ -224,10 +233,10 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         response_model=ReportListResponse,
         summary="List chosen reports",
         description=(
-            "Lists the country's economy and household reports among the "
-            "report_id values (at most 25), in the order named and once each, "
-            "with their newest runs but without results, read in one query. "
-            "Unknown reports, other countries' and budget windows are left out."
+            "Lists the country's reports among the report_id values (at most "
+            "25), in the order named and once each, with their newest runs, and "
+            "each budget window's years, but without results, read in two "
+            "queries. Unknown reports and other countries' are left out."
         ),
     )
     def list_reports(
@@ -251,13 +260,16 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         responses=READ_RESPONSES,
         summary="Read a report",
         description=(
-            "Returns the economy or household report, its newest run whatever "
-            "its status and versions, the versions the Public API runs now, "
-            "and, once the newest run has succeeded, its result. An economy "
-            "report's result is in today's economy result format; a household "
-            "report's is each simulation's calculated household, as "
-            "/v2/household-calculations answers one. A report with no run, such "
-            "as one migrated from v1, answers its definition with no result; "
+            "Returns the report, its newest run whatever its status and "
+            "versions, the versions the Public API runs now, and, once the newest "
+            "run has succeeded, its result. An economy report's run is one report "
+            "run and its result today's economy result. A household report's "
+            "result is each simulation's calculated household, as "
+            "/v2/household-calculations answers one, and a failed run gives each "
+            "side's error. A budget window's run is a budget-window run with a "
+            "report run per year, and its result today's budget-window format: "
+            "each year's budget figures and their totals. A report with no run, "
+            "such as one migrated from v1, answers its definition with no result; "
             "reading starts no run."
         ),
     )

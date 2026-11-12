@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}
 STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
+# The year of a report store_report stores, unless it is given another.
+STORED_REPORT_YEAR = 2026
 
 
 @dataclass
@@ -112,9 +114,13 @@ def store_catalog(connection: Connection, country: str) -> CatalogRows:
 
 
 def store_simulation(
-    connection: Connection, catalog: CatalogRows, *, policy_id: UUID | None
+    connection: Connection,
+    catalog: CatalogRows,
+    *,
+    policy_id: UUID | None,
+    year: int = STORED_REPORT_YEAR,
 ) -> UUID:
-    """Store an economy simulation of the catalog's dataset and region."""
+    """Store an economy simulation in ``year`` of the catalog's dataset and region."""
     simulation_id = uuid4()
     insert_row(
         connection,
@@ -125,10 +131,18 @@ def store_simulation(
         policy_id=policy_id,
         tax_benefit_model_version_id=catalog.version_id,
         region_id=catalog.region_id,
-        year=2026,
+        year=year,
     )
     catalog.simulation_ids.append(simulation_id)
     return simulation_id
+
+
+@dataclass(frozen=True)
+class BudgetWindowYear:
+    """A year of a budget-window run, which a report run of the report calculates."""
+
+    budget_window_run_id: UUID
+    year: int
 
 
 @dataclass(frozen=True)
@@ -136,7 +150,9 @@ class RunSettings:
     """A run's package versions, status, creation time and failure message.
 
     ``run_id`` is the run's ID, a new one when None; a report run's
-    simulation runs always get new ones.
+    simulation runs always get new ones. A report run with a
+    ``budget_window_year`` is that year of that budget-window run, and its
+    simulation runs are of that year.
     """
 
     versions: dict[str, str]
@@ -144,6 +160,7 @@ class RunSettings:
     created_at: datetime = STARTED_AT
     error_message: str | None = None
     run_id: UUID | None = None
+    budget_window_year: BudgetWindowYear | None = None
 
     @property
     def finished(self) -> bool:
@@ -155,8 +172,13 @@ def store_simulation_run(
     catalog: CatalogRows,
     simulation_id: UUID,
     settings: RunSettings,
+    *,
+    year: int = STORED_REPORT_YEAR,
 ) -> UUID:
-    """Store one run of the simulation; a finished one has a completion time."""
+    """Store one run of the simulation in ``year``.
+
+    A finished run has a completion time.
+    """
     run_id = uuid4() if settings.run_id is None else settings.run_id
     created_at = settings.created_at
     insert_row(
@@ -165,7 +187,7 @@ def store_simulation_run(
         id=run_id,
         created_at=created_at,
         simulation_id=simulation_id,
-        year=2026,
+        year=year,
         tax_benefit_model_version_id=catalog.version_id,
         dataset_id=catalog.dataset_id,
         region_id=catalog.region_id,
@@ -184,6 +206,7 @@ class StoredReport:
     report_id: UUID
     baseline_simulation_id: UUID
     reform_simulation_id: UUID
+    year: int = STORED_REPORT_YEAR
 
 
 def store_report(
@@ -192,14 +215,22 @@ def store_report(
     *,
     household_id: UUID | None = None,
     budget_window_size: int | None = None,
+    year: int = STORED_REPORT_YEAR,
 ) -> StoredReport:
-    """Store a report comparing current law with the catalog's policy."""
+    """Store a report of ``year`` comparing current law with the catalog's policy.
+
+    A budget window's ``year`` is its first year, whose simulations the
+    report names.
+    """
     report = StoredReport(
         report_id=uuid4(),
-        baseline_simulation_id=store_simulation(connection, catalog, policy_id=None),
-        reform_simulation_id=store_simulation(
-            connection, catalog, policy_id=catalog.policy_id
+        baseline_simulation_id=store_simulation(
+            connection, catalog, policy_id=None, year=year
         ),
+        reform_simulation_id=store_simulation(
+            connection, catalog, policy_id=catalog.policy_id, year=year
+        ),
+        year=year,
     )
     connection.execute(
         text(
@@ -208,7 +239,7 @@ def store_report(
             "reform_simulation_id, household_id, dataset_id, region_id, year, "
             "budget_window_size, inputs) VALUES (:id, :label, :description, "
             ":country, :type, :model_id, :policy_id, :baseline, :reform, "
-            ":household_id, :dataset_id, :region_id, 2026, :budget_window_size, "
+            ":household_id, :dataset_id, :region_id, :year, :budget_window_size, "
             "CAST(:inputs AS JSON))"
         ),
         {
@@ -225,6 +256,7 @@ def store_report(
             "dataset_id": catalog.dataset_id,
             "region_id": catalog.region_id,
             "budget_window_size": budget_window_size,
+            "year": year,
             "inputs": '{"include_cliffs": true}',
         },
     )
@@ -244,14 +276,26 @@ def store_report_run(
     With ``result``, the run's result columns and rows are stored as the
     simulation service's writer stores that economy result.
     """
+    budget_window_year = settings.budget_window_year
     simulation_run_settings = replace(settings, run_id=None)
+    simulation_year = (
+        report.year if budget_window_year is None else budget_window_year.year
+    )
     run_ids = RunIds(
         report_run_id=uuid4() if settings.run_id is None else settings.run_id,
         baseline_simulation_run_id=store_simulation_run(
-            connection, catalog, report.baseline_simulation_id, simulation_run_settings
+            connection,
+            catalog,
+            report.baseline_simulation_id,
+            simulation_run_settings,
+            year=simulation_year,
         ),
         reform_simulation_run_id=store_simulation_run(
-            connection, catalog, report.reform_simulation_id, simulation_run_settings
+            connection,
+            catalog,
+            report.reform_simulation_id,
+            simulation_run_settings,
+            year=simulation_year,
         ),
     )
     stored = (
@@ -268,11 +312,13 @@ def store_report_run(
         text(
             "INSERT INTO report_runs (id, created_at, report_id, "
             "baseline_simulation_run_id, reform_simulation_run_id, "
+            "budget_window_run_id, year, "
             "country_package_version, policyengine_version, status, trigger, "
             "started_at, completed_at, error_message, spm_provenance"
             + "".join(f", {column}" for column in result_columns)
             + ") VALUES (:id, :created_at, :report_id, :baseline_run, "
-            ":reform_run, :country_package_version, :policyengine_version, "
+            ":reform_run, :budget_window_run_id, :year, "
+            ":country_package_version, :policyengine_version, "
             ":status, 'initial', :started_at, :completed_at, :error_message, "
             ":spm_provenance"
             + "".join(f", :{column}" for column in result_columns)
@@ -284,6 +330,12 @@ def store_report_run(
             "report_id": report.report_id,
             "baseline_run": run_ids.baseline_simulation_run_id,
             "reform_run": run_ids.reform_simulation_run_id,
+            "budget_window_run_id": (
+                None
+                if budget_window_year is None
+                else budget_window_year.budget_window_run_id
+            ),
+            "year": None if budget_window_year is None else budget_window_year.year,
             "status": settings.status,
             "started_at": created_at,
             "completed_at": (
@@ -300,6 +352,35 @@ def store_report_run(
             for row in rows:
                 insert_row(connection, table, id=uuid4(), **row)
     return run_ids
+
+
+def store_budget_window_run(
+    connection: Connection,
+    catalog: CatalogRows,
+    report: StoredReport,
+    settings: RunSettings,
+) -> UUID:
+    """Store a calculation of the budget-window report, without its years.
+
+    Store each year with ``store_report_run``, whose settings name the year.
+    """
+    run_id = uuid4() if settings.run_id is None else settings.run_id
+    created_at = settings.created_at
+    insert_row(
+        connection,
+        "budget_window_runs",
+        id=run_id,
+        created_at=created_at,
+        report_id=report.report_id,
+        tax_benefit_model_version_id=catalog.version_id,
+        trigger="initial",
+        recalculate=False,
+        status=settings.status,
+        error_message=settings.error_message,
+        started_at=None if settings.status == "pending" else created_at,
+        completed_at=created_at + timedelta(hours=1) if settings.finished else None,
+    )
+    return run_id
 
 
 def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
@@ -331,3 +412,27 @@ def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
             text("DELETE FROM tax_benefit_models WHERE id = :id"),
             {"id": catalog.model_id},
         )
+
+
+def store_year_simulations(
+    connection: Connection, catalog: CatalogRows, report: StoredReport, year: int
+) -> StoredReport:
+    """Return the report with the simulations a year of its budget window uses.
+
+    As the simulation service creates a window, its first year (the report's
+    ``year``) uses the report's two simulations. Each later year gets a
+    baseline and a reform simulation of its own year, with the same
+    policies, which this stores.
+    """
+    if year == report.year:
+        return report
+    return StoredReport(
+        report_id=report.report_id,
+        baseline_simulation_id=store_simulation(
+            connection, catalog, policy_id=None, year=year
+        ),
+        reform_simulation_id=store_simulation(
+            connection, catalog, policy_id=catalog.policy_id, year=year
+        ),
+        year=report.year,
+    )

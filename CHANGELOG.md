@@ -1,3 +1,21 @@
+## [5.44.0] - 2026-11-12
+
+### Added
+
+- Admins can read any signed-in v2 user's saved policies, households, simulations and reports, in every country, at `GET /v2/admin/users/{user_id}/saved-items`; each read is recorded with the admin's and the user's IDs.
+
+
+## [5.43.0] - 2026-11-12
+
+### Added
+
+- `POST /v2/reports` and `POST /v2/simulations` refuse a policy that sets parameters the running catalog version no longer has, as `POST /v2/household-calculations` does: they answer 422 with code `missing_parameters`, naming those parameters, and the simulation service is not asked, so no run starts. A report checks its baseline's policy, then its reform's. A catalog that cannot be read during the check answers 503.
+
+### Changed
+
+- The Modal workers' v2 database role may update a budget-window run's status, error message, start, completion and update times, so the workers can mark a window succeeded when its last year finishes or failed when a year fails; the simulation service's role may update the same columns except the start time, so it can fail a window at once when Modal refuses its first years' calls. Neither role may change anything else about a window run.
+
+
 ## [5.42.0] - 2026-11-12
 
 ### Added

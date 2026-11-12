@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.stored_reports.types import (
+    BudgetWindowReportRead,
+    BudgetWindowReportSummaryRead,
+    BudgetWindowRunRead,
+    BudgetWindowYearRead,
     HouseholdReportRead,
     HouseholdReportSummaryRead,
     ReportDefinitionRead,
@@ -18,9 +22,17 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from uuid import UUID
 
-    from policyengine_api.data.v2.models import Report, ReportRun, Simulation
+    from policyengine_api.data.v2.models import (
+        BudgetWindowRun,
+        Report,
+        ReportRun,
+        Simulation,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         PackageVersions,
+    )
+    from policyengine_api.services.v2.stored_reports.budget_window_results import (
+        types as window_result_types,
     )
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
@@ -35,9 +47,10 @@ if TYPE_CHECKING:
         StoredReportRows,
     )
 
-# The kinds of report the report routes read; budget windows are read once
-# their own routes exist.
-READABLE_KINDS: frozenset[ReportKind] = frozenset({"economy", "household"})
+# The kinds of report the report routes read: every kind there is.
+READABLE_KINDS: frozenset[ReportKind] = frozenset(
+    {"economy", "household", "budget_window"}
+)
 
 
 def report_kind(report: Report) -> ReportKind:
@@ -165,13 +178,85 @@ def household_report_read(
     return HouseholdReportRead(**vars(summary), result=result, failure=failure)
 
 
+def budget_window_run_read(
+    window_run: BudgetWindowRun, years: Sequence[ReportRun]
+) -> BudgetWindowRunRead:
+    """Return the window run's status, trigger and times, with its years.
+
+    Its versions are its first year's, since the simulation service creates
+    every year on one version; a run with no year has none.
+    """
+    year_reads = tuple(
+        BudgetWindowYearRead(**vars(report_run_read(run)), year=run.year)
+        for run in years
+        if run.year is not None
+    )
+    first_year = year_reads[0] if year_reads else None
+    return BudgetWindowRunRead(
+        id=window_run.id,
+        status=window_run.status.value,
+        trigger=window_run.trigger.value,
+        recalculate=window_run.recalculate,
+        country_package_version=(
+            None if first_year is None else first_year.country_package_version
+        ),
+        policyengine_version=(
+            None if first_year is None else first_year.policyengine_version
+        ),
+        error_message=window_run.error_message,
+        created_at=window_run.created_at,
+        started_at=window_run.started_at,
+        completed_at=window_run.completed_at,
+        years=year_reads,
+    )
+
+
+def budget_window_summary_read(
+    rows: StoredReportRows, *, current_versions: PackageVersions
+) -> BudgetWindowReportSummaryRead:
+    """Return a budget-window report's definition and newest run, without a result.
+
+    Raise ValueError for a report with no window size, which is not a budget
+    window.
+    """
+    report = rows.report
+    if report.budget_window_size is None:
+        msg = f"Report {report.id} is not a budget window"
+        raise ValueError(msg)
+    window_run = rows.newest_budget_window_run
+    return BudgetWindowReportSummaryRead(
+        **vars(_report_definition(rows, current_versions=current_versions)),
+        kind="budget_window",
+        region_code=rows.region_code,
+        dataset_name=rows.dataset_name,
+        budget_window_size=report.budget_window_size,
+        status="not_run" if window_run is None else window_run.status.value,
+        run=(
+            None
+            if window_run is None
+            else budget_window_run_read(window_run, rows.budget_window_years)
+        ),
+    )
+
+
+def budget_window_read(
+    rows: StoredReportRows,
+    *,
+    current_versions: PackageVersions,
+    result: window_result_types.BudgetWindowResult | None,
+) -> BudgetWindowReportRead:
+    """Return a budget-window report with its newest run's result, if it has one."""
+    summary = budget_window_summary_read(rows, current_versions=current_versions)
+    return BudgetWindowReportRead(**vars(summary), result=result)
+
+
 def listed_reports(
     rows: Iterable[StoredReportRows], *, report_ids: Sequence[UUID]
 ) -> list[StoredReportRows]:
-    """Return the economy and household reports among ``rows``, as named.
+    """Return the reports among ``rows`` these routes read, as named.
 
     They are in the order of ``report_ids``. A report named twice is listed
-    once, where it is first named; budget windows are left out.
+    once, where it is first named.
     """
     by_id = {
         stored.report.id: stored
