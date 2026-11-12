@@ -1,1 +1,0 @@
-Admins can read any signed-in v2 user's saved policies, households, simulations and reports, in every country, at `GET /v2/admin/users/{user_id}/saved-items`; each read is recorded with the admin's and the user's IDs.
