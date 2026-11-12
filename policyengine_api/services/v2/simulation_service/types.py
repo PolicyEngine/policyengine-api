@@ -186,7 +186,8 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
 class ReportDefinitionFields(StrictSubmissionModel):
     """What every report names: a label, and a baseline and a reform simulation.
 
-    Both simulations use the report's year, region and dataset, as
+    Both simulations use the report's year (a budget window's first year;
+    each later year gets simulations of its own), region and dataset, as
     ``EconomySimulationFields`` describes them. ``spm`` selects the SPM
     forecast scenario and geography; omit it, rather than sending null, to
     use the simulation service's default. Each kind of report narrows

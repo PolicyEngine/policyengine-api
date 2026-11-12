@@ -135,8 +135,11 @@ class Simulation(TimestampedModel, table=True):
 class SimulationRun(TimestampedModel, table=True):
     """One run of a simulation for one year on one catalog and .py version.
 
-    A simulation has a run per year it is calculated for, so a budget window
-    compares a report's same two simulations in every year of the window.
+    A simulation has a run per year it is calculated for. Each year of a
+    budget window is a report run naming the two simulation runs it
+    compares: the simulation service gives each year simulations of that
+    year, or reuses succeeded runs, and the report's own two simulations are
+    its first year's.
 
     ``tax_benefit_model_version_id``, ``dataset_id`` and ``region_id`` name the
     catalog version, dataset and region the run used, which a run on a newer

@@ -37,7 +37,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
-from tests.fixtures.economy_results import uk_economy_result, us_economy_result
+from tests.fixtures.economy_results import RunIds, uk_economy_result, us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
@@ -47,6 +47,7 @@ from tests.integration.stored_report_rows import (
     store_catalog,
     store_report,
     store_report_run,
+    year_simulations,
 )
 
 if TYPE_CHECKING:
@@ -151,10 +152,10 @@ def store_window(
     catalog: CatalogRows,
     report: StoredReport,
     window: StoredWindow,
-) -> tuple[UUID, dict[int, UUID]]:
-    """Store a window run and its years.
+) -> tuple[UUID, dict[int, RunIds]]:
+    """Store a window run and its years, each under that year's simulations.
 
-    Return the window run's ID and each year's report run ID.
+    Return the window run's ID and each year's report and simulation run IDs.
     """
     settings = window.settings
     window_run_id = store_budget_window_run(connection, catalog, report, settings)
@@ -163,7 +164,7 @@ def store_window(
         run_ids = store_report_run(
             connection,
             catalog,
-            report,
+            year_simulations(connection, catalog, report, year),
             RunSettings(
                 versions=settings.versions,
                 status=status,
@@ -184,7 +185,7 @@ def store_window(
                 else None
             ),
         )
-        year_run_ids[year] = run_ids.report_run_id
+        year_run_ids[year] = run_ids
     return window_run_id, year_run_ids
 
 
@@ -229,7 +230,19 @@ def test_a_budget_window_reads_its_newest_run_years_and_result(
         "4.1.0",
     )
     assert [(year["year"], year["id"], year["status"]) for year in run["years"]] == [
-        (year, str(year_run_ids[year]), "succeeded") for year in YEAR_BUDGETS
+        (year, str(year_run_ids[year].report_run_id), "succeeded")
+        for year in YEAR_BUDGETS
+    ]
+    # Each year names its own simulation runs, not the report's simulations'.
+    assert [
+        (year["baseline_simulation_run_id"], year["reform_simulation_run_id"])
+        for year in run["years"]
+    ] == [
+        (
+            str(year_run_ids[year].baseline_simulation_run_id),
+            str(year_run_ids[year].reform_simulation_run_id),
+        )
+        for year in YEAR_BUDGETS
     ]
     assert item["current_versions"] == CURRENT_VERSIONS
     result = item["result"]

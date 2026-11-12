@@ -102,11 +102,7 @@ enforce_user_write_request_size = request_size_limit(
 USER_RESOURCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": V2ErrorResponse,
-        "description": (
-            "The supplied references or countries contradict each other, or a "
-            "saved report's budget_window_years disagrees with the budget "
-            "window of the detailed-save report it names."
-        ),
+        "description": "The supplied references or countries contradict each other.",
     },
     401: {
         "model": V2ErrorResponse,

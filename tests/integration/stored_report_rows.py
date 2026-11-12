@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}
 STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
+# The year of every report store_report stores.
+STORED_REPORT_YEAR = 2026
 
 
 @dataclass
@@ -112,9 +114,13 @@ def store_catalog(connection: Connection, country: str) -> CatalogRows:
 
 
 def store_simulation(
-    connection: Connection, catalog: CatalogRows, *, policy_id: UUID | None
+    connection: Connection,
+    catalog: CatalogRows,
+    *,
+    policy_id: UUID | None,
+    year: int = 2026,
 ) -> UUID:
-    """Store an economy simulation of the catalog's dataset and region."""
+    """Store an economy simulation in ``year`` of the catalog's dataset and region."""
     simulation_id = uuid4()
     insert_row(
         connection,
@@ -125,7 +131,7 @@ def store_simulation(
         policy_id=policy_id,
         tax_benefit_model_version_id=catalog.version_id,
         region_id=catalog.region_id,
-        year=2026,
+        year=year,
     )
     catalog.simulation_ids.append(simulation_id)
     return simulation_id
@@ -394,3 +400,26 @@ def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
             text("DELETE FROM tax_benefit_models WHERE id = :id"),
             {"id": catalog.model_id},
         )
+
+
+def year_simulations(
+    connection: Connection, catalog: CatalogRows, report: StoredReport, year: int
+) -> StoredReport:
+    """Return the report as a year of its budget window sees it.
+
+    As the simulation service creates a window, its first year (the report's
+    ``year``, 2026 here) uses the report's two simulations, and each later
+    year a baseline and a reform simulation of its own year, with the same
+    policies.
+    """
+    if year == STORED_REPORT_YEAR:
+        return report
+    return StoredReport(
+        report_id=report.report_id,
+        baseline_simulation_id=store_simulation(
+            connection, catalog, policy_id=None, year=year
+        ),
+        reform_simulation_id=store_simulation(
+            connection, catalog, policy_id=catalog.policy_id, year=year
+        ),
+    )

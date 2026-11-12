@@ -57,6 +57,7 @@ from tests.integration.stored_report_rows import (
     store_catalog,
     store_report,
     store_report_run,
+    year_simulations,
 )
 
 if TYPE_CHECKING:
@@ -102,7 +103,7 @@ class StoringSimulationService:
                 store_report_run(
                     connection,
                     self.catalog,
-                    stored,
+                    year_simulations(connection, self.catalog, stored, year),
                     RunSettings(
                         versions=CURRENT_VERSIONS,
                         status="pending",

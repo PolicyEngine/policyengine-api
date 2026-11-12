@@ -42,6 +42,7 @@ from tests.integration.stored_report_rows import (
     store_catalog,
     store_report,
     store_report_run,
+    year_simulations,
 )
 from tests.unit.v2.user_service_support import default_legacy_references
 
@@ -230,7 +231,7 @@ def test_a_succeeded_window_whose_result_cannot_be_read_can_still_be_saved(
             store_report_run(
                 connection,
                 catalog,
-                window,
+                year_simulations(connection, catalog, window, year),
                 RunSettings(
                     versions=versions,
                     budget_window_year=BudgetWindowYear(
