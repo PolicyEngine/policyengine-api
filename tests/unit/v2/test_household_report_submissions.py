@@ -16,6 +16,7 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 )
 from policyengine_api.services.v2.countries.types import CountryRead
 from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationCountryError,
     HouseholdCalculationYearError,
 )
 from policyengine_api.services.v2.households.types import HouseholdRead
@@ -34,7 +35,6 @@ from policyengine_api.services.v2.simulation_service.types import (
     SubmittedReport,
 )
 from policyengine_api.services.v2.simulation_service.validators import (
-    HouseholdCalculationsUnsupportedError,
     SubmissionStorageError,
 )
 from tests.unit.v2.test_simulation_submissions import (
@@ -188,7 +188,7 @@ def test_a_country_without_household_calculations_is_refused_before_anything_is_
         policies=policies,
     )
 
-    with pytest.raises(HouseholdCalculationsUnsupportedError, match="'us'"):
+    with pytest.raises(HouseholdCalculationCountryError, match="country us"):
         service.submit_household_report(household_report_input())
     assert households.asked == []
     assert policies.asked == []

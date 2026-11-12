@@ -37,7 +37,11 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationFailure,
     HouseholdCalculationOutput,
 )
-from policyengine_api.services.v2.simulation_service.types import PackageVersions
+from policyengine_api.services.v2.simulation_service.types import (
+    HouseholdReportCreationInput,
+    PackageVersions,
+    SubmittedReport,
+)
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
@@ -53,6 +57,7 @@ from policyengine_api.services.v2.stored_reports.types import (
     ReportSummaryRead,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    CreatedReportUnreadableError,
     StoredReportNotFoundError,
 )
 
@@ -312,6 +317,9 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
     assert isinstance(report, HouseholdReportRead)
     assert report.kind == "household"
     assert report.household_id == stored.household_id
+    # A household report has no region or dataset.
+    assert not hasattr(report, "region_code")
+    assert not hasattr(report, "dataset_name")
     assert (report.label, report.description, report.year) == (
         "My household under the reform",
         "Doubles the credit",
@@ -563,3 +571,86 @@ def test_a_list_names_household_reports_beside_economy_reports_without_results(
     assert household_summary.status == "succeeded"
     assert not hasattr(household_summary, "result")
     assert type(economy_summary) is ReportSummaryRead
+
+
+@dataclass
+class StoringHouseholdReportService:
+    """The simulation service, storing a pending household report for each one sent.
+
+    With ``answer_unstored``, it answers with a report ID it stored nothing
+    for. An economy report must not reach it.
+    """
+
+    sessions: sessionmaker[Session]
+    answer_unstored: bool = False
+    sent: list[HouseholdReportCreationInput] | None = None
+
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        self.sent = [*(self.sent or []), report]
+        if self.answer_unstored:
+            return SubmittedReport(report_id=uuid4(), report_run_id=uuid4())
+        with self.sessions() as session:
+            stored = store_household_report(
+                session, run=RunToStore(status=ReportRunStatus.PENDING)
+            )
+        assert stored.report_run_id is not None
+        return SubmittedReport(
+            report_id=stored.report_id, report_run_id=stored.report_run_id
+        )
+
+    def submit_report(self, report: object) -> SubmittedReport:
+        msg = "a household report must not be sent as an economy report"
+        raise AssertionError(msg)
+
+
+def household_report_input() -> HouseholdReportCreationInput:
+    return HouseholdReportCreationInput.model_validate(
+        {
+            "country_id": "us",
+            "kind": "household",
+            "label": "My household under the reform",
+            "household_id": str(uuid4()),
+            "baseline": {},
+            "reform": None,
+        }
+    )
+
+
+def test_a_household_report_is_sent_as_one_and_read_back_from_the_tables(
+    sessions: sessionmaker[Session],
+) -> None:
+    simulation_service = StoringHouseholdReportService(sessions)
+    reports = V2StoredReportService(
+        StoredReportDatabaseSession(sessions),
+        current_versions=current_versions,
+        submissions=simulation_service,
+    )
+    report_input = household_report_input()
+
+    created = reports.create_report(report_input)
+
+    assert simulation_service.sent == [report_input]
+    assert isinstance(created, HouseholdReportRead)
+    assert (created.status, created.result, created.failure) == (
+        "pending",
+        None,
+        None,
+    )
+
+
+def test_a_created_household_report_that_cannot_be_read_back_is_named(
+    sessions: sessionmaker[Session],
+) -> None:
+    reports = V2StoredReportService(
+        StoredReportDatabaseSession(sessions),
+        current_versions=current_versions,
+        submissions=StoringHouseholdReportService(sessions, answer_unstored=True),
+    )
+
+    with pytest.raises(CreatedReportUnreadableError) as unreadable:
+        reports.create_report(household_report_input())
+
+    assert unreadable.value.country_id == "us"
+    assert isinstance(unreadable.value.__cause__, StoredReportNotFoundError)

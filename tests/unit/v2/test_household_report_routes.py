@@ -13,6 +13,7 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationOutput,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationCountryError,
     HouseholdCalculationYearError,
 )
 from policyengine_api.services.v2.households.validators import (
@@ -20,9 +21,6 @@ from policyengine_api.services.v2.households.validators import (
 )
 from policyengine_api.services.v2.simulation_service.types import (
     HouseholdReportCreationInput,
-)
-from policyengine_api.services.v2.simulation_service.validators import (
-    HouseholdCalculationsUnsupportedError,
 )
 from policyengine_api.services.v2.stored_reports.household_results.types import (
     HouseholdReportFailure,
@@ -201,8 +199,8 @@ def test_a_household_report_naming_another_country_is_refused_with_400() -> None
     ("error", "status_code"),
     [
         pytest.param(
-            HouseholdCalculationsUnsupportedError(
-                "Household reports are not available for country 'us'"
+            HouseholdCalculationCountryError(
+                "Household calculations are not available for country us."
             ),
             422,
             id="no-household-calculations",

@@ -187,10 +187,12 @@ def store_household_report(
     household_id: UUID,
     *,
     status: str = "succeeded",
+    with_reform: bool = True,
 ) -> StoredHouseholdReport:
     """Store a household report of current law and the catalog's policy, with a run.
 
     A succeeded run's simulation runs hold their calculated households.
+    Without ``with_reform``, it is a report of the baseline alone.
     """
     succeeded = status == "succeeded"
     baseline_id, baseline_run_id = store_household_simulation(
@@ -202,15 +204,17 @@ def store_household_report(
             status, succeeded_document(BASELINE_HOUSEHOLD) if succeeded else None
         ),
     )
-    reform_id, reform_run_id = store_household_simulation(
-        connection,
-        catalog,
-        household_id,
-        policy_id=catalog.policy_id,
-        run=SimulationRunToStore(
-            status, succeeded_document(REFORM_HOUSEHOLD) if succeeded else None
-        ),
-    )
+    reform_id = reform_run_id = None
+    if with_reform:
+        reform_id, reform_run_id = store_household_simulation(
+            connection,
+            catalog,
+            household_id,
+            policy_id=catalog.policy_id,
+            run=SimulationRunToStore(
+                status, succeeded_document(REFORM_HOUSEHOLD) if succeeded else None
+            ),
+        )
     report_id = uuid4()
     insert_row(
         connection,
@@ -219,7 +223,7 @@ def store_household_report(
         label="My household under the reform",
         country=catalog.country,
         tax_benefit_model_id=catalog.model_id,
-        policy_id=catalog.policy_id,
+        policy_id=catalog.policy_id if with_reform else None,
         baseline_simulation_id=baseline_id,
         reform_simulation_id=reform_id,
         household_id=household_id,
@@ -372,6 +376,27 @@ def test_a_household_report_answers_both_calculated_households(
     assert item["reform_simulation"]["policy_id"] == str(catalog.policy_id)
     assert item["result"]["baseline"]["household"] == BASELINE_HOUSEHOLD
     assert item["result"]["reform"]["household"] == REFORM_HOUSEHOLD
+
+
+def test_a_household_report_of_the_baseline_alone_answers_no_reform(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        household_id = store_household(connection, household_only_uk)
+        stored = store_household_report(
+            connection, household_only_uk, household_id, with_reform=False
+        )
+
+    response = client_for(runtime_sessions).get(
+        f"/v2/reports/{stored.report_id}?country_id=uk"
+    )
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    assert item["reform_simulation"] is None
+    assert item["run"]["reform_simulation_run_id"] is None
+    assert item["result"]["baseline"]["household"] == BASELINE_HOUSEHOLD
+    assert item["result"]["reform"] is None
 
 
 def test_household_reports_are_listed_beside_economy_reports(
