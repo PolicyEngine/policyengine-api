@@ -24,7 +24,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     RUN_ROUTE_KINDS,
     ReportKindUnsupportedError,
     ReportStorageError,
-    require_economy_report_runs,
+    require_run_route_kind,
 )
 
 if TYPE_CHECKING:
@@ -134,27 +134,24 @@ def test_a_run_list_whose_report_cannot_be_read_is_storage_unavailable() -> None
     assert unavailable.value.__cause__ is database_session.error
 
 
-def test_an_economy_reports_runs_can_be_run_and_listed() -> None:
-    assert require_economy_report_runs(stored_rows()) is None
-
-
 @pytest.mark.parametrize(
-    ("report_columns", "kind_name"),
-    [
-        ({"household_id": uuid4()}, "a household report"),
-        ({"budget_window_size": 3}, "a budget window"),
-    ],
-    ids=["household", "budget-window"],
+    ("report_columns", "kind"),
+    [({}, "economy"), ({"budget_window_size": 3}, "budget_window")],
+    ids=["economy", "budget-window"],
 )
-def test_another_kinds_runs_are_not_run_or_listed_yet(
-    report_columns: dict[str, object], kind_name: str
+def test_an_economy_reports_or_budget_windows_runs_can_be_run_and_listed(
+    report_columns: dict[str, object], kind: str
 ) -> None:
+    assert require_run_route_kind(stored_rows(**report_columns)) == kind
+
+
+def test_a_household_reports_runs_are_not_run_or_listed_yet() -> None:
     with pytest.raises(ReportKindUnsupportedError) as unsupported:
-        require_economy_report_runs(stored_rows(**report_columns))
+        require_run_route_kind(stored_rows(household_id=uuid4()))
 
     assert str(unsupported.value) == (
-        f"Report {REPORT_ID} is {kind_name}, whose runs these routes do not start "
-        "or list yet"
+        f"Report {REPORT_ID} is a household report, whose runs these routes do not "
+        "start or list yet"
     )
 
 

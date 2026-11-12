@@ -28,7 +28,16 @@ from policyengine_api.services.v2.stored_reports.validators import (
     RerunReportUnreadableError,
     StoredReportNotFoundError,
 )
-from tests.unit.v2.report_run_support import NEW_RUN_ID, FakeReportRunService
+from tests.unit.v2.budget_window_report_support import (
+    BUDGET_WINDOW_REPORT_ID,
+    budget_window_report_read,
+)
+from tests.unit.v2.report_run_support import (
+    NEW_RUN_ID,
+    NEW_WINDOW_RUN_ID,
+    FakeReportRunService,
+    budget_window_runs_read,
+)
 from tests.unit.v2.stored_report_support import (
     POLICY_ID,
     REPORT_ID,
@@ -71,6 +80,43 @@ def test_a_reports_runs_are_answered_newest_first_with_versions_and_current_ones
     assert service.calls == [
         ("list_report_runs", {"country_id": "us", "report_id": REPORT_ID})
     ]
+
+
+def test_a_budget_windows_runs_are_answered_with_their_years() -> None:
+    service = FakeReportRunService(runs=budget_window_runs_read())
+
+    response = report_route_client(reports=service).get(
+        f"/v2/reports/{BUDGET_WINDOW_REPORT_ID}/runs?country_id=us"
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["report_id"] == str(BUDGET_WINDOW_REPORT_ID)
+    assert result["kind"] == "budget_window"
+    newest, first = result["items"]
+    assert newest["id"] == str(NEW_WINDOW_RUN_ID)
+    assert (newest["trigger"], newest["recalculate"]) == ("manual", True)
+    assert newest["policyengine_version"] == "4.2.0"
+    assert [year["year"] for year in first["years"]] == [2026, 2027]
+    assert first["years"][0]["country_package_version"] == "1.4.0"
+    assert result["current_versions"]["policyengine_version"] == "4.2.0"
+
+
+def test_running_a_budget_window_again_answers_the_window_with_its_new_run() -> None:
+    window = budget_window_report_read(status="pending", result=None)
+    service = FakeReportRunService(rerun=window)
+
+    response = report_route_client(reports=service).post(
+        f"/v2/reports/{BUDGET_WINDOW_REPORT_ID}/runs?country_id=us",
+        json={"force": True},
+    )
+
+    assert response.status_code == 201, response.text
+    item = response.json()["result"]["item"]
+    assert item["kind"] == "budget_window"
+    assert item["budget_window_size"] == 2
+    assert [year["year"] for year in item["run"]["years"]] == [2026, 2027]
+    assert item["result"] is None
 
 
 def test_a_report_with_no_run_lists_none() -> None:
@@ -383,3 +429,15 @@ def test_the_openapi_document_describes_both_run_routes() -> None:
     assert {"$ref": "#/components/schemas/V2MissingParametersErrorResponse"} in runs[
         "post"
     ]["responses"]["422"]["content"]["application/json"]["schema"]["anyOf"]
+
+
+def test_the_openapi_document_gives_each_kinds_run_list() -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+
+    schemas = document["components"]["schemas"]
+    result = schemas["ReportRunListResponse"]["properties"]["result"]
+    assert result["discriminator"]["propertyName"] == "kind"
+    assert {option["$ref"] for option in result["oneOf"]} == {
+        "#/components/schemas/ReportRunListResult",
+        "#/components/schemas/BudgetWindowRunListResult",
+    }

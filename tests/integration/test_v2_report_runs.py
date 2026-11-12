@@ -9,7 +9,7 @@ country and policies, and reading the report and its runs back.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -55,16 +55,19 @@ from policyengine_api.services.v2.stored_reports.services import V2StoredReportS
 from tests.integration.simulation_rows import insert_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
+    BudgetWindowYear,
     RunSettings,
     StoredReport,
     delete_catalog,
+    store_budget_window_run,
     store_catalog,
     store_report,
     store_report_run,
+    store_year_simulations,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Iterator
 
     from sqlalchemy import Connection, Engine
 
@@ -86,6 +89,43 @@ def mark_manual(connection: Connection, run_id: UUID) -> None:
     )
 
 
+def mark_window_manual(
+    connection: Connection, window_run_id: UUID, *, recalculate: bool
+) -> None:
+    """Record the window run as a re-run, as the simulation service creates one."""
+    connection.execute(
+        text(
+            "UPDATE budget_window_runs SET trigger = 'manual', recalculate = "
+            ":recalculate WHERE id = :id"
+        ),
+        {"id": window_run_id, "recalculate": recalculate},
+    )
+
+
+def store_window_run(
+    connection: Connection,
+    catalog: CatalogRows,
+    report: StoredReport,
+    settings: RunSettings,
+    years: tuple[int, ...],
+) -> UUID:
+    """Store a budget-window run and a report run of each year, with ``settings``."""
+    window_run_id = store_budget_window_run(connection, catalog, report, settings)
+    for year in years:
+        store_report_run(
+            connection,
+            catalog,
+            store_year_simulations(connection, catalog, report, year),
+            replace(
+                settings,
+                budget_window_year=BudgetWindowYear(
+                    budget_window_run_id=window_run_id, year=year
+                ),
+            ),
+        )
+    return window_run_id
+
+
 @dataclass
 class RerunningSimulationService:
     """Store the new run the simulation service would start, and record the ask.
@@ -94,6 +134,8 @@ class RerunningSimulationService:
     so reading it back finds nothing. With ``refusal``, it stores nothing and
     raises it, as the simulation service refuses. With ``database_session``,
     it records how many of the report service's sessions are open when asked.
+    With ``window_years``, the report is a budget window, and the new run is
+    a budget-window run with a pending report run for each of those years.
     """
 
     engine: Engine
@@ -101,6 +143,7 @@ class RerunningSimulationService:
     delete_report: bool = False
     refusal: Exception | None = None
     database_session: CountingDatabaseSession | None = None
+    window_years: tuple[int, ...] = ()
     reruns: list[ReportRerunInput] = field(default_factory=list)
     new_run_ids: list[UUID] = field(default_factory=list)
     open_sessions_when_asked: list[int] = field(default_factory=list)
@@ -124,18 +167,21 @@ class RerunningSimulationService:
                 baseline_simulation_id=simulations.baseline_simulation_id,
                 reform_simulation_id=simulations.reform_simulation_id,
             )
-            run_ids = store_report_run(
-                connection,
-                self.catalog,
-                report,
-                RunSettings(
-                    versions=CURRENT_VERSIONS,
-                    status="pending",
-                    created_at=STARTED_AT + timedelta(days=30),
-                ),
+            settings = RunSettings(
+                versions=CURRENT_VERSIONS,
+                status="pending",
+                created_at=STARTED_AT + timedelta(days=30),
             )
-            mark_manual(connection, run_ids.report_run_id)
-            self.new_run_ids.append(run_ids.report_run_id)
+            if self.window_years:
+                window_run_id = store_window_run(
+                    connection, self.catalog, report, settings, self.window_years
+                )
+                mark_window_manual(connection, window_run_id, recalculate=rerun.force)
+                self.new_run_ids.append(window_run_id)
+            else:
+                run_ids = store_report_run(connection, self.catalog, report, settings)
+                mark_manual(connection, run_ids.report_run_id)
+                self.new_run_ids.append(run_ids.report_run_id)
             if self.delete_report:
                 connection.execute(
                     text("DELETE FROM reports WHERE id = :id"),
@@ -346,37 +392,12 @@ def store_household_report(connection: Connection, catalog: CatalogRows) -> UUID
     return store_report(connection, catalog, household_id=household_id).report_id
 
 
-def store_budget_window(connection: Connection, catalog: CatalogRows) -> UUID:
-    """Store a three-year budget window; return its report's ID."""
-    return store_report(connection, catalog, budget_window_size=3).report_id
-
-
-@dataclass(frozen=True)
-class OtherKind:
-    """A kind of report the run routes refuse: its name and how to store one."""
-
-    name: str
-    store: Callable[[Connection, CatalogRows], UUID]
-
-
 @pytest.mark.parametrize("method", ["get", "post"])
-@pytest.mark.parametrize(
-    "other_kind",
-    [
-        OtherKind("a budget window", store_budget_window),
-        OtherKind("a household report", store_household_report),
-    ],
-    ids=["budget-window", "household"],
-)
-def test_other_kinds_runs_are_not_listed_or_started_here_yet(
-    owner_engine: Engine,
-    catalog: CatalogRows,
-    runtime_sessions: Any,
-    method: str,
-    other_kind: OtherKind,
+def test_a_household_reports_runs_are_not_listed_or_started_here_yet(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any, method: str
 ) -> None:
     with owner_engine.begin() as connection:
-        report_id = other_kind.store(connection, catalog)
+        report_id = store_household_report(connection, catalog)
     simulation_service = RerunningSimulationService(owner_engine, catalog)
     client = client_for(runtime_sessions, simulation_service)
 
@@ -386,8 +407,8 @@ def test_other_kinds_runs_are_not_listed_or_started_here_yet(
 
     assert response.status_code == 422
     assert response.json()["message"] == (
-        f"Report {report_id} is {other_kind.name}, whose runs these routes do not "
-        "start or list yet"
+        f"Report {report_id} is a household report, whose runs these routes do "
+        "not start or list yet"
     )
     assert simulation_service.reruns == []
 
@@ -529,3 +550,100 @@ def test_the_simulation_services_refusal_is_answered_as_its_own(
 
     assert response.status_code == 503
     assert response.json() == {"status": "error", "message": message}
+
+
+def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        window = store_report(connection, catalog, budget_window_size=2)
+        first_run_id = store_window_run(
+            connection,
+            catalog,
+            window,
+            RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
+            (2026, 2027),
+        )
+        newest_run_id = store_window_run(
+            connection,
+            catalog,
+            window,
+            RunSettings(
+                versions=CURRENT_VERSIONS,
+                status="running",
+                created_at=STARTED_AT + timedelta(days=1),
+            ),
+            (2026, 2027),
+        )
+        mark_window_manual(connection, newest_run_id, recalculate=True)
+    client = client_for(
+        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+    )
+
+    response = client.get(f"/v2/reports/{window.report_id}/runs?country_id=us")
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["report_id"] == str(window.report_id)
+    assert result["kind"] == "budget_window"
+    assert result["current_versions"] == CURRENT_VERSIONS
+    items = result["items"]
+    assert [item["id"] for item in items] == [str(newest_run_id), str(first_run_id)]
+    assert [
+        (item["status"], item["trigger"], item["recalculate"]) for item in items
+    ] == [("running", "manual", True), ("succeeded", "initial", False)]
+    assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
+    assert [[year["year"] for year in item["years"]] for item in items] == [
+        [2026, 2027],
+        [2026, 2027],
+    ]
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_running_a_budget_window_again_answers_it_with_its_new_run(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    force: bool,  # noqa: FBT001  # pytest passes parameters positionally
+) -> None:
+    with owner_engine.begin() as connection:
+        window = store_report(connection, catalog, budget_window_size=2)
+        first_run_id = store_window_run(
+            connection,
+            catalog,
+            window,
+            RunSettings(versions=OLDER_VERSIONS),
+            (2026, 2027),
+        )
+    simulation_service = RerunningSimulationService(
+        owner_engine, catalog, window_years=(2026, 2027)
+    )
+    client = client_for(runtime_sessions, simulation_service)
+
+    response = client.post(
+        f"/v2/reports/{window.report_id}/runs?country_id=us", json={"force": force}
+    )
+
+    assert response.status_code == 201, response.text
+    assert simulation_service.reruns == [
+        ReportRerunInput(
+            country_id="us",
+            report_id=window.report_id,
+            force=force,
+            policy_ids=(None, catalog.policy_id),
+        )
+    ]
+    item = response.json()["result"]["item"]
+    (new_run_id,) = simulation_service.new_run_ids
+    assert item["kind"] == "budget_window"
+    assert item["status"] == "pending"
+    assert item["run"]["id"] == str(new_run_id)
+    assert item["run"]["trigger"] == "manual"
+    assert item["run"]["recalculate"] is force
+    assert item["run"]["policyengine_version"] == "4.2.0"
+    assert item["result"] is None
+    runs = client.get(f"/v2/reports/{window.report_id}/runs?country_id=us").json()
+    assert [run["id"] for run in runs["result"]["items"]] == [
+        str(new_run_id),
+        str(first_run_id),
+    ]
