@@ -3,8 +3,10 @@
 Each parity household goes to ``/calculate`` (``/calculate-full`` when it adds
 missing variables) as the check sends it. The real routes check its inputs and
 parse its situation with the installed country models, and only the
-calculation itself is left out, so a household the routes refuse fails here
-rather than in a release. The check waits longer than the candidate's Cloud
+calculation itself is left out, so a household the routes refuse before
+calculating fails here rather than in a release. A refusal during the
+calculation, such as an SPM error, is not covered. The check waits longer than
+the candidate's Cloud
 Run request timeout (``CLOUD_RUN_TIMEOUT`` in
 ``.github/scripts/cloud_run_env.sh``) for the answer: ``/calculate-full`` can
 take most of it, and the check should get the candidate's own answer.
@@ -40,10 +42,12 @@ PARITY_HOUSEHOLDS = parity_households(0)
 
 
 class UncalculatedHouseholds(HouseholdCalculationService):
-    """The routes' household service, answering each accepted household as sent.
+    """The routes' household service, answering each accepted household uncalculated.
 
     Input checks and situation parsing run as in the Public API; the
-    calculation, which takes minutes for ``/calculate-full``, does not.
+    calculation, which takes minutes for ``/calculate-full``, does not. The
+    answer is the household as the routes prepared it: deprecated inputs
+    dropped and, for ``/calculate-full``, the missing variables added.
     """
 
     def calculate_prepared_household(
