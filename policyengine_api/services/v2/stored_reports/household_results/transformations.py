@@ -11,15 +11,13 @@ from policyengine_api.services.v2.household_calculations.types import (
 )
 from policyengine_api.services.v2.stored_reports.household_results.types import (
     HouseholdReportFailure,
+    HouseholdReportSideFailure,
 )
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.data.v2.models import ReportRun
-    from policyengine_api.services.v2.household_calculations.types import (
-        HouseholdCalculationFailure,
-    )
     from policyengine_api.services.v2.stored_reports.household_results.types import (
         HouseholdResultRows,
     )
@@ -27,7 +25,7 @@ if TYPE_CHECKING:
 
 def _side_failure(
     rows: HouseholdResultRows, simulation_run_id: UUID | None
-) -> HouseholdCalculationFailure | None:
+) -> HouseholdReportSideFailure | None:
     """Return the side's failure, or None without a readable failure document."""
     if simulation_run_id is None:
         return None
@@ -37,7 +35,13 @@ def _side_failure(
         )
     except ValidationError:
         return None
-    return document.calculation_failure()
+    error = document.error
+    return HouseholdReportSideFailure(
+        code=error.code,
+        message=error.message,
+        input_errors=tuple(error.input_errors),
+        spm_error=error.spm_error,
+    )
 
 
 def household_report_failure(

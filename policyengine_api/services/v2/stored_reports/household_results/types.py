@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from policyengine_api.services.v2.household_calculations.types import (
-        HouseholdCalculationFailure,
         HouseholdCalculationOutput,
     )
 
@@ -60,17 +59,31 @@ class HouseholdReportResult:
 
 
 @dataclass(frozen=True)
+class HouseholdReportSideFailure:
+    """The household function's error for one side's calculation.
+
+    It is read from the side's failure document, which always names its
+    ``code``, such as ``invalid_inputs``; ``input_errors`` names each input
+    the country model does not recognize, and ``spm_error`` is an SPM error.
+    """
+
+    code: str
+    message: str
+    input_errors: tuple[dict[str, JsonValue], ...]
+    spm_error: dict[str, JsonValue] | None
+
+
+@dataclass(frozen=True)
 class HouseholdReportFailure:
     """Why each side of a failed household report run failed, where it says.
 
-    Each is the household function's error for that side's calculation: its
-    code, message, the inputs the country model does not recognize and any
-    SPM error. A side is None when it succeeded, has no failure document (a
+    Each is the household function's error for that side's calculation. A
+    side is None when it succeeded, has no failure document (a
     run failed outside its calculation, such as one Modal refused, records
     none) or has one that cannot be read; the report run's error message
     still says why it failed. ``reform`` is also None for a report of the
     baseline alone.
     """
 
-    baseline: HouseholdCalculationFailure | None
-    reform: HouseholdCalculationFailure | None
+    baseline: HouseholdReportSideFailure | None
+    reform: HouseholdReportSideFailure | None
