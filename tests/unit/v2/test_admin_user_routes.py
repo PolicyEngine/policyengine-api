@@ -14,6 +14,14 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
 from policyengine_api.fastapi_routes.v2.user_type_support import (
     minimum_user_type_dependency,
 )
+from policyengine_api.services.v2.user_accounts.types import (
+    AccountExport,
+    AccountRead,
+)
+from policyengine_api.services.v2.user_households.types import UserHouseholdRead
+from policyengine_api.services.v2.user_policies.types import UserPolicyRead
+from policyengine_api.services.v2.user_reports.types import UserReportRead
+from policyengine_api.services.v2.user_simulations.types import UserSimulationRead
 from policyengine_api.services.v2.user_types.types import (
     MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserPage,
@@ -31,6 +39,7 @@ from policyengine_api.services.v2.user_types.validators import (
     UserTypeCheckUnavailableError,
 )
 from tests.unit.v2.user_route_support import (
+    BROWSER_USER_ID,
     CREATED_AT,
     OWNER_ID,
     PRINCIPAL,
@@ -42,7 +51,12 @@ from tests.unit.v2.user_route_support import (
 
 TARGET_ID = UUID("00000000-0000-0000-0000-000000000081")
 CHANGE_ID = UUID("00000000-0000-0000-0000-000000000082")
+SAVED_POLICY_ID = UUID("00000000-0000-0000-0000-000000000083")
+SAVED_HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000084")
+SAVED_SIMULATION_ID = UUID("00000000-0000-0000-0000-000000000085")
+SAVED_REPORT_ID = UUID("00000000-0000-0000-0000-000000000086")
 LAST_SEEN_AT = datetime(2026, 2, 1, tzinfo=UTC)
+SAVED_ITEMS_PATH = f"/v2/admin/users/{TARGET_ID}/saved-items"
 
 
 def _user(**changes) -> AdminUserRead:
@@ -73,6 +87,82 @@ def _change() -> UserTypeChangeRead:
     )
 
 
+def _saved_items() -> AccountExport:
+    """Return the target user and one saved record of each kind, in two countries."""
+    return AccountExport(
+        user=AccountRead(
+            id=TARGET_ID,
+            user_type="author",
+            primary_country="uk",
+            first_name="Bob",
+            last_name=None,
+            email="bob@example.test",
+            created_at=CREATED_AT,
+        ),
+        policies=(
+            UserPolicyRead(
+                id=SAVED_POLICY_ID,
+                country_id="uk",
+                user_id=TARGET_ID,
+                policy_id=None,
+                legacy_policy_id=7,
+                name="Bob's reform",
+                description=None,
+                baseline="current-law",
+                provenance=None,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            ),
+        ),
+        households=(
+            UserHouseholdRead(
+                id=SAVED_HOUSEHOLD_ID,
+                country_id="us",
+                user_id=TARGET_ID,
+                household_id=None,
+                legacy_household_id=10,
+                name=None,
+                description=None,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            ),
+        ),
+        simulations=(
+            UserSimulationRead(
+                id=SAVED_SIMULATION_ID,
+                country_id="us",
+                user_id=TARGET_ID,
+                simulation_id=None,
+                legacy_simulation_id=613,
+                name=None,
+                description=None,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            ),
+        ),
+        reports=(
+            UserReportRead(
+                id=SAVED_REPORT_ID,
+                country_id="uk",
+                user_id=TARGET_ID,
+                report_id=None,
+                legacy_report_id=615,
+                name=None,
+                description=None,
+                user_policy_id=SAVED_POLICY_ID,
+                baseline_user_policy_id=None,
+                source_note=None,
+                provisions=None,
+                validation=None,
+                budget_window_years=None,
+                last_run_at=None,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            ),
+        ),
+    )
+
+
 def _result(name: str, kwargs: dict):
     if name == "require_minimum_user_type":
         return UserType.ADMIN
@@ -83,6 +173,8 @@ def _result(name: str, kwargs: dict):
         )
     if name == "list_user_type_changes":
         return (_change(),)
+    if name in {"get_user_saved_items", "export_account"}:
+        return _saved_items()
     return _user()
 
 
@@ -189,6 +281,82 @@ def test_admins_read_one_user_and_its_type_history() -> None:
     ) in service.calls
 
 
+def test_admins_read_a_users_saved_items_as_its_own_export_returns_them() -> None:
+    service = RecordingService(_result)
+    client, _service = _client(service, v2_account_service_factory=lambda: service)
+
+    saved_items = client.get(SAVED_ITEMS_PATH)
+    own_export = client.get("/v2/me/export?country_id=us")
+
+    assert saved_items.status_code == 200
+    assert saved_items.json() == own_export.json()
+    result = saved_items.json()["result"]
+    assert result["user"]["id"] == str(TARGET_ID)
+    assert [
+        (kind, item["id"], item["country_id"])
+        for kind in ("policies", "households", "simulations", "reports")
+        for item in result[kind]
+    ] == [
+        ("policies", str(SAVED_POLICY_ID), "uk"),
+        ("households", str(SAVED_HOUSEHOLD_ID), "us"),
+        ("simulations", str(SAVED_SIMULATION_ID), "us"),
+        ("reports", str(SAVED_REPORT_ID), "uk"),
+    ]
+    assert service.calls[:2] == [
+        (
+            "require_minimum_user_type",
+            {"principal": PRINCIPAL, "minimum": UserType.ADMIN},
+        ),
+        ("get_user_saved_items", {"principal": PRINCIPAL, "user_id": TARGET_ID}),
+    ]
+
+
+def test_saved_items_of_an_unauthenticated_or_absent_user_are_not_found() -> None:
+    not_found_error = SignedInUserNotFoundError("No signed-in user has this ID")
+
+    def refuse(name: str, kwargs: dict):
+        if name == "get_user_saved_items":
+            raise not_found_error
+        return _result(name, kwargs)
+
+    client, service = _client(RecordingService(refuse))
+
+    not_found = client.get(f"/v2/admin/users/{BROWSER_USER_ID}/saved-items")
+    malformed = client.get("/v2/admin/users/not-a-uuid/saved-items")
+
+    assert not_found.status_code == 404
+    assert not_found.json() == {
+        "status": "error",
+        "message": "No signed-in user has this ID",
+    }
+    assert str(BROWSER_USER_ID) not in not_found.text
+    assert malformed.status_code == 422
+    assert [
+        kwargs["user_id"]
+        for name, kwargs in service.calls
+        if name == "get_user_saved_items"
+    ] == [BROWSER_USER_ID]
+
+
+def test_openapi_publishes_the_saved_items_route_with_the_export_result() -> None:
+    client, _service = _client()
+
+    schema = client.get("/v2/openapi.json").json()
+
+    # Read-only: the path has no other operation.
+    assert set(schema["paths"]["/v2/admin/users/{user_id}/saved-items"]) == {"get"}
+    operation = schema["paths"]["/v2/admin/users/{user_id}/saved-items"]["get"]
+    assert {"200", "401", "403", "404", "422", "500", "503"} <= set(
+        operation["responses"]
+    )
+    success_ref = operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    success_schema = schema["components"]["schemas"][success_ref.rsplit("/", 1)[-1]]
+    assert success_schema["properties"]["result"]["$ref"].endswith("/MeExportResult")
+    assert "Admins only" in operation["description"]
+
+
 def test_admins_change_a_signed_in_users_type() -> None:
     client, service = _client()
 
@@ -270,9 +438,10 @@ def test_callers_below_admin_get_403_from_every_admin_route(principal: str) -> N
             json={"user_type": "admin", "expected_user_type": "standard"},
         ),
         client.get(f"/v2/admin/users/{TARGET_ID}/user-type-changes"),
+        client.get(SAVED_ITEMS_PATH),
     ]
 
-    assert [response.status_code for response in responses] == [403] * 4
+    assert [response.status_code for response in responses] == [403] * 5
     assert {name for name, _kwargs in service.calls} == {"require_minimum_user_type"}
     expected_principal = (
         PRINCIPAL if principal == "signed_in" else UNAUTHENTICATED_PRINCIPAL

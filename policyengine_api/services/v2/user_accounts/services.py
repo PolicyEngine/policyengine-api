@@ -78,11 +78,47 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from uuid import UUID
 
+    from sqlmodel import Session
+
     from policyengine_api.services.v2.user_accounts.database_session import (
         AccountDatabaseSession,
     )
 
 logger = logging.getLogger(__name__)
+
+
+def export_user_in_session(
+    session: Session, *, user_id: UUID, email: str | None
+) -> AccountExport:
+    """Return a user's account and every association it owns, in all countries.
+
+    ``email`` is shown in place of the user's own email when it is not None.
+    Raise AccountNotFoundError when no user has ``user_id``. The caller's own
+    export and an admin's read of a user's saved items both use this.
+    """
+    # Imported here: v2 services load only when used (ruff's
+    # banned-module-level-imports in pyproject.toml).
+    from policyengine_api.services.v2.user_households.services import (
+        read_all_user_households,
+    )
+    from policyengine_api.services.v2.user_policies.services import (
+        read_all_user_policies,
+    )
+    from policyengine_api.services.v2.user_reports.services import (
+        read_all_user_reports,
+    )
+    from policyengine_api.services.v2.user_simulations.services import (
+        read_all_user_simulations,
+    )
+
+    user = require_account(read_account_user(session, user_id))
+    return AccountExport(
+        user=account_read(user, email=email),
+        policies=read_all_user_policies(session, user_id=user_id),
+        households=read_all_user_households(session, user_id=user_id),
+        simulations=read_all_user_simulations(session, user_id=user_id),
+        reports=read_all_user_reports(session, user_id=user_id),
+    )
 
 
 class V2AccountService:
@@ -198,19 +234,6 @@ class V2AccountService:
 
         A signed-out browser with no saved work gets an empty export with no user.
         """
-        from policyengine_api.services.v2.user_households.services import (
-            read_all_user_households,
-        )
-        from policyengine_api.services.v2.user_policies.services import (
-            read_all_user_policies,
-        )
-        from policyengine_api.services.v2.user_reports.services import (
-            read_all_user_reports,
-        )
-        from policyengine_api.services.v2.user_simulations.services import (
-            read_all_user_simulations,
-        )
-
         with self._database_session.transaction() as session:
             owner = resolve_principal_user_for_read_in_session(
                 session, principal, country_id=country_id
@@ -223,13 +246,8 @@ class V2AccountService:
                     simulations=(),
                     reports=(),
                 )
-            user = require_account(read_account_user(session, owner.user_id))
-            return AccountExport(
-                user=account_read(user, email=owner.email),
-                policies=read_all_user_policies(session, user_id=owner.user_id),
-                households=read_all_user_households(session, user_id=owner.user_id),
-                simulations=read_all_user_simulations(session, user_id=owner.user_id),
-                reports=read_all_user_reports(session, user_id=owner.user_id),
+            return export_user_in_session(
+                session, user_id=owner.user_id, email=owner.email
             )
 
     def upgrade_account(

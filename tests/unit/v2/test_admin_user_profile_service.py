@@ -12,11 +12,13 @@ import logging
 import re
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import pytest
 from sqlmodel import select
 
+from policyengine_api import observability
 from policyengine_api.data.v2.models import (
     User,
     UserIdentity,
@@ -48,15 +50,16 @@ from policyengine_api.services.v2.user_types.types import (
 from policyengine_api.services.v2.user_types.validators import (
     AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
+    SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
 )
 from tests.unit.v2.user_service_support import ISSUER, V2Store, v2_store
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
-    from uuid import UUID
 
 OTHER_ISSUER = "https://other-tenant.example.test/"
+ABSENT_USER_ID = UUID("00000000-0000-0000-0000-0000000000a1")
 FIRST_SEEN = datetime(2026, 1, 1, tzinfo=UTC)
 LATER = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -904,3 +907,127 @@ def test_a_type_change_and_the_type_history_each_pass_a_wait_budget(
     assert isinstance(change_budget, RateLimitWaitBudget)
     assert isinstance(history_budget, RateLimitWaitBudget)
     assert change_budget is not history_budget
+
+
+class RecordedEvents:
+    """Stands in for the observability runtime, keeping each event's name."""
+
+    def __init__(self) -> None:
+        self.names: list[str] = []
+
+    def event(self, name: str, **_details: Any) -> None:
+        self.names.append(name)
+
+
+@pytest.fixture
+def recorded_events(monkeypatch: pytest.MonkeyPatch) -> RecordedEvents:
+    recorder = RecordedEvents()
+    monkeypatch.setattr(observability, "get_runtime", lambda: recorder)
+    return recorder
+
+
+def test_a_users_saved_items_show_the_email_admins_see_from_auth0(
+    store: V2Store, recorded_events: RecordedEvents
+) -> None:
+    alice = _principal("alice")
+    alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
+    _make_admin(store, alice_id)
+    bob_id = _sign_in(
+        store, _principal("bob", email="bob@stored.example.test"), created_at=LATER
+    )
+    reader = StandInProfileReader(
+        [
+            _profile(
+                "google-oauth2|bob",
+                email="bob@auth0.example.test",
+                email_verified=True,
+                given_name="Bob",
+            )
+        ]
+    )
+    user_types = _user_types(store, reader)
+
+    saved_items = user_types.get_user_saved_items(principal=alice, user_id=bob_id)
+    admin_user_item = user_types.get_user(principal=alice, user_id=bob_id)
+
+    assert saved_items.user is not None
+    assert saved_items.user.id == bob_id
+    assert saved_items.user.email == admin_user_item.email == "bob@auth0.example.test"
+    # Only the email comes from Auth0: the names are the stored ones, as the
+    # user's own export has them.
+    assert (saved_items.user.first_name, saved_items.user.last_name) == (None, None)
+    assert reader.profile_reads == [("google-oauth2|bob",), ("google-oauth2|bob",)]
+    saved_items_budget, _admin_user_item_budget = reader.wait_budgets
+    assert isinstance(saved_items_budget, RateLimitWaitBudget)
+    assert recorded_events.names == ["admin_read_v2_user_saved_items"]
+    with store.sessions() as session:
+        stored_bob = session.get(User, bob_id)
+        assert stored_bob is not None
+        stored_identity_emails = {
+            identity.email for identity in session.exec(select(UserIdentity)).all()
+        }
+    # Nothing read from Auth0 is stored.
+    assert stored_bob.email is None
+    assert "bob@auth0.example.test" not in stored_identity_emails
+
+
+def test_saved_items_keep_the_stored_email_when_auth0_cannot_answer(
+    store: V2Store, recorded_events: RecordedEvents
+) -> None:
+    alice = _principal("alice")
+    alice_id = _sign_in(store, alice, created_at=FIRST_SEEN)
+    _make_admin(store, alice_id)
+    bob_id = _sign_in(
+        store, _principal("bob", email="bob@stored.example.test"), created_at=LATER
+    )
+    reader = StandInProfileReader(
+        failure=Auth0UserProfilesUnavailableError(
+            "Auth0 user profiles are unavailable: timeout", cause="timeout"
+        )
+    )
+
+    with _recorded_logs() as records:
+        saved_items = _user_types(store, reader).get_user_saved_items(
+            principal=alice, user_id=bob_id
+        )
+
+    assert saved_items.user is not None
+    assert saved_items.user.email == "bob@stored.example.test"
+    assert [
+        (record.levelno, record.getMessage(), record.policyengine_attributes)
+        for record in records
+    ] == [
+        (
+            logging.WARNING,
+            "admin_user_profiles_unavailable",
+            {
+                "operation": "read_profiles",
+                "error_type": "Auth0UserProfilesUnavailableError",
+                "cause": "timeout",
+            },
+        )
+    ]
+    # The read is still served and recorded.
+    assert recorded_events.names == ["admin_read_v2_user_saved_items"]
+
+
+def test_a_refused_saved_items_read_never_reaches_auth0(
+    store: V2Store, recorded_events: RecordedEvents
+) -> None:
+    people = _signed_in_people(store)
+    reader = StandInProfileReader(
+        [_profile("google-oauth2|carol", email="carol@auth0.example.test")]
+    )
+    user_types = _user_types(store, reader)
+
+    with pytest.raises(UserTypeBelowMinimumError):
+        user_types.get_user_saved_items(
+            principal=_principal("bob"), user_id=people["carol"]
+        )
+    with pytest.raises(SignedInUserNotFoundError):
+        user_types.get_user_saved_items(
+            principal=_principal("alice"), user_id=ABSENT_USER_ID
+        )
+
+    assert reader.profile_reads == []
+    assert recorded_events.names == []

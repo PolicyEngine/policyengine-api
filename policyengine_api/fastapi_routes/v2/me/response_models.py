@@ -148,9 +148,11 @@ class InvitationAcceptanceResult(StrictAccountAPIModel):
 
 
 class MeExportResult(StrictAccountAPIModel):
-    """The current user and every policy, household, simulation and report it saved.
+    """A user and every policy, household, simulation and report it saved.
 
     The export covers every country, not only the requested one.
+    ``GET /v2/me/export`` returns the current user's, and
+    ``GET /v2/admin/users/{user_id}/saved-items`` a signed-in user's, to admins.
     """
 
     # Null when an unauthenticated user has not saved anything yet.

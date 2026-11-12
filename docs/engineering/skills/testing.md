@@ -621,6 +621,7 @@ uv run --frozen pytest \
   tests/unit/v2/test_user_type_service.py \
   tests/unit/v2/test_admin_user_routes.py \
   tests/unit/v2/test_admin_user_profile_service.py \
+  tests/unit/v2/test_admin_user_saved_items_service.py \
   tests/unit/v2/test_admin_invitation_routes.py \
   tests/unit/v2/test_user_invitation_service.py \
   tests/unit/v2/test_user_email_service.py \
