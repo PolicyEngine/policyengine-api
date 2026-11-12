@@ -479,6 +479,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.services.v2.policies.types.StrictPolicyInput",
     "policyengine_api.services.v2.simulation_service.types.EconomyReportCreationInput",
     "policyengine_api.services.v2.simulation_service.types.EconomySimulationCreationInput",
+    "policyengine_api.services.v2.simulation_service.types.HouseholdReportCreationInput",
     "policyengine_api.services.v2.simulation_service.types.StrictSubmissionModel",
     "policyengine_api.services.v2.simulations.types.StrictContractModel",
     "policyengine_api.services.v2.stored_reports.economy_results.types.EconomyResultModel",
