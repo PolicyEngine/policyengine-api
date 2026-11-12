@@ -22,10 +22,10 @@ class EconomyReportCreateRequest(EconomyReportCreationInput):
 class HouseholdReportCreateRequest(HouseholdReportCreationInput):
     """A household report to create; ``country_id`` must match the query's.
 
-    It calculates the stored household ``household_id`` in ``year`` under
-    ``baseline`` and ``reform``; each empty object is current law, and a null
-    or omitted ``reform`` makes a report of the baseline alone. No field names
-    a PolicyEngine.py version.
+    It calculates the stored household ``household_id`` in its default year
+    under ``baseline`` and ``reform``; each empty object is current law, and a
+    null or omitted ``reform`` makes a report of the baseline alone. No field
+    names a year or a PolicyEngine.py version.
     """
 
 

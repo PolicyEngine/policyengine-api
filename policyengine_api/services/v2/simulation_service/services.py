@@ -15,7 +15,8 @@ them in the catalog version its default worker runs.
 A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),
 and the household it names must be stored in the country, through the same
-service as ``/v2/households``; the household is read before the policies.
+service as ``/v2/households``, with a default year, which the report
+calculates; the household is checked before the policies.
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
+)
+from policyengine_api.services.v2.household_calculations.validators import (
+    require_default_year,
 )
 from policyengine_api.services.v2.policies.validators import (
     require_policy_parameters_present,
@@ -157,7 +161,9 @@ class SimulationSubmissionService:
 
         Raise HouseholdCalculationsUnsupportedError unless the country's row
         allows household calculations, then HouseholdNotFoundError for a
-        household the country does not store, then the policy checks' errors
+        household the country does not store, then
+        HouseholdCalculationYearError for one with no default year, then the
+        policy checks' errors
         (the baseline's policy first, and only the baseline's for a report of
         the baseline alone), SubmissionStorageError when the database or its
         catalog cannot be read, and then the simulation service's errors.
@@ -165,9 +171,10 @@ class SimulationSubmissionService:
         country_id = report.country_id
         with _storage_failures():
             require_household_country(self._countries.list_countries(), country_id)
-            self._households.get_household(
+            household = self._households.get_household(
                 country_id=country_id, household_id=report.household_id
             )
+        require_default_year(household.default_year)
         policy_ids = [report.baseline.policy_id]
         if report.reform is not None:
             policy_ids.append(report.reform.policy_id)

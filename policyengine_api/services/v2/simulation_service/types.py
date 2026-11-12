@@ -214,7 +214,8 @@ class HouseholdReportFields(StrictSubmissionModel):
     """A household report: one stored household under a baseline and a reform.
 
     ``household_id`` names a household stored through ``/v2/households`` in
-    the report's country, and both simulations calculate it in ``year``.
+    the report's country, and both simulations calculate it in its default
+    year, the year its values name, as a household calculation does.
     ``reform`` is null, or omitted, for a report of the baseline alone. With
     ``add_missing_variables``, each simulation also calculates every yearly,
     monthly and eternal variable the household lacks, as ``/calculate-full``
@@ -225,7 +226,6 @@ class HouseholdReportFields(StrictSubmissionModel):
     label: ReportLabel
     description: ReportDescription | None = None
     household_id: ResourceId
-    year: SimulationYear
     baseline: HouseholdPolicyChoice
     reform: HouseholdPolicyChoice | None = None
     add_missing_variables: StrictBool = False
@@ -283,7 +283,8 @@ class SimulationServiceClient(Protocol):
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
     HouseholdCalculationsUnsupportedError, HouseholdNotFoundError,
-    PolicyNotFoundError, PolicyParametersMissingError and
+    HouseholdCalculationYearError, PolicyNotFoundError,
+    PolicyParametersMissingError and
     SubmissionStorageError from its checks.
     """
 

@@ -22,6 +22,9 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     run_v2_operation,
     v2_missing_parameters_response,
 )
+from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationYearError,
+)
 from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
@@ -52,6 +55,7 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
     HouseholdNotFoundError,
     EconomyCalculationsUnsupportedError,
     HouseholdCalculationsUnsupportedError,
+    HouseholdCalculationYearError,
     SimulationServiceInvalidRequestError,
 )
 # How the simulation service's answers and the submission checks are answered.
@@ -70,6 +74,7 @@ SUBMISSION_ERROR_MAPPINGS = (
         (
             EconomyCalculationsUnsupportedError,
             HouseholdCalculationsUnsupportedError,
+            HouseholdCalculationYearError,
             SimulationServiceInvalidRequestError,
         ),
         422,

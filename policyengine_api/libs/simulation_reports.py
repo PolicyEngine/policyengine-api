@@ -17,8 +17,9 @@ the year, region and dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
 caller gave them. A household report goes to the same ``POST /reports`` as
 ``report_type`` ``household``, naming the label and description, the stored
-household, the year, each simulation's policy (the reform null for a report
-of the baseline alone) and ``add_missing_variables``. None names a
+household, each simulation's policy (the reform null for a report of the
+baseline alone) and ``add_missing_variables``, but no year: the simulation
+service calculates the household's default year. None names a
 PolicyEngine.py version: the simulation service runs its default worker's.
 The simulation service answers:
 
@@ -262,7 +263,6 @@ def household_report_request(report: HouseholdReportCreationInput) -> dict[str, 
         "label": report.label,
         "description": report.description,
         "household_id": str(report.household_id),
-        "year": report.year,
         "baseline": _household_policy_choice(report.baseline),
         "reform": (
             None if report.reform is None else _household_policy_choice(report.reform)

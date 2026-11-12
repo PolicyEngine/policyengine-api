@@ -285,7 +285,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": (
             "The request does not match the schema; the country has no economy "
             "reports (such as a household-only country), for an economy report, "
-            "or no household calculations, for a household report; a policy the "
+            "or no household calculations, for a household report; a household "
+            "report's household has no default year; a policy the "
             "report "
             "names sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "
