@@ -4,15 +4,17 @@ A caller's type is its stored user's type. A signed-in caller with no user
 yet is standard, and a signed-out browser is unauthenticated. Checking a
 caller's type only reads: it never provisions a user.
 
-Only admins list signed-in users, read one, change a user's type or read a
-user's recorded type changes. An admin's change also names the type the admin
-last read: a change to another type is refused when the stored type is no
-longer that one. Only the type is compared, so a type changed and changed back
-since the read is not detected, and asking for the type the user already has
-changes nothing whatever was expected. Unauthenticated users are never listed or
-changed, since their IDs are their browsers' credentials. Each change records
-the previous and new type, who made it and how. A change that would leave no
-admin is refused.
+Only admins list signed-in users, read one, change a user's type, read a
+user's recorded type changes or read a user's saved items. An admin's change
+also names the type the admin last read: a change to another type is refused
+when the stored type is no longer that one. Only the type is compared, so a
+type changed and changed back since the read is not detected, and asking for
+the type the user already has changes nothing whatever was expected.
+Unauthenticated users are never listed, read or changed, since their IDs are
+their browsers' credentials. Each change records the previous and new type,
+who made it and how. A change that would leave no admin is refused. An
+admin's read of a user's saved items returns what the user's own export
+returns, and is recorded with the admin's and the user's IDs.
 
 Every change, and every signed-in account deletion, first takes one
 transaction-scoped advisory lock, then reads the admins and checks the caller
@@ -20,15 +22,17 @@ or the deleted user against them, so they run one at a time and none can leave
 no admin.
 
 With a user profile source, admins see each user's email and names as Auth0
-has them, read after the database work and never stored: only identities
-from the users' issuer are looked up, and an email search also finds users
-through Auth0. When Auth0 can't answer, reads keep the stored values and
-record a warning, and an email search is refused. A type change commits
-before its response reads Auth0.
+has them (a read of a user's saved items takes only the email), read after
+the database work and never stored: only identities from the users' issuer
+are looked up, and an email search also finds users through Auth0. When
+Auth0 can't answer, reads keep the stored values and record a warning, and an
+email search is refused. A type change commits before its response reads
+Auth0.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -62,6 +66,7 @@ from policyengine_api.services.v2.user_types.transformations import (
     caller_user_type,
     identities_by_user,
     profiles_of,
+    saved_items_with_email,
     stored_admin_user,
     stored_user_type_change,
     user_type_change_read_with_profiles,
@@ -82,6 +87,7 @@ from policyengine_api.services.v2.user_types.validators import (
     AdminUserProfilesUnavailableError,
     UserTypeCheckUnavailableError,
     require_admin_after_deletion,
+    require_admin_caller,
     require_another_admin,
     require_email_search_within_limit,
     require_expected_user_type,
@@ -101,6 +107,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import User, UserIdentity, UserTypeChange
     from policyengine_api.libs.auth0_management import Auth0UserProfile
     from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.user_accounts.types import AccountExport
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
     )
@@ -109,6 +116,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PROFILES_UNAVAILABLE_EVENT = "admin_user_profiles_unavailable"
+# The runtime event recorded for each admin's read of a user's saved items.
+ADMIN_SAVED_ITEMS_READ_EVENT = "admin_read_v2_user_saved_items"
 EMAIL_SEARCH_UNAVAILABLE_MESSAGE = (
     "Users can't be searched by email now: their emails could not be read "
     "from Auth0. Try again shortly."
@@ -443,6 +452,38 @@ class V2UserTypeService:
             for change in stored
         )
 
+    def get_user_saved_items(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> AccountExport:
+        """Return a signed-in user's account and saved items, in every country.
+
+        Only an admin may read them. The result is what the user's own export
+        returns, with the email admins see for the user: with a profile
+        source, its Auth0 email, read after the database work, else its stored
+        one. Each read is recorded with the admin's and the user's IDs, never
+        with what the user saved.
+        """
+        # Imported here: v2 services load only when used (ruff's
+        # banned-module-level-imports in pyproject.toml).
+        from policyengine_api.services.v2.user_accounts.services import (
+            export_user_in_session,
+        )
+
+        source = self._profile_source_for_reads()
+        issuer = None if source is None else source.issuer
+        with self._database_session.read() as session:
+            admin_user_id = require_admin_caller(
+                find_principal_user_in_session(session, principal)
+            )
+            user = require_signed_in_user(read_signed_in_user(session, user_id))
+            (stored_user,) = _stored_admin_users(session, [user], issuer)
+            saved_items = export_user_in_session(
+                session, user_id=user_id, email=stored_user.read.email
+            )
+        (read,) = self._with_profiles(source, [stored_user], RateLimitWaitBudget())
+        _record_saved_items_read(admin_user_id=admin_user_id, user_id=user_id)
+        return saved_items_with_email(saved_items, read.email)
+
     def set_user_type_by_email(
         self, *, email: str, user_type: UserType
     ) -> ScriptedUserTypeChange:
@@ -493,6 +534,29 @@ def require_admin_remains_after_deletion_in_session(
     require_admin_after_deletion(
         user_id=user_id, admin_user_ids=read_admin_user_ids(session)
     )
+
+
+def _record_saved_items_read(*, admin_user_id: UUID, user_id: UUID) -> None:
+    """Record that an admin read a signed-in user's saved items, by their IDs.
+
+    It is a runtime event rather than a log record because the deployed
+    process leaves the root logger at WARNING, which drops a module logger's
+    INFO records (docs/engineering/skills/observability.md).
+    """
+    # Telemetry must never fail the request.
+    with contextlib.suppress(Exception):
+        from policyengine_api import (  # noqa: PLC0415  # importing it builds the process-wide runtime, which the user-type script must not
+            observability,
+        )
+
+        observability.get_runtime().event(
+            ADMIN_SAVED_ITEMS_READ_EVENT,
+            severity="INFO",
+            attributes={
+                "admin_v2_user_id": str(admin_user_id),
+                "v2_user_id": str(user_id),
+            },
+        )
 
 
 def _require_caller_type(

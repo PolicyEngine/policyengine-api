@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import User
     from policyengine_api.libs.auth0_management import Auth0UserIdSearch
+    from policyengine_api.services.v2.identity.types import ResolvedUser
 
 BELOW_MINIMUM_MESSAGES = {
     UserType.STANDARD: "Sign in to do this",
@@ -77,6 +78,17 @@ def require_minimum_user_type(user_type: UserType, minimum: UserType) -> UserTyp
     if user_type_meets_minimum(user_type, minimum):
         return user_type
     raise UserTypeBelowMinimumError(BELOW_MINIMUM_MESSAGES[minimum])
+
+
+def require_admin_caller(caller: ResolvedUser | None) -> UUID:
+    """Return the caller's user ID if its stored type is admin; raise otherwise.
+
+    A caller with no stored user, signed in or not, is never an admin.
+    """
+    if caller is None:
+        raise UserTypeBelowMinimumError(BELOW_MINIMUM_MESSAGES[UserType.ADMIN])
+    require_minimum_user_type(caller.user_type, UserType.ADMIN)
+    return caller.user_id
 
 
 def require_listed_admin(
