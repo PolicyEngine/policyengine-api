@@ -61,9 +61,9 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
     }
 )
 # Signed-in user resources only store and read saved work, and admins' user
-# routes only read and change users' types. Their route groups (household,
-# simulation, report, user_profile) also compute, but these requests never do,
-# so they log no simulation flow or compute selection.
+# routes only read users, change their types and delete their accounts. Their
+# route groups (household, simulation, report, user_profile) also compute, but
+# these requests never do, so they log no simulation flow or compute selection.
 V2_USER_RESOURCE_SEGMENTS = frozenset(
     {
         "user-policies",

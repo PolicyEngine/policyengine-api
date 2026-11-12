@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.43.0"
+version = "5.44.0"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -483,6 +483,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.services.v2.metadata.types.StrictResponseModel",
     "policyengine_api.services.v2.policies.types.PolicyCreationInput",
     "policyengine_api.services.v2.policies.types.StrictPolicyInput",
+    "policyengine_api.services.v2.simulation_service.types.BudgetWindowReportCreationInput",
     "policyengine_api.services.v2.simulation_service.types.EconomyReportCreationInput",
     "policyengine_api.services.v2.simulation_service.types.EconomySimulationCreationInput",
     "policyengine_api.services.v2.simulation_service.types.StrictSubmissionModel",

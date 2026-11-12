@@ -1,4 +1,4 @@
-"""Native FastAPI contract tests for admins' user-type routes and minimum types."""
+"""Native FastAPI contract tests for admins' user routes and minimum types."""
 
 from __future__ import annotations
 
@@ -15,8 +15,13 @@ from policyengine_api.fastapi_routes.v2.user_type_support import (
     minimum_user_type_dependency,
 )
 from policyengine_api.services.v2.user_accounts.types import (
+    AccountDeletion,
     AccountExport,
     AccountRead,
+)
+from policyengine_api.services.v2.user_accounts.validators import (
+    AccountDeletionUnavailableError,
+    AccountIdentityDeletionError,
 )
 from policyengine_api.services.v2.user_households.types import UserHouseholdRead
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
@@ -32,6 +37,7 @@ from policyengine_api.services.v2.user_types.types import (
 from policyengine_api.services.v2.user_types.validators import (
     AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
+    LastAdminDeletionError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
     UserTypeBelowMinimumError,
@@ -427,8 +433,11 @@ def test_service_refusals_map_to_http_statuses(
 def test_callers_below_admin_get_403_from_every_admin_route(principal: str) -> None:
     service = RecordingService(_result)
     service.error = UserTypeBelowMinimumError("Only admins may manage users' types")
+    accounts = RecordingService()
     options = {} if principal == "signed_in" else {"require_user": signed_out_browser}
-    client, _service = _client(service, **options)
+    client, _service = _client(
+        service, v2_account_service_factory=lambda: accounts, **options
+    )
 
     responses = [
         client.get("/v2/admin/users"),
@@ -438,11 +447,13 @@ def test_callers_below_admin_get_403_from_every_admin_route(principal: str) -> N
             json={"user_type": "admin", "expected_user_type": "standard"},
         ),
         client.get(f"/v2/admin/users/{TARGET_ID}/user-type-changes"),
+        client.delete(f"/v2/admin/users/{TARGET_ID}"),
         client.get(SAVED_ITEMS_PATH),
     ]
 
-    assert [response.status_code for response in responses] == [403] * 5
+    assert [response.status_code for response in responses] == [403] * 6
     assert {name for name, _kwargs in service.calls} == {"require_minimum_user_type"}
+    assert accounts.calls == []
     expected_principal = (
         PRINCIPAL if principal == "signed_in" else UNAUTHENTICATED_PRINCIPAL
     )
@@ -497,6 +508,121 @@ def test_an_unreadable_caller_type_answers_503() -> None:
         "status": "error",
         "message": "V2 user persistence is unavailable",
     }
+
+
+def _deletion_client(accounts: RecordingService | None = None, **client_options):
+    """Build the app with an admin caller and a recording account service."""
+    accounts = accounts or RecordingService(
+        AccountDeletion(user_id=TARGET_ID, auth0_subjects=())
+    )
+    client, user_types = _client(
+        v2_account_service_factory=lambda: accounts, **client_options
+    )
+    return client, user_types, accounts
+
+
+def test_admins_delete_a_signed_in_users_account() -> None:
+    client, user_types, accounts = _deletion_client()
+
+    response = client.delete(f"/v2/admin/users/{TARGET_ID}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert user_types.calls == [
+        (
+            "require_minimum_user_type",
+            {"principal": PRINCIPAL, "minimum": UserType.ADMIN},
+        )
+    ]
+    assert accounts.calls == [
+        (
+            "delete_user_account_as_admin",
+            {"principal": PRINCIPAL, "user_id": TARGET_ID},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code"),
+    [
+        (UserTypeBelowMinimumError("Only admins may do this"), 403),
+        (SignedInUserNotFoundError("No signed-in user has this ID"), 404),
+        (
+            LastAdminDeletionError(
+                "The last admin's account can't be deleted; make another user "
+                "an admin first"
+            ),
+            409,
+        ),
+        (
+            AccountIdentityDeletionError(
+                "find them in Auth0 by the email the admin user routes showed",
+                undeleted_auth0_user_count=1,
+            ),
+            502,
+        ),
+        (
+            AccountDeletionUnavailableError(
+                "Account deletion is temporarily unavailable; nothing was deleted"
+            ),
+            503,
+        ),
+    ],
+)
+def test_admin_account_deletion_refusals_map_to_http_statuses(
+    error: Exception, status_code: int
+) -> None:
+    accounts = RecordingService()
+    accounts.error = error
+    client, _user_types, _accounts = _deletion_client(accounts)
+
+    response = client.delete(f"/v2/admin/users/{TARGET_ID}")
+
+    assert response.status_code == status_code
+    assert response.json() == {"status": "error", "message": str(error)}
+
+
+def test_admin_account_deletion_needs_a_uuid_and_a_credential() -> None:
+    client, _user_types, accounts = _deletion_client()
+    unauthenticated_client, _types, unauthenticated_accounts = _deletion_client(
+        require_user=None
+    )
+
+    malformed = client.delete("/v2/admin/users/not-a-uuid")
+    without_credential = unauthenticated_client.delete(f"/v2/admin/users/{TARGET_ID}")
+
+    assert malformed.status_code == 422
+    assert without_credential.status_code == 401
+    assert accounts.calls == []
+    assert unauthenticated_accounts.calls == []
+
+
+def test_the_admin_account_deletion_route_documents_its_responses() -> None:
+    client, _user_types, _accounts = _deletion_client()
+
+    schema = client.get("/v2/openapi.json").json()
+    operation = schema["paths"]["/v2/admin/users/{user_id}"]["delete"]
+
+    assert set(operation["responses"]) >= {
+        "204",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
+        "502",
+        "503",
+    }
+    assert "Admins only" in operation["description"]
+    assert "Auth0" in operation["description"]
+    assert "own account" in operation["responses"]["409"]["description"]
+    assert "404" in operation["responses"]["502"]["description"]
+    assert "Auth0 tenant" in operation["responses"]["502"]["description"]
+    assert (
+        "the email the admin user routes showed for the user before the deletion"
+        in operation["responses"]["502"]["description"]
+    )
+    assert "nothing was deleted" in operation["responses"]["503"]["description"]
 
 
 def test_an_email_search_answers_503_when_auth0_profiles_are_unavailable() -> None:

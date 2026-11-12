@@ -649,8 +649,11 @@ model changes:
   filter selects (`child` for `age`); both join their table's unique key.
 - `report_runs` gains its Modal call ID.
 - Budget windows: a simulation run calculates one `year`, which joins the
-  index for a simulation's newest successful run, so a budget window compares
-  a report's same two simulations in every year. `reports.budget_window_size`
+  index for a simulation's newest successful run. Each year of a budget
+  window is a report run naming the two simulation runs it compares; the
+  simulation service gives each year simulations of that year, or reuses
+  succeeded runs, and the report's own two simulations are its first year's.
+  `reports.budget_window_size`
   (1 to 75 years, an economy report with a year, ending by 2200) marks a
   budget-window report. The new `budget_window_runs` holds one row per
   calculation of one: its report, catalog version, trigger, whether its years

@@ -32,12 +32,12 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
     )
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        ReportCreationInput,
     )
     from policyengine_api.services.v2.stored_reports.types import (
-        ReportRead,
-        ReportSummaryRead,
+        StoredReportRead,
+        StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
     from policyengine_api.services.v2.user_accounts.types import (
@@ -196,23 +196,25 @@ class V2HouseholdCalculationResourceService(Protocol):
 class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        """Return the country's economy report, its newest run and that run's result.
+    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
+        """Return the country's report, its newest run and that run's result.
 
-        Raise ``StoredReportNotFoundError`` when the country has no such
-        report, ``ReportKindUnsupportedError`` for a household report or
-        budget window, and ``EconomyResultUnreadableError`` when a succeeded
-        run's result cannot be read.
+        The report is an economy report or a budget window. Raise
+        ``StoredReportNotFoundError`` when the country has no such report,
+        ``ReportKindUnsupportedError`` for a household report, and
+        ``EconomyResultUnreadableError`` or
+        ``BudgetWindowResultUnreadableError`` when a succeeded run's result
+        cannot be read.
         """
         ...
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[ReportSummaryRead, ...]:
-        """Return the country's economy reports among ``report_ids``, in that order."""
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's economy reports and budget windows, as named."""
         ...
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
         Raise ``EconomyCalculationsUnsupportedError`` for a country without
@@ -555,6 +557,21 @@ class V2AccountResourceService(Protocol):
 
         A signed-in user's Auth0 user is deleted too when Auth0 Management is
         configured.
+        """
+        ...
+
+    def delete_user_account_as_admin(
+        self, *, principal: UserPrincipal, user_id: UUID
+    ) -> AccountDeletion:
+        """Delete a signed-in user's account for an admin, as for one's own.
+
+        Raise ``UserTypeBelowMinimumError`` unless the caller is an admin,
+        ``SignedInUserNotFoundError`` when no signed-in user has the ID, and
+        ``LastAdminDeletionError`` when that user is the only admin, each with
+        nothing deleted. Raise ``AccountDeletionUnavailableError`` before
+        anything is deleted when the Auth0 deleter can't be prepared, and
+        ``AccountIdentityDeletionError`` when the data was deleted but some of
+        the user's Auth0 users were not.
         """
         ...
 

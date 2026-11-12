@@ -96,7 +96,7 @@ def require_listed_admin(
 ) -> UUID:
     """Return the caller's ID if it is among the admins read in this transaction.
 
-    Refuse any other caller.
+    Raise UserTypeBelowMinimumError otherwise.
     """
     if caller_user_id is None or caller_user_id not in admin_user_ids:
         raise UserTypeBelowMinimumError(BELOW_MINIMUM_MESSAGES[UserType.ADMIN])
