@@ -1,10 +1,11 @@
 """PostgreSQL tests for admins' changes to users' types, as the runtime role.
 
 These prove what SQLite cannot: the runtime role's declared privileges cover
-the changes and their history, the user-type change lock makes concurrent
-changes and deletions run one at a time so the last admin is never demoted or
-deleted and a change from a type changed meanwhile is refused, and account
-deletion cascades through the history or keeps a change without its admin.
+the changes and their history and admins' deletions of accounts, the
+user-type change lock makes concurrent changes and deletions run one at a time
+so the last admin is never demoted or deleted and a change from a type
+changed meanwhile is refused, and account deletion cascades through the
+history or keeps a change without its admin.
 """
 
 from __future__ import annotations
@@ -37,6 +38,10 @@ from policyengine_api.libs.auth0_management import (
 )
 from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.user_accounts.database_connectors.deletes import (
+    delete_account_legacy_user_mappings,
+    delete_account_user,
+)
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
@@ -511,3 +516,129 @@ def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> No
     assert isinstance(outcomes.get("error"), UserTypeChangedError)
     assert _stored_types(sessions, [bob_id]) == ["author"]
     assert _history(sessions, bob_id) == []
+
+
+def _admin_deletion_in_thread(
+    sessions, *, admin: UserPrincipal, user_id: UUID, outcomes: dict[str, object]
+) -> threading.Thread:
+    """Start an admin's deletion of ``user_id``; ``outcomes`` records how it ends."""
+    finished = threading.Event()
+    outcomes["finished"] = finished
+
+    def delete_user_account() -> None:
+        try:
+            outcomes["deletion"] = _accounts(sessions).delete_user_account_as_admin(
+                principal=admin, user_id=user_id
+            )
+        except Exception as error:  # noqa: BLE001  # the test inspects the failure
+            outcomes["error"] = error
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=delete_user_account)
+    thread.start()
+    return thread
+
+
+def test_the_runtime_role_deletes_another_users_account_for_an_admin(
+    sessions,
+) -> None:
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _user_types(sessions).change_user_type(
+        principal=alice,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+    with sessions.begin() as session:
+        session.add(
+            LegacyUserMapping(legacy_user_id=f"auth0|v1-{uuid4().hex}", user_id=bob_id)
+        )
+
+    deletion = accounts.delete_user_account_as_admin(principal=alice, user_id=bob_id)
+
+    assert deletion.user_id == bob_id
+    with sessions() as session:
+        assert session.get(User, bob_id) is None
+        assert (
+            session.execute(
+                select(LegacyUserMapping).where(LegacyUserMapping.user_id == bob_id)
+            ).first()
+            is None
+        )
+    assert _history(sessions, bob_id) == []
+    assert _admin_ids(sessions) == [alice_id]
+
+
+def test_an_admins_own_deletion_waits_for_a_demotion_and_keeps_the_last_admin(
+    sessions,
+) -> None:
+    """Alice deletes her own account while a change demotes Bob, the other admin."""
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    for user_id in (alice_id, bob_id):
+        _store_type_as_superuser(user_id, UserType.ADMIN)
+    outcomes: dict[str, object] = {}
+
+    held = sessions()
+    try:
+        held.begin()
+        # The held session stands in for a change in progress: it holds the
+        # user-type change lock and demotes Bob.
+        assert sorted(_lock_and_read_admins(held)) == sorted([alice_id, bob_id])
+        bob_row = read_signed_in_user(held, bob_id, for_update=True)
+        assert bob_row is not None
+        update_user_type(held, bob_row, user_type=UserType.STANDARD)
+        deletion = _admin_deletion_in_thread(
+            sessions, admin=alice, user_id=alice_id, outcomes=outcomes
+        )
+        assert not outcomes["finished"].wait(LOCK_WAIT_SECONDS)
+        held.commit()
+    finally:
+        held.close()
+    deletion.join(timeout=10)
+
+    # Alice is the only admin once her turn comes, so her deletion is refused.
+    assert isinstance(outcomes.get("error"), LastAdminDeletionError)
+    assert _admin_ids(sessions) == [alice_id]
+
+
+def test_two_admins_deleting_each_other_at_once_leave_one_admin(sessions) -> None:
+    """Bob deletes Alice while Alice's deletion of Bob holds the lock."""
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    for user_id in (alice_id, bob_id):
+        _store_type_as_superuser(user_id, UserType.ADMIN)
+    outcomes: dict[str, object] = {}
+
+    held = sessions()
+    try:
+        held.begin()
+        # The held session stands in for Alice's deletion of Bob: it holds the
+        # user-type change lock and deletes him.
+        assert sorted(_lock_and_read_admins(held)) == sorted([alice_id, bob_id])
+        deletion = _admin_deletion_in_thread(
+            sessions, admin=bob, user_id=alice_id, outcomes=outcomes
+        )
+        assert not outcomes["finished"].wait(LOCK_WAIT_SECONDS)
+        delete_account_legacy_user_mappings(held, user_id=bob_id)
+        delete_account_user(held, user_id=bob_id)
+        held.commit()
+    finally:
+        held.close()
+    deletion.join(timeout=10)
+
+    # Bob no longer exists once his turn comes, so he is not an admin.
+    assert isinstance(outcomes.get("error"), UserTypeBelowMinimumError)
+    assert _admin_ids(sessions) == [alice_id]

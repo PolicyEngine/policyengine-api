@@ -1,0 +1,1 @@
+`DELETE /v2/me` now tries to delete the Auth0 user of every one of the account's sign-in identities before it answers 502, instead of stopping at the first failure, and its `auth0_user_deletion_failed` WARNING record now also carries `auth0_user_count` and `undeleted_auth0_user_count`. A retry still deletes only the Auth0 user of the token's own identity.
