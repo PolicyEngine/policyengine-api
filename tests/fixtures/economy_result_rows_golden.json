@@ -1,0 +1,4892 @@
+{
+  "generated_by": "scripts/generate_economy_result_golden.py",
+  "writer": {
+    "repository": "PolicyEngine/policyengine-sim-api",
+    "commit": "cb1264a595f703f9989b8ee0cac124e031671c37",
+    "path": "libs/policyengine-stage12-persistence/src/policyengine_stage12_persistence/report_run_results.py",
+    "last_changed_in": "c02145fd696e5c7b78c757cf18873507994672a9"
+  },
+  "run_ids": {
+    "report_run_id": "00000000-0000-4000-8000-00000000c001",
+    "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+    "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003"
+  },
+  "cases": [
+    {
+      "name": "us",
+      "country": "us",
+      "output": {
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "model_version": "1.0.0",
+        "data_version": "enhanced_cps_2024@1.2.3",
+        "budget": {
+          "tax_revenue_impact": 1500.0,
+          "state_tax_revenue_impact": 250.0,
+          "benefit_spending_impact": -500.0,
+          "budgetary_impact": 2000.0,
+          "households": 130000000.0,
+          "baseline_net_income": 9500000000000.0
+        },
+        "detailed_budget": {
+          "income_tax": {
+            "baseline": 1000.0,
+            "reform": 2500.0,
+            "difference": 1500.0,
+            "is_tax": true
+          },
+          "snap": {
+            "baseline": 800.0,
+            "reform": 300.0,
+            "difference": -500.0,
+            "is_tax": false
+          },
+          "state_income_tax": {
+            "baseline": 10.0,
+            "reform": 260.0,
+            "difference": 250.0,
+            "is_tax": null
+          }
+        },
+        "decile": {
+          "average": {
+            "1": 10.0,
+            "2": 20.0,
+            "3": 30.0,
+            "4": 40.0,
+            "5": 50.0,
+            "6": 60.0,
+            "7": 70.0,
+            "8": 80.0,
+            "9": 90.0,
+            "10": 100.0
+          },
+          "relative": {
+            "1": 0.015625,
+            "2": 0.03125,
+            "3": 0.046875,
+            "4": 0.0625,
+            "5": 0.078125,
+            "6": 0.09375,
+            "7": 0.109375,
+            "8": 0.125,
+            "9": 0.140625,
+            "10": 0.15625
+          }
+        },
+        "inequality": {
+          "gini": {
+            "baseline": 0.41,
+            "reform": 0.4
+          },
+          "top_10_pct_share": {
+            "baseline": 0.32,
+            "reform": 0.31
+          },
+          "top_1_pct_share": {
+            "baseline": 0.11,
+            "reform": 0.105
+          }
+        },
+        "poverty": {
+          "poverty": {
+            "child": {
+              "baseline": 0.1,
+              "reform": 0.09000000000000001
+            },
+            "adult": {
+              "baseline": 0.12000000000000001,
+              "reform": 0.11
+            },
+            "senior": {
+              "baseline": 0.13,
+              "reform": 0.14
+            },
+            "all": {
+              "baseline": 0.14,
+              "reform": 0.12000000000000001
+            }
+          },
+          "deep_poverty": {
+            "child": {
+              "baseline": 0.04,
+              "reform": 0.03
+            },
+            "adult": {
+              "baseline": 0.06,
+              "reform": 0.05
+            },
+            "senior": {
+              "baseline": 0.07,
+              "reform": 0.08
+            },
+            "all": {
+              "baseline": 0.08,
+              "reform": 0.06
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "poverty": {
+            "male": {
+              "baseline": 0.11,
+              "reform": 0.1
+            },
+            "female": {
+              "baseline": 0.13,
+              "reform": 0.12
+            }
+          },
+          "deep_poverty": {
+            "male": {
+              "baseline": 0.04,
+              "reform": 0.035
+            },
+            "female": {
+              "baseline": 0.05,
+              "reform": 0.045
+            }
+          }
+        },
+        "poverty_by_race": {
+          "poverty": {
+            "white": {
+              "baseline": 0.08,
+              "reform": 0.07
+            },
+            "black": {
+              "baseline": 0.18,
+              "reform": 0.16
+            },
+            "hispanic": {
+              "baseline": 0.16,
+              "reform": 0.15
+            },
+            "other": {
+              "baseline": 0.12,
+              "reform": 0.11
+            }
+          }
+        },
+        "intra_decile": {
+          "deciles": {
+            "Lose more than 5%": [
+              0.05,
+              0.06,
+              0.07,
+              0.08,
+              0.09,
+              0.1,
+              0.11,
+              0.12,
+              0.13,
+              0.14
+            ],
+            "Lose less than 5%": [
+              0.051,
+              0.061,
+              0.071,
+              0.081,
+              0.091,
+              0.101,
+              0.111,
+              0.121,
+              0.131,
+              0.141
+            ],
+            "No change": [
+              0.052,
+              0.062,
+              0.072,
+              0.082,
+              0.092,
+              0.102,
+              0.112,
+              0.122,
+              0.132,
+              0.142
+            ],
+            "Gain less than 5%": [
+              0.053,
+              0.063,
+              0.073,
+              0.083,
+              0.093,
+              0.103,
+              0.113,
+              0.123,
+              0.133,
+              0.143
+            ],
+            "Gain more than 5%": [
+              0.054,
+              0.064,
+              0.074,
+              0.084,
+              0.094,
+              0.104,
+              0.114,
+              0.124,
+              0.134,
+              0.144
+            ]
+          },
+          "all": {
+            "Lose more than 5%": 0.095,
+            "Lose less than 5%": 0.096,
+            "No change": 0.097,
+            "Gain less than 5%": 0.098,
+            "Gain more than 5%": 0.099
+          }
+        },
+        "wealth_decile": null,
+        "intra_wealth_decile": null,
+        "labor_supply_response": {
+          "substitution_lsr": -120.0,
+          "income_lsr": 45.0,
+          "relative_lsr": {
+            "income": 0.001,
+            "substitution": -0.002
+          },
+          "total_change": -75.0,
+          "revenue_change": -30.0,
+          "decile": {
+            "average": {
+              "income": {
+                "1": 1.5,
+                "2": 3.0,
+                "3": 4.5,
+                "4": 6.0,
+                "5": 7.5,
+                "6": 9.0,
+                "7": 10.5,
+                "8": 12.0,
+                "9": 13.5,
+                "10": 15.0
+              },
+              "substitution": {
+                "1": -2.0,
+                "2": -4.0,
+                "3": -6.0,
+                "4": -8.0,
+                "5": -10.0,
+                "6": -12.0,
+                "7": -14.0,
+                "8": -16.0,
+                "9": -18.0,
+                "10": -20.0
+              }
+            },
+            "relative": {
+              "income": {
+                "2": 0.0002,
+                "3": 0.00030000000000000003,
+                "4": 0.0004,
+                "5": 0.0005,
+                "6": 0.0006000000000000001,
+                "7": 0.0007,
+                "8": 0.0008,
+                "9": 0.0009000000000000001,
+                "10": 0.001
+              },
+              "substitution": {
+                "2": -0.0004,
+                "3": -0.0006000000000000001,
+                "4": -0.0008,
+                "5": -0.001,
+                "6": -0.0012000000000000001,
+                "7": -0.0014,
+                "8": -0.0016,
+                "9": -0.0018000000000000002,
+                "10": -0.002
+              }
+            }
+          },
+          "hours": {
+            "baseline": 1000000000.0,
+            "reform": 999000000.0,
+            "change": -1000000.0,
+            "income_effect": 200000.0,
+            "substitution_effect": -1200000.0
+          }
+        },
+        "constituency_impact": null,
+        "local_authority_impact": null,
+        "congressional_district_impact": {
+          "districts": [
+            {
+              "district": "AK-01",
+              "average_household_income_change": 12.0,
+              "relative_household_income_change": 0.001,
+              "winner_percentage": 0.3,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.5,
+              "population": 300000.0
+            },
+            {
+              "district": "CA-05",
+              "average_household_income_change": -4.0,
+              "relative_household_income_change": -0.0005,
+              "winner_percentage": 0.1,
+              "loser_percentage": 0.6,
+              "no_change_percentage": 0.3,
+              "population": 290000.0
+            },
+            {
+              "district": "CA-12",
+              "average_household_income_change": 7.5,
+              "relative_household_income_change": 0.0008,
+              "winner_percentage": 0.4,
+              "loser_percentage": 0.1,
+              "no_change_percentage": 0.5,
+              "population": 310000.0
+            },
+            {
+              "district": "UT-03",
+              "average_household_income_change": 3.0,
+              "relative_household_income_change": 0.0002,
+              "winner_percentage": 0.2,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.6,
+              "population": 280000.0
+            }
+          ]
+        },
+        "cliff_impact": {
+          "baseline": {
+            "cliff_gap": 1200000000.0,
+            "cliff_share": 0.04
+          },
+          "reform": {
+            "cliff_gap": 1100000000.0,
+            "cliff_share": 0.035
+          }
+        }
+      },
+      "report_run_columns": {
+        "baseline_cliff_gap": 1200000000.0,
+        "baseline_cliff_share": 0.04,
+        "reform_cliff_gap": 1100000000.0,
+        "reform_cliff_share": 0.035,
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "data_version": "enhanced_cps_2024@1.2.3"
+      },
+      "rows": {
+        "labor_supply_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "income_effect_earnings_change": 45.0,
+            "substitution_effect_earnings_change": -120.0,
+            "total_earnings_change": -75.0,
+            "revenue_change": -30.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002,
+            "baseline_weekly_hours": 1000000000.0,
+            "reform_weekly_hours": 999000000.0,
+            "weekly_hours_change": -1000000.0,
+            "weekly_hours_income_effect": 200000.0,
+            "weekly_hours_substitution_effect": -1200000.0
+          }
+        ],
+        "labor_supply_decile_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 1,
+            "average_income_effect": 1.5,
+            "average_substitution_effect": -2.0,
+            "relative_income_effect": null,
+            "relative_substitution_effect": null
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 2,
+            "average_income_effect": 3.0,
+            "average_substitution_effect": -4.0,
+            "relative_income_effect": 0.0002,
+            "relative_substitution_effect": -0.0004
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 3,
+            "average_income_effect": 4.5,
+            "average_substitution_effect": -6.0,
+            "relative_income_effect": 0.00030000000000000003,
+            "relative_substitution_effect": -0.0006000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 4,
+            "average_income_effect": 6.0,
+            "average_substitution_effect": -8.0,
+            "relative_income_effect": 0.0004,
+            "relative_substitution_effect": -0.0008
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 5,
+            "average_income_effect": 7.5,
+            "average_substitution_effect": -10.0,
+            "relative_income_effect": 0.0005,
+            "relative_substitution_effect": -0.001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 6,
+            "average_income_effect": 9.0,
+            "average_substitution_effect": -12.0,
+            "relative_income_effect": 0.0006000000000000001,
+            "relative_substitution_effect": -0.0012000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 7,
+            "average_income_effect": 10.5,
+            "average_substitution_effect": -14.0,
+            "relative_income_effect": 0.0007,
+            "relative_substitution_effect": -0.0014
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 8,
+            "average_income_effect": 12.0,
+            "average_substitution_effect": -16.0,
+            "relative_income_effect": 0.0008,
+            "relative_substitution_effect": -0.0016
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 9,
+            "average_income_effect": 13.5,
+            "average_substitution_effect": -18.0,
+            "relative_income_effect": 0.0009000000000000001,
+            "relative_substitution_effect": -0.0018000000000000002
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 10,
+            "average_income_effect": 15.0,
+            "average_substitution_effect": -20.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002
+          }
+        ],
+        "budget_summary": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_tax",
+            "entity": "household",
+            "change": 1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_benefits",
+            "entity": "household",
+            "change": -500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_state_income_tax",
+            "entity": "household",
+            "change": 250.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_net_income",
+            "entity": "household",
+            "baseline_total": 9500000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_weight",
+            "entity": "household",
+            "baseline_total": 130000000.0
+          }
+        ],
+        "decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 1,
+            "quantiles": 10,
+            "absolute_change": 10.0,
+            "relative_change": 1.5625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 2,
+            "quantiles": 10,
+            "absolute_change": 20.0,
+            "relative_change": 3.125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 3,
+            "quantiles": 10,
+            "absolute_change": 30.0,
+            "relative_change": 4.6875
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 4,
+            "quantiles": 10,
+            "absolute_change": 40.0,
+            "relative_change": 6.25
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 5,
+            "quantiles": 10,
+            "absolute_change": 50.0,
+            "relative_change": 7.8125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 6,
+            "quantiles": 10,
+            "absolute_change": 60.0,
+            "relative_change": 9.375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 7,
+            "quantiles": 10,
+            "absolute_change": 70.0,
+            "relative_change": 10.9375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 8,
+            "quantiles": 10,
+            "absolute_change": 80.0,
+            "relative_change": 12.5
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 9,
+            "quantiles": 10,
+            "absolute_change": 90.0,
+            "relative_change": 14.0625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 10,
+            "quantiles": 10,
+            "absolute_change": 100.0,
+            "relative_change": 15.625
+          }
+        ],
+        "intra_decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 1,
+            "lose_more_than_5pct": 0.05,
+            "lose_less_than_5pct": 0.051,
+            "no_change": 0.052,
+            "gain_less_than_5pct": 0.053,
+            "gain_more_than_5pct": 0.054
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 2,
+            "lose_more_than_5pct": 0.06,
+            "lose_less_than_5pct": 0.061,
+            "no_change": 0.062,
+            "gain_less_than_5pct": 0.063,
+            "gain_more_than_5pct": 0.064
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 3,
+            "lose_more_than_5pct": 0.07,
+            "lose_less_than_5pct": 0.071,
+            "no_change": 0.072,
+            "gain_less_than_5pct": 0.073,
+            "gain_more_than_5pct": 0.074
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 4,
+            "lose_more_than_5pct": 0.08,
+            "lose_less_than_5pct": 0.081,
+            "no_change": 0.082,
+            "gain_less_than_5pct": 0.083,
+            "gain_more_than_5pct": 0.084
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 5,
+            "lose_more_than_5pct": 0.09,
+            "lose_less_than_5pct": 0.091,
+            "no_change": 0.092,
+            "gain_less_than_5pct": 0.093,
+            "gain_more_than_5pct": 0.094
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 6,
+            "lose_more_than_5pct": 0.1,
+            "lose_less_than_5pct": 0.101,
+            "no_change": 0.102,
+            "gain_less_than_5pct": 0.103,
+            "gain_more_than_5pct": 0.104
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 7,
+            "lose_more_than_5pct": 0.11,
+            "lose_less_than_5pct": 0.111,
+            "no_change": 0.112,
+            "gain_less_than_5pct": 0.113,
+            "gain_more_than_5pct": 0.114
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 8,
+            "lose_more_than_5pct": 0.12,
+            "lose_less_than_5pct": 0.121,
+            "no_change": 0.122,
+            "gain_less_than_5pct": 0.123,
+            "gain_more_than_5pct": 0.124
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 9,
+            "lose_more_than_5pct": 0.13,
+            "lose_less_than_5pct": 0.131,
+            "no_change": 0.132,
+            "gain_less_than_5pct": 0.133,
+            "gain_more_than_5pct": 0.134
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 10,
+            "lose_more_than_5pct": 0.14,
+            "lose_less_than_5pct": 0.141,
+            "no_change": 0.142,
+            "gain_less_than_5pct": 0.143,
+            "gain_more_than_5pct": 0.144
+          }
+        ],
+        "poverty": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.18
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.09000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.03
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.035
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.045
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.15
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.11
+          }
+        ],
+        "inequality": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.41,
+            "top_10_share": 0.32,
+            "top_1_share": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.4,
+            "top_10_share": 0.31,
+            "top_1_share": 0.105
+          }
+        ],
+        "program_statistics": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "income_tax",
+            "entity": null,
+            "is_tax": true,
+            "baseline_total": 1000.0,
+            "reform_total": 2500.0,
+            "change": 1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "snap",
+            "entity": null,
+            "is_tax": false,
+            "baseline_total": 800.0,
+            "reform_total": 300.0,
+            "change": -500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "state_income_tax",
+            "entity": null,
+            "is_tax": null,
+            "baseline_total": 10.0,
+            "reform_total": 260.0,
+            "change": 250.0
+          }
+        ],
+        "congressional_district_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 200,
+            "state_fips": 2,
+            "district_number": 0,
+            "average_household_income_change": 12.0,
+            "relative_household_income_change": 0.001,
+            "winner_percentage": 0.3,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.5,
+            "population": 300000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 605,
+            "state_fips": 6,
+            "district_number": 5,
+            "average_household_income_change": -4.0,
+            "relative_household_income_change": -0.0005,
+            "winner_percentage": 0.1,
+            "loser_percentage": 0.6,
+            "no_change_percentage": 0.3,
+            "population": 290000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 612,
+            "state_fips": 6,
+            "district_number": 12,
+            "average_household_income_change": 7.5,
+            "relative_household_income_change": 0.0008,
+            "winner_percentage": 0.4,
+            "loser_percentage": 0.1,
+            "no_change_percentage": 0.5,
+            "population": 310000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 4903,
+            "state_fips": 49,
+            "district_number": 3,
+            "average_household_income_change": 3.0,
+            "relative_household_income_change": 0.0002,
+            "winner_percentage": 0.2,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.6,
+            "population": 280000.0
+          }
+        ],
+        "constituency_impacts": [],
+        "local_authority_impacts": []
+      }
+    },
+    {
+      "name": "uk",
+      "country": "uk",
+      "output": {
+        "spm_provenance": null,
+        "model_version": "2.0.0",
+        "data_version": "enhanced_frs_2023_24@1.0.0",
+        "budget": {
+          "tax_revenue_impact": 4000000000.0,
+          "state_tax_revenue_impact": 0.0,
+          "benefit_spending_impact": 1000000000.0,
+          "budgetary_impact": 3000000000.0,
+          "households": 28000000.0,
+          "baseline_net_income": 1200000000000.0
+        },
+        "detailed_budget": {
+          "income_tax": {
+            "baseline": 200000000000.0,
+            "reform": 204000000000.0,
+            "difference": 4000000000.0,
+            "is_tax": true
+          },
+          "universal_credit": {
+            "baseline": 60000000000.0,
+            "reform": 61000000000.0,
+            "difference": 1000000000.0,
+            "is_tax": false
+          }
+        },
+        "decile": {
+          "average": {
+            "1": -5.0,
+            "2": -10.0,
+            "3": -15.0,
+            "4": -20.0,
+            "5": -25.0,
+            "6": -30.0,
+            "7": -35.0,
+            "8": -40.0,
+            "9": -45.0,
+            "10": -50.0
+          },
+          "relative": {
+            "1": 0.015625,
+            "2": 0.03125,
+            "3": 0.046875,
+            "4": 0.0625,
+            "5": 0.078125,
+            "6": 0.09375,
+            "7": 0.109375,
+            "8": 0.125,
+            "9": 0.140625,
+            "10": 0.15625
+          }
+        },
+        "inequality": {
+          "gini": {
+            "baseline": 0.36,
+            "reform": 0.355
+          },
+          "top_10_pct_share": {
+            "baseline": 0.27,
+            "reform": 0.265
+          },
+          "top_1_pct_share": {
+            "baseline": 0.08,
+            "reform": 0.079
+          }
+        },
+        "poverty": {
+          "poverty": {
+            "child": {
+              "baseline": 0.17,
+              "reform": 0.16
+            },
+            "adult": {
+              "baseline": 0.19,
+              "reform": 0.18000000000000002
+            },
+            "senior": {
+              "baseline": 0.2,
+              "reform": 0.21000000000000002
+            },
+            "all": {
+              "baseline": 0.21000000000000002,
+              "reform": 0.19
+            }
+          },
+          "deep_poverty": {
+            "child": {
+              "baseline": 0.12,
+              "reform": 0.11
+            },
+            "adult": {
+              "baseline": 0.13999999999999999,
+              "reform": 0.13
+            },
+            "senior": {
+              "baseline": 0.15,
+              "reform": 0.16
+            },
+            "all": {
+              "baseline": 0.16,
+              "reform": 0.13999999999999999
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "poverty": {
+            "male": {
+              "baseline": 0.16,
+              "reform": 0.15
+            },
+            "female": {
+              "baseline": 0.18,
+              "reform": 0.17
+            }
+          },
+          "deep_poverty": {
+            "male": {
+              "baseline": 0.11,
+              "reform": 0.1
+            },
+            "female": {
+              "baseline": 0.13,
+              "reform": 0.12
+            }
+          }
+        },
+        "poverty_by_race": null,
+        "intra_decile": {
+          "deciles": {
+            "Lose more than 5%": [
+              0.02,
+              0.03,
+              0.04,
+              0.05,
+              0.06,
+              0.07,
+              0.08,
+              0.09,
+              0.1,
+              0.11
+            ],
+            "Lose less than 5%": [
+              0.021,
+              0.031,
+              0.041,
+              0.051,
+              0.061,
+              0.071,
+              0.081,
+              0.091,
+              0.101,
+              0.111
+            ],
+            "No change": [
+              0.022,
+              0.032,
+              0.042,
+              0.052,
+              0.062,
+              0.072,
+              0.082,
+              0.092,
+              0.102,
+              0.112
+            ],
+            "Gain less than 5%": [
+              0.023,
+              0.033,
+              0.043,
+              0.053,
+              0.063,
+              0.073,
+              0.083,
+              0.093,
+              0.103,
+              0.113
+            ],
+            "Gain more than 5%": [
+              0.024,
+              0.034,
+              0.044,
+              0.054,
+              0.064,
+              0.074,
+              0.084,
+              0.094,
+              0.104,
+              0.114
+            ]
+          },
+          "all": {
+            "Lose more than 5%": 0.065,
+            "Lose less than 5%": 0.066,
+            "No change": 0.067,
+            "Gain less than 5%": 0.06799999999999999,
+            "Gain more than 5%": 0.06899999999999999
+          }
+        },
+        "wealth_decile": {
+          "average": {
+            "1": -8.0,
+            "2": -16.0,
+            "3": -24.0,
+            "4": -32.0,
+            "5": -40.0,
+            "6": -48.0,
+            "7": -56.0,
+            "8": -64.0,
+            "9": -72.0,
+            "10": -80.0
+          },
+          "relative": {
+            "1": 0.015625,
+            "2": 0.03125,
+            "3": 0.046875,
+            "4": 0.0625,
+            "5": 0.078125,
+            "6": 0.09375,
+            "7": 0.109375,
+            "8": 0.125,
+            "9": 0.140625,
+            "10": 0.15625
+          }
+        },
+        "intra_wealth_decile": {
+          "deciles": {
+            "Lose more than 5%": [
+              0.03,
+              0.04,
+              0.05,
+              0.06,
+              0.07,
+              0.08,
+              0.09,
+              0.1,
+              0.11,
+              0.12
+            ],
+            "Lose less than 5%": [
+              0.031,
+              0.041,
+              0.051,
+              0.061,
+              0.071,
+              0.081,
+              0.091,
+              0.101,
+              0.111,
+              0.121
+            ],
+            "No change": [
+              0.032,
+              0.042,
+              0.052,
+              0.062,
+              0.072,
+              0.082,
+              0.092,
+              0.102,
+              0.112,
+              0.122
+            ],
+            "Gain less than 5%": [
+              0.033,
+              0.043,
+              0.053,
+              0.063,
+              0.073,
+              0.083,
+              0.093,
+              0.103,
+              0.113,
+              0.123
+            ],
+            "Gain more than 5%": [
+              0.034,
+              0.044,
+              0.054,
+              0.064,
+              0.074,
+              0.084,
+              0.094,
+              0.104,
+              0.114,
+              0.124
+            ]
+          },
+          "all": {
+            "Lose more than 5%": 0.075,
+            "Lose less than 5%": 0.076,
+            "No change": 0.077,
+            "Gain less than 5%": 0.078,
+            "Gain more than 5%": 0.079
+          }
+        },
+        "labor_supply_response": null,
+        "constituency_impact": [
+          {
+            "disclosure_tier": "reported",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012,
+            "constituency_code": "E14001063",
+            "constituency_name": "Aldershot",
+            "average_household_income_change": 10.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0
+          },
+          {
+            "disclosure_tier": "approximate",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012,
+            "constituency_code": "W07000081",
+            "constituency_name": "Aberafan Maesteg",
+            "average_household_income_change": -2.5,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0
+          }
+        ],
+        "local_authority_impact": [
+          {
+            "disclosure_tier": "reported",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012,
+            "local_authority_code": "E06000001",
+            "local_authority_name": "Hartlepool",
+            "average_household_income_change": 4.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0
+          },
+          {
+            "disclosure_tier": null,
+            "average_household_income_change_lower": null,
+            "average_household_income_change_upper": null,
+            "relative_household_income_change_lower": null,
+            "relative_household_income_change_upper": null,
+            "local_authority_code": "E06000002",
+            "local_authority_name": "Middlesbrough",
+            "average_household_income_change": -3.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0
+          }
+        ],
+        "congressional_district_impact": null,
+        "cliff_impact": null
+      },
+      "report_run_columns": {
+        "baseline_cliff_gap": null,
+        "baseline_cliff_share": null,
+        "reform_cliff_gap": null,
+        "reform_cliff_share": null,
+        "spm_provenance": null,
+        "data_version": "enhanced_frs_2023_24@1.0.0"
+      },
+      "rows": {
+        "labor_supply_responses": [],
+        "labor_supply_decile_responses": [],
+        "budget_summary": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_tax",
+            "entity": "household",
+            "change": 4000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_benefits",
+            "entity": "household",
+            "change": 1000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_net_income",
+            "entity": "household",
+            "baseline_total": 1200000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_weight",
+            "entity": "household",
+            "baseline_total": 28000000.0
+          }
+        ],
+        "decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 1,
+            "quantiles": 10,
+            "absolute_change": -5.0,
+            "relative_change": 1.5625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 2,
+            "quantiles": 10,
+            "absolute_change": -10.0,
+            "relative_change": 3.125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 3,
+            "quantiles": 10,
+            "absolute_change": -15.0,
+            "relative_change": 4.6875
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 4,
+            "quantiles": 10,
+            "absolute_change": -20.0,
+            "relative_change": 6.25
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 5,
+            "quantiles": 10,
+            "absolute_change": -25.0,
+            "relative_change": 7.8125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 6,
+            "quantiles": 10,
+            "absolute_change": -30.0,
+            "relative_change": 9.375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 7,
+            "quantiles": 10,
+            "absolute_change": -35.0,
+            "relative_change": 10.9375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 8,
+            "quantiles": 10,
+            "absolute_change": -40.0,
+            "relative_change": 12.5
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 9,
+            "quantiles": 10,
+            "absolute_change": -45.0,
+            "relative_change": 14.0625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 10,
+            "quantiles": 10,
+            "absolute_change": -50.0,
+            "relative_change": 15.625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 1,
+            "quantiles": 10,
+            "absolute_change": -8.0,
+            "relative_change": 1.5625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 2,
+            "quantiles": 10,
+            "absolute_change": -16.0,
+            "relative_change": 3.125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 3,
+            "quantiles": 10,
+            "absolute_change": -24.0,
+            "relative_change": 4.6875
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 4,
+            "quantiles": 10,
+            "absolute_change": -32.0,
+            "relative_change": 6.25
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 5,
+            "quantiles": 10,
+            "absolute_change": -40.0,
+            "relative_change": 7.8125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 6,
+            "quantiles": 10,
+            "absolute_change": -48.0,
+            "relative_change": 9.375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 7,
+            "quantiles": 10,
+            "absolute_change": -56.0,
+            "relative_change": 10.9375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 8,
+            "quantiles": 10,
+            "absolute_change": -64.0,
+            "relative_change": 12.5
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 9,
+            "quantiles": 10,
+            "absolute_change": -72.0,
+            "relative_change": 14.0625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": "household_wealth_decile",
+            "entity": "household",
+            "decile": 10,
+            "quantiles": 10,
+            "absolute_change": -80.0,
+            "relative_change": 15.625
+          }
+        ],
+        "intra_decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 1,
+            "lose_more_than_5pct": 0.02,
+            "lose_less_than_5pct": 0.021,
+            "no_change": 0.022,
+            "gain_less_than_5pct": 0.023,
+            "gain_more_than_5pct": 0.024
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 2,
+            "lose_more_than_5pct": 0.03,
+            "lose_less_than_5pct": 0.031,
+            "no_change": 0.032,
+            "gain_less_than_5pct": 0.033,
+            "gain_more_than_5pct": 0.034
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 3,
+            "lose_more_than_5pct": 0.04,
+            "lose_less_than_5pct": 0.041,
+            "no_change": 0.042,
+            "gain_less_than_5pct": 0.043,
+            "gain_more_than_5pct": 0.044
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 4,
+            "lose_more_than_5pct": 0.05,
+            "lose_less_than_5pct": 0.051,
+            "no_change": 0.052,
+            "gain_less_than_5pct": 0.053,
+            "gain_more_than_5pct": 0.054
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 5,
+            "lose_more_than_5pct": 0.06,
+            "lose_less_than_5pct": 0.061,
+            "no_change": 0.062,
+            "gain_less_than_5pct": 0.063,
+            "gain_more_than_5pct": 0.064
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 6,
+            "lose_more_than_5pct": 0.07,
+            "lose_less_than_5pct": 0.071,
+            "no_change": 0.072,
+            "gain_less_than_5pct": 0.073,
+            "gain_more_than_5pct": 0.074
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 7,
+            "lose_more_than_5pct": 0.08,
+            "lose_less_than_5pct": 0.081,
+            "no_change": 0.082,
+            "gain_less_than_5pct": 0.083,
+            "gain_more_than_5pct": 0.084
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 8,
+            "lose_more_than_5pct": 0.09,
+            "lose_less_than_5pct": 0.091,
+            "no_change": 0.092,
+            "gain_less_than_5pct": 0.093,
+            "gain_more_than_5pct": 0.094
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 9,
+            "lose_more_than_5pct": 0.1,
+            "lose_less_than_5pct": 0.101,
+            "no_change": 0.102,
+            "gain_less_than_5pct": 0.103,
+            "gain_more_than_5pct": 0.104
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 10,
+            "lose_more_than_5pct": 0.11,
+            "lose_less_than_5pct": 0.111,
+            "no_change": 0.112,
+            "gain_less_than_5pct": 0.113,
+            "gain_more_than_5pct": 0.114
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 1,
+            "lose_more_than_5pct": 0.03,
+            "lose_less_than_5pct": 0.031,
+            "no_change": 0.032,
+            "gain_less_than_5pct": 0.033,
+            "gain_more_than_5pct": 0.034
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 2,
+            "lose_more_than_5pct": 0.04,
+            "lose_less_than_5pct": 0.041,
+            "no_change": 0.042,
+            "gain_less_than_5pct": 0.043,
+            "gain_more_than_5pct": 0.044
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 3,
+            "lose_more_than_5pct": 0.05,
+            "lose_less_than_5pct": 0.051,
+            "no_change": 0.052,
+            "gain_less_than_5pct": 0.053,
+            "gain_more_than_5pct": 0.054
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 4,
+            "lose_more_than_5pct": 0.06,
+            "lose_less_than_5pct": 0.061,
+            "no_change": 0.062,
+            "gain_less_than_5pct": 0.063,
+            "gain_more_than_5pct": 0.064
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 5,
+            "lose_more_than_5pct": 0.07,
+            "lose_less_than_5pct": 0.071,
+            "no_change": 0.072,
+            "gain_less_than_5pct": 0.073,
+            "gain_more_than_5pct": 0.074
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 6,
+            "lose_more_than_5pct": 0.08,
+            "lose_less_than_5pct": 0.081,
+            "no_change": 0.082,
+            "gain_less_than_5pct": 0.083,
+            "gain_more_than_5pct": 0.084
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 7,
+            "lose_more_than_5pct": 0.09,
+            "lose_less_than_5pct": 0.091,
+            "no_change": 0.092,
+            "gain_less_than_5pct": 0.093,
+            "gain_more_than_5pct": 0.094
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 8,
+            "lose_more_than_5pct": 0.1,
+            "lose_less_than_5pct": 0.101,
+            "no_change": 0.102,
+            "gain_less_than_5pct": 0.103,
+            "gain_more_than_5pct": 0.104
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 9,
+            "lose_more_than_5pct": 0.11,
+            "lose_less_than_5pct": 0.111,
+            "no_change": 0.112,
+            "gain_less_than_5pct": 0.113,
+            "gain_more_than_5pct": 0.114
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "wealth",
+            "decile": 10,
+            "lose_more_than_5pct": 0.12,
+            "lose_less_than_5pct": 0.121,
+            "no_change": 0.122,
+            "gain_less_than_5pct": 0.123,
+            "gain_more_than_5pct": 0.124
+          }
+        ],
+        "poverty": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.21000000000000002
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.17
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.19
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.2
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.18
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.13999999999999999
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.15
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.19
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.18000000000000002
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.21000000000000002
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.15
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "relative_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.17
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.13999999999999999
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "absolute_bhc",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.12
+          }
+        ],
+        "inequality": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "income_variable": "equiv_hbai_household_net_income",
+            "entity": "household",
+            "gini": 0.36,
+            "top_10_share": 0.27,
+            "top_1_share": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "equiv_hbai_household_net_income",
+            "entity": "household",
+            "gini": 0.355,
+            "top_10_share": 0.265,
+            "top_1_share": 0.079
+          }
+        ],
+        "program_statistics": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "income_tax",
+            "entity": null,
+            "is_tax": true,
+            "baseline_total": 200000000000.0,
+            "reform_total": 204000000000.0,
+            "change": 4000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "universal_credit",
+            "entity": null,
+            "is_tax": false,
+            "baseline_total": 60000000000.0,
+            "reform_total": 61000000000.0,
+            "change": 1000000000.0
+          }
+        ],
+        "congressional_district_impacts": [],
+        "constituency_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "constituency_code": "E14001063",
+            "constituency_name": "Aldershot",
+            "average_household_income_change": 10.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0,
+            "disclosure_tier": "reported",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "constituency_code": "W07000081",
+            "constituency_name": "Aberafan Maesteg",
+            "average_household_income_change": -2.5,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0,
+            "disclosure_tier": "approximate",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012
+          }
+        ],
+        "local_authority_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "local_authority_code": "E06000001",
+            "local_authority_name": "Hartlepool",
+            "average_household_income_change": 4.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0,
+            "disclosure_tier": "reported",
+            "average_household_income_change_lower": 8.0,
+            "average_household_income_change_upper": 12.0,
+            "relative_household_income_change_lower": 0.0008,
+            "relative_household_income_change_upper": 0.0012
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "local_authority_code": "E06000002",
+            "local_authority_name": "Middlesbrough",
+            "average_household_income_change": -3.0,
+            "relative_household_income_change": 0.001,
+            "population": 40000.0,
+            "disclosure_tier": null,
+            "average_household_income_change_lower": null,
+            "average_household_income_change_upper": null,
+            "relative_household_income_change_lower": null,
+            "relative_household_income_change_upper": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "us-labour-supply-deciles-and-at-large-districts",
+      "country": "us",
+      "output": {
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "model_version": "1.0.0",
+        "data_version": "enhanced_cps_2024@1.2.3",
+        "budget": {
+          "tax_revenue_impact": 1500.0,
+          "state_tax_revenue_impact": 250.0,
+          "benefit_spending_impact": -500.0,
+          "budgetary_impact": 2000.0,
+          "households": 130000000.0,
+          "baseline_net_income": 9500000000000.0
+        },
+        "detailed_budget": {
+          "income_tax": {
+            "baseline": 1000.0,
+            "reform": 2500.0,
+            "difference": 1500.0,
+            "is_tax": true
+          },
+          "snap": {
+            "baseline": 800.0,
+            "reform": 300.0,
+            "difference": -500.0,
+            "is_tax": false
+          },
+          "state_income_tax": {
+            "baseline": 10.0,
+            "reform": 260.0,
+            "difference": 250.0,
+            "is_tax": null
+          }
+        },
+        "decile": {
+          "average": {
+            "1": 10.0,
+            "2": 20.0,
+            "3": 30.0,
+            "4": 40.0,
+            "5": 50.0,
+            "6": 60.0,
+            "7": 70.0,
+            "8": 80.0,
+            "9": 90.0,
+            "10": 100.0
+          },
+          "relative": {
+            "1": 0.015625,
+            "2": 0.03125,
+            "3": 0.046875,
+            "4": 0.0625,
+            "5": 0.078125,
+            "6": 0.09375,
+            "7": 0.109375,
+            "8": 0.125,
+            "9": 0.140625,
+            "10": 0.15625
+          }
+        },
+        "inequality": {
+          "gini": {
+            "baseline": 0.41,
+            "reform": 0.4
+          },
+          "top_10_pct_share": {
+            "baseline": 0.32,
+            "reform": 0.31
+          },
+          "top_1_pct_share": {
+            "baseline": 0.11,
+            "reform": 0.105
+          }
+        },
+        "poverty": {
+          "poverty": {
+            "child": {
+              "baseline": 0.1,
+              "reform": 0.09000000000000001
+            },
+            "adult": {
+              "baseline": 0.12000000000000001,
+              "reform": 0.11
+            },
+            "senior": {
+              "baseline": 0.13,
+              "reform": 0.14
+            },
+            "all": {
+              "baseline": 0.14,
+              "reform": 0.12000000000000001
+            }
+          },
+          "deep_poverty": {
+            "child": {
+              "baseline": 0.04,
+              "reform": 0.03
+            },
+            "adult": {
+              "baseline": 0.06,
+              "reform": 0.05
+            },
+            "senior": {
+              "baseline": 0.07,
+              "reform": 0.08
+            },
+            "all": {
+              "baseline": 0.08,
+              "reform": 0.06
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "poverty": {
+            "male": {
+              "baseline": 0.11,
+              "reform": 0.1
+            },
+            "female": {
+              "baseline": 0.13,
+              "reform": 0.12
+            }
+          },
+          "deep_poverty": {
+            "male": {
+              "baseline": 0.04,
+              "reform": 0.035
+            },
+            "female": {
+              "baseline": 0.05,
+              "reform": 0.045
+            }
+          }
+        },
+        "poverty_by_race": {
+          "poverty": {
+            "white": {
+              "baseline": 0.08,
+              "reform": 0.07
+            },
+            "black": {
+              "baseline": 0.18,
+              "reform": 0.16
+            },
+            "hispanic": {
+              "baseline": 0.16,
+              "reform": 0.15
+            },
+            "other": {
+              "baseline": 0.12,
+              "reform": 0.11
+            }
+          }
+        },
+        "intra_decile": {
+          "deciles": {
+            "Lose more than 5%": [
+              0.05,
+              0.06,
+              0.07,
+              0.08,
+              0.09,
+              0.1,
+              0.11,
+              0.12,
+              0.13,
+              0.14
+            ],
+            "Lose less than 5%": [
+              0.051,
+              0.061,
+              0.071,
+              0.081,
+              0.091,
+              0.101,
+              0.111,
+              0.121,
+              0.131,
+              0.141
+            ],
+            "No change": [
+              0.052,
+              0.062,
+              0.072,
+              0.082,
+              0.092,
+              0.102,
+              0.112,
+              0.122,
+              0.132,
+              0.142
+            ],
+            "Gain less than 5%": [
+              0.053,
+              0.063,
+              0.073,
+              0.083,
+              0.093,
+              0.103,
+              0.113,
+              0.123,
+              0.133,
+              0.143
+            ],
+            "Gain more than 5%": [
+              0.054,
+              0.064,
+              0.074,
+              0.084,
+              0.094,
+              0.104,
+              0.114,
+              0.124,
+              0.134,
+              0.144
+            ]
+          },
+          "all": {
+            "Lose more than 5%": 0.095,
+            "Lose less than 5%": 0.096,
+            "No change": 0.097,
+            "Gain less than 5%": 0.098,
+            "Gain more than 5%": 0.099
+          }
+        },
+        "wealth_decile": null,
+        "intra_wealth_decile": null,
+        "labor_supply_response": {
+          "substitution_lsr": -120.0,
+          "income_lsr": 45.0,
+          "relative_lsr": {
+            "income": 0.001,
+            "substitution": -0.002
+          },
+          "total_change": -75.0,
+          "revenue_change": -30.0,
+          "decile": {
+            "average": {
+              "income": {
+                "-1": 0.5,
+                "0": 0.7,
+                "1": 1.5,
+                "2": 3.0,
+                "3": 4.5,
+                "4": 6.0,
+                "5": 7.5,
+                "6": 9.0,
+                "7": 10.5,
+                "8": 12.0,
+                "9": 13.5,
+                "10": 15.0
+              },
+              "substitution": {
+                "-1": -0.5,
+                "0": -0.7,
+                "1": -2.0,
+                "2": -4.0,
+                "3": -6.0,
+                "4": -8.0,
+                "5": -10.0,
+                "6": -12.0,
+                "7": -14.0,
+                "8": -16.0,
+                "9": -18.0,
+                "10": -20.0
+              }
+            },
+            "relative": {
+              "income": {
+                "2": 0.0002,
+                "3": 0.00030000000000000003,
+                "4": 0.0004,
+                "5": 0.0005,
+                "6": 0.0006000000000000001,
+                "7": 0.0007,
+                "8": 0.0008,
+                "9": 0.0009000000000000001,
+                "10": 0.001
+              },
+              "substitution": {
+                "2": -0.0004,
+                "3": -0.0006000000000000001,
+                "4": -0.0008,
+                "5": -0.001,
+                "6": -0.0012000000000000001,
+                "7": -0.0014,
+                "8": -0.0016,
+                "9": -0.0018000000000000002,
+                "10": -0.002
+              }
+            }
+          },
+          "hours": {
+            "baseline": 1000000000.0,
+            "reform": 999000000.0,
+            "change": -1000000.0,
+            "income_effect": 200000.0,
+            "substitution_effect": -1200000.0
+          }
+        },
+        "constituency_impact": null,
+        "local_authority_impact": null,
+        "congressional_district_impact": {
+          "districts": [
+            {
+              "district": "AK-01",
+              "average_household_income_change": 12.0,
+              "relative_household_income_change": 0.001,
+              "winner_percentage": 0.3,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.5,
+              "population": 300000.0
+            },
+            {
+              "district": "CA-05",
+              "average_household_income_change": -4.0,
+              "relative_household_income_change": -0.0005,
+              "winner_percentage": 0.1,
+              "loser_percentage": 0.6,
+              "no_change_percentage": 0.3,
+              "population": 290000.0
+            },
+            {
+              "district": "CA-12",
+              "average_household_income_change": 7.5,
+              "relative_household_income_change": 0.0008,
+              "winner_percentage": 0.4,
+              "loser_percentage": 0.1,
+              "no_change_percentage": 0.5,
+              "population": 310000.0
+            },
+            {
+              "district": "DC-01",
+              "average_household_income_change": -1.5,
+              "relative_household_income_change": 0.0004,
+              "winner_percentage": 0.25,
+              "loser_percentage": 0.25,
+              "no_change_percentage": 0.5,
+              "population": 700000.0
+            },
+            {
+              "district": "UT-03",
+              "average_household_income_change": 3.0,
+              "relative_household_income_change": 0.0002,
+              "winner_percentage": 0.2,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.6,
+              "population": 280000.0
+            },
+            {
+              "district": "WY-01",
+              "average_household_income_change": 5.0,
+              "relative_household_income_change": 0.0004,
+              "winner_percentage": 0.25,
+              "loser_percentage": 0.25,
+              "no_change_percentage": 0.5,
+              "population": 580000.0
+            }
+          ]
+        },
+        "cliff_impact": {
+          "baseline": {
+            "cliff_gap": 1200000000.0,
+            "cliff_share": 0.04
+          },
+          "reform": {
+            "cliff_gap": 1100000000.0,
+            "cliff_share": 0.035
+          }
+        }
+      },
+      "report_run_columns": {
+        "baseline_cliff_gap": 1200000000.0,
+        "baseline_cliff_share": 0.04,
+        "reform_cliff_gap": 1100000000.0,
+        "reform_cliff_share": 0.035,
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "data_version": "enhanced_cps_2024@1.2.3"
+      },
+      "rows": {
+        "labor_supply_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "income_effect_earnings_change": 45.0,
+            "substitution_effect_earnings_change": -120.0,
+            "total_earnings_change": -75.0,
+            "revenue_change": -30.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002,
+            "baseline_weekly_hours": 1000000000.0,
+            "reform_weekly_hours": 999000000.0,
+            "weekly_hours_change": -1000000.0,
+            "weekly_hours_income_effect": 200000.0,
+            "weekly_hours_substitution_effect": -1200000.0
+          }
+        ],
+        "labor_supply_decile_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": -1,
+            "average_income_effect": 0.5,
+            "average_substitution_effect": -0.5,
+            "relative_income_effect": null,
+            "relative_substitution_effect": null
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 0,
+            "average_income_effect": 0.7,
+            "average_substitution_effect": -0.7,
+            "relative_income_effect": null,
+            "relative_substitution_effect": null
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 1,
+            "average_income_effect": 1.5,
+            "average_substitution_effect": -2.0,
+            "relative_income_effect": null,
+            "relative_substitution_effect": null
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 2,
+            "average_income_effect": 3.0,
+            "average_substitution_effect": -4.0,
+            "relative_income_effect": 0.0002,
+            "relative_substitution_effect": -0.0004
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 3,
+            "average_income_effect": 4.5,
+            "average_substitution_effect": -6.0,
+            "relative_income_effect": 0.00030000000000000003,
+            "relative_substitution_effect": -0.0006000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 4,
+            "average_income_effect": 6.0,
+            "average_substitution_effect": -8.0,
+            "relative_income_effect": 0.0004,
+            "relative_substitution_effect": -0.0008
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 5,
+            "average_income_effect": 7.5,
+            "average_substitution_effect": -10.0,
+            "relative_income_effect": 0.0005,
+            "relative_substitution_effect": -0.001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 6,
+            "average_income_effect": 9.0,
+            "average_substitution_effect": -12.0,
+            "relative_income_effect": 0.0006000000000000001,
+            "relative_substitution_effect": -0.0012000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 7,
+            "average_income_effect": 10.5,
+            "average_substitution_effect": -14.0,
+            "relative_income_effect": 0.0007,
+            "relative_substitution_effect": -0.0014
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 8,
+            "average_income_effect": 12.0,
+            "average_substitution_effect": -16.0,
+            "relative_income_effect": 0.0008,
+            "relative_substitution_effect": -0.0016
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 9,
+            "average_income_effect": 13.5,
+            "average_substitution_effect": -18.0,
+            "relative_income_effect": 0.0009000000000000001,
+            "relative_substitution_effect": -0.0018000000000000002
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 10,
+            "average_income_effect": 15.0,
+            "average_substitution_effect": -20.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002
+          }
+        ],
+        "budget_summary": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_tax",
+            "entity": "household",
+            "change": 1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_benefits",
+            "entity": "household",
+            "change": -500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_state_income_tax",
+            "entity": "household",
+            "change": 250.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_net_income",
+            "entity": "household",
+            "baseline_total": 9500000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_weight",
+            "entity": "household",
+            "baseline_total": 130000000.0
+          }
+        ],
+        "decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 1,
+            "quantiles": 10,
+            "absolute_change": 10.0,
+            "relative_change": 1.5625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 2,
+            "quantiles": 10,
+            "absolute_change": 20.0,
+            "relative_change": 3.125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 3,
+            "quantiles": 10,
+            "absolute_change": 30.0,
+            "relative_change": 4.6875
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 4,
+            "quantiles": 10,
+            "absolute_change": 40.0,
+            "relative_change": 6.25
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 5,
+            "quantiles": 10,
+            "absolute_change": 50.0,
+            "relative_change": 7.8125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 6,
+            "quantiles": 10,
+            "absolute_change": 60.0,
+            "relative_change": 9.375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 7,
+            "quantiles": 10,
+            "absolute_change": 70.0,
+            "relative_change": 10.9375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 8,
+            "quantiles": 10,
+            "absolute_change": 80.0,
+            "relative_change": 12.5
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 9,
+            "quantiles": 10,
+            "absolute_change": 90.0,
+            "relative_change": 14.0625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 10,
+            "quantiles": 10,
+            "absolute_change": 100.0,
+            "relative_change": 15.625
+          }
+        ],
+        "intra_decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 1,
+            "lose_more_than_5pct": 0.05,
+            "lose_less_than_5pct": 0.051,
+            "no_change": 0.052,
+            "gain_less_than_5pct": 0.053,
+            "gain_more_than_5pct": 0.054
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 2,
+            "lose_more_than_5pct": 0.06,
+            "lose_less_than_5pct": 0.061,
+            "no_change": 0.062,
+            "gain_less_than_5pct": 0.063,
+            "gain_more_than_5pct": 0.064
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 3,
+            "lose_more_than_5pct": 0.07,
+            "lose_less_than_5pct": 0.071,
+            "no_change": 0.072,
+            "gain_less_than_5pct": 0.073,
+            "gain_more_than_5pct": 0.074
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 4,
+            "lose_more_than_5pct": 0.08,
+            "lose_less_than_5pct": 0.081,
+            "no_change": 0.082,
+            "gain_less_than_5pct": 0.083,
+            "gain_more_than_5pct": 0.084
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 5,
+            "lose_more_than_5pct": 0.09,
+            "lose_less_than_5pct": 0.091,
+            "no_change": 0.092,
+            "gain_less_than_5pct": 0.093,
+            "gain_more_than_5pct": 0.094
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 6,
+            "lose_more_than_5pct": 0.1,
+            "lose_less_than_5pct": 0.101,
+            "no_change": 0.102,
+            "gain_less_than_5pct": 0.103,
+            "gain_more_than_5pct": 0.104
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 7,
+            "lose_more_than_5pct": 0.11,
+            "lose_less_than_5pct": 0.111,
+            "no_change": 0.112,
+            "gain_less_than_5pct": 0.113,
+            "gain_more_than_5pct": 0.114
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 8,
+            "lose_more_than_5pct": 0.12,
+            "lose_less_than_5pct": 0.121,
+            "no_change": 0.122,
+            "gain_less_than_5pct": 0.123,
+            "gain_more_than_5pct": 0.124
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 9,
+            "lose_more_than_5pct": 0.13,
+            "lose_less_than_5pct": 0.131,
+            "no_change": 0.132,
+            "gain_less_than_5pct": 0.133,
+            "gain_more_than_5pct": 0.134
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 10,
+            "lose_more_than_5pct": 0.14,
+            "lose_less_than_5pct": 0.141,
+            "no_change": 0.142,
+            "gain_less_than_5pct": 0.143,
+            "gain_more_than_5pct": 0.144
+          }
+        ],
+        "poverty": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.18
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.09000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.03
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.035
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.045
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.15
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.11
+          }
+        ],
+        "inequality": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.41,
+            "top_10_share": 0.32,
+            "top_1_share": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.4,
+            "top_10_share": 0.31,
+            "top_1_share": 0.105
+          }
+        ],
+        "program_statistics": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "income_tax",
+            "entity": null,
+            "is_tax": true,
+            "baseline_total": 1000.0,
+            "reform_total": 2500.0,
+            "change": 1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "snap",
+            "entity": null,
+            "is_tax": false,
+            "baseline_total": 800.0,
+            "reform_total": 300.0,
+            "change": -500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "state_income_tax",
+            "entity": null,
+            "is_tax": null,
+            "baseline_total": 10.0,
+            "reform_total": 260.0,
+            "change": 250.0
+          }
+        ],
+        "congressional_district_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 200,
+            "state_fips": 2,
+            "district_number": 0,
+            "average_household_income_change": 12.0,
+            "relative_household_income_change": 0.001,
+            "winner_percentage": 0.3,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.5,
+            "population": 300000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 605,
+            "state_fips": 6,
+            "district_number": 5,
+            "average_household_income_change": -4.0,
+            "relative_household_income_change": -0.0005,
+            "winner_percentage": 0.1,
+            "loser_percentage": 0.6,
+            "no_change_percentage": 0.3,
+            "population": 290000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 612,
+            "state_fips": 6,
+            "district_number": 12,
+            "average_household_income_change": 7.5,
+            "relative_household_income_change": 0.0008,
+            "winner_percentage": 0.4,
+            "loser_percentage": 0.1,
+            "no_change_percentage": 0.5,
+            "population": 310000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 1100,
+            "state_fips": 11,
+            "district_number": 0,
+            "average_household_income_change": -1.5,
+            "relative_household_income_change": 0.0004,
+            "winner_percentage": 0.25,
+            "loser_percentage": 0.25,
+            "no_change_percentage": 0.5,
+            "population": 700000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 4903,
+            "state_fips": 49,
+            "district_number": 3,
+            "average_household_income_change": 3.0,
+            "relative_household_income_change": 0.0002,
+            "winner_percentage": 0.2,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.6,
+            "population": 280000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 5600,
+            "state_fips": 56,
+            "district_number": 0,
+            "average_household_income_change": 5.0,
+            "relative_household_income_change": 0.0004,
+            "winner_percentage": 0.25,
+            "loser_percentage": 0.25,
+            "no_change_percentage": 0.5,
+            "population": 580000.0
+          }
+        ],
+        "constituency_impacts": [],
+        "local_authority_impacts": []
+      }
+    },
+    {
+      "name": "us-negative-budget",
+      "country": "us",
+      "output": {
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "model_version": "1.0.0",
+        "data_version": "enhanced_cps_2024@1.2.3",
+        "budget": {
+          "tax_revenue_impact": -1500.0,
+          "state_tax_revenue_impact": -250.0,
+          "benefit_spending_impact": 500.0,
+          "budgetary_impact": -2000.0,
+          "households": 130000000.0,
+          "baseline_net_income": 9500000000000.0
+        },
+        "detailed_budget": {
+          "income_tax": {
+            "baseline": 1000.0,
+            "reform": 2500.0,
+            "difference": 1500.0,
+            "is_tax": true
+          },
+          "snap": {
+            "baseline": 800.0,
+            "reform": 300.0,
+            "difference": -500.0,
+            "is_tax": false
+          },
+          "state_income_tax": {
+            "baseline": 10.0,
+            "reform": 260.0,
+            "difference": 250.0,
+            "is_tax": null
+          }
+        },
+        "decile": {
+          "average": {
+            "1": 10.0,
+            "2": 20.0,
+            "3": 30.0,
+            "4": 40.0,
+            "5": 50.0,
+            "6": 60.0,
+            "7": 70.0,
+            "8": 80.0,
+            "9": 90.0,
+            "10": 100.0
+          },
+          "relative": {
+            "1": 0.015625,
+            "2": 0.03125,
+            "3": 0.046875,
+            "4": 0.0625,
+            "5": 0.078125,
+            "6": 0.09375,
+            "7": 0.109375,
+            "8": 0.125,
+            "9": 0.140625,
+            "10": 0.15625
+          }
+        },
+        "inequality": {
+          "gini": {
+            "baseline": 0.41,
+            "reform": 0.4
+          },
+          "top_10_pct_share": {
+            "baseline": 0.32,
+            "reform": 0.31
+          },
+          "top_1_pct_share": {
+            "baseline": 0.11,
+            "reform": 0.105
+          }
+        },
+        "poverty": {
+          "poverty": {
+            "child": {
+              "baseline": 0.1,
+              "reform": 0.09000000000000001
+            },
+            "adult": {
+              "baseline": 0.12000000000000001,
+              "reform": 0.11
+            },
+            "senior": {
+              "baseline": 0.13,
+              "reform": 0.14
+            },
+            "all": {
+              "baseline": 0.14,
+              "reform": 0.12000000000000001
+            }
+          },
+          "deep_poverty": {
+            "child": {
+              "baseline": 0.04,
+              "reform": 0.03
+            },
+            "adult": {
+              "baseline": 0.06,
+              "reform": 0.05
+            },
+            "senior": {
+              "baseline": 0.07,
+              "reform": 0.08
+            },
+            "all": {
+              "baseline": 0.08,
+              "reform": 0.06
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "poverty": {
+            "male": {
+              "baseline": 0.11,
+              "reform": 0.1
+            },
+            "female": {
+              "baseline": 0.13,
+              "reform": 0.12
+            }
+          },
+          "deep_poverty": {
+            "male": {
+              "baseline": 0.04,
+              "reform": 0.035
+            },
+            "female": {
+              "baseline": 0.05,
+              "reform": 0.045
+            }
+          }
+        },
+        "poverty_by_race": {
+          "poverty": {
+            "white": {
+              "baseline": 0.08,
+              "reform": 0.07
+            },
+            "black": {
+              "baseline": 0.18,
+              "reform": 0.16
+            },
+            "hispanic": {
+              "baseline": 0.16,
+              "reform": 0.15
+            },
+            "other": {
+              "baseline": 0.12,
+              "reform": 0.11
+            }
+          }
+        },
+        "intra_decile": {
+          "deciles": {
+            "Lose more than 5%": [
+              0.05,
+              0.06,
+              0.07,
+              0.08,
+              0.09,
+              0.1,
+              0.11,
+              0.12,
+              0.13,
+              0.14
+            ],
+            "Lose less than 5%": [
+              0.051,
+              0.061,
+              0.071,
+              0.081,
+              0.091,
+              0.101,
+              0.111,
+              0.121,
+              0.131,
+              0.141
+            ],
+            "No change": [
+              0.052,
+              0.062,
+              0.072,
+              0.082,
+              0.092,
+              0.102,
+              0.112,
+              0.122,
+              0.132,
+              0.142
+            ],
+            "Gain less than 5%": [
+              0.053,
+              0.063,
+              0.073,
+              0.083,
+              0.093,
+              0.103,
+              0.113,
+              0.123,
+              0.133,
+              0.143
+            ],
+            "Gain more than 5%": [
+              0.054,
+              0.064,
+              0.074,
+              0.084,
+              0.094,
+              0.104,
+              0.114,
+              0.124,
+              0.134,
+              0.144
+            ]
+          },
+          "all": {
+            "Lose more than 5%": 0.095,
+            "Lose less than 5%": 0.096,
+            "No change": 0.097,
+            "Gain less than 5%": 0.098,
+            "Gain more than 5%": 0.099
+          }
+        },
+        "wealth_decile": null,
+        "intra_wealth_decile": null,
+        "labor_supply_response": {
+          "substitution_lsr": -120.0,
+          "income_lsr": 45.0,
+          "relative_lsr": {
+            "income": 0.001,
+            "substitution": -0.002
+          },
+          "total_change": -75.0,
+          "revenue_change": -30.0,
+          "decile": {
+            "average": {
+              "income": {
+                "1": 1.5,
+                "2": 3.0,
+                "3": 4.5,
+                "4": 6.0,
+                "5": 7.5,
+                "6": 9.0,
+                "7": 10.5,
+                "8": 12.0,
+                "9": 13.5,
+                "10": 15.0
+              },
+              "substitution": {
+                "1": -2.0,
+                "2": -4.0,
+                "3": -6.0,
+                "4": -8.0,
+                "5": -10.0,
+                "6": -12.0,
+                "7": -14.0,
+                "8": -16.0,
+                "9": -18.0,
+                "10": -20.0
+              }
+            },
+            "relative": {
+              "income": {
+                "2": 0.0002,
+                "3": 0.00030000000000000003,
+                "4": 0.0004,
+                "5": 0.0005,
+                "6": 0.0006000000000000001,
+                "7": 0.0007,
+                "8": 0.0008,
+                "9": 0.0009000000000000001,
+                "10": 0.001
+              },
+              "substitution": {
+                "2": -0.0004,
+                "3": -0.0006000000000000001,
+                "4": -0.0008,
+                "5": -0.001,
+                "6": -0.0012000000000000001,
+                "7": -0.0014,
+                "8": -0.0016,
+                "9": -0.0018000000000000002,
+                "10": -0.002
+              }
+            }
+          },
+          "hours": {
+            "baseline": 1000000000.0,
+            "reform": 999000000.0,
+            "change": -1000000.0,
+            "income_effect": 200000.0,
+            "substitution_effect": -1200000.0
+          }
+        },
+        "constituency_impact": null,
+        "local_authority_impact": null,
+        "congressional_district_impact": {
+          "districts": [
+            {
+              "district": "AK-01",
+              "average_household_income_change": 12.0,
+              "relative_household_income_change": 0.001,
+              "winner_percentage": 0.3,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.5,
+              "population": 300000.0
+            },
+            {
+              "district": "CA-05",
+              "average_household_income_change": -4.0,
+              "relative_household_income_change": -0.0005,
+              "winner_percentage": 0.1,
+              "loser_percentage": 0.6,
+              "no_change_percentage": 0.3,
+              "population": 290000.0
+            },
+            {
+              "district": "CA-12",
+              "average_household_income_change": 7.5,
+              "relative_household_income_change": 0.0008,
+              "winner_percentage": 0.4,
+              "loser_percentage": 0.1,
+              "no_change_percentage": 0.5,
+              "population": 310000.0
+            },
+            {
+              "district": "UT-03",
+              "average_household_income_change": 3.0,
+              "relative_household_income_change": 0.0002,
+              "winner_percentage": 0.2,
+              "loser_percentage": 0.2,
+              "no_change_percentage": 0.6,
+              "population": 280000.0
+            }
+          ]
+        },
+        "cliff_impact": {
+          "baseline": {
+            "cliff_gap": 1200000000.0,
+            "cliff_share": 0.04
+          },
+          "reform": {
+            "cliff_gap": 1100000000.0,
+            "cliff_share": 0.035
+          }
+        }
+      },
+      "report_run_columns": {
+        "baseline_cliff_gap": 1200000000.0,
+        "baseline_cliff_share": 0.04,
+        "reform_cliff_gap": 1100000000.0,
+        "reform_cliff_share": 0.035,
+        "spm_provenance": {
+          "schema_version": "canonical-spm-comparison-v2",
+          "baseline": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          },
+          "reform": {
+            "receipt": {
+              "schema_version": "canonical-spm-provenance-v2",
+              "forecast_id": "spm-forecast-2026",
+              "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "scenario": "baseline",
+              "geography_kind": "county",
+              "geography_id": null,
+              "county_vintage": "2020",
+              "as_of": null,
+              "years": [
+                "2026"
+              ],
+              "runtime_versions": {
+                "policyengine": "4.0.0",
+                "policyengine-core": "3.0.0",
+                "policyengine-us": "1.0.0",
+                "spm-calculator": "0.5.0"
+              }
+            },
+            "execution_count": 1
+          }
+        },
+        "data_version": "enhanced_cps_2024@1.2.3"
+      },
+      "rows": {
+        "labor_supply_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "income_effect_earnings_change": 45.0,
+            "substitution_effect_earnings_change": -120.0,
+            "total_earnings_change": -75.0,
+            "revenue_change": -30.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002,
+            "baseline_weekly_hours": 1000000000.0,
+            "reform_weekly_hours": 999000000.0,
+            "weekly_hours_change": -1000000.0,
+            "weekly_hours_income_effect": 200000.0,
+            "weekly_hours_substitution_effect": -1200000.0
+          }
+        ],
+        "labor_supply_decile_responses": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 1,
+            "average_income_effect": 1.5,
+            "average_substitution_effect": -2.0,
+            "relative_income_effect": null,
+            "relative_substitution_effect": null
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 2,
+            "average_income_effect": 3.0,
+            "average_substitution_effect": -4.0,
+            "relative_income_effect": 0.0002,
+            "relative_substitution_effect": -0.0004
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 3,
+            "average_income_effect": 4.5,
+            "average_substitution_effect": -6.0,
+            "relative_income_effect": 0.00030000000000000003,
+            "relative_substitution_effect": -0.0006000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 4,
+            "average_income_effect": 6.0,
+            "average_substitution_effect": -8.0,
+            "relative_income_effect": 0.0004,
+            "relative_substitution_effect": -0.0008
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 5,
+            "average_income_effect": 7.5,
+            "average_substitution_effect": -10.0,
+            "relative_income_effect": 0.0005,
+            "relative_substitution_effect": -0.001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 6,
+            "average_income_effect": 9.0,
+            "average_substitution_effect": -12.0,
+            "relative_income_effect": 0.0006000000000000001,
+            "relative_substitution_effect": -0.0012000000000000001
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 7,
+            "average_income_effect": 10.5,
+            "average_substitution_effect": -14.0,
+            "relative_income_effect": 0.0007,
+            "relative_substitution_effect": -0.0014
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 8,
+            "average_income_effect": 12.0,
+            "average_substitution_effect": -16.0,
+            "relative_income_effect": 0.0008,
+            "relative_substitution_effect": -0.0016
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 9,
+            "average_income_effect": 13.5,
+            "average_substitution_effect": -18.0,
+            "relative_income_effect": 0.0009000000000000001,
+            "relative_substitution_effect": -0.0018000000000000002
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "decile": 10,
+            "average_income_effect": 15.0,
+            "average_substitution_effect": -20.0,
+            "relative_income_effect": 0.001,
+            "relative_substitution_effect": -0.002
+          }
+        ],
+        "budget_summary": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_tax",
+            "entity": "household",
+            "change": -1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_benefits",
+            "entity": "household",
+            "change": 500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_state_income_tax",
+            "entity": "household",
+            "change": -250.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_net_income",
+            "entity": "household",
+            "baseline_total": 9500000000000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "variable_name": "household_weight",
+            "entity": "household",
+            "baseline_total": 130000000.0
+          }
+        ],
+        "decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 1,
+            "quantiles": 10,
+            "absolute_change": 10.0,
+            "relative_change": 1.5625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 2,
+            "quantiles": 10,
+            "absolute_change": 20.0,
+            "relative_change": 3.125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 3,
+            "quantiles": 10,
+            "absolute_change": 30.0,
+            "relative_change": 4.6875
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 4,
+            "quantiles": 10,
+            "absolute_change": 40.0,
+            "relative_change": 6.25
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 5,
+            "quantiles": 10,
+            "absolute_change": 50.0,
+            "relative_change": 7.8125
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 6,
+            "quantiles": 10,
+            "absolute_change": 60.0,
+            "relative_change": 9.375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 7,
+            "quantiles": 10,
+            "absolute_change": 70.0,
+            "relative_change": 10.9375
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 8,
+            "quantiles": 10,
+            "absolute_change": 80.0,
+            "relative_change": 12.5
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 9,
+            "quantiles": 10,
+            "absolute_change": 90.0,
+            "relative_change": 14.0625
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "decile_variable": null,
+            "entity": "household",
+            "decile": 10,
+            "quantiles": 10,
+            "absolute_change": 100.0,
+            "relative_change": 15.625
+          }
+        ],
+        "intra_decile_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 1,
+            "lose_more_than_5pct": 0.05,
+            "lose_less_than_5pct": 0.051,
+            "no_change": 0.052,
+            "gain_less_than_5pct": 0.053,
+            "gain_more_than_5pct": 0.054
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 2,
+            "lose_more_than_5pct": 0.06,
+            "lose_less_than_5pct": 0.061,
+            "no_change": 0.062,
+            "gain_less_than_5pct": 0.063,
+            "gain_more_than_5pct": 0.064
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 3,
+            "lose_more_than_5pct": 0.07,
+            "lose_less_than_5pct": 0.071,
+            "no_change": 0.072,
+            "gain_less_than_5pct": 0.073,
+            "gain_more_than_5pct": 0.074
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 4,
+            "lose_more_than_5pct": 0.08,
+            "lose_less_than_5pct": 0.081,
+            "no_change": 0.082,
+            "gain_less_than_5pct": 0.083,
+            "gain_more_than_5pct": 0.084
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 5,
+            "lose_more_than_5pct": 0.09,
+            "lose_less_than_5pct": 0.091,
+            "no_change": 0.092,
+            "gain_less_than_5pct": 0.093,
+            "gain_more_than_5pct": 0.094
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 6,
+            "lose_more_than_5pct": 0.1,
+            "lose_less_than_5pct": 0.101,
+            "no_change": 0.102,
+            "gain_less_than_5pct": 0.103,
+            "gain_more_than_5pct": 0.104
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 7,
+            "lose_more_than_5pct": 0.11,
+            "lose_less_than_5pct": 0.111,
+            "no_change": 0.112,
+            "gain_less_than_5pct": 0.113,
+            "gain_more_than_5pct": 0.114
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 8,
+            "lose_more_than_5pct": 0.12,
+            "lose_less_than_5pct": 0.121,
+            "no_change": 0.122,
+            "gain_less_than_5pct": 0.123,
+            "gain_more_than_5pct": 0.124
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 9,
+            "lose_more_than_5pct": 0.13,
+            "lose_less_than_5pct": 0.131,
+            "no_change": 0.132,
+            "gain_less_than_5pct": 0.133,
+            "gain_more_than_5pct": 0.134
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "decile_type": "income",
+            "decile": 10,
+            "lose_more_than_5pct": 0.14,
+            "lose_less_than_5pct": 0.141,
+            "no_change": 0.142,
+            "gain_less_than_5pct": 0.143,
+            "gain_more_than_5pct": 0.144
+          }
+        ],
+        "poverty": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.13
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.04
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.18
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.12000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.09000000000000001
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.14
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.1
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.12
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": null,
+            "filter_group": null,
+            "rate": 0.06
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "child",
+            "rate": 0.03
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "adult",
+            "rate": 0.05
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "age",
+            "filter_group": "senior",
+            "rate": 0.08
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "male",
+            "rate": 0.035
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm_deep",
+            "entity": "person",
+            "filter_variable": "is_male",
+            "filter_group": "female",
+            "rate": 0.045
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "white",
+            "rate": 0.07
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "black",
+            "rate": 0.16
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "hispanic",
+            "rate": 0.15
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "poverty_type": "spm",
+            "entity": "person",
+            "filter_variable": "race",
+            "filter_group": "other",
+            "rate": 0.11
+          }
+        ],
+        "inequality": [
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.41,
+            "top_10_share": 0.32,
+            "top_1_share": 0.11
+          },
+          {
+            "simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "income_variable": "household_net_income",
+            "entity": "household",
+            "gini": 0.4,
+            "top_10_share": 0.31,
+            "top_1_share": 0.105
+          }
+        ],
+        "program_statistics": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "income_tax",
+            "entity": null,
+            "is_tax": true,
+            "baseline_total": 1000.0,
+            "reform_total": 2500.0,
+            "change": 1500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "snap",
+            "entity": null,
+            "is_tax": false,
+            "baseline_total": 800.0,
+            "reform_total": 300.0,
+            "change": -500.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "program_name": "state_income_tax",
+            "entity": null,
+            "is_tax": null,
+            "baseline_total": 10.0,
+            "reform_total": 260.0,
+            "change": 250.0
+          }
+        ],
+        "congressional_district_impacts": [
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 200,
+            "state_fips": 2,
+            "district_number": 0,
+            "average_household_income_change": 12.0,
+            "relative_household_income_change": 0.001,
+            "winner_percentage": 0.3,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.5,
+            "population": 300000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 605,
+            "state_fips": 6,
+            "district_number": 5,
+            "average_household_income_change": -4.0,
+            "relative_household_income_change": -0.0005,
+            "winner_percentage": 0.1,
+            "loser_percentage": 0.6,
+            "no_change_percentage": 0.3,
+            "population": 290000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 612,
+            "state_fips": 6,
+            "district_number": 12,
+            "average_household_income_change": 7.5,
+            "relative_household_income_change": 0.0008,
+            "winner_percentage": 0.4,
+            "loser_percentage": 0.1,
+            "no_change_percentage": 0.5,
+            "population": 310000.0
+          },
+          {
+            "report_run_id": "00000000-0000-4000-8000-00000000c001",
+            "baseline_simulation_run_id": "00000000-0000-4000-8000-00000000c002",
+            "reform_simulation_run_id": "00000000-0000-4000-8000-00000000c003",
+            "district_geoid": 4903,
+            "state_fips": 49,
+            "district_number": 3,
+            "average_household_income_change": 3.0,
+            "relative_household_income_change": 0.0002,
+            "winner_percentage": 0.2,
+            "loser_percentage": 0.2,
+            "no_change_percentage": 0.6,
+            "population": 280000.0
+          }
+        ],
+        "constituency_impacts": [],
+        "local_authority_impacts": []
+      }
+    }
+  ]
+}

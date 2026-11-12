@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from policyengine_api.data.v2.models import UserType
@@ -30,6 +31,15 @@ if TYPE_CHECKING:
         NativePolicyCreation,
         NativePolicyCreationInput,
     )
+    from policyengine_api.services.v2.simulation_service.types import (
+        EconomyReportCreationInput,
+        EconomySimulationCreationInput,
+    )
+    from policyengine_api.services.v2.stored_reports.types import (
+        ReportRead,
+        ReportSummaryRead,
+    )
+    from policyengine_api.services.v2.stored_simulations.types import SimulationRead
     from policyengine_api.services.v2.user_accounts.types import (
         AccountDeletion,
         AccountExport,
@@ -179,6 +189,63 @@ class V2HouseholdCalculationResourceService(Protocol):
         """Return the calculation household_jobs records.
 
         Raise ``HouseholdCalculationNotFoundError`` when there is no such job.
+        """
+        ...
+
+
+class V2StoredReportResourceService(Protocol):
+    """Route-independent report operations for one request."""
+
+    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
+        """Return the country's economy report, its newest run and that run's result.
+
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report, ``ReportKindUnsupportedError`` for a household report or
+        budget window, and ``EconomyResultUnreadableError`` when a succeeded
+        run's result cannot be read.
+        """
+        ...
+
+    def list_reports(
+        self, *, country_id: str, report_ids: Sequence[UUID]
+    ) -> tuple[ReportSummaryRead, ...]:
+        """Return the country's economy reports among ``report_ids``, in that order."""
+        ...
+
+    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+        """Create the report through the simulation service; return it as stored.
+
+        Raise ``EconomyCalculationsUnsupportedError`` for a country without
+        economy reports, ``PolicyNotFoundError`` for a policy the country
+        does not store, ``PolicyParametersMissingError`` for a policy that
+        sets parameters the running catalog version lacks,
+        ``SubmissionStorageError`` when the database or its catalog cannot be
+        read for those checks, the simulation service's errors, and
+        ``CreatedReportUnreadableError`` when the report it created cannot be
+        read back.
+        """
+        ...
+
+
+class V2StoredSimulationResourceService(Protocol):
+    """Route-independent simulation operations for one request."""
+
+    def get_simulation(self, *, country_id: str, simulation_id: UUID) -> SimulationRead:
+        """Return the country's simulation and its newest run.
+
+        Raise ``StoredSimulationNotFoundError`` when there is none.
+        """
+        ...
+
+    def create_simulation(
+        self, simulation_input: EconomySimulationCreationInput
+    ) -> SimulationRead:
+        """Create the simulation through the simulation service; return it as stored.
+
+        Raise the checks' and the simulation service's errors as
+        ``V2StoredReportResourceService.create_report`` does, for the
+        simulation's one policy, and ``CreatedSimulationUnreadableError`` when
+        the simulation it created cannot be read back.
         """
         ...
 

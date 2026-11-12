@@ -39,6 +39,7 @@ def _shared_report_read() -> SharedUserReportRead:
     return SharedUserReportRead(
         id=REPORT_ASSOCIATION_ID,
         country_id="us",
+        report_id=None,
         legacy_report_id=615,
         name="CTC report",
         source_note="from chat",
@@ -76,6 +77,7 @@ def test_anyone_reads_a_saved_report_by_its_link_without_the_owner() -> None:
             "item": {
                 "id": str(REPORT_ASSOCIATION_ID),
                 "country_id": "us",
+                "report_id": None,
                 "legacy_report_id": 615,
                 "name": "CTC report",
                 "source_note": "from chat",

@@ -53,6 +53,12 @@ from policyengine_api.services.v2.user_invitations.validators import (
 from policyengine_api.services.v2.user_policies.validators import (
     AssociationPolicyNotFoundError,
 )
+from policyengine_api.services.v2.user_reports.validators import (
+    AssociationReportNotFoundError,
+)
+from policyengine_api.services.v2.user_simulations.validators import (
+    AssociationSimulationNotFoundError,
+)
 from policyengine_api.services.v2.user_types.validators import (
     AdminUserEmailSearchRefusedError,
     AdminUserProfilesUnavailableError,
@@ -233,6 +239,8 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
             AssociationNotFoundError,
             AssociationPolicyNotFoundError,
             AssociationHouseholdNotFoundError,
+            AssociationReportNotFoundError,
+            AssociationSimulationNotFoundError,
             AccountNotFoundError,
             SignedInUserNotFoundError,
             InvitationNotFoundError,

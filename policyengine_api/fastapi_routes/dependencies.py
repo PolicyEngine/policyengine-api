@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated, Protocol
 from fastapi import Depends, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.fastapi_routes.metadata_protocols import (
     MetadataReader,
     V2MetadataResourceReader,
@@ -20,6 +21,8 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2HouseholdCalculationResourceService,
     V2HouseholdResourceService,
     V2PolicyResourceService,
+    V2StoredReportResourceService,
+    V2StoredSimulationResourceService,
     V2UserHouseholdResourceService,
     V2UserInvitationResourceService,
     V2UserPolicyResourceService,
@@ -45,6 +48,7 @@ from policyengine_api.request_caller import current_request_caller
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
+from policyengine_api.services.v2.simulation_service.types import PackageVersions
 from policyengine_api.services.v2.user_types.types import UserProfileSource
 
 if TYPE_CHECKING:
@@ -55,6 +59,9 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.identity.types import (
         AccountPrincipal,
+    )
+    from policyengine_api.services.v2.simulation_service.types import (
+        SimulationServiceClient,
     )
     from policyengine_api.services.v2.user_emails.services import V2UserEmailService
 
@@ -68,6 +75,8 @@ __all__ = [
     "V2HouseholdResourceService",
     "V2MetadataResourceReader",
     "V2PolicyResourceService",
+    "V2StoredReportResourceService",
+    "V2StoredSimulationResourceService",
     "V2UserHouseholdResourceService",
     "V2UserInvitationResourceService",
     "V2UserPolicyResourceService",
@@ -201,6 +210,68 @@ def _default_v2_household_calculation_service_factory() -> (
         policies=_default_v2_policy_service_factory(),
         database_session=HouseholdCalculationDatabaseSession(get_v2_session_factory()),
         simulation_factory=process_simulation_household_calculation_client,
+    )
+
+
+def _current_package_versions(country_id: str) -> PackageVersions:
+    """Return the country package and .py versions this process runs."""
+    return PackageVersions(
+        country_package_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+        policyengine_version=POLICYENGINE_VERSION,
+    )
+
+
+def _default_simulation_submissions() -> SimulationServiceClient:
+    """Check submissions, then send them to the configured simulation service."""
+    from policyengine_api.libs.simulation_reports import (
+        process_simulation_service_client,
+    )
+    from policyengine_api.services.v2.simulation_service.services import (
+        SimulationSubmissionService,
+    )
+
+    return SimulationSubmissionService(
+        countries=_default_v2_country_service_factory(),
+        policies=_default_v2_policy_service_factory(),
+        client_factory=process_simulation_service_client,
+    )
+
+
+def _default_v2_stored_report_service_factory() -> V2StoredReportResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.stored_reports.database_session import (
+        StoredReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.stored_reports.services import (
+        V2StoredReportService,
+    )
+
+    return V2StoredReportService(
+        StoredReportDatabaseSession(get_v2_session_factory()),
+        current_versions=_current_package_versions,
+        submissions=_default_simulation_submissions(),
+    )
+
+
+def _default_v2_stored_simulation_service_factory() -> (
+    V2StoredSimulationResourceService
+):
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.stored_simulations.database_session import (
+        StoredSimulationDatabaseSession,
+    )
+    from policyengine_api.services.v2.stored_simulations.services import (
+        V2StoredSimulationService,
+    )
+
+    return V2StoredSimulationService(
+        StoredSimulationDatabaseSession(get_v2_session_factory()),
+        current_versions=_current_package_versions,
+        submissions=_default_simulation_submissions(),
     )
 
 
@@ -437,6 +508,12 @@ class NativeRouteDependencies:
     v2_household_calculation_service_factory: (
         Callable[[], V2HouseholdCalculationResourceService] | None
     ) = None
+    v2_stored_report_service_factory: (
+        Callable[[], V2StoredReportResourceService] | None
+    ) = None
+    v2_stored_simulation_service_factory: (
+        Callable[[], V2StoredSimulationResourceService] | None
+    ) = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
         None
     )
@@ -477,6 +554,10 @@ class NativeRouteDependencies:
             v2_household_service_factory=_default_v2_household_service_factory,
             v2_household_calculation_service_factory=(
                 _default_v2_household_calculation_service_factory
+            ),
+            v2_stored_report_service_factory=_default_v2_stored_report_service_factory,
+            v2_stored_simulation_service_factory=(
+                _default_v2_stored_simulation_service_factory
             ),
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
             v2_user_household_service_factory=(

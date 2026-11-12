@@ -514,9 +514,9 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 
 A saved report's ID is its shareable link, so `GET /v2/shared-reports/{id}`
 takes no credential and sits outside the authenticated user-report router. It
-never provisions a user. Its item is `{id, country_id, legacy_report_id, name,
-source_note, provisions, validation, budget_window_years, baseline_reform,
-last_run_at, created_at, updated_at}`:
+never provisions a user. Its item is `{id, country_id, report_id,
+legacy_report_id, name, source_note, provisions, validation,
+budget_window_years, baseline_reform, last_run_at, created_at, updated_at}`:
 
 - `user_id`, `user_policy_id`, and `baseline_user_policy_id` are left out;
   the owner and the owner's saved reforms stay private.
@@ -526,6 +526,26 @@ last_run_at, created_at, updated_at}`:
 - Anyone holding the ID can read the report's name, source note, and
   provisions. There is no shared list or search, and the owner routes stay
   owner-scoped.
+
+### Saved detailed-save simulations and reports
+
+`POST` and `PATCH` on `/v2/user-simulations` and `/v2/user-reports` take a
+detailed-save `simulation_id` or `report_id` beside the v1
+`legacy_simulation_id` and `legacy_report_id`:
+
+- A saved report names a report stored in its country (`reports.country`),
+  and a saved simulation a simulation of its country's model
+  (`policyengine-<country>`); any other is 404. The check is a `SELECT` in the
+  write's own transaction. B1 · 11's `RESTRICT` foreign keys refuse a record
+  deleted between the check and the write, and that SQLSTATE 23503 on the key
+  is answered as 404 too.
+- v1 report and simulation numbers are not connected to detailed-save
+  records, so a request naming both kinds of reference, or an update that
+  would leave a saved record naming both, is 400. Only the production
+  migration writes saved records holding both. A record holding both can
+  still be renamed.
+- Neither reference can be cleared. No route looks a detailed-save record up
+  by its v1 number, and no read starts a run.
 
 `MeItem` is `{id, user_type, primary_country, first_name, last_name, email,
 created_at}`; `user_type` is `unauthenticated` or the signed-in user's stored
@@ -1003,5 +1023,5 @@ The disposable-Postgres suite proves the following:
 - A retention policy for unauthenticated users whose browsers never return.
   Nothing expires them today.
 - An explicit claim flow for legacy-app users (`POST /v2/me/legacy-claims`).
-- Accepting v2 `simulation_id` / `report_id` once the Simulation Entrypoint owns
-  those records.
+- Saved simulations and reports have accepted detailed-save `simulation_id` and
+  `report_id` since C1 · 8; see "Saved detailed-save simulations and reports".

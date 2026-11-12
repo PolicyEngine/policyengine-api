@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.41.1"
+version = "5.42.0"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -399,6 +399,7 @@ banned-module-level-imports = [
     "policyengine_api.libs.auth0_management",
     "policyengine_api.libs.postmark_email",
     "policyengine_api.libs.simulation_household_calculations",
+    "policyengine_api.libs.simulation_reports",
     "policyengine_api.services.v2.countries.database_session",
     "policyengine_api.services.v2.countries.services",
     "policyengine_api.services.v2.household_calculations.database_session",
@@ -411,6 +412,11 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.metadata.services",
     "policyengine_api.services.v2.policies.database_session",
     "policyengine_api.services.v2.policies.services",
+    "policyengine_api.services.v2.simulation_service.services",
+    "policyengine_api.services.v2.stored_reports.database_session",
+    "policyengine_api.services.v2.stored_reports.services",
+    "policyengine_api.services.v2.stored_simulations.database_session",
+    "policyengine_api.services.v2.stored_simulations.services",
     "policyengine_api.services.v2.user_accounts.database_session",
     "policyengine_api.services.v2.user_accounts.services",
     "policyengine_api.services.v2.user_emails.services",
@@ -439,6 +445,7 @@ runtime-evaluated-base-classes = [
     "policyengine_api.data.v2.models.comparison_runs.Stage12RunTimestamps",
     "policyengine_api.data.v2.models.run_results.GeographicImpactBase",
     "policyengine_api.data.v2.models.run_results.UKAreaImpactBase",
+    "policyengine_api.fastapi_routes.v2.errors_support.V2ErrorResponse",
     "policyengine_api.fastapi_routes.v2.households.document_models.HouseholdEntityRecord",
     "policyengine_api.fastapi_routes.v2.households.document_models.StrictHouseholdDocumentModel",
     "policyengine_api.fastapi_routes.v2.households.response_models.HouseholdSuccessResponse",
@@ -448,6 +455,10 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.metadata.response_models.MetadataResourceSuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.PolicySuccessResponse",
     "policyengine_api.fastapi_routes.v2.policies.response_models.StrictPolicyAPIModel",
+    "policyengine_api.fastapi_routes.v2.reports.response_models.ReportSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.reports.response_models.StrictReportAPIModel",
+    "policyengine_api.fastapi_routes.v2.simulations.response_models.SimulationSuccessResponse",
+    "policyengine_api.fastapi_routes.v2.simulations.response_models.StrictSimulationAPIModel",
     "policyengine_api.fastapi_routes.v2.user_households.response_models.StrictUserHouseholdAPIModel",
     "policyengine_api.fastapi_routes.v2.user_households.response_models.UserHouseholdSuccessResponse",
     "policyengine_api.fastapi_routes.v2.user_policies.response_models.StrictUserPolicyAPIModel",
@@ -457,6 +468,8 @@ runtime-evaluated-base-classes = [
     "policyengine_api.fastapi_routes.v2.user_reports.response_models.UserReportSuccessResponse",
     "policyengine_api.fastapi_routes.v2.user_simulations.response_models.StrictUserSimulationAPIModel",
     "policyengine_api.fastapi_routes.v2.user_simulations.response_models.UserSimulationSuccessResponse",
+    "policyengine_api.libs.simulation_service_answers.AnswerModel",
+    "policyengine_api.libs.simulation_service_answers.Refusal",
     "policyengine_api.query_parameters.CatalogQuery",
     "policyengine_api.query_parameters.CountryQuery",
     "policyengine_api.query_parameters.EconomyQuery",
@@ -470,7 +483,11 @@ runtime-evaluated-base-classes = [
     "policyengine_api.services.v2.metadata.types.StrictResponseModel",
     "policyengine_api.services.v2.policies.types.PolicyCreationInput",
     "policyengine_api.services.v2.policies.types.StrictPolicyInput",
+    "policyengine_api.services.v2.simulation_service.types.EconomyReportCreationInput",
+    "policyengine_api.services.v2.simulation_service.types.EconomySimulationCreationInput",
+    "policyengine_api.services.v2.simulation_service.types.StrictSubmissionModel",
     "policyengine_api.services.v2.simulations.types.StrictContractModel",
+    "policyengine_api.services.v2.stored_reports.economy_results.types.EconomyResultModel",
     "policyengine_api.services.v2.user_accounts.types.AccountUpdateInput",
     "policyengine_api.services.v2.user_accounts.types.StrictAccountInput",
     "policyengine_api.services.v2.user_households.types.StrictUserHouseholdInput",
