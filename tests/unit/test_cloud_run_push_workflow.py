@@ -545,3 +545,22 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
     ):
         assert name in integration
     assert "STAGING_AUTH0_TEST" not in production
+
+
+def test_push_workflow_wires_auth0_user_profile_settings_to_both_deploys():
+    """Each deploy job gets its environment's read-only profile client."""
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    for job, environment in ((staging, "staging"), (production, "production")):
+        assert f"    environment: {environment}\n" in job
+        for line in (
+            "AUTH0_USER_PROFILES_DOMAIN: ${{ vars.AUTH0_USER_PROFILES_DOMAIN }}",
+            "AUTH0_USER_PROFILES_CLIENT_ID: ${{ vars.AUTH0_USER_PROFILES_CLIENT_ID }}",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE: "
+            "${{ secrets.AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE }}",
+        ):
+            assert line in job
+    # The release tests never see them.
+    assert "AUTH0_USER_PROFILES" not in _workflow_job_block(workflow, RELEASE_TESTS_JOB)

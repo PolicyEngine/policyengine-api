@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from uuid import UUID
 
+    from policyengine_api.services.v2.user_types.types import IdentitySubjects
+
 
 # Stable application-defined PostgreSQL lock ID that every change of a user's
 # type, and every signed-in account deletion, takes.
@@ -83,11 +85,14 @@ def read_signed_in_users(
     email_contains: str | None,
     offset: int,
     limit: int,
+    email_matching_identities: IdentitySubjects | None = None,
 ) -> list[User]:
     """Return a page of signed-in users, newest first.
 
     With ``email_contains``, only users whose own email or any identity's
-    email contains it, ignoring case; LIKE wildcards in it match literally.
+    email contains it, ignoring case (LIKE wildcards in it match literally),
+    and users with an identity among ``email_matching_identities``: the
+    subjects whose Auth0 email matched it.
     """
     statement = select(User).where(User.user_type != UserType.UNAUTHENTICATED.value)
     if email_contains is not None:
@@ -99,12 +104,23 @@ def read_signed_in_users(
             )
             .exists()
         )
-        statement = statement.where(
-            or_(
-                col(User.email).icontains(email_contains, autoescape=True),
-                identity_matches,
+        matches = [
+            col(User.email).icontains(email_contains, autoescape=True),
+            identity_matches,
+        ]
+        if email_matching_identities is not None and (
+            email_matching_identities.subjects
+        ):
+            matches.append(
+                select(UserIdentity.id)
+                .where(
+                    col(UserIdentity.user_id) == col(User.id),
+                    col(UserIdentity.issuer) == email_matching_identities.issuer,
+                    col(UserIdentity.subject).in_(email_matching_identities.subjects),
+                )
+                .exists()
             )
-        )
+        statement = statement.where(or_(*matches))
     return list(
         session.exec(
             statement.order_by(col(User.created_at).desc(), col(User.id))
