@@ -316,8 +316,10 @@ class HouseholdCalculationSubmitter(Protocol):
     ) -> HouseholdCalculationAccepted:
         """Submit the calculation and return the job the service created.
 
-        Raise SimulationServiceInvalidRequestError when the service refuses
-        the caller's data, with its reasons;
+        Raise, with the error types of
+        ``policyengine_api.services.v2.simulation_service.types``,
+        SimulationServiceInvalidRequestError when the service refuses the
+        caller's data, with its reasons;
         SimulationServiceUnavailableError when no job of the submission will
         run;
         SimulationServiceInternalError when it failed (500), possibly after
@@ -328,47 +330,3 @@ class HouseholdCalculationSubmitter(Protocol):
         in its place.
         """
         ...
-
-
-class SimulationServiceUnavailableError(RuntimeError):
-    """The simulation service could not be reached, or refused so no job runs.
-
-    It covers a connection never made, a gateway token that cannot be
-    fetched, missing configuration, and every answer after which no job of
-    the submission runs: a household, policy or catalog version it cannot
-    find (which the Public API checks first), its authentication, routing,
-    body-size and rate limits, and its own 503 when it is not configured,
-    cannot read a database or manifest, or cannot start a Modal call, after
-    which it fails the job it had created.
-    """
-
-
-class SimulationServiceAnswerUnreadableError(RuntimeError):
-    """The simulation service may have created the job, but no usable answer came.
-
-    It answered 202, so it has already created the job and started its call,
-    but its answer is unreadable; it answered a status the Public API does not
-    expect, possibly after creating the job; its answer was lost after the
-    submission may have reached it; or a proxy answered in its place. The
-    message asks the caller to submit again, and says this creates a second
-    job if the first request went through.
-    """
-
-
-class SimulationServiceInternalError(RuntimeError):
-    """The simulation service failed (500), possibly after creating the job.
-
-    The job may already exist, so submitting again may create a second one;
-    this is why it is not reported as the service being unavailable. Like
-    SimulationServiceAnswerUnreadableError, its message asks the caller to
-    submit again and says this creates a second job if the first request went
-    through.
-    """
-
-
-class SimulationServiceInvalidRequestError(ValueError):
-    """The simulation service refuses the caller's data; the message says why.
-
-    Such as a stored household or policy value its household contract cannot
-    take, or an option it refuses.
-    """

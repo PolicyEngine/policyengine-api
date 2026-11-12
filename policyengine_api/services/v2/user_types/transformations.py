@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         AccountPrincipal,
         ResolvedUser,
     )
+    from policyengine_api.services.v2.user_accounts.types import AccountExport
 
 
 def caller_user_type(
@@ -212,3 +213,12 @@ def user_type_change_read_with_profiles(
     return replace(
         read, changed_by_email=profile_email(profiles) or read.changed_by_email
     )
+
+
+def saved_items_with_email(
+    saved_items: AccountExport, email: str | None
+) -> AccountExport:
+    """Show ``email`` as the user's email in its saved items, when it has a user."""
+    if saved_items.user is None:
+        return saved_items
+    return replace(saved_items, user=replace(saved_items.user, email=email))

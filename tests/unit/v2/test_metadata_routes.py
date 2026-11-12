@@ -337,6 +337,10 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/household-calculations/{calculation_id}",
         "/v2/policies",
         "/v2/policies/{policy_id}",
+        "/v2/reports",
+        "/v2/reports/{report_id}",
+        "/v2/simulations",
+        "/v2/simulations/{simulation_id}",
         "/v2/user-households",
         "/v2/user-households/{association_id}",
         "/v2/user-policies",
@@ -352,6 +356,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/admin/users",
         "/v2/admin/users/{user_id}",
         "/v2/admin/users/{user_id}/user-type-changes",
+        "/v2/admin/users/{user_id}/saved-items",
     }
     assert set(schema["paths"]) == metadata_paths | native_paths
     assert "V2ErrorResponse" in schema["components"]["schemas"]

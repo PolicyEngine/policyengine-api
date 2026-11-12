@@ -1,4 +1,4 @@
-"""Strict HTTP response models for admins' user-type routes."""
+"""Strict HTTP response models for admins' user routes."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+from policyengine_api.fastapi_routes.v2.me.response_models import MeExportResult
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.user_types.types import (
@@ -153,3 +155,16 @@ class UserTypeChangeListResponse(StrictAdminUserAPIModel):
     status: Literal["ok"] = "ok"
     message: None = None
     result: UserTypeChangeListResult
+
+
+class AdminUserSavedItemsResponse(StrictAdminUserAPIModel):
+    """The response for a signed-in user's saved items, in every country.
+
+    ``result`` is what the user's own ``GET /v2/me/export`` returns: the user,
+    with the email admins see for it, and every policy, household, simulation
+    and report it saved.
+    """
+
+    status: Literal["ok"] = "ok"
+    message: None = None
+    result: MeExportResult

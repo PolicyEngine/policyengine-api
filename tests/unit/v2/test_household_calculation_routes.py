@@ -21,10 +21,6 @@ from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationOutput,
     HouseholdCalculationRead,
     HouseholdCalculationSubmitted,
-    SimulationServiceAnswerUnreadableError,
-    SimulationServiceInternalError,
-    SimulationServiceInvalidRequestError,
-    SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
@@ -37,6 +33,12 @@ from policyengine_api.services.v2.households.validators import HouseholdNotFound
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
     PolicyParametersMissingError,
+)
+from policyengine_api.services.v2.simulation_service.types import (
+    SimulationServiceAnswerUnreadableError,
+    SimulationServiceInternalError,
+    SimulationServiceInvalidRequestError,
+    SimulationServiceUnavailableError,
 )
 from tests.fixtures.household_calculation_documents import (
     CALCULATED_HOUSEHOLD,

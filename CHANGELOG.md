@@ -1,3 +1,35 @@
+## [5.43.0] - 2026-11-12
+
+### Added
+
+- `POST /v2/reports` and `POST /v2/simulations` refuse a policy that sets parameters the running catalog version no longer has, as `POST /v2/household-calculations` does: they answer 422 with code `missing_parameters`, naming those parameters, and the simulation service is not asked, so no run starts. A report checks its baseline's policy, then its reform's. A catalog that cannot be read during the check answers 503.
+
+### Changed
+
+- The Modal workers' v2 database role may update a budget-window run's status, error message, start, completion and update times, so the workers can mark a window succeeded when its last year finishes or failed when a year fails; the simulation service's role may update the same columns except the start time, so it can fail a window at once when Modal refuses its first years' calls. Neither role may change anything else about a window run.
+
+
+## [5.42.0] - 2026-11-12
+
+### Added
+
+- Add `/v2/reports` and `/v2/simulations`: create economy reports and simulations through the simulation service, read a report with its newest run, that run's economy result and the versions the Public API runs, list up to 25 named reports, and read a simulation with its newest run. A create answers 422 when the simulation service refuses the caller's data: its 422, or its 400 with code `unknown_region`, `unknown_dataset` or `unknown_dynamic`. It answers 502 when the simulation service may have created the record but gave no usable answer: its 500, an answer lost after the request may have reached it, a proxy's 502 or 504 in its place, a 503 that cannot be read or that names only another record, any status the Public API does not expect (such as 200, 204 or 409, which the simulation service's route may answer after writing rows), or a created answer that cannot be read. For all but the last, the message asks the caller to submit again and says that this creates a second record if the first request went through. A created record that cannot be read back also answers 502, with its `report_id` or `simulation_id`. It answers 503, and the simulation service has created nothing, when the request was never sent (no connection made, no gateway token, or the simulation service not configured); when the simulation service answers a readable 503 naming no record, a 400 with any other code or none, a 400 or 422 that cannot be read, or 401, 403, 404, 405, 413 or 429, which are sent before its route runs; and when the v2 database is not configured or cannot be read for the checks. A readable 400's or 422's message gives the simulation service's code, when it has one, and its reason, but not its status. The message for any other answer gives the simulation service's status and code, as in `503 modal_call_refused`, but never its reason, since a 500's or 503's may be an exception's text; a code that isn't a fixed identifier (lower-case letters, digits and underscores, starting with a letter, at most 64 characters) is left out. A 503 for a record the service created and whose run it then failed gives that record's `report_id` or `simulation_id`. Saved reports and simulations now also take a detailed-save `report_id` or `simulation_id`, but not together with a v1 number.
+
+
+## [5.41.1] - 2026-11-12
+
+### Fixed
+
+- Fix the live staging household parity checks: the US household's `income_tax` is on its tax unit, where `/calculate` expects it, and the checks wait longer than the candidate's 300 s request timeout for `/calculate-full`.
+
+
+## [5.41.0] - 2026-11-12
+
+### Added
+
+- The admin user routes show each user's email and names from Auth0, read when an admin asks and never stored, and an email search finds users by their Auth0 email; it refuses text with `<` or `>`, and text that more than 200 Auth0 users match. The optional, read-only `AUTH0_USER_PROFILES_*` settings, which need `PUBLIC_API_AUTH_ISSUER`, configure it in staging and production.
+
+
 ## [5.40.0] - 2026-11-11
 
 ### Added

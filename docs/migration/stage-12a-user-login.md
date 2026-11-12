@@ -120,6 +120,7 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
+| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
 | `DELETE /v2/admin/users/{user_id}` | Deletes the user's account and saved records, and the Auth0 users of its sign-in identities, as `DELETE /v2/me` deletes the caller's own (see [Admins' account deletions](#admins-account-deletions)). 204. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
@@ -129,6 +130,19 @@ one, else the user's own, and the names are the user's stored ones;
 `last_seen_at` is when the user's most recently seen identity was last seen. Unauthenticated users are
 never listed, read, changed or deleted (404), since their IDs are their
 browsers' credentials.
+
+An admin's read of saved items and the user's own export run the same code,
+`export_user_in_session` in `services/v2/user_accounts/services.py`, which
+reads the user and its saved items by user ID. Each successful read is
+recorded as the runtime event `admin_read_v2_user_saved_items`, with
+`admin_v2_user_id` and `v2_user_id` (both signed-in users' IDs) and nothing
+the user saved. A refused read (403 or 404) emits no event, so the event
+never names an unauthenticated user's ID; the request log and Cloud Run's own
+request logs still record every request's path, which holds the requested ID,
+as they do for the other admin routes. It is a runtime event
+(`ObservabilityRuntime.event`) rather than a log record because the deployed
+process leaves the root logger at WARNING, which drops a module logger's INFO
+records (see `docs/engineering/skills/observability.md`).
 
 ### Emails and names from Auth0
 
@@ -150,8 +164,8 @@ API when an admin asks, and store none of them:
   `search_engine=v3`, `sort=user_id:1`, only `user_id`, `email`,
   `email_verified`, `given_name`, `family_name` and `name`), all through one
   HTTP client, so one connection serves them. `GET /v2/admin/users/{user_id}`,
-  the `PATCH` response and the history's `changed_by_email` are filled the
-  same way.
+  the `PATCH` response, the history's `changed_by_email` and the saved-items
+  read's user `email` are filled the same way.
 - Each user's profiles are taken in identity order, most recently seen
   first. `email` is the first verified email, else the first email, else the
   stored one. `first_name` and `last_name` are the given and family names of
@@ -184,7 +198,8 @@ API when an admin asks, and store none of them:
 - When the profile settings are present but Auth0 can't answer (a timeout,
   a connection error, a failed token request, 403 for a client without
   `read:users`, 429, a 5xx), the list, the single read, the `PATCH`
-  response and the history answer with stored values and record the WARNING
+  response, the history and the saved-items read answer with stored values
+  and record the WARNING
   `admin_user_profiles_unavailable` with only the operation, the error type
   and a cause: `http_<status>` (`http_403` for a client without
   `read:users`, `http_429` for rate limiting), `timeout`,
@@ -470,9 +485,9 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 
 A saved report's ID is its shareable link, so `GET /v2/shared-reports/{id}`
 takes no credential and sits outside the authenticated user-report router. It
-never provisions a user. Its item is `{id, country_id, legacy_report_id, name,
-source_note, provisions, validation, budget_window_years, baseline_reform,
-last_run_at, created_at, updated_at}`:
+never provisions a user. Its item is `{id, country_id, report_id,
+legacy_report_id, name, source_note, provisions, validation,
+budget_window_years, baseline_reform, last_run_at, created_at, updated_at}`:
 
 - `user_id`, `user_policy_id`, and `baseline_user_policy_id` are left out;
   the owner and the owner's saved reforms stay private.
@@ -482,6 +497,26 @@ last_run_at, created_at, updated_at}`:
 - Anyone holding the ID can read the report's name, source note, and
   provisions. There is no shared list or search, and the owner routes stay
   owner-scoped.
+
+### Saved detailed-save simulations and reports
+
+`POST` and `PATCH` on `/v2/user-simulations` and `/v2/user-reports` take a
+detailed-save `simulation_id` or `report_id` beside the v1
+`legacy_simulation_id` and `legacy_report_id`:
+
+- A saved report names a report stored in its country (`reports.country`),
+  and a saved simulation a simulation of its country's model
+  (`policyengine-<country>`); any other is 404. The check is a `SELECT` in the
+  write's own transaction. B1 · 11's `RESTRICT` foreign keys refuse a record
+  deleted between the check and the write, and that SQLSTATE 23503 on the key
+  is answered as 404 too.
+- v1 report and simulation numbers are not connected to detailed-save
+  records, so a request naming both kinds of reference, or an update that
+  would leave a saved record naming both, is 400. Only the production
+  migration writes saved records holding both. A record holding both can
+  still be renamed.
+- Neither reference can be cleared. No route looks a detailed-save record up
+  by its v1 number, and no read starts a run.
 
 `MeItem` is `{id, user_type, primary_country, first_name, last_name, email,
 created_at}`; `user_type` is `unauthenticated` or the signed-in user's stored
@@ -932,5 +967,5 @@ The disposable-Postgres suite proves the following:
 - A retention policy for unauthenticated users whose browsers never return.
   Nothing expires them today.
 - An explicit claim flow for legacy-app users (`POST /v2/me/legacy-claims`).
-- Accepting v2 `simulation_id` / `report_id` once the Simulation Entrypoint owns
-  those records.
+- Saved simulations and reports have accepted detailed-save `simulation_id` and
+  `report_id` since C1 · 8; see "Saved detailed-save simulations and reports".

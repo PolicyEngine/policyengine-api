@@ -121,13 +121,16 @@ def build_v2_user_report_router(
         "/user-reports",
         response_model=UserReportDetailResponse,
         status_code=201,
-        summary="Save a v1 report for the current user",
+        summary="Save a report for the current user",
         description=(
             "Requires a bearer access token or the PolicyEngine-Unauthenticated-User "
-            "header; the owner is taken from that credential. "
-            "Stage 12A accepts legacy_report_id only (the requested v1 report "
-            "output ID), checked in the v1 database. An optional user_policy_id "
-            "must name the same user's saved policy in the same country."
+            "header; the owner is taken from that credential. Names a "
+            "detailed-save report (report_id), which must be stored in the "
+            "country (404 otherwise), or a v1 report output (legacy_report_id), "
+            "checked in the v1 database; naming both is refused with 400, since "
+            "v1 report numbers are not connected to detailed-save reports. An "
+            "optional user_policy_id must name the same user's saved policy in "
+            "the same country."
         ),
     )
     def create_user_report(

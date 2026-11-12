@@ -19,6 +19,29 @@ class UserReportNotFoundError(AssociationNotFoundError):
     """Raised when an association is absent for the caller and country."""
 
 
+class AssociationReportNotFoundError(LookupError):
+    """A saved report names a detailed-save report the country does not have."""
+
+
+# The foreign key from saved reports to reports (``RESTRICT``).
+SAVED_REPORT_FOREIGN_KEY = "fk_user_report_associations_report_id_reports"
+
+
+def report_not_found(
+    *, report_id: UUID, country_id: str
+) -> AssociationReportNotFoundError:
+    """Return the error for a detailed-save report the country does not have."""
+    return AssociationReportNotFoundError(
+        f"Report {report_id} was not found in country {country_id!r}"
+    )
+
+
+def require_stored_report(*, stored: bool, report_id: UUID, country_id: str) -> None:
+    """Raise AssociationReportNotFoundError unless the report is ``stored``."""
+    if not stored:
+        raise report_not_found(report_id=report_id, country_id=country_id)
+
+
 def require_user_report(
     association: UserReportAssociation | None,
     *,

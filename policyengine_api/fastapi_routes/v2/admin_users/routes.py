@@ -1,9 +1,10 @@
-"""Native FastAPI routes for admins to find users, change their types and delete them.
+"""Native FastAPI routes for admins' management of signed-in users.
 
-Every route requires an admin: the router checks the caller's stored type
-before any route runs (403 below admin), and each service operation checks it
-again inside its own transaction. Unauthenticated users are never listed,
-changed or deleted, since their IDs are their browsers' credentials.
+Admins find users, change their types, read their saved items and delete their
+accounts. Every route requires an admin: the router checks the caller's stored
+type before any route runs (403 below admin), and each service operation checks
+it again inside its own transaction. Unauthenticated users are never listed,
+read, changed or deleted, since their IDs are their browsers' credentials.
 
 Users' emails and names come from Auth0 when the Public API has user profile
 settings, read for each request and never stored; see AdminUserItem.
@@ -34,11 +35,13 @@ from policyengine_api.fastapi_routes.v2.admin_users.response_models import (
     AdminUserPageResult,
     AdminUserResponse,
     AdminUserResult,
+    AdminUserSavedItemsResponse,
     UserTypeChangeItem,
     UserTypeChangeListResponse,
     UserTypeChangeListResult,
 )
 from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.me.response_models import MeExportResult
 from policyengine_api.fastapi_routes.v2.user_auth_support import (
     require_signed_in_principal,
 )
@@ -178,6 +181,44 @@ def _delete_user_account(
         return Response(status_code=204)
 
     return user_resource_operation(delete)
+
+
+def _list_user_type_changes(
+    service_factory: Callable[[], V2UserTypeResourceService],
+    principal: AccountPrincipal,
+    user_id: UUID,
+) -> UserTypeChangeListResponse | JSONResponse:
+    """Return a signed-in user's recorded type changes to an admin, newest first."""
+
+    def read() -> UserTypeChangeListResponse:
+        changes = service_factory().list_user_type_changes(
+            principal=principal, user_id=user_id
+        )
+        return UserTypeChangeListResponse(
+            result=UserTypeChangeListResult(
+                items=[UserTypeChangeItem.from_read(change) for change in changes]
+            )
+        )
+
+    return user_resource_operation(read)
+
+
+def _read_user_saved_items(
+    service_factory: Callable[[], V2UserTypeResourceService],
+    principal: AccountPrincipal,
+    user_id: UUID,
+) -> AdminUserSavedItemsResponse | JSONResponse:
+    """Return a signed-in user's saved items to an admin, as its own export does."""
+
+    def read() -> AdminUserSavedItemsResponse:
+        saved_items = service_factory().get_user_saved_items(
+            principal=principal, user_id=user_id
+        )
+        return AdminUserSavedItemsResponse(
+            result=MeExportResult.from_export(saved_items)
+        )
+
+    return user_resource_operation(read)
 
 
 def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRouter:
@@ -326,16 +367,27 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         user_id: UUID,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
     ) -> UserTypeChangeListResponse | JSONResponse:
-        def read() -> UserTypeChangeListResponse:
-            changes = service_factory().list_user_type_changes(
-                principal=principal, user_id=user_id
-            )
-            return UserTypeChangeListResponse(
-                result=UserTypeChangeListResult(
-                    items=[UserTypeChangeItem.from_read(change) for change in changes]
-                )
-            )
+        return _list_user_type_changes(service_factory, principal, user_id)
 
-        return user_resource_operation(read)
+    @router.get(
+        "/users/{user_id}/saved-items",
+        response_model=AdminUserSavedItemsResponse,
+        summary=(
+            "Read a signed-in user's saved policies, households, simulations and "
+            "reports"
+        ),
+        description=(
+            "Admins only; read-only. Returns what the user's own GET /v2/me/export "
+            "returns, in every country: the user, with the email admins see for "
+            "it, and every saved policy, household, simulation and report. An "
+            "unauthenticated user's ID is not found (404). Each read is recorded "
+            "with the admin's and the user's IDs."
+        ),
+    )
+    def get_user_saved_items(
+        user_id: UUID,
+        principal: Annotated[AccountPrincipal, Depends(require_user)],
+    ) -> AdminUserSavedItemsResponse | JSONResponse:
+        return _read_user_saved_items(service_factory, principal, user_id)
 
     return router

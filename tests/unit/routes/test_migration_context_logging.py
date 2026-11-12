@@ -614,6 +614,85 @@ def test_signed_in_user_resources_log_supabase_sources(
     }
 
 
+class _SimulationResourceRequest(NamedTuple):
+    method: str
+    path: str
+    route_group: str
+    sim_flow: str | None
+    sim_compute: str | None
+
+
+_SIMULATION_RESOURCE_REQUESTS = (
+    _SimulationResourceRequest("GET", "/v2/reports", "report", None, None),
+    _SimulationResourceRequest(
+        "GET", "/v2/reports/00000000-0000-0000-0000-000000000001", "report", None, None
+    ),
+    _SimulationResourceRequest("POST", "/v2/reports", "report", "report", "v2_primary"),
+    _SimulationResourceRequest(
+        "GET",
+        "/v2/simulations/00000000-0000-0000-0000-000000000001",
+        "simulation",
+        None,
+        None,
+    ),
+    _SimulationResourceRequest(
+        "POST", "/v2/simulations", "simulation", "economy", "v2_primary"
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "request_case",
+    [
+        pytest.param(case, id=f"{case.method}-{case.path}")
+        for case in _SIMULATION_RESOURCE_REQUESTS
+    ],
+)
+def test_v2_reports_and_simulations_log_what_they_use(
+    monkeypatch, request_case: _SimulationResourceRequest
+):
+    """They read Supabase and create only through the Cloud Run simulation service.
+
+    The route groups' database, entrypoint and compute flags select none of
+    it, so an invalid flag is not read.
+    """
+    for name in (
+        "DB_READ_SIMULATION",
+        "DB_WRITE_SIMULATION",
+        "DB_READ_REPORT",
+        "DB_WRITE_REPORT",
+        "SIM_ENTRYPOINT",
+        "SIM_COMPUTE_ECONOMY",
+        "SIM_COMPUTE_REPORT",
+    ):
+        monkeypatch.setenv(name, "invalid-for-native-v2")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            ServedRequest(
+                request_id="request",
+                method=request_case.method,
+                path=request_case.path,
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
+        )
+
+    context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert context == {
+        "route_group": request_case.route_group,
+        "route_impl": "fastapi_native",
+        "db_entity": request_case.route_group,
+        "db_write": None,
+        "db_read": "supabase",
+        "sim_flow": request_case.sim_flow,
+        "sim_entrypoint": "cloud_run_simulation_entrypoint",
+        "sim_compute": request_case.sim_compute,
+    }
+
+
 def test_native_route_failure_logs_country_and_actual_implementation():
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,

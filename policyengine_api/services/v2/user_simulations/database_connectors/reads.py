@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import UserSimulationAssociation
+from policyengine_api.data.v2.models import (
+    Simulation,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    UserSimulationAssociation,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -77,4 +82,33 @@ def read_all_user_simulation_rows(
                 col(UserSimulationAssociation.id),
             )
         ).all()
+    )
+
+
+def read_simulation_exists(
+    session: Session, *, country_id: str, simulation_id: UUID
+) -> bool:
+    """Return whether a detailed-save simulation of the country's model has this id.
+
+    A simulation has no country column: its catalog version's model is the
+    country's (``policyengine-<country>``).
+    """
+    return (
+        session.exec(
+            select(Simulation.id)
+            .join(
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id)
+                == Simulation.tax_benefit_model_version_id,
+            )
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == TaxBenefitModelVersion.model_id,
+            )
+            .where(
+                Simulation.id == simulation_id,
+                TaxBenefitModel.name == f"policyengine-{country_id}",
+            )
+        ).one_or_none()
+        is not None
     )

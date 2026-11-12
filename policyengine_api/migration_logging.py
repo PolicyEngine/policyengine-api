@@ -74,15 +74,19 @@ V2_USER_RESOURCE_SEGMENTS = frozenset(
         "admin",
     }
 )
-# /v2/household-calculations reads only Supabase and computes only on the
-# Cloud Run simulation service's v2 household functions, whatever the
-# household route group's database, entrypoint and compute flags select: a
-# submission reads the countries row, household and policy and sends the
-# calculation there, and a read reads the job and calls nothing. It reads
-# none of those flags, so none of them is checked for its log record.
-V2_HOUSEHOLD_CALCULATION_SEGMENT = "household-calculations"
-V2_HOUSEHOLD_CALCULATION_ENTRYPOINT = "cloud_run_simulation_entrypoint"
-V2_HOUSEHOLD_CALCULATION_COMPUTE = "v2_primary"
+# /v2/household-calculations, /v2/reports and /v2/simulations read only
+# Supabase, and compute or create only through the Cloud Run simulation
+# service's v2 routes, whatever their route groups' database, entrypoint and
+# compute flags select. A household calculation's submission reads the
+# countries row, household and policy and sends the calculation there; a
+# report's or simulation's create checks the country and policies and sends
+# the request there; a read reads the tables and calls nothing. They read none
+# of those flags, so none of them is checked for their log records.
+V2_SIMULATION_SERVICE_SEGMENTS = frozenset(
+    {"household-calculations", "reports", "simulations"}
+)
+V2_SIMULATION_SERVICE_ENTRYPOINT = "cloud_run_simulation_entrypoint"
+V2_SIMULATION_SERVICE_COMPUTE = "v2_primary"
 V2_RESOURCE_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
 # A v2 resource path has at least the "v2" segment and the resource segment.
 V2_RESOURCE_PATH_MINIMUM_SEGMENTS = 2
@@ -266,25 +270,31 @@ def log_migration_request(served_request: ServedRequest) -> None:
     )
 
 
-def _household_calculation_context(
+def _simulation_service_context(
     route_group: str, *, method: str, route_impl: RouteImplementation | None
 ) -> dict[str, str | None]:
-    """Return a household calculation's log record from what it actually uses."""
+    """Return a household calculation's, report's or simulation's log record.
+
+    The record names what the request actually uses, not its route group's
+    flags.
+    """
     try:
         selected_route_impl = route_impl or get_route_impl(route_group)
     except ValueError as error:
         return {"route_group": route_group, "migration_flag_error": str(error)}
     route_config = ROUTE_GROUP_CONFIG_BY_NAME[route_group]
-    submits = method == "POST"
+    sends_to_simulation_service = method == "POST"
     return MigrationContext(
         route_group=route_group,
         route_impl=selected_route_impl,
         db_entity=route_config.db_entity,
         db_write=None,
         db_read="supabase",
-        sim_flow=route_config.sim_flow if submits else None,
-        sim_entrypoint=V2_HOUSEHOLD_CALCULATION_ENTRYPOINT,
-        sim_compute=V2_HOUSEHOLD_CALCULATION_COMPUTE if submits else None,
+        sim_flow=route_config.sim_flow if sends_to_simulation_service else None,
+        sim_entrypoint=V2_SIMULATION_SERVICE_ENTRYPOINT,
+        sim_compute=(
+            V2_SIMULATION_SERVICE_COMPUTE if sends_to_simulation_service else None
+        ),
     ).to_log_dict()
 
 
@@ -295,8 +305,8 @@ def _migration_context(
     route_impl: RouteImplementation | None,
 ) -> dict[str, str | None]:
     route_group = infer_route_group(path)
-    if _v2_resource_segment(path) == V2_HOUSEHOLD_CALCULATION_SEGMENT:
-        return _household_calculation_context(
+    if _v2_resource_segment(path) in V2_SIMULATION_SERVICE_SEGMENTS:
+        return _simulation_service_context(
             route_group, method=method, route_impl=route_impl
         )
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)

@@ -14,12 +14,14 @@ from policyengine_api.fastapi_routes.v2.household_calculations.routes import (
 from policyengine_api.libs.gateway_auth import GatewayAuthError
 from policyengine_api.libs.simulation_household_calculations import (
     HOUSEHOLD_CALCULATIONS_PATH,
-    SimulationAnswer,
     SimulationHouseholdCalculationClient,
 )
+from policyengine_api.libs.simulation_service_answers import SimulationAnswer
 from policyengine_api.request_context import _asgi_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
+)
+from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
