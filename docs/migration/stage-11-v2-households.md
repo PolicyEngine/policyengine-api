@@ -384,7 +384,8 @@ by value with `/calculate` and `/calculate-full`. The parity set waits 320 s
 for each `/calculate` or `/calculate-full` answer, longer than the candidate's
 300 s Cloud Run request timeout: `/calculate-full` calculates every variable
 the household leaves out, which took 224 s on staging. A unit test sends each
-parity household through those routes' input checks with the installed
-country models, so a household they refuse fails before a release. The checks
+parity household through those routes, which check its inputs and parse its
+situation with the installed country models, leaving out only the
+calculation, so a household they refuse fails before a release. The checks
 need the simulation service's household calculation route deployed to staging
 first.

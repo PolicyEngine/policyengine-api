@@ -1,28 +1,31 @@
 """The live parity checks' requests to the Public API's own calculation routes.
 
 Each parity household goes to ``/calculate`` (``/calculate-full`` when it adds
-missing variables) as the check sends it, and must pass those routes' input
-checks with the installed country models, so a household the routes refuse
-fails here rather than in a release. The check waits longer than the
-candidate's Cloud Run request timeout (``CLOUD_RUN_TIMEOUT`` in
+missing variables) as the check sends it. The real routes check its inputs and
+parse its situation with the installed country models, and only the
+calculation itself is left out, so a household the routes refuse fails here
+rather than in a release. The check waits longer than the candidate's Cloud
+Run request timeout (``CLOUD_RUN_TIMEOUT`` in
 ``.github/scripts/cloud_run_env.sh``) for the answer: ``/calculate-full`` can
 take most of it, and the check should get the candidate's own answer.
 """
 
 from __future__ import annotations
 
-import json
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+from flask import Flask
 
 from policyengine_api.country import COUNTRIES
+from policyengine_api.extensions import cache
+from policyengine_api.routes import household_routes
 from policyengine_api.services.household_calculation_service import (
-    HouseholdCalculationOptions,
+    HouseholdCalculationResult,
     HouseholdCalculationService,
-    InvalidHouseholdInputsError,
+    PreparedHouseholdCalculation,
 )
-from policyengine_api.utils.input_validation import format_invalid_inputs_message
 from tests.fixtures.integration.live_household_calculations import (
     LiveHousehold,
     calculate_with_v1,
@@ -30,46 +33,43 @@ from tests.fixtures.integration.live_household_calculations import (
 from tests.integration.test_live_v2_household_parity import parity_households
 from tests.unit.cloud_run_deploy_support import run_bash, script_env
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 PARITY_HOUSEHOLDS = parity_households(0)
 
 
-class PublicApiInputChecks:
-    """The Public API's calculation routes, answering once their input checks pass.
+class UncalculatedHouseholds(HouseholdCalculationService):
+    """The routes' household service, answering each accepted household as sent.
 
-    A refused request gets the routes' 400; an accepted one gets its household
-    back uncalculated. The read timeout of every request is recorded.
+    Input checks and situation parsing run as in the Public API; the
+    calculation, which takes minutes for ``/calculate-full``, does not.
     """
 
-    def __init__(self) -> None:
-        self.service = HouseholdCalculationService(country_provider=lambda: COUNTRIES)
-        self.read_timeouts: list[float | None] = []
-
-    def answer(self, request: httpx.Request) -> httpx.Response:
-        self.read_timeouts.append(request.extensions["timeout"]["read"])
-        country_id, route = request.url.path.strip("/").split("/")
-        payload = json.loads(request.content)
-        try:
-            self.service.prepare_household_calculation(
-                country_id,
-                payload["household"],
-                payload.get("policy", {}),
-                options=HouseholdCalculationOptions(
-                    add_missing=route == "calculate-full"
-                ),
-            )
-        except InvalidHouseholdInputsError as error:
-            message = format_invalid_inputs_message(error.invalid_inputs)
-            return httpx.Response(400, json={"status": "error", "message": message})
-        return httpx.Response(
-            200, json={"status": "ok", "result": payload["household"]}
+    def calculate_prepared_household(
+        self, prepared: PreparedHouseholdCalculation
+    ) -> HouseholdCalculationResult:
+        return HouseholdCalculationResult(
+            household=prepared.household_json, warnings=prepared.warnings
         )
 
-    def calculate(self, household: LiveHousehold) -> dict:
-        with httpx.Client(
-            base_url="https://public-api.example",
-            transport=httpx.MockTransport(self.answer),
-        ) as client:
-            return calculate_with_v1(client, household)
+
+@pytest.fixture
+def public_api(monkeypatch: pytest.MonkeyPatch) -> Iterator[httpx.Client]:
+    """Call the Public API's calculation routes with the installed country models."""
+    monkeypatch.setattr(
+        household_routes,
+        "household_calculation_service",
+        UncalculatedHouseholds(country_provider=lambda: COUNTRIES),
+    )
+    app = Flask(__name__)
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
+    app.register_blueprint(household_routes.household_bp)
+    with httpx.Client(
+        base_url="http://public-api.test", transport=httpx.WSGITransport(app=app)
+    ) as client:
+        yield client
 
 
 def candidate_request_timeout_seconds() -> float:
@@ -89,8 +89,10 @@ def candidate_request_timeout_seconds() -> float:
     PARITY_HOUSEHOLDS,
     ids=[parity_household.name for parity_household in PARITY_HOUSEHOLDS],
 )
-def test_the_public_api_accepts_each_parity_household(household) -> None:
-    answer = PublicApiInputChecks().calculate(household)
+def test_the_public_api_accepts_each_parity_household(
+    public_api: httpx.Client, household: LiveHousehold
+) -> None:
+    answer = calculate_with_v1(public_api, household)
 
     assert answer["status"] == "ok"
 
@@ -109,12 +111,19 @@ def test_the_public_api_accepts_each_parity_household(household) -> None:
     ids=["calculate", "calculate-full"],
 )
 def test_the_check_waits_longer_than_the_candidate_lets_a_request_run(
-    household,
+    household: LiveHousehold,
 ) -> None:
-    public_api = PublicApiInputChecks()
+    read_timeouts: list[float | None] = []
 
-    public_api.calculate(household)
+    def answer(request: httpx.Request) -> httpx.Response:
+        read_timeouts.append(request.extensions["timeout"]["read"])
+        return httpx.Response(200, json={"status": "ok", "result": {}})
 
-    (read_timeout,) = public_api.read_timeouts
+    with httpx.Client(
+        base_url="https://public-api.example", transport=httpx.MockTransport(answer)
+    ) as client:
+        calculate_with_v1(client, household)
+
+    (read_timeout,) = read_timeouts
     assert read_timeout is not None
     assert read_timeout > candidate_request_timeout_seconds()
