@@ -555,6 +555,13 @@ _USER_RESOURCE_REQUESTS = (
         None,
         "supabase",
     ),
+    _UserResourceRequest(
+        "DELETE",
+        "/v2/admin/users/00000000-0000-0000-0000-000000000001",
+        "user_profile",
+        None,
+        "supabase",
+    ),
 )
 
 

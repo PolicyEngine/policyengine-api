@@ -148,7 +148,11 @@ class _FailureCase(NamedTuple):
             None,
         ),
         _FailureCase(
-            AccountIdentityDeletionError(ERROR_MESSAGE), 502, ERROR_MESSAGE, None, None
+            AccountIdentityDeletionError(ERROR_MESSAGE, undeleted_auth0_user_count=1),
+            502,
+            ERROR_MESSAGE,
+            None,
+            None,
         ),
         _FailureCase(
             AccountDeletionUnavailableError(ERROR_MESSAGE),

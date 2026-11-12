@@ -170,8 +170,12 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
             502: {
                 "model": V2ErrorResponse,
                 "description": (
-                    "Account data was deleted but the Auth0 user could not be "
-                    "removed; retrying is safe."
+                    "Account data was deleted, but an Auth0 user of the "
+                    "account's sign-in identities could not be deleted; every "
+                    "one was tried. A retry with the same token is safe, but it "
+                    "deletes only the Auth0 user of the token's own identity: "
+                    "an Auth0 user of another identity that failed stays, and "
+                    "must be deleted in Auth0."
                 ),
             },
             503: {
