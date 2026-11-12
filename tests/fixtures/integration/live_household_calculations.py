@@ -50,6 +50,13 @@ READ_RETRY_ERRORS: tuple[type[httpx.TransportError], ...] = (httpx.TransportErro
 TRANSIENT_LIMIT_SECONDS = float(
     os.environ.get("STAGING_HOUSEHOLD_TRANSIENT_LIMIT_SECONDS", "90")
 )
+# How long the check waits for the Public API's own /calculate or
+# /calculate-full answer: longer than the candidate's Cloud Run request timeout
+# (CLOUD_RUN_TIMEOUT in .github/scripts/cloud_run_env.sh, 300 s), so the check
+# gets the candidate's own answer, a 504 included. /calculate-full calculates
+# every variable the household leaves out and can take most of that: 224 s on
+# staging, and up to 300 s in production.
+V1_CALCULATION_TIMEOUT_SECONDS = 320.0
 FINISHED_STATUSES = {"succeeded", "failed"}
 YEAR = "2026"
 REFORM_START = f"{YEAR}-01-01"
@@ -279,7 +286,8 @@ def calculate_with_v1(client: httpx.Client, household: LiveHousehold) -> dict:
     """Return the Public API's own answer for the same household and reform.
 
     ``/calculate-full`` answers when the household adds missing variables,
-    ``/calculate`` otherwise.
+    ``/calculate`` otherwise. The answer is awaited for
+    ``V1_CALCULATION_TIMEOUT_SECONDS``.
     """
     route = "calculate-full" if household.add_missing_variables else "calculate"
     request: dict[str, Any] = {"household": household.situation()}
@@ -288,7 +296,11 @@ def calculate_with_v1(client: httpx.Client, household: LiveHousehold) -> dict:
             parameter_name: {f"{REFORM_START}.{OPEN_END}": value}
             for parameter_name, value in household.reform.items()
         }
-    response = client.post(f"/{household.country_id}/{route}", json=request)
+    response = client.post(
+        f"/{household.country_id}/{route}",
+        json=request,
+        timeout=V1_CALCULATION_TIMEOUT_SECONDS,
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["status"] == "ok", payload
