@@ -72,6 +72,7 @@ if TYPE_CHECKING:
 
     from pydantic import JsonValue
 
+    from policyengine_api.data.v2.models import BudgetSummary as BudgetSummaryRow
     from policyengine_api.data.v2.models import (
         CongressionalDistrictImpact as CongressionalDistrictImpactRow,
     )
@@ -178,7 +179,7 @@ def _figure(value: float | None, *, name: str) -> float:
     return value
 
 
-def _spm_provenance(
+def stored_spm_provenance(
     stored: dict[str, JsonValue] | None,
 ) -> SPMComparisonProvenance | None:
     """Return the report run's stored SPM receipts, or None without any.
@@ -219,10 +220,10 @@ def economy_result(rows: EconomyResultRows) -> EconomyResult:
         row.decile_type == "wealth" for row in rows.intra_decile_impacts
     )
     return EconomyResult(
-        spm_provenance=_spm_provenance(report_run.spm_provenance),
+        spm_provenance=stored_spm_provenance(report_run.spm_provenance),
         model_version=report_run.country_package_version,
         data_version=report_run.data_version,
-        budget=_budget(rows),
+        budget=budget_impact(country_id=country_id, budget_summary=rows.budget_summary),
         detailed_budget=_detailed_budget(rows),
         decile=_deciles(income_deciles),
         inequality=_inequality(rows),
@@ -250,11 +251,16 @@ def economy_result(rows: EconomyResultRows) -> EconomyResult:
     )
 
 
-def _budget(rows: EconomyResultRows) -> BudgetaryImpact:
+def budget_impact(
+    *, country_id: str, budget_summary: Iterable[BudgetSummaryRow]
+) -> BudgetaryImpact:
+    """Return the budget figures of a report run's budget summary rows.
+
+    Raise EconomyResultUnreadableError when a figure every result has is
+    missing or null; the message names it.
+    """
     household_totals = {
-        row.variable_name: row
-        for row in rows.budget_summary
-        if row.entity == "household"
+        row.variable_name: row for row in budget_summary if row.entity == "household"
     }
 
     def figure(variable: str, column: Literal["change", "baseline_total"]) -> float:
@@ -268,7 +274,7 @@ def _budget(rows: EconomyResultRows) -> BudgetaryImpact:
     benefits = figure("household_benefits", "change")
     state_income_tax = (
         figure(STATE_INCOME_TAX_VARIABLE, "change")
-        if rows.country_id == "us" or STATE_INCOME_TAX_VARIABLE in household_totals
+        if country_id == "us" or STATE_INCOME_TAX_VARIABLE in household_totals
         else 0.0
     )
     return BudgetaryImpact(

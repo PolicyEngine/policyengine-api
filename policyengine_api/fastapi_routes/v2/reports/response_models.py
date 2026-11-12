@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
@@ -15,14 +15,21 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
+from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
+    BudgetWindowResult,
+)
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResult,
 )
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
+        BudgetWindowReportRead,
+        BudgetWindowReportSummaryRead,
         ReportRead,
         ReportSummaryRead,
+        StoredReportRead,
+        StoredReportSummaryRead,
     )
 
 
@@ -115,16 +122,126 @@ class ReportItem(ReportSummaryItem):
         return cls.model_validate(read)
 
 
-class ReportDetailResult(StrictReportAPIModel):
-    """Result holding one report in ``item``."""
+class BudgetWindowYearItem(ReportRunItem):
+    """One year of a budget-window run: the report run calculating that year.
 
-    item: ReportItem
+    Its fields are a report run's, as ``ReportRunItem`` describes them. A
+    year still waiting to start is ``pending``, and one the window failed
+    before it started is ``failed``, its ``error_message`` saying so.
+    """
+
+    year: int
+
+
+class BudgetWindowRunItem(StrictReportAPIModel):
+    """One calculation of a budget window: a report run per year, in year order.
+
+    ``status`` is ``pending`` until a year starts running, ``running`` while
+    its years run, ``failed`` once a year has failed, with ``error_message``
+    saying which, and ``succeeded`` once every year has. ``trigger`` is
+    ``initial`` for the run the report's creation started, and
+    ``recalculate`` says whether its years calculate their
+    simulations again rather than reusing successful runs.
+    ``country_package_version`` and ``policyengine_version`` are the versions
+    its years run on, null for a run with no year.
+    """
+
+    id: UUID
+    status: Literal["pending", "running", "succeeded", "failed"]
+    trigger: Literal["initial", "manual", "system"]
+    recalculate: bool
+    country_package_version: str | None
+    policyengine_version: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    years: list[BudgetWindowYearItem]
+
+
+class BudgetWindowReportSummaryItem(StrictReportAPIModel):
+    """A budget window: a baseline and a reform simulation compared in each year.
+
+    The window is ``budget_window_size`` years from ``year``, in the region
+    and dataset named. ``status`` is the newest run's, or ``not_run`` for a
+    report with no run. ``run`` is the newest budget-window run, whatever its
+    status and versions, with its years; ``current_versions`` are the
+    versions the Public API runs now, so a newest run on other versions is
+    out of date. ``options`` are the options the report was created with.
+    """
+
+    id: UUID
+    country_id: str
+    kind: Literal["budget_window"]
+    label: str
+    description: str | None
+    year: int | None
+    budget_window_size: int
+    region_code: str | None
+    dataset_name: str | None
+    baseline_simulation: ReportSimulationItem | None
+    reform_simulation: ReportSimulationItem | None
+    options: dict[str, JsonValue]
+    created_at: datetime
+    status: Literal["not_run", "pending", "running", "succeeded", "failed"]
+    run: BudgetWindowRunItem | None
+    current_versions: PackageVersionsItem
+
+    @classmethod
+    def from_summary(
+        cls, read: BudgetWindowReportSummaryRead
+    ) -> BudgetWindowReportSummaryItem:
+        """Build the summary from the service's read, without a result."""
+        return cls.model_validate(read)
+
+
+class BudgetWindowReportItem(BudgetWindowReportSummaryItem):
+    """A budget window with its newest run's result.
+
+    ``result`` is the budget-window result, in the format the app reads
+    today: each year's budget figures, in year order, and their totals. It is
+    there once the newest run has succeeded, and null otherwise.
+    """
+
+    result: BudgetWindowResult | None
+
+    @classmethod
+    def from_read(cls, read: BudgetWindowReportRead) -> BudgetWindowReportItem:
+        """Build the item from the service's read, with its result."""
+        return cls.model_validate(read)
+
+
+def report_item(read: StoredReportRead) -> ReportItem | BudgetWindowReportItem:
+    """Build the item of the report's kind from the service's read."""
+    if read.kind == "budget_window":
+        return BudgetWindowReportItem.from_read(read)
+    return ReportItem.from_read(read)
+
+
+def report_summary_item(
+    read: StoredReportSummaryRead,
+) -> ReportSummaryItem | BudgetWindowReportSummaryItem:
+    """Build the summary of the report's kind from the service's read."""
+    if read.kind == "budget_window":
+        return BudgetWindowReportSummaryItem.from_summary(read)
+    return ReportSummaryItem.from_summary(read)
+
+
+class ReportDetailResult(StrictReportAPIModel):
+    """Result holding one report in ``item``; its ``kind`` says which model it is."""
+
+    item: Annotated[ReportItem | BudgetWindowReportItem, Field(discriminator="kind")]
 
 
 class ReportListResult(StrictReportAPIModel):
     """The listed reports in ``items``, in the order named, without results."""
 
-    items: list[ReportSummaryItem]
+    items: list[
+        Annotated[
+            ReportSummaryItem | BudgetWindowReportSummaryItem,
+            Field(discriminator="kind"),
+        ]
+    ]
 
 
 ResultT = TypeVar("ResultT")
@@ -176,11 +293,12 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response("No report has this ID in this country."),
     422: error_response(
         "The request does not match the schema, or the report is a household "
-        "report or a budget window, which this route does not read yet."
+        "report, which this route does not read yet."
     ),
     500: error_response(
-        "The newest run succeeded but its stored result cannot be read, or the "
-        "operation could not be completed."
+        "The newest run succeeded but its stored result cannot be read (for a "
+        "budget window, a year has no succeeded run or no budget figures), or "
+        "the operation could not be completed."
     ),
 }
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
