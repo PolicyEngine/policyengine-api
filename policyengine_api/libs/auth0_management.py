@@ -125,8 +125,9 @@ class Auth0UserProfilesUnavailableError(Auth0ManagementError):
     Timeouts, connection errors, a refused or failed token request, a missing
     ``read:users`` permission (``http_403``), rate limiting (``http_429``,
     after at most one short wait), server errors (``http_500`` and so on)
-    and an answer that isn't a list of users all raise it, each with its
-    ``cause``. The message names at most that cause.
+    and an answer that isn't a list of users, or for a read by ID isn't that
+    user, all raise it, each with its ``cause``. The message names at most
+    that cause.
     """
 
 
@@ -150,7 +151,7 @@ def _seconds(value: str | None) -> float | None:
 
 @dataclass(frozen=True)
 class Auth0UserProfile:
-    """What the admin routes read about one Auth0 user; never stored.
+    """What the Public API reads about one Auth0 user; never stored.
 
     Each text is stripped, and absent when Auth0 sent none, sent an empty one
     or sent something other than text. ``email_verified`` is true only when
@@ -268,7 +269,7 @@ def _profile_text(value: object, maximum_length: int) -> str | None:
 
 
 def _user_profile(payload: object) -> Auth0UserProfile | None:
-    """Read one user of a search answer, or ``None`` when it has no user ID."""
+    """Read one user of an answer, or ``None`` when it has no user ID."""
     if not isinstance(payload, dict):
         return None
     user_id = payload.get("user_id")
@@ -310,7 +311,7 @@ class Auth0ManagementClient:
         ``http_client`` replaces the per-request and per-operation clients
         (tests pass a mock transport), and ``secret_loader`` reads
         ``client_secret_resource`` when no direct secret is set. ``sleep``
-        waits before a rate-limited search's retry, and ``clock`` gives the
+        waits before a rate-limited read's retry, and ``clock`` gives the
         current Unix time for Auth0's rate-limit reset.
         """
         self._settings = settings

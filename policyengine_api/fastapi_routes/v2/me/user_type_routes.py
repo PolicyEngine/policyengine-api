@@ -60,11 +60,13 @@ ACCEPTANCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         ),
     },
     403: {
-        "model": V2CodedErrorResponse,
+        # A machine (client-credentials) principal's refusal has no code.
+        "model": V2CodedErrorResponse | V2ErrorResponse,
         "description": (
             "code email_mismatch: the signed-in user's verified email isn't the "
             "invited address, compared whole and ignoring case. The invitation "
-            "stays open."
+            "stays open. A machine (client-credentials) principal is also "
+            "refused with 403, without a code."
         ),
     },
     409: {

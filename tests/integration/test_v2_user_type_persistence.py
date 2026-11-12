@@ -694,3 +694,46 @@ def test_an_acceptance_waits_for_its_inviters_demotion_and_is_refused(
     # Alice is no longer an admin once Bob's turn comes, so it is refused.
     assert isinstance(outcomes.get("error"), InviterNotAdminError)
     assert _stored_types(sessions, [bob_id]) == ["standard"]
+
+
+def test_deleting_an_account_deletes_the_invitations_it_accepted(sessions) -> None:
+    """The runtime role holds no DELETE on invitations; the foreign key cascades."""
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    accounts.get_account(principal=bob, country_id="us")
+    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    postmark = RecordingPostmark()
+    auth0 = StandInAuth0(
+        Auth0UserProfile(
+            user_id=bob.subject,
+            email="bob@invited.example.test",
+            email_verified=True,
+            given_name=None,
+            family_name=None,
+            name=None,
+        )
+    )
+    invitations = _invitations(sessions, postmark, auth0)
+    accepted = invitations.create_invitation(
+        principal=alice, email="bob@invited.example.test", user_type=UserType.AUTHOR
+    )
+    invitations.accept_invitation(
+        principal=bob, token=_sent_token(postmark), country_id="us"
+    )
+    still_open = invitations.create_invitation(
+        principal=alice, email="other@invited.example.test", user_type=UserType.ADMIN
+    )
+
+    accounts.delete_account(principal=bob)
+
+    with sessions() as session:
+        kept = set(
+            session.execute(
+                select(UserInvitation.id).where(
+                    UserInvitation.id.in_([accepted.id, still_open.id])
+                )
+            ).scalars()
+        )
+    assert kept == {still_open.id}
