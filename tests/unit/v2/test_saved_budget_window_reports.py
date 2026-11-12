@@ -90,10 +90,21 @@ def test_a_saved_window_disagreeing_with_its_report_answers_400() -> None:
     assert response.json() == {"status": "error", "message": str(error)}
 
 
-def test_the_openapi_document_names_the_saved_window_refusal() -> None:
+def test_only_the_saved_report_writes_document_the_window_refusal() -> None:
     client, _flask_calls = user_route_client()
 
-    document = client.get("/v2/openapi.json").json()
+    paths = client.get("/v2/openapi.json").json()["paths"]
 
-    answer = document["paths"]["/v2/user-reports"]["post"]["responses"]["400"]
-    assert "budget_window_years" in answer["description"]
+    for path, method in (
+        ("/v2/user-reports", "post"),
+        ("/v2/user-reports/{association_id}", "patch"),
+    ):
+        answer = paths[path][method]["responses"]["400"]
+        assert "budget_window_years" in answer["description"], (path, method)
+    for path, method in (
+        ("/v2/user-reports/{association_id}", "get"),
+        ("/v2/user-policies", "post"),
+        ("/v2/user-simulations", "post"),
+    ):
+        answer = paths[path][method]["responses"]["400"]
+        assert "budget_window_years" not in answer["description"], (path, method)
