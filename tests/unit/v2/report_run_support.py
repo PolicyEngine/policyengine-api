@@ -14,6 +14,7 @@ from policyengine_api.services.v2.stored_reports.types import (
 from tests.unit.v2.budget_window_report_support import (
     BUDGET_WINDOW_REPORT_ID,
     budget_window_run_read,
+    budget_window_year_read,
 )
 from tests.unit.v2.stored_report_support import (
     CREATED_AT,
@@ -56,7 +57,16 @@ def report_runs_read() -> ReportRunsRead:
 
 
 def budget_window_runs_read() -> BudgetWindowRunsRead:
-    """Return a budget window's two runs, newest first: a forced re-run, pending."""
+    """Return a budget window's two runs, newest first: a forced re-run, pending.
+
+    The re-run's years are on the current versions, which are the window
+    run's, as its first year's always are.
+    """
+    rerun_at = CREATED_AT + timedelta(days=3)
+    current = {
+        "country_package_version": CURRENT_VERSIONS.country_package_version,
+        "policyengine_version": CURRENT_VERSIONS.policyengine_version,
+    }
     return BudgetWindowRunsRead(
         report_id=BUDGET_WINDOW_REPORT_ID,
         kind="budget_window",
@@ -66,11 +76,23 @@ def budget_window_runs_read() -> BudgetWindowRunsRead:
                 status="pending",
                 trigger="manual",
                 recalculate=True,
-                country_package_version=CURRENT_VERSIONS.country_package_version,
-                policyengine_version=CURRENT_VERSIONS.policyengine_version,
-                created_at=CREATED_AT + timedelta(days=3),
+                created_at=rerun_at,
                 started_at=None,
                 completed_at=None,
+                years=tuple(
+                    budget_window_year_read(
+                        year,
+                        id=UUID(int=year),
+                        status="pending",
+                        trigger="manual",
+                        created_at=rerun_at,
+                        started_at=None,
+                        completed_at=None,
+                        **current,
+                    )
+                    for year in (2026, 2027)
+                ),
+                **current,
             ),
             budget_window_run_read(),
         ),

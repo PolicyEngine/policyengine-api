@@ -3,25 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, get_args
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from policyengine_api.data.v2.models import Report
+from policyengine_api.data.v2.models import (
+    BudgetWindowRun,
+    Report,
+    ReportRunStatus,
+    ReportRunTrigger,
+)
 from policyengine_api.services.v2.simulation_service.types import PackageVersions
 from policyengine_api.services.v2.stored_reports.services import (
     SubmissionsNotConfiguredError,
     V2StoredReportService,
 )
+from policyengine_api.services.v2.stored_reports.transformations import (
+    budget_window_runs_read,
+)
 from policyengine_api.services.v2.stored_reports.types import (
     ReportKind,
+    RunRouteKind,
     StoredReportRows,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     REPORT_KIND_NAMES,
-    RUN_ROUTE_KINDS,
     ReportKindUnsupportedError,
     ReportStorageError,
     require_run_route_kind,
@@ -37,6 +46,7 @@ if TYPE_CHECKING:
     )
 
 REPORT_ID = UUID("00000000-0000-0000-0000-00000000f001")
+STORED_AT = datetime(2026, 11, 13, 9, tzinfo=UTC)
 CURRENT_VERSIONS = PackageVersions(
     country_package_version="1.5.0", policyengine_version="4.2.0"
 )
@@ -158,4 +168,32 @@ def test_a_household_reports_runs_are_not_run_or_listed_yet() -> None:
 def test_every_report_kind_has_a_name_and_the_run_routes_take_only_kinds() -> None:
     # A kind added later is refused with its name (422), not a KeyError (500).
     assert set(REPORT_KIND_NAMES) == set(get_args(ReportKind))
-    assert RUN_ROUTE_KINDS.issubset(get_args(ReportKind))
+    assert set(get_args(RunRouteKind)).issubset(get_args(ReportKind))
+
+
+def test_a_window_run_with_no_year_lists_no_years_and_no_versions() -> None:
+    window_run = BudgetWindowRun(
+        id=uuid4(),
+        created_at=STORED_AT,
+        updated_at=STORED_AT,
+        report_id=REPORT_ID,
+        tax_benefit_model_version_id=uuid4(),
+        trigger=ReportRunTrigger.MANUAL,
+        recalculate=True,
+        status=ReportRunStatus.PENDING,
+    )
+
+    runs = budget_window_runs_read(
+        stored_rows(budget_window_size=2),
+        [window_run],
+        {},
+        current_versions=CURRENT_VERSIONS,
+    )
+
+    assert runs.kind == "budget_window"
+    (run,) = runs.runs
+    assert run.id == window_run.id
+    assert (run.trigger, run.recalculate, run.status) == ("manual", True, "pending")
+    assert run.years == ()
+    assert run.country_package_version is None
+    assert run.policyengine_version is None

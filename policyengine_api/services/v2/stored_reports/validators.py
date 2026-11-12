@@ -18,13 +18,12 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import ReportRun
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
+        RunRouteKind,
         StoredReportRows,
     )
 
 KIND_NAMES = {"household": "a household report"}
-# The kinds of report whose runs the run routes start and list; they refuse
-# any other kind, naming it.
-RUN_ROUTE_KINDS: frozenset[ReportKind] = frozenset({"economy", "budget_window"})
+# Each kind of report, as the run routes name one they refuse.
 REPORT_KIND_NAMES: dict[ReportKind, str] = {
     "economy": "an economy report",
     "household": "a household report",
@@ -111,21 +110,21 @@ def require_readable_report(rows: StoredReportRows) -> ReportKind:
     return kind
 
 
-def require_run_route_kind(rows: StoredReportRows) -> ReportKind:
+def require_run_route_kind(rows: StoredReportRows) -> RunRouteKind:
     """Return the report's kind, or raise ReportKindUnsupportedError.
 
     The run routes start and list runs of economy reports and budget
-    windows. They take household reports once their own PR adds them,
-    separately from the read routes' kinds.
+    windows, and refuse any other kind. They take household reports once
+    their own PR adds them, separately from the read routes' kinds.
     """
     kind = report_kind(rows.report)
-    if kind not in RUN_ROUTE_KINDS:
-        msg = (
-            f"Report {rows.report.id} is {REPORT_KIND_NAMES[kind]}, whose runs "
-            "these routes do not start or list yet"
-        )
-        raise ReportKindUnsupportedError(msg)
-    return kind
+    if kind in ("economy", "budget_window"):
+        return kind
+    msg = (
+        f"Report {rows.report.id} is {REPORT_KIND_NAMES[kind]}, whose runs "
+        "these routes do not start or list yet"
+    )
+    raise ReportKindUnsupportedError(msg)
 
 
 def require_reform_run(report_run: ReportRun) -> UUID:

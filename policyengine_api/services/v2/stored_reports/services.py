@@ -317,18 +317,22 @@ class V2StoredReportService:
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
             current_versions = self._current_versions(country_id)
-            if require_run_route_kind(stored) == "budget_window":
-                window_runs = read_budget_window_runs(session, report_id=report_id)
-                return budget_window_runs_read(
-                    stored,
-                    window_runs,
-                    read_budget_window_years(
-                        session, [window_run.id for window_run in window_runs]
-                    ),
-                    current_versions=current_versions,
-                )
-            return report_runs_read(
-                stored,
-                read_report_runs(session, report_id=report_id),
-                current_versions=current_versions,
-            )
+            # A kind the run routes take later fails mypy (a missing return)
+            # until it has a case here.
+            match require_run_route_kind(stored):
+                case "budget_window":
+                    window_runs = read_budget_window_runs(session, report_id=report_id)
+                    return budget_window_runs_read(
+                        stored,
+                        window_runs,
+                        read_budget_window_years(
+                            session, [window_run.id for window_run in window_runs]
+                        ),
+                        current_versions=current_versions,
+                    )
+                case "economy":
+                    return report_runs_read(
+                        stored,
+                        read_report_runs(session, report_id=report_id),
+                        current_versions=current_versions,
+                    )

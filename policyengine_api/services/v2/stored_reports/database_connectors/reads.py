@@ -1,4 +1,4 @@
-"""Database reads of v2 reports and their newest runs.
+"""Database reads of v2 reports, their newest runs and budget-window years.
 
 A report's own runs are report runs that are not a year of a budget window;
 a budget-window report's are budget-window runs, each with a report run per
