@@ -103,7 +103,7 @@ def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
         ),
         (RuntimeError("unexpected"), 500, "V2 report operation failed"),
     ],
-    ids=["not-found", "other-kind", "unreadable-result", "storage", "unexpected"],
+    ids=["not-found", "unreadable-result", "storage", "unexpected"],
 )
 def test_report_read_failures_answer_typed_errors(
     error: Exception, status_code: int, message: str
