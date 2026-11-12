@@ -83,6 +83,18 @@ WORKER_RESULT_COLUMNS = {
 SERVICE_RUN_STATE_COLUMNS = frozenset(
     {"status", "modal_call_id", "error_message", "completed_at", "updated_at"}
 )
+# A budget-window run has no Modal call of its own. Each year's Modal
+# coordinator starts the window's next unstarted year when its year finishes;
+# the last year to finish marks the window succeeded, and a failed year fails
+# it.
+WORKER_WINDOW_RUN_COLUMNS = frozenset(
+    {"status", "error_message", "started_at", "completed_at", "updated_at"}
+)
+# The simulation service starts a window's first years at submit, and fails
+# the window at once when Modal refuses their calls.
+SERVICE_WINDOW_RUN_COLUMNS = frozenset(
+    {"status", "error_message", "completed_at", "updated_at"}
+)
 # What a run is: no role may change these after the simulation service writes
 # them.
 RUN_DEFINITION_COLUMNS = {
@@ -122,6 +134,9 @@ RUN_DEFINITION_COLUMNS = {
             "country_package_version",
             "policyengine_version",
         }
+    ),
+    "budget_window_runs": frozenset(
+        {"report_id", "tax_benefit_model_version_id", "trigger", "recalculate"}
     ),
 }
 # The policy, dynamic, household and catalog rows a run needs.
@@ -273,6 +288,9 @@ def test_simulation_service_creates_simulation_rows_and_reads_run_inputs() -> No
     expected |= dict.fromkeys(RUN_INPUT_TABLES, READ)
     for table in RUN_STATUS_TABLES:
         expected[table] = READ_INSERT | {update_columns(*SERVICE_RUN_STATE_COLUMNS)}
+    expected["budget_window_runs"] = READ_INSERT | {
+        update_columns(*SERVICE_WINDOW_RUN_COLUMNS)
+    }
     assert declared == expected
 
 
@@ -286,6 +304,7 @@ def test_modal_workers_write_only_run_status_and_results() -> None:
     for table in RUN_STATUS_TABLES:
         worker_columns = WORKER_RUN_STATE_COLUMNS | WORKER_RESULT_COLUMNS[table]
         expected[table] = READ | {update_columns(*worker_columns)}
+    expected["budget_window_runs"] = READ | {update_columns(*WORKER_WINDOW_RUN_COLUMNS)}
     assert declared == expected
 
 
