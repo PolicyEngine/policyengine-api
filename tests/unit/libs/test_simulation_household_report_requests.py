@@ -12,6 +12,7 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPINGS
 from policyengine_api.libs.simulation_reports import (
     REPORTS_PATH,
     household_report_request,
@@ -116,6 +117,33 @@ def test_a_household_report_the_service_refuses_is_reported_with_its_reason() ->
         "The simulation service cannot run this request (household_not_calculable): "
         "The household has no default year"
     )
+
+
+@pytest.mark.parametrize(
+    "code", ["unknown_household", "no_household_function", "unknown_policy"]
+)
+def test_a_household_400_the_public_api_checked_first_is_unavailable(
+    code: str,
+) -> None:
+    # The Public API checks the household and policies before sending, and
+    # the default worker's household function is the service's own state.
+    service = RecordingService(
+        status_code=400, body={"code": code, "detail": "No such row."}
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        service.client().submit_household_report(household_report_input())
+
+    route_status = next(
+        mapping.status_code
+        for mapping in REPORT_ERROR_MAPPINGS
+        if isinstance(unavailable.value, mapping.error_types)
+    )
+    assert route_status == 503
+    assert str(unavailable.value) == (
+        f"The simulation service refused the report ({code}): No such row."
+    )
+    assert unavailable.value.created_record_id is None
 
 
 def test_a_household_report_the_unavailable_service_created_is_named() -> None:

@@ -362,4 +362,9 @@ def test_the_create_routes_schema_offers_the_household_kind() -> None:
         "baseline",
     }
     assert "year" not in household_request["properties"]
+    # Each side's failure is read from the household function's failure
+    # document, which always names its code.
+    side_failure = components["HouseholdReportSideFailureItem"]
+    assert side_failure["properties"]["code"] == {"title": "Code", "type": "string"}
+    assert "submit" not in side_failure["description"]
     assert "HouseholdReportItem" in components

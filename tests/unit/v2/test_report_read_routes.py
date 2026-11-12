@@ -93,9 +93,9 @@ def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
             "Report x was not found in country 'us'",
         ),
         (
-            ReportKindUnsupportedError("Report x is a household report"),
+            ReportKindUnsupportedError("Report x is a budget window"),
             422,
-            "Report x is a household report",
+            "Report x is a budget window",
         ),
         (
             EconomyResultUnreadableError("the budget summary has no household_tax row"),

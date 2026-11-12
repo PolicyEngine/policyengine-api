@@ -90,6 +90,19 @@ def current_versions(country_id: str) -> PackageVersions:
     return PackageVersions(**CURRENT_VERSIONS)
 
 
+INPUT_ERRORS = [{"name": "employment_incme", "message": "is not a variable"}]
+FAILED_DOCUMENT = {
+    "status": "failed",
+    "schema_version": 1,
+    "error": {
+        "code": "invalid_inputs",
+        "message": "The household names inputs the model does not have.",
+        "input_errors": INPUT_ERRORS,
+        "spm_error": None,
+    },
+}
+
+
 def succeeded_document(household: dict[str, Any]) -> dict[str, Any]:
     """Return the household function's result document for a calculated household."""
     return {
@@ -181,28 +194,49 @@ def store_household_simulation(
     return simulation_id, run_id
 
 
+@dataclass(frozen=True)
+class HouseholdReportToStore:
+    """A household report's run status, its sides, and their documents.
+
+    A succeeded run's simulation runs hold their calculated households,
+    unless ``documents`` gives the baseline's and the reform's documents.
+    Without ``with_reform``, it is a report of the baseline alone.
+    """
+
+    status: str = "succeeded"
+    with_reform: bool = True
+    documents: tuple[dict[str, Any] | None, dict[str, Any] | None] | None = None
+
+
 def store_household_report(
     connection: Connection,
     catalog: CatalogRows,
     household_id: UUID,
-    *,
-    status: str = "succeeded",
-    with_reform: bool = True,
+    report: HouseholdReportToStore | None = None,
 ) -> StoredHouseholdReport:
     """Store a household report of current law and the catalog's policy, with a run.
 
-    A succeeded run's simulation runs hold their calculated households.
-    Without ``with_reform``, it is a report of the baseline alone.
+    Without ``report``, its run succeeded and both sides hold their households.
     """
+    report = report or HouseholdReportToStore()
+    status = report.status
+    with_reform = report.with_reform
+    documents = report.documents
     succeeded = status == "succeeded"
+    baseline_document, reform_document = (
+        (
+            succeeded_document(BASELINE_HOUSEHOLD) if succeeded else None,
+            succeeded_document(REFORM_HOUSEHOLD) if succeeded else None,
+        )
+        if documents is None
+        else documents
+    )
     baseline_id, baseline_run_id = store_household_simulation(
         connection,
         catalog,
         household_id,
         policy_id=None,
-        run=SimulationRunToStore(
-            status, succeeded_document(BASELINE_HOUSEHOLD) if succeeded else None
-        ),
+        run=SimulationRunToStore(status, baseline_document),
     )
     reform_id = reform_run_id = None
     if with_reform:
@@ -211,9 +245,7 @@ def store_household_report(
             catalog,
             household_id,
             policy_id=catalog.policy_id,
-            run=SimulationRunToStore(
-                status, succeeded_document(REFORM_HOUSEHOLD) if succeeded else None
-            ),
+            run=SimulationRunToStore(status, reform_document),
         )
     report_id = uuid4()
     insert_row(
@@ -266,7 +298,10 @@ class StoringHouseholdReportService:
         self.household_reports.append(report)
         with self.engine.begin() as connection:
             stored = store_household_report(
-                connection, self.catalog, report.household_id, status="pending"
+                connection,
+                self.catalog,
+                report.household_id,
+                HouseholdReportToStore(status="pending"),
             )
         return SubmittedReport(
             report_id=stored.report_id, report_run_id=stored.report_run_id
@@ -384,7 +419,10 @@ def test_a_household_report_of_the_baseline_alone_answers_no_reform(
     with owner_engine.begin() as connection:
         household_id = store_household(connection, household_only_uk)
         stored = store_household_report(
-            connection, household_only_uk, household_id, with_reform=False
+            connection,
+            household_only_uk,
+            household_id,
+            HouseholdReportToStore(with_reform=False),
         )
 
     response = client_for(runtime_sessions).get(
@@ -399,6 +437,56 @@ def test_a_household_report_of_the_baseline_alone_answers_no_reform(
     assert item["result"]["reform"] is None
 
 
+def test_a_failed_household_report_answers_each_sides_failure(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        household_id = store_household(connection, household_only_uk)
+        stored = store_household_report(
+            connection,
+            household_only_uk,
+            household_id,
+            HouseholdReportToStore(
+                status="failed",
+                documents=(succeeded_document(BASELINE_HOUSEHOLD), FAILED_DOCUMENT),
+            ),
+        )
+
+    response = client_for(runtime_sessions).get(
+        f"/v2/reports/{stored.report_id}?country_id=uk"
+    )
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    assert (item["status"], item["result"]) == ("failed", None)
+    assert item["failure"] == {"baseline": None, "reform": FAILED_DOCUMENT["error"]}
+
+
+def test_a_succeeded_household_report_missing_a_calculation_answers_500(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        household_id = store_household(connection, household_only_uk)
+        stored = store_household_report(
+            connection,
+            household_only_uk,
+            household_id,
+            HouseholdReportToStore(
+                documents=(succeeded_document(BASELINE_HOUSEHOLD), None)
+            ),
+        )
+
+    response = client_for(runtime_sessions).get(
+        f"/v2/reports/{stored.report_id}?country_id=uk"
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "status": "error",
+        "message": "The report's stored result cannot be read",
+    }
+
+
 def test_household_reports_are_listed_beside_economy_reports(
     owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
 ) -> None:
@@ -406,7 +494,7 @@ def test_household_reports_are_listed_beside_economy_reports(
     with owner_engine.begin() as connection:
         household_id = store_household(connection, catalog)
         household_report = store_household_report(
-            connection, catalog, household_id, status="running"
+            connection, catalog, household_id, HouseholdReportToStore(status="running")
         )
         economy_report = store_report(connection, catalog)
 
