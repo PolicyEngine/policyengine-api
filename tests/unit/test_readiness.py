@@ -164,6 +164,26 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
         {"PUBLIC_API_AUTH_REQUIRED": "true"},
         {"PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/"},
         {"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"},
+        # The Auth0 user profile settings are all-or-none, like the deletion
+        # settings, and name a canonical tenant domain.
+        {"AUTH0_USER_PROFILES_DOMAIN": "policyengine.us.auth0.com"},
+        {
+            "AUTH0_USER_PROFILES_DOMAIN": "https://policyengine.us.auth0.com/",
+            "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": (
+                "projects/p/secrets/auth0-profiles/versions/latest"
+            ),
+        },
+        # Complete profile settings need the users' issuer: without it no
+        # identity is a user of the tenant, and profiles would silently be
+        # read for nobody.
+        {
+            "AUTH0_USER_PROFILES_DOMAIN": "policyengine.us.auth0.com",
+            "AUTH0_USER_PROFILES_CLIENT_ID": "profile-reader",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE": (
+                "projects/p/secrets/auth0-profiles/versions/latest"
+            ),
+        },
         # An allow list of server clients needs the Auth0 settings that check
         # their tokens, and must be a comma-separated list of client IDs.
         {"PUBLIC_API_SERVER_CLIENT_IDS": "client-a"},
@@ -218,6 +238,10 @@ def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment
         "AUTH0_MANAGEMENT_CLIENT_ID",
         "AUTH0_MANAGEMENT_CLIENT_SECRET",
         "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE",
+        "AUTH0_USER_PROFILES_DOMAIN",
+        "AUTH0_USER_PROFILES_CLIENT_ID",
+        "AUTH0_USER_PROFILES_CLIENT_SECRET",
+        "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE",
     ):
         monkeypatch.delenv(name, raising=False)
     for name, value in environment.items():

@@ -6,12 +6,16 @@ from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
 from policyengine_api.services.v2.identity.validators import user_type_meets_minimum
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Sequence
     from uuid import UUID
 
     from policyengine_api.data.v2.models import User
+    from policyengine_api.libs.auth0_management import Auth0UserIdSearch
 
 BELOW_MINIMUM_MESSAGES = {
     UserType.STANDARD: "Sign in to do this",
@@ -50,6 +54,22 @@ class UserTypeCheckUnavailableError(RuntimeError):
 
 class UserEmailMatchError(LookupError):
     """Raised when the type script finds no signed-in user, or several, by email."""
+
+
+class AdminUserEmailSearchRefusedError(ValueError):
+    """Raised when an email search can't be served as asked (422).
+
+    Its text holds ``<`` or ``>``, or more Auth0 users match it than an
+    admin's page of matches can be read from Auth0 for.
+    """
+
+
+class AdminUserProfilesUnavailableError(RuntimeError):
+    """Raised when users' emails and names can't be read from Auth0.
+
+    An email search can't be served without them (503); every other admin
+    read answers with stored values instead.
+    """
 
 
 def require_minimum_user_type(user_type: UserType, minimum: UserType) -> UserType:
@@ -126,3 +146,26 @@ def require_one_user_with_email(users: Sequence[User], email: str) -> User:
         )
         raise UserEmailMatchError(msg)
     return users[0]
+
+
+def require_searchable_email_text(text: str) -> str:
+    """Return email search text, or refuse text with ``<`` or ``>``.
+
+    No email address holds them unquoted, and Auth0's query syntax reads
+    them as a range and can't escape them.
+    """
+    if "<" in text or ">" in text:
+        msg = "Email search text can't contain < or >: no email address holds them"
+        raise AdminUserEmailSearchRefusedError(msg)
+    return text
+
+
+def require_email_search_within_limit(found: Auth0UserIdSearch) -> tuple[str, ...]:
+    """Return the Auth0 user IDs found, or refuse a search matching too many."""
+    if found.more_than_limit:
+        msg = (
+            f"More than {MAXIMUM_EMAIL_SEARCH_MATCHES} users match that email "
+            "text; enter more of it"
+        )
+        raise AdminUserEmailSearchRefusedError(msg)
+    return found.user_ids

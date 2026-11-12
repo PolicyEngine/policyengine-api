@@ -613,11 +613,13 @@ uv run --frozen --extra dev mypy
 uv run --frozen pytest \
   tests/unit/libs/test_user_auth.py \
   tests/unit/libs/test_auth0_management.py \
+  tests/unit/libs/test_rate_limit_wait_budget.py \
   tests/unit/v2/test_user_route_auth.py \
   tests/unit/v2/test_me_routes.py \
   tests/unit/v2/test_user_types.py \
   tests/unit/v2/test_user_type_service.py \
   tests/unit/v2/test_admin_user_routes.py \
+  tests/unit/v2/test_admin_user_profile_service.py \
   tests/unit/test_set_v2_user_type_script.py \
   tests/unit/v2/test_user_policy_routes.py \
   tests/unit/v2/test_user_household_routes.py \
