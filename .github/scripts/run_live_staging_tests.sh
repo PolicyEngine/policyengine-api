@@ -28,7 +28,10 @@ uv run --frozen --extra dev python -m pytest \
 # to staging; staging promotion waits on them, so the change that adds them
 # merges only after that deployment. Their requests are short (a
 # submission, then a poll every few seconds) apart from the parity tests'
-# /calculate requests, but the parallel check submits 6 calculations at once:
+# /calculate and /calculate-full requests, which the tests wait for longer
+# than the candidate's 300 s request timeout (V1_CALCULATION_TIMEOUT_SECONDS in
+# tests/fixtures/integration/live_household_calculations.py): /calculate-full
+# took 224 s on staging. The parallel check submits 6 calculations at once:
 # with the 3 other workers' requests, at most 3 wait for a free slot, as above.
 uv run --frozen --extra dev python -m pytest \
   -n 4 \
