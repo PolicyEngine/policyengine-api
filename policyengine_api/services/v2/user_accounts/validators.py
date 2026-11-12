@@ -11,7 +11,7 @@ from policyengine_api.services.v2.identity.types import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.models import User
+    from policyengine_api.data.v2.models import User, UserTypeChange
 
 
 class AccountNotFoundError(LookupError):
@@ -28,6 +28,10 @@ class AccountIdentityDeletionError(RuntimeError):
 
 class AccountDeletionUnavailableError(RuntimeError):
     """Raised before any data is deleted when Auth0 deletion cannot run."""
+
+
+class TypeChangeNotFoundError(LookupError):
+    """Raised when the caller has no recorded type change with an ID (404)."""
 
 
 def require_resolved_account(owner: ResolvedUser | None) -> ResolvedUser:
@@ -55,3 +59,11 @@ def require_editable_account(principal: AccountPrincipal) -> UserPrincipal:
         msg = "Sign in to edit your account details."
         raise AccountEditRequiresSignInError(msg)
     return principal
+
+
+def require_type_change(change: UserTypeChange | None) -> UserTypeChange:
+    """Return the caller's recorded type change, or raise TypeChangeNotFoundError."""
+    if change is None:
+        msg = "You have no type change with this ID"
+        raise TypeChangeNotFoundError(msg)
+    return change

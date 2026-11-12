@@ -27,7 +27,13 @@ if TYPE_CHECKING:
         AccountExport,
         AccountRead,
         AccountUpgrade,
+        LatestTypeChangeRead,
     )
+    from policyengine_api.services.v2.user_invitations.types import (
+        InvitationAcceptance,
+    )
+
+SignedInUserType = Literal["standard", "author", "admin"]
 
 
 class StrictAccountAPIModel(BaseModel):
@@ -65,6 +71,80 @@ class MeDetailResult(StrictAccountAPIModel):
     """Result holding the current user in ``item``."""
 
     item: MeItem
+
+
+class LatestTypeChangeItem(StrictAccountAPIModel):
+    """The user's most recent type change, from ``previous_user_type``."""
+
+    id: UUID
+    previous_user_type: SignedInUserType
+    user_type: SignedInUserType
+    changed_at: datetime
+
+    @classmethod
+    def from_read(cls, change: LatestTypeChangeRead) -> LatestTypeChangeItem:
+        """Convert the service's read model; the types are validated as literals."""
+        return cls.model_validate(
+            {
+                "id": change.id,
+                "previous_user_type": change.previous_user_type.value,
+                "user_type": change.user_type.value,
+                "changed_at": change.changed_at,
+            }
+        )
+
+
+class MeReadResult(StrictAccountAPIModel):
+    """The current user, and their most recent type change until it is dismissed.
+
+    ``latest_type_change`` is null when the user's type never changed, when
+    its most recent change was dismissed, and for an unauthenticated user.
+    """
+
+    item: MeItem
+    latest_type_change: LatestTypeChangeItem | None
+
+    @classmethod
+    def from_read(cls, account: AccountRead) -> MeReadResult:
+        """Build the result from the service's account read."""
+        change = account.latest_type_change
+        return cls(
+            item=MeItem.from_read(account),
+            latest_type_change=(
+                None if change is None else LatestTypeChangeItem.from_read(change)
+            ),
+        )
+
+
+class InvitationAcceptanceItem(StrictAccountAPIModel):
+    """The user's type after accepting an invitation, and before.
+
+    ``type_changed`` is false when the user already had the invited type or a
+    higher one: an invitation never lowers a type.
+    """
+
+    user_type: SignedInUserType
+    previous_user_type: SignedInUserType
+    type_changed: bool
+
+    @classmethod
+    def from_acceptance(
+        cls, acceptance: InvitationAcceptance
+    ) -> InvitationAcceptanceItem:
+        """Convert the service's acceptance; the types are validated as literals."""
+        return cls.model_validate(
+            {
+                "user_type": acceptance.user_type.value,
+                "previous_user_type": acceptance.previous_user_type.value,
+                "type_changed": acceptance.type_changed,
+            }
+        )
+
+
+class InvitationAcceptanceResult(StrictAccountAPIModel):
+    """Result holding the accepted invitation's outcome in ``item``."""
+
+    item: InvitationAcceptanceItem
 
 
 class MeExportResult(StrictAccountAPIModel):
@@ -129,6 +209,14 @@ class AccountSuccessResponse(StrictAccountAPIModel, Generic[ResultT]):
 
 class MeDetailResponse(AccountSuccessResponse[MeDetailResult]):
     """Success response holding the current user."""
+
+
+class MeReadResponse(AccountSuccessResponse[MeReadResult]):
+    """Success response holding the current user and their latest type change."""
+
+
+class InvitationAcceptanceResponse(AccountSuccessResponse[InvitationAcceptanceResult]):
+    """Success response holding an accepted invitation's outcome."""
 
 
 class MeExportResponse(AccountSuccessResponse[MeExportResult]):

@@ -4,7 +4,10 @@ Revision 617f531f1506 replaces the users type check with one that also allows
 author and admin, and changes nothing else; its downgrade restores the check
 that allows only unauthenticated and standard, so it fails while any user is
 an author or an admin. Revision 970be5d29283, on it, adds user_type_changes and
-changes nothing else.
+changes nothing else. Revision bb09a374231f, on the SPM availability revision,
+adds user_invitations and user_type_changes.dismissed_at, and lets a change's
+source be invitation; its downgrade fails while any change's source is
+invitation.
 """
 
 import re
@@ -27,6 +30,9 @@ USER_TYPES_PREVIOUS_REVISION = "81b728a088e7"
 USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
+# The SPM availability revision, and the user invitations revision on it.
+SPM_AVAILABILITY_REVISION = "0c136a278f29"
+USER_INVITATIONS_REVISION = "bb09a374231f"
 
 
 def _check_names(engine: Engine, table_name: str) -> set[str]:
@@ -193,5 +199,119 @@ def test_user_type_changes_revision_adds_only_its_table() -> None:
             "ck_user_type_changes_source",
         }
     finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_user_invitations_revision_adds_invitations_and_dismissals_only() -> None:
+    """The revision adds user_invitations, dismissed_at and a wider source check."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, SPM_AVAILABILITY_REVISION)
+        parent = _schema_shape(engine)
+        command.upgrade(config, USER_INVITATIONS_REVISION)
+        revision = _schema_shape(engine)
+
+        assert set(revision) - set(parent) == {"user_invitations"}
+        changed_tables = sorted(
+            table_name
+            for table_name in parent
+            if revision[table_name] != parent[table_name]
+        )
+        assert changed_tables == ["user_type_changes"]
+        parent_changes = dict(parent["user_type_changes"])
+        revision_changes = dict(revision["user_type_changes"])
+        parent_columns = parent_changes.pop("columns")
+        revision_columns = revision_changes.pop("columns")
+        assert revision_columns == [
+            *parent_columns,
+            ("dismissed_at", "TIMESTAMP", True, None),
+        ]
+        parent_checks = dict(parent_changes.pop("checks"))
+        revision_checks = dict(revision_changes.pop("checks"))
+        assert revision_changes == parent_changes
+        assert re.findall(
+            r"'(\w+)'", parent_checks.pop("ck_user_type_changes_source")
+        ) == ["admin_route", "script"]
+        assert re.findall(
+            r"'(\w+)'", revision_checks.pop("ck_user_type_changes_source_allowed")
+        ) == ["admin_route", "script", "invitation"]
+        assert revision_checks == parent_checks
+
+        invitations = revision["user_invitations"]
+        assert sorted(invitations["foreign_keys"]) == [
+            (
+                "fk_user_invitations_accepted_by_user_id_users",
+                ["accepted_by_user_id"],
+                "users",
+            ),
+            (
+                "fk_user_invitations_invited_by_user_id_users",
+                ["invited_by_user_id"],
+                "users",
+            ),
+        ]
+        assert invitations["unique_constraints"] == [
+            ("uq_user_invitations_token_hash", ["token_hash"])
+        ]
+        assert set(invitations["checks"]) == {
+            "ck_user_invitations_user_type",
+            "ck_user_invitations_accepted_or_revoked",
+        }
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_user_invitations_revision_records_invitation_changes_until_downgraded() -> (
+    None
+):
+    """A change from an invitation is stored, and keeps the downgrade from running."""
+    database_url = disposable_v2_url()
+    config = alembic_v2_config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+
+    def insert_change() -> None:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO user_type_changes (id, user_id, "
+                    "previous_user_type, new_user_type, source) VALUES "
+                    "(:change_id, :user_id, 'standard', 'author', 'invitation')"
+                ),
+                {"change_id": uuid4(), "user_id": user_id},
+            )
+
+    try:
+        command.downgrade(config, SPM_AVAILABILITY_REVISION)
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO users (id, user_type, primary_country) "
+                    "VALUES (:user_id, 'author', 'us')"
+                ),
+                {"user_id": user_id},
+            )
+        with pytest.raises(sa.exc.IntegrityError):
+            insert_change()
+
+        command.upgrade(config, USER_INVITATIONS_REVISION)
+        insert_change()
+        with pytest.raises(sa.exc.IntegrityError):
+            command.downgrade(config, SPM_AVAILABILITY_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == USER_INVITATIONS_REVISION
+        assert "user_invitations" in inspect(engine).get_table_names()
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id}
+            )
+        command.downgrade(config, SPM_AVAILABILITY_REVISION)
         command.upgrade(config, "head")
         engine.dispose()

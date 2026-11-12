@@ -1,10 +1,12 @@
-"""Canonical SQLModel tables for v2 users and their sign-in identities.
+"""Canonical SQLModel tables for v2 users, their sign-in identities and types.
 
 A user is ``unauthenticated``, or a signed-in user of type ``standard``,
 ``author`` or ``admin``, backed by one or more verified sign-in identities
 (every Stage 10 legacy-mapping user is standard). An unauthenticated user's
 ``id`` is the random UUID a signed-out browser generates and sends as its
-credential; every other user column stays NULL.
+credential; every other user column stays NULL. Each change of a signed-in
+user's type is recorded, and admins invite email addresses to become authors
+or admins.
 """
 
 from datetime import datetime
@@ -57,8 +59,15 @@ class UserTypeChangeSource(StrEnum):
     ADMIN_ROUTE = "admin_route"
     # An operator, through scripts/set_v2_user_type.py.
     SCRIPT = "script"
+    # The user, by accepting an admin's email invitation.
+    INVITATION = "invitation"
 
 
+# The types an admin's email invitation can grant.
+INVITATION_USER_TYPES = (UserType.AUTHOR, UserType.ADMIN)
+_INVITATION_USER_TYPES_SQL = ", ".join(
+    f"'{user_type.value}'" for user_type in INVITATION_USER_TYPES
+)
 _USER_TYPE_CHANGE_SOURCES_SQL = ", ".join(
     f"'{source.value}'" for source in UserTypeChangeSource
 )
@@ -161,9 +170,11 @@ class UserTypeChange(IdentifiedModel, table=True):
     """One change of a signed-in user's type; together, the user's type history.
 
     ``created_at`` is when the type changed. ``changed_by_user_id`` names the
-    admin who changed it through the admin routes. It is empty for a change the
-    type script made, and becomes empty if that admin's account is deleted.
-    Deleting the user deletes its history.
+    admin who changed it through the admin routes, or who sent the invitation
+    the user accepted. It is empty for a change the type script made, and
+    becomes empty if that admin's account is deleted. ``dismissed_at`` is when
+    the user dismissed the app's notice of the change. Deleting the user
+    deletes its history.
     """
 
     __tablename__ = "user_type_changes"
@@ -180,9 +191,11 @@ class UserTypeChange(IdentifiedModel, table=True):
             "previous_user_type <> new_user_type",
             name="ck_user_type_changes_changed_type",
         ),
+        # Alembic compares checks by name only, so this one was renamed from
+        # ck_user_type_changes_source when invitation was allowed.
         sa.CheckConstraint(
             f"source IN ({_USER_TYPE_CHANGE_SOURCES_SQL})",
-            name="ck_user_type_changes_source",
+            name="ck_user_type_changes_source_allowed",
         ),
         sa.Index("ix_user_type_changes_user_id_created_at", "user_id", "created_at"),
         # Deleting any user sets its changes' admin to NULL, which searches here.
@@ -196,3 +209,58 @@ class UserTypeChange(IdentifiedModel, table=True):
     previous_user_type: str = Field(max_length=16)
     new_user_type: str = Field(max_length=16)
     source: str = Field(max_length=16)
+    dismissed_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )
+
+
+class UserInvitation(IdentifiedModel, table=True):
+    """An admin's invitation for an email address to become an author or admin.
+
+    The invitation's token is sent only in its email; only the token's SHA-256
+    digest, in hexadecimal, is stored. An invitation is open until it is
+    accepted or revoked, and can be accepted only before ``expires_at``.
+    Resending gives it a new token and expiry. ``last_sent_at`` is when the
+    email with the current token was sent, and ``last_send_error`` names why
+    the last send failed. ``invited_by_user_id`` is the admin who created or
+    last resent it, and ``accepted_by_user_id`` the user who accepted it; each
+    becomes empty if that user's account is deleted.
+    """
+
+    __tablename__ = "user_invitations"
+    __table_args__ = (
+        sa.CheckConstraint(
+            f"user_type IN ({_INVITATION_USER_TYPES_SQL})",
+            name="ck_user_invitations_user_type",
+        ),
+        sa.CheckConstraint(
+            "accepted_at IS NULL OR revoked_at IS NULL",
+            name="ck_user_invitations_accepted_or_revoked",
+        ),
+        sa.UniqueConstraint("token_hash", name="uq_user_invitations_token_hash"),
+        # Deleting any user sets its invitations' users to NULL, which
+        # searches here.
+        sa.Index("ix_user_invitations_invited_by_user_id", "invited_by_user_id"),
+        sa.Index("ix_user_invitations_accepted_by_user_id", "accepted_by_user_id"),
+    )
+
+    email: str = Field(max_length=320)
+    user_type: str = Field(max_length=16)
+    token_hash: str = Field(max_length=64)
+    invited_by_user_id: UUID | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    expires_at: datetime = Field(sa_type=sa.DateTime(timezone=True))
+    last_sent_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )
+    last_send_error: str | None = Field(default=None, max_length=64)
+    accepted_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )
+    accepted_by_user_id: UUID | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    revoked_at: datetime | None = Field(
+        default=None, sa_type=sa.DateTime(timezone=True)
+    )

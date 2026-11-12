@@ -22,6 +22,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from policyengine_api.data.v2.models import UserType
+from policyengine_api.data.v2.models.base import utc_now
 from policyengine_api.services.v2.identity.database_connectors.deletes import (
     delete_unauthenticated_user,
 )
@@ -43,13 +44,17 @@ from policyengine_api.services.v2.user_accounts.database_connectors.deletes impo
 from policyengine_api.services.v2.user_accounts.database_connectors.reads import (
     read_account_user,
     read_identity_subjects,
+    read_latest_user_type_change,
+    read_user_type_change,
 )
 from policyengine_api.services.v2.user_accounts.database_connectors.updates import (
+    dismiss_user_type_change,
     update_account_user,
 )
 from policyengine_api.services.v2.user_accounts.transformations import (
     account_read,
     account_update_values,
+    latest_type_change_read,
 )
 from policyengine_api.services.v2.user_accounts.types import (
     AccountDeletion,
@@ -62,9 +67,11 @@ from policyengine_api.services.v2.user_accounts.types import (
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
+    TypeChangeNotFoundError,
     require_account,
     require_editable_account,
     require_resolved_account,
+    require_type_change,
 )
 
 if TYPE_CHECKING:
@@ -121,8 +128,9 @@ class V2AccountService:
     ) -> AccountRead:
         """Return the caller's account, provisioning a signed-in caller's user.
 
-        Raise AccountNotFoundError for a signed-out browser that has not saved
-        anything yet.
+        The account carries the user's most recent type change unless it was
+        dismissed. Raise AccountNotFoundError for a signed-out browser that
+        has not saved anything yet.
         """
         with self._database_session.transaction() as session:
             owner = require_resolved_account(
@@ -131,7 +139,33 @@ class V2AccountService:
                 )
             )
             user = require_account(read_account_user(session, owner.user_id))
-            return account_read(user, email=owner.email)
+            return account_read(
+                user,
+                email=owner.email,
+                latest_type_change=latest_type_change_read(
+                    read_latest_user_type_change(session, owner.user_id)
+                ),
+            )
+
+    def dismiss_type_change(
+        self, *, principal: UserPrincipal, type_change_id: UUID
+    ) -> None:
+        """Record that the signed-in user dismissed the notice of a type change.
+
+        Dismissing one already dismissed changes nothing. Raise
+        TypeChangeNotFoundError unless the caller's user has this change; a
+        caller with no user yet gets none.
+        """
+        with self._database_session.transaction() as session:
+            owner = find_principal_user_in_session(session, principal)
+            if owner is None:
+                msg = "You have no type change with this ID"
+                raise TypeChangeNotFoundError(msg)
+            change = require_type_change(
+                read_user_type_change(session, type_change_id, user_id=owner.user_id)
+            )
+            if change.dismissed_at is None:
+                dismiss_user_type_change(session, change, dismissed_at=utc_now())
 
     def update_account(
         self,

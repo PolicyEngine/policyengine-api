@@ -16,7 +16,7 @@ _warmed_up.set()
 
 
 def validate_policy_runtime_configuration() -> None:
-    """Validate source selectors, v2 persistence, auth, Auth0 and measurement."""
+    """Validate source selectors, v2 persistence, auth, Auth0, email and measurement."""
     from policyengine_api.data.v2.settings import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
         load_v2_runtime_database_settings,
     )
@@ -24,6 +24,7 @@ def validate_policy_runtime_configuration() -> None:
         load_auth0_management_settings,
         load_auth0_user_profile_settings,
     )
+    from policyengine_api.libs.postmark_email import load_postmark_settings
     from policyengine_api.libs.server_credentials import (  # noqa: PLC0415  # keeps importing readiness cheap; only validation needs configuration
         load_server_credential_requirement,
         load_server_credential_settings,
@@ -60,6 +61,9 @@ def validate_policy_runtime_configuration() -> None:
     # Unusable profile settings would leave admins without emails and make
     # every email search answer 503.
     load_auth0_user_profile_settings()
+    # Unusable email settings would leave every invitation unsent and every
+    # type change unannounced; absent ones only send nothing.
+    load_postmark_settings()
     # A bundle whose measurement configuration this build cannot serve would
     # reject every country request. Report it here, where the deployment is
     # gated, instead of only on the requests themselves.

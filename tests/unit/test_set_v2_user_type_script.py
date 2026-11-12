@@ -121,3 +121,50 @@ def test_the_command_refuses_missing_or_unknown_arguments(arguments) -> None:
 
     assert exit_info.value.code == 2
     assert user_types.calls == []
+
+
+def test_the_command_emails_the_user_whose_type_it_changed(monkeypatch) -> None:
+    """The command's own service emails the user, as the admin routes do."""
+    from policyengine_api.data.v2 import database
+    from policyengine_api.fastapi_routes import dependencies
+    from policyengine_api.services.v2.identity.types import UserPrincipal
+    from policyengine_api.services.v2.user_accounts.database_session import (
+        AccountDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_accounts.services import V2AccountService
+    from tests.unit.v2.user_email_support import (
+        RecordingEmailSender,
+        StandInProfileReader,
+        auth0_profile,
+        profile_source,
+    )
+    from tests.unit.v2.user_service_support import ISSUER, v2_store
+
+    ada = UserPrincipal(
+        issuer=ISSUER, subject="google-oauth2|ada", email="ada@example.org"
+    )
+    sender = RecordingEmailSender()
+    reader = StandInProfileReader([auth0_profile(ada.subject, "ada@auth0.test")])
+    with v2_store() as store:
+        V2AccountService(AccountDatabaseSession(store.sessions)).get_account(
+            principal=ada, country_id="us"
+        )
+        monkeypatch.setattr(database, "get_v2_session_factory", lambda: store.sessions)
+        monkeypatch.setattr(
+            "policyengine_api.libs.postmark_email.build_postmark_email_sender",
+            lambda: sender,
+        )
+        monkeypatch.setattr(
+            dependencies,
+            "_default_user_profile_source",
+            lambda: profile_source(ISSUER, reader),
+        )
+
+        exit_code = set_v2_user_type.main(
+            ["--email", "ada@example.org", "--user-type", "author"]
+        )
+
+    assert exit_code == 0
+    assert [(email["to"], email["template_alias"]) for email in sender.sent] == [
+        ("ada@auth0.test", "user-type-changed")
+    ]

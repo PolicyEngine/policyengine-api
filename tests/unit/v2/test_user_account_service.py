@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlmodel import select
@@ -13,6 +14,8 @@ from policyengine_api.data.v2.models import (
     UserIdentity,
     UserPolicy,
     UserSimulationAssociation,
+    UserType,
+    UserTypeChange,
 )
 from policyengine_api.services.v2.associations.validators import (
     AssociationLinkNotFoundError,
@@ -33,6 +36,7 @@ from policyengine_api.services.v2.user_accounts.types import AccountUpdateInput
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
+    TypeChangeNotFoundError,
 )
 from policyengine_api.services.v2.user_policies.database_session import (
     UserPolicyDatabaseSession,
@@ -565,3 +569,113 @@ def test_only_account_deletion_builds_the_auth0_deleter(store) -> None:
         account_input=AccountUpdateInput(first_name="Ada"),
     )
     accounts.export_account(principal=ALICE, country_id="us")
+
+
+TYPE_CHANGED_AT = datetime(2026, 11, 1, tzinfo=UTC)
+
+
+def _record_type_change(
+    store,
+    user_id,
+    previous_user_type: UserType,
+    new_user_type: UserType,
+    *,
+    changed_at: datetime,
+):
+    with store.sessions.begin() as session:
+        change = UserTypeChange(
+            user_id=user_id,
+            previous_user_type=previous_user_type.value,
+            new_user_type=new_user_type.value,
+            source="admin_route",
+            created_at=changed_at,
+        )
+        session.add(change)
+        session.flush()
+        return change.id
+
+
+def test_the_account_carries_its_latest_type_change_until_it_is_dismissed(
+    store,
+) -> None:
+    accounts, *_ = _services(store)
+    user_id = accounts.get_account(principal=ALICE, country_id="us").id
+    assert (
+        accounts.get_account(principal=ALICE, country_id="us").latest_type_change
+        is None
+    )
+    _record_type_change(
+        store, user_id, UserType.STANDARD, UserType.AUTHOR, changed_at=TYPE_CHANGED_AT
+    )
+    latest_id = _record_type_change(
+        store,
+        user_id,
+        UserType.AUTHOR,
+        UserType.ADMIN,
+        changed_at=TYPE_CHANGED_AT + timedelta(days=1),
+    )
+
+    latest = accounts.get_account(principal=ALICE, country_id="us").latest_type_change
+    accounts.dismiss_type_change(principal=ALICE, type_change_id=latest_id)
+    after_dismissal = accounts.get_account(principal=ALICE, country_id="us")
+    # Dismissing again changes nothing.
+    accounts.dismiss_type_change(principal=ALICE, type_change_id=latest_id)
+
+    assert latest is not None
+    assert (latest.id, latest.previous_user_type, latest.user_type) == (
+        latest_id,
+        UserType.AUTHOR,
+        UserType.ADMIN,
+    )
+    assert latest.changed_at.replace(tzinfo=UTC) == TYPE_CHANGED_AT + timedelta(days=1)
+    # An older change that wasn't dismissed doesn't come back.
+    assert after_dismissal.latest_type_change is None
+    with store.sessions() as session:
+        stored = session.get(UserTypeChange, latest_id)
+        assert stored is not None
+        assert stored.dismissed_at is not None
+
+
+def test_only_the_users_own_type_change_is_dismissed(store) -> None:
+    accounts, *_ = _services(store)
+    accounts.get_account(principal=ALICE, country_id="us")
+    bob_id = accounts.get_account(principal=BOB, country_id="us").id
+    bobs_change = _record_type_change(
+        store, bob_id, UserType.STANDARD, UserType.AUTHOR, changed_at=TYPE_CHANGED_AT
+    )
+    newcomer = UserPrincipal(issuer=ISSUER, subject="google-oauth2|newcomer")
+
+    with pytest.raises(TypeChangeNotFoundError):
+        accounts.dismiss_type_change(principal=ALICE, type_change_id=bobs_change)
+    with pytest.raises(TypeChangeNotFoundError):
+        accounts.dismiss_type_change(principal=newcomer, type_change_id=bobs_change)
+    with pytest.raises(TypeChangeNotFoundError):
+        accounts.dismiss_type_change(principal=BOB, type_change_id=uuid4())
+
+    bob = accounts.get_account(principal=BOB, country_id="us")
+    assert bob.latest_type_change is not None
+    assert bob.latest_type_change.id == bobs_change
+    with store.sessions() as session:
+        # Dismissing never creates the caller's account.
+        assert (
+            session.exec(
+                select(UserIdentity).where(UserIdentity.subject == newcomer.subject)
+            ).all()
+            == []
+        )
+
+
+def test_other_account_reads_carry_no_type_change(store) -> None:
+    accounts, *_ = _services(store)
+    user_id = accounts.get_account(principal=ALICE, country_id="us").id
+    _record_type_change(
+        store, user_id, UserType.STANDARD, UserType.AUTHOR, changed_at=TYPE_CHANGED_AT
+    )
+
+    updated = accounts.update_account(
+        principal=ALICE,
+        country_id="us",
+        account_input=AccountUpdateInput(first_name="Alice"),
+    )
+
+    assert updated.latest_type_change is None

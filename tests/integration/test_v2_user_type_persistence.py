@@ -1,9 +1,11 @@
 """PostgreSQL tests for admins' changes to users' types, as the runtime role.
 
 These prove what SQLite cannot: the runtime role's declared privileges cover
-the changes and their history, the user-type change lock makes concurrent
-changes and deletions run one at a time so the last admin is never demoted or
-deleted and a change from a type changed meanwhile is refused, and account
+the changes and their history, email invitations and their acceptance, and
+dismissing a change's notice; the user-type change lock makes concurrent
+changes, acceptances and deletions run one at a time so the last admin is
+never demoted or deleted, a change from a type changed meanwhile is refused,
+and an invitation whose admin was demoted meanwhile is refused; and account
 deletion cascades through the history or keeps a change without its admin.
 """
 
@@ -15,7 +17,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, select, update
+from sqlalchemy import create_engine, delete, or_, select, update
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
@@ -27,6 +29,7 @@ from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
     UserIdentity,
+    UserInvitation,
     UserType,
     UserTypeChange,
 )
@@ -41,6 +44,17 @@ from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
+from policyengine_api.services.v2.user_emails.services import V2UserEmailService
+from policyengine_api.services.v2.user_invitations.database_session import (
+    UserInvitationDatabaseSession,
+)
+from policyengine_api.services.v2.user_invitations.services import (
+    V2UserInvitationService,
+)
+from policyengine_api.services.v2.user_invitations.types import AdminInvitationSearch
+from policyengine_api.services.v2.user_invitations.validators import (
+    InviterNotAdminError,
+)
 from policyengine_api.services.v2.user_types.database_connectors.reads import (
     acquire_user_type_change_lock,
     read_admin_user_ids,
@@ -119,6 +133,14 @@ def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Sessi
             owned = select(UserIdentity.user_id).where(UserIdentity.issuer == issuer)
             user_ids = list(connection.execute(owned).scalars())
             if user_ids:
+                connection.execute(
+                    delete(UserInvitation).where(
+                        or_(
+                            UserInvitation.invited_by_user_id.in_(user_ids),
+                            UserInvitation.accepted_by_user_id.in_(user_ids),
+                        )
+                    )
+                )
                 connection.execute(
                     delete(LegacyUserMapping).where(
                         LegacyUserMapping.user_id.in_(user_ids)
@@ -511,3 +533,158 @@ def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> No
     assert isinstance(outcomes.get("error"), UserTypeChangedError)
     assert _stored_types(sessions, [bob_id]) == ["author"]
     assert _history(sessions, bob_id) == []
+
+
+class RecordingPostmark:
+    """Record each template email, as Postmark would accept it."""
+
+    app_url = "https://app.example.test"
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    def send_template(self, *, to, template_alias, template_model) -> None:
+        self.sent.append(
+            {"to": to, "template_alias": template_alias, "model": dict(template_model)}
+        )
+
+
+def _invitations(
+    sessions, postmark: RecordingPostmark, auth0: StandInAuth0
+) -> V2UserInvitationService:
+    def source() -> UserProfileSource:
+        return UserProfileSource(issuer=sessions.kw["info"]["issuer"], reader=auth0)
+
+    return V2UserInvitationService(
+        UserInvitationDatabaseSession(sessions),
+        user_email_service=V2UserEmailService(
+            email_sender_factory=lambda: postmark, user_profile_source_factory=source
+        ),
+        user_profile_source_factory=source,
+    )
+
+
+def _sent_token(postmark: RecordingPostmark) -> str:
+    return postmark.sent[-1]["model"]["accept_url"].split("#token=", 1)[1]
+
+
+def test_the_runtime_role_invites_accepts_and_dismisses(sessions) -> None:
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    postmark = RecordingPostmark()
+    auth0 = StandInAuth0(
+        Auth0UserProfile(
+            user_id=bob.subject,
+            email="Bob@Invited.example.test",
+            email_verified=True,
+            given_name=None,
+            family_name=None,
+            name=None,
+        )
+    )
+    invitations = _invitations(sessions, postmark, auth0)
+
+    withdrawn = invitations.create_invitation(
+        principal=alice, email="other@invited.example.test", user_type=UserType.ADMIN
+    )
+    invitations.revoke_invitation(principal=alice, invitation_id=withdrawn.id)
+    invited = invitations.create_invitation(
+        principal=alice, email="bob@invited.example.test", user_type=UserType.AUTHOR
+    )
+    resent = invitations.resend_invitation(principal=alice, invitation_id=invited.id)
+    listed = invitations.list_invitations(
+        principal=alice, search=AdminInvitationSearch()
+    )
+    acceptance = invitations.accept_invitation(
+        principal=bob, token=_sent_token(postmark), country_id="us"
+    )
+    latest = accounts.get_account(principal=bob, country_id="us").latest_type_change
+    assert latest is not None
+    accounts.dismiss_type_change(principal=bob, type_change_id=latest.id)
+    after_dismissal = accounts.get_account(principal=bob, country_id="us")
+
+    assert resent.last_sent_at is not None
+    assert invited.id in {item.id for item in listed.items}
+    assert withdrawn.id not in {item.id for item in listed.items}
+    assert acceptance.type_changed is True
+    assert _stored_types(sessions, [bob_id]) == ["author"]
+    (change,) = _history(sessions, bob_id)
+    assert (change.source, change.changed_by_user_id) == ("invitation", alice_id)
+    assert (latest.previous_user_type, latest.user_type) == (
+        UserType.STANDARD,
+        UserType.AUTHOR,
+    )
+    assert after_dismissal.latest_type_change is None
+    assert [email["template_alias"] for email in postmark.sent] == [
+        "user-invitation",
+        "user-invitation",
+        "user-invitation",
+        "user-type-changed",
+    ]
+    assert postmark.sent[-1]["to"] == "Bob@Invited.example.test"
+
+
+def test_an_acceptance_waits_for_its_inviters_demotion_and_is_refused(
+    sessions,
+) -> None:
+    """Carol demotes Alice while Bob's acceptance of Alice's invitation waits."""
+    alice = _principal(sessions, "alice")
+    bob = _principal(sessions, "bob")
+    carol = _principal(sessions, "carol")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    bob_id = accounts.get_account(principal=bob, country_id="us").id
+    carol_id = accounts.get_account(principal=carol, country_id="us").id
+    for user_id in (alice_id, carol_id):
+        _store_type_as_superuser(user_id, UserType.ADMIN)
+    postmark = RecordingPostmark()
+    auth0 = StandInAuth0(
+        Auth0UserProfile(
+            user_id=bob.subject,
+            email="bob@invited.example.test",
+            email_verified=True,
+            given_name=None,
+            family_name=None,
+            name=None,
+        )
+    )
+    _invitations(sessions, postmark, auth0).create_invitation(
+        principal=alice, email="bob@invited.example.test", user_type=UserType.ADMIN
+    )
+    token = _sent_token(postmark)
+    outcomes: dict[str, object] = {}
+    finished = threading.Event()
+
+    def bob_accepts() -> None:
+        try:
+            outcomes["result"] = _invitations(
+                sessions, postmark, auth0
+            ).accept_invitation(principal=bob, token=token, country_id="us")
+        except Exception as error:  # noqa: BLE001  # the test inspects the failure
+            outcomes["error"] = error
+        finally:
+            finished.set()
+
+    held = sessions()
+    try:
+        held.begin()
+        # Carol's change holds the user-type change lock, as the service's does.
+        assert sorted(_lock_and_read_admins(held)) == sorted([alice_id, carol_id])
+        waiting_acceptance = threading.Thread(target=bob_accepts)
+        waiting_acceptance.start()
+        assert not finished.wait(LOCK_WAIT_SECONDS)
+        alice_row = read_signed_in_user(held, alice_id, for_update=True)
+        assert alice_row is not None
+        update_user_type(held, alice_row, user_type=UserType.AUTHOR)
+        held.commit()
+    finally:
+        held.close()
+    waiting_acceptance.join(timeout=10)
+
+    # Alice is no longer an admin once Bob's turn comes, so it is refused.
+    assert isinstance(outcomes.get("error"), InviterNotAdminError)
+    assert _stored_types(sessions, [bob_id]) == ["standard"]

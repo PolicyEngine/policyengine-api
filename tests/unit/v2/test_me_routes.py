@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
 
+from policyengine_api.data.v2.models import UserType
 from policyengine_api.services.v2.identity.types import AccountConversionOutcome
 from policyengine_api.services.v2.identity.validators import (
     StandardUserRequiresSignInError,
@@ -15,12 +17,25 @@ from policyengine_api.services.v2.user_accounts.types import (
     AccountExport,
     AccountRead,
     AccountUpgrade,
+    LatestTypeChangeRead,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountEditRequiresSignInError,
     AccountIdentityDeletionError,
     AccountNotFoundError,
+    TypeChangeNotFoundError,
+)
+from policyengine_api.services.v2.user_invitations.types import InvitationAcceptance
+from policyengine_api.services.v2.user_invitations.validators import (
+    InvitationAcceptedError,
+    InvitationEmailMismatchError,
+    InvitationEmailNotVerifiedError,
+    InvitationEmailUnavailableError,
+    InvitationExpiredError,
+    InvitationRevokedError,
+    InvitationTokenNotFoundError,
+    InviterNotAdminError,
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead
@@ -102,7 +117,8 @@ def test_get_me_provisions_with_the_query_country() -> None:
                 "last_name": None,
                 "email": None,
                 "created_at": "2026-01-01T00:00:00Z",
-            }
+            },
+            "latest_type_change": None,
         },
     }
     assert service.calls == [
@@ -493,3 +509,198 @@ def test_import_route_is_removed() -> None:
 
     assert response.status_code == 405
     assert service.calls == []
+
+
+TYPE_CHANGE_ID = UUID("00000000-0000-0000-0000-000000000066")
+TYPE_CHANGED_AT = datetime(2026, 11, 1, tzinfo=UTC)
+
+
+def test_get_me_carries_the_latest_type_change_until_it_is_dismissed() -> None:
+    def result(_name: str, _kwargs: dict):
+        return _account(
+            user_type="author",
+            latest_type_change=LatestTypeChangeRead(
+                id=TYPE_CHANGE_ID,
+                previous_user_type=UserType.STANDARD,
+                user_type=UserType.AUTHOR,
+                changed_at=TYPE_CHANGED_AT,
+            ),
+        )
+
+    client, _service = _client(RecordingService(result))
+
+    read = client.get("/v2/me?country_id=us")
+    patched = client.patch("/v2/me?country_id=us", json={"first_name": "Ada"})
+
+    assert read.status_code == 200
+    assert read.json()["result"]["latest_type_change"] == {
+        "id": str(TYPE_CHANGE_ID),
+        "previous_user_type": "standard",
+        "user_type": "author",
+        "changed_at": "2026-11-01T00:00:00Z",
+    }
+    # Only reading the account reports the change.
+    assert set(patched.json()["result"]) == {"item"}
+
+
+def _accepting_client(invitations: RecordingService, **client_options):
+    client, _flask_calls = user_route_client(
+        v2_user_invitation_service_factory=lambda: invitations, **client_options
+    )
+    return client
+
+
+def test_a_signed_in_user_accepts_an_invitation_with_its_token() -> None:
+    invitations = RecordingService(
+        InvitationAcceptance(
+            user_type=UserType.ADMIN,
+            previous_user_type=UserType.STANDARD,
+            type_changed=True,
+        )
+    )
+    client = _accepting_client(invitations)
+
+    response = client.post(
+        "/v2/me/invitations/accept?country_id=UK", json={"token": "a-token"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "message": None,
+        "result": {
+            "item": {
+                "user_type": "admin",
+                "previous_user_type": "standard",
+                "type_changed": True,
+            }
+        },
+    }
+    assert invitations.calls == [
+        (
+            "accept_invitation",
+            {"principal": PRINCIPAL, "token": "a-token", "country_id": "uk"},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code"),
+    [
+        (
+            InvitationEmailUnavailableError("try again shortly"),
+            503,
+            "auth0_unavailable",
+        ),
+        (InvitationTokenNotFoundError("not valid"), 410, "invitation_not_found"),
+        (InvitationRevokedError("withdrawn"), 410, "invitation_revoked"),
+        (InvitationExpiredError("expired"), 410, "invitation_expired"),
+        (InvitationAcceptedError("already accepted"), 410, "invitation_accepted"),
+        (InviterNotAdminError("no longer an admin"), 409, "inviter_not_admin"),
+        (InvitationEmailNotVerifiedError("not verified"), 409, "email_not_verified"),
+        (InvitationEmailMismatchError("another address"), 403, "email_mismatch"),
+    ],
+)
+def test_each_refused_acceptance_names_its_reason(
+    error: Exception, status_code: int, code: str
+) -> None:
+    invitations = RecordingService()
+    invitations.error = error
+    client = _accepting_client(invitations)
+
+    response = client.post(
+        "/v2/me/invitations/accept?country_id=us", json={"token": "a-token"}
+    )
+
+    assert response.status_code == status_code
+    assert response.json() == {
+        "status": "error",
+        "message": str(error),
+        "code": code,
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/v2/me/invitations/accept", {"token": "a-token"}),
+        ("/v2/me/invitations/accept?country_id=us", {}),
+        ("/v2/me/invitations/accept?country_id=us", {"token": ""}),
+        ("/v2/me/invitations/accept?country_id=us", {"token": "t" * 257}),
+        ("/v2/me/invitations/accept?country_id=us", {"token": "t", "email": "x"}),
+    ],
+)
+def test_an_acceptance_needs_a_country_and_only_a_token(path: str, body: dict) -> None:
+    invitations = RecordingService()
+    client = _accepting_client(invitations)
+
+    response = client.post(path, json=body)
+
+    assert response.status_code == 422
+    assert invitations.calls == []
+
+
+def test_only_a_signed_in_user_accepts_an_invitation() -> None:
+    invitations = RecordingService()
+    client = _accepting_client(invitations, require_user=signed_out_browser)
+
+    response = client.post(
+        "/v2/me/invitations/accept?country_id=us",
+        json={"token": "a-token"},
+        headers=UNAUTHENTICATED_HEADERS,
+    )
+
+    assert response.status_code == 401
+    assert invitations.calls == []
+
+
+def test_a_signed_in_user_dismisses_a_type_change() -> None:
+    client, service = _client(RecordingService())
+
+    response = client.post(
+        f"/v2/me/type-changes/{TYPE_CHANGE_ID}/dismiss?country_id=us"
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert service.calls == [
+        (
+            "dismiss_type_change",
+            {"principal": PRINCIPAL, "type_change_id": TYPE_CHANGE_ID},
+        )
+    ]
+
+
+def test_dismissing_a_type_change_the_user_doesnt_have_is_not_found() -> None:
+    service = RecordingService()
+    service.error = TypeChangeNotFoundError("You have no type change with this ID")
+    client, _service = _client(service)
+
+    response = client.post(
+        f"/v2/me/type-changes/{TYPE_CHANGE_ID}/dismiss?country_id=us"
+    )
+
+    assert response.status_code == 404
+
+
+def test_only_a_signed_in_user_dismisses_a_type_change() -> None:
+    client, service = _client(RecordingService(), require_user=signed_out_browser)
+
+    response = client.post(
+        f"/v2/me/type-changes/{TYPE_CHANGE_ID}/dismiss?country_id=us",
+        headers=UNAUTHENTICATED_HEADERS,
+    )
+
+    assert response.status_code == 401
+    assert service.calls == []
+
+
+def test_the_openapi_document_names_each_refused_acceptance_code() -> None:
+    client = _accepting_client(RecordingService())
+
+    document = client.get("/v2/openapi.json").json()
+    accept = document["paths"]["/v2/me/invitations/accept"]["post"]
+
+    assert {"200", "401", "403", "409", "410", "422", "503"} <= set(accept["responses"])
+    for status in ("403", "409", "410", "503"):
+        assert "code" in str(accept["responses"][status])

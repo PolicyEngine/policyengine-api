@@ -44,6 +44,12 @@ if TYPE_CHECKING:
         UserHouseholdRead,
         UserHouseholdUpdateInput,
     )
+    from policyengine_api.services.v2.user_invitations.types import (
+        AdminInvitationPage,
+        AdminInvitationRead,
+        AdminInvitationSearch,
+        InvitationAcceptance,
+    )
     from policyengine_api.services.v2.user_policies.types import (
         UserPolicyCreateFields,
         UserPolicyFilter,
@@ -485,6 +491,15 @@ class V2AccountResourceService(Protocol):
         """
         ...
 
+    def dismiss_type_change(
+        self, *, principal: UserPrincipal, type_change_id: UUID
+    ) -> None:
+        """Record that the signed-in user dismissed the notice of a type change.
+
+        Raise ``TypeChangeNotFoundError`` unless the user has this change.
+        """
+        ...
+
 
 class V2UserTypeResourceService(Protocol):
     """Route-independent minimum user types and admins' changes to users' types."""
@@ -529,4 +544,48 @@ class V2UserTypeResourceService(Protocol):
         self, *, principal: AccountPrincipal, user_id: UUID
     ) -> tuple[UserTypeChangeRead, ...]:
         """Return a signed-in user's recorded type changes, newest first."""
+        ...
+
+
+class V2UserInvitationResourceService(Protocol):
+    """Route-independent email invitations and their acceptance."""
+
+    def create_invitation(
+        self, *, principal: AccountPrincipal, email: str, user_type: UserType
+    ) -> AdminInvitationRead:
+        """Invite an address to become an author or admin, then email it."""
+        ...
+
+    def list_invitations(
+        self, *, principal: AccountPrincipal, search: AdminInvitationSearch
+    ) -> AdminInvitationPage:
+        """Return one page of open invitations, newest first, to an admin."""
+        ...
+
+    def resend_invitation(
+        self, *, principal: AccountPrincipal, invitation_id: UUID
+    ) -> AdminInvitationRead:
+        """Give an open invitation a new link and expiry, and email it again.
+
+        Raise ``InvitationNotFoundError`` unless an open invitation has the ID.
+        """
+        ...
+
+    def revoke_invitation(
+        self, *, principal: AccountPrincipal, invitation_id: UUID
+    ) -> None:
+        """Revoke an open invitation.
+
+        Raise ``InvitationNotFoundError`` unless an open invitation has the ID.
+        """
+        ...
+
+    def accept_invitation(
+        self, *, principal: UserPrincipal, token: str, country_id: str
+    ) -> InvitationAcceptance:
+        """Accept an invitation for the signed-in user, giving its type.
+
+        Raise one of the invitation acceptance errors, each with its ``code``,
+        when it can't be accepted.
+        """
         ...

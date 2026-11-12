@@ -233,6 +233,31 @@ if (( auth0_user_profiles_count != 0 )) && [[ -z "${PUBLIC_API_AUTH_ISSUER:-}" ]
   exit 1
 fi
 
+# Optional: invitation and type-change emails go through Postmark only when
+# its server token's Secret Manager version, the sender address and the app's
+# address the emails link to are all set. Staging and production may both
+# configure it, each with its own Postmark server.
+postmark_count=0
+for name in \
+  POSTMARK_SERVER_TOKEN_SECRET_RESOURCE \
+  POSTMARK_SENDER_ADDRESS \
+  POLICYENGINE_APP_URL; do
+  if [[ -n "${!name:-}" ]]; then
+    postmark_count=$((postmark_count + 1))
+  fi
+done
+if (( postmark_count != 0 && postmark_count != 3 )); then
+  echo "Set POSTMARK_SERVER_TOKEN_SECRET_RESOURCE, POSTMARK_SENDER_ADDRESS, and POLICYENGINE_APP_URL together, or none" >&2
+  exit 1
+fi
+# The emails' links open the app, so its address is HTTPS, and has no query
+# or fragment for the links' paths to follow.
+app_url_pattern='^https://[^/?#[:space:]]+(/[^?#[:space:]]*)?$'
+if [[ -n "${POLICYENGINE_APP_URL:-}" && ! "${POLICYENGINE_APP_URL}" =~ ${app_url_pattern} ]]; then
+  echo "POLICYENGINE_APP_URL must be an https address with no query or fragment" >&2
+  exit 1
+fi
+
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
 )"

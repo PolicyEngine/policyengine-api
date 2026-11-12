@@ -564,3 +564,26 @@ def test_push_workflow_wires_auth0_user_profile_settings_to_both_deploys():
             assert line in job
     # The release tests never see them.
     assert "AUTH0_USER_PROFILES" not in _workflow_job_block(workflow, RELEASE_TESTS_JOB)
+
+
+def test_push_workflow_wires_postmark_settings_to_both_deploys():
+    """Each deploy job gets its environment's Postmark server and app address."""
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    for job, environment in ((staging, "staging"), (production, "production")):
+        assert f"    environment: {environment}\n" in job
+        for line in (
+            "POSTMARK_SERVER_TOKEN_SECRET_RESOURCE: "
+            "${{ secrets.POSTMARK_SERVER_TOKEN_SECRET_RESOURCE }}",
+            "POSTMARK_SENDER_ADDRESS: ${{ vars.POSTMARK_SENDER_ADDRESS }}",
+            "POLICYENGINE_APP_URL: ${{ vars.POLICYENGINE_APP_URL }}",
+        ):
+            assert line in job
+        # The deploy names the token's Secret Manager version, never the token.
+        assert "POSTMARK_SERVER_TOKEN:" not in job
+    # The release tests never see them.
+    release_tests = _workflow_job_block(workflow, RELEASE_TESTS_JOB)
+    assert "POSTMARK" not in release_tests
+    assert "POLICYENGINE_APP_URL" not in release_tests

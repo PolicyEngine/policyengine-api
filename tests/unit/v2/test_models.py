@@ -1022,9 +1022,14 @@ def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> Non
         "previous_user_type",
         "new_user_type",
         "source",
+        "dismissed_at",
     }
     assert not changes.c.user_id.nullable
     assert changes.c.changed_by_user_id.nullable
+    # Set when the user dismisses the app's notice of the change.
+    assert changes.c.dismissed_at.nullable
+    assert isinstance(changes.c.dismissed_at.type, sa.DateTime)
+    assert changes.c.dismissed_at.type.timezone is True
     foreign_keys = {
         key.parent.name: (key.column.table.name, key.ondelete)
         for key in changes.foreign_keys
@@ -1046,9 +1051,74 @@ def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> Non
         ),
         "ck_user_type_changes_new_user_type": f"new_user_type IN {signed_in_types}",
         "ck_user_type_changes_changed_type": "previous_user_type <> new_user_type",
-        "ck_user_type_changes_source": "source IN ('admin_route', 'script')",
+        # Renamed when invitation was allowed: Alembic compares checks by
+        # name only, so a new name makes autogenerate replace the check.
+        "ck_user_type_changes_source_allowed": (
+            "source IN ('admin_route', 'script', 'invitation')"
+        ),
     }
     # The admin's index serves the SET NULL that each user deletion runs.
     assert {
         tuple(column.name for column in index.columns) for index in changes.indexes
     } == {("user_id", "created_at"), ("changed_by_user_id",)}
+
+
+def test_user_invitations_hold_each_invitation_and_only_its_token_hash() -> None:
+    invitations = V2_METADATA.tables["user_invitations"]
+
+    assert {column.name for column in invitations.columns} == {
+        "id",
+        "created_at",
+        "email",
+        "user_type",
+        "token_hash",
+        "invited_by_user_id",
+        "expires_at",
+        "last_sent_at",
+        "last_send_error",
+        "accepted_at",
+        "accepted_by_user_id",
+        "revoked_at",
+    }
+    required = {"id", "created_at", "email", "user_type", "token_hash", "expires_at"}
+    assert {
+        column.name for column in invitations.columns if not column.nullable
+    } == required
+    for name in ("expires_at", "last_sent_at", "accepted_at", "revoked_at"):
+        column_type = invitations.c[name].type
+        assert isinstance(column_type, sa.DateTime), name
+        assert column_type.timezone is True, name
+    assert invitations.c.email.type.length == 320
+    # A SHA-256 digest in hexadecimal; the token itself is never stored.
+    assert invitations.c.token_hash.type.length == 64
+    assert invitations.c.last_send_error.type.length == 64
+    foreign_keys = {
+        key.parent.name: (key.column.table.name, key.ondelete)
+        for key in invitations.foreign_keys
+    }
+    # Deleting the inviting or accepting user keeps the invitation.
+    assert foreign_keys == {
+        "invited_by_user_id": ("users", "SET NULL"),
+        "accepted_by_user_id": ("users", "SET NULL"),
+    }
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in invitations.constraints
+        if isinstance(constraint, sa.CheckConstraint)
+    }
+    assert checks == {
+        "ck_user_invitations_user_type": "user_type IN ('author', 'admin')",
+        "ck_user_invitations_accepted_or_revoked": (
+            "accepted_at IS NULL OR revoked_at IS NULL"
+        ),
+    }
+    unique = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in invitations.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert unique == {("token_hash",)}
+    # The users' indexes serve the SET NULL that each user deletion runs.
+    assert {
+        tuple(column.name for column in index.columns) for index in invitations.indexes
+    } == {("invited_by_user_id",), ("accepted_by_user_id",)}

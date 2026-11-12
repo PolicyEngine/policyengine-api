@@ -208,18 +208,21 @@ The response shapes are unchanged; the routes' OpenAPI descriptions say where
 the emails and names come from.
 
 Each change is a row of `user_type_changes`: the user, the previous and new
-types, the admin (`changed_by_user_id`) and the `source`, `admin_route` or
-`script`. Deleting the user deletes its changes; deleting the admin keeps them
-with no admin.
+types, the admin (`changed_by_user_id`), the `source`, `admin_route`,
+`invitation` or `script`, and `dismissed_at`, when the user dismissed the
+app's notice of it. Deleting the user deletes its changes; deleting the admin
+keeps them with no admin.
 
 A change that would leave no admin is refused with 409, and so is the last
-admin's `DELETE /v2/me`. Every change, the script's included, and every
+admin's `DELETE /v2/me`. Every change, the script's and an invitation's
+included, every invitation an admin creates, resends or revokes, and every
 signed-in account deletion first takes one transaction-scoped advisory lock
 (`pg_advisory_xact_lock(8629020026100001)`), then reads the admins in a
-statement of its own and checks the caller, or the deleted user, against
-them. Because of that lock, concurrent changes and deletions run one at a
-time, and each reads the admins the ones before it committed; an admin
-demoted by an earlier change is then refused with 403. An admin's change to
+statement of its own and checks the caller, the invitation's admin, or the
+deleted user, against them. Because of that lock, concurrent changes,
+invitations and deletions run one at a time, and each reads the admins the
+ones before it committed; an admin demoted by an earlier change is then
+refused with 403. An admin's change to
 another type then also compares the user's locked row with
 `expected_user_type`, as the route table says; the script's changes don't. Locking the admins' rows instead would miss
 a user promoted while the lock was awaited, since a waiting query rechecks
@@ -233,7 +236,109 @@ settings (`V2_RUNTIME_DATABASE_URL` or
 `V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE`, `V2_SUPABASE_PROJECT_REF`,
 `V2_SUPABASE_ENVIRONMENT`), and refuses an address with no signed-in user, or
 several, and the last admin's demotion. A person's user exists only after
-their first signed-in request to the detailed-save routes.
+their first signed-in request to the detailed-save routes. Like an admin's
+change, the script's change emails the user (below) when it has the
+`AUTH0_USER_PROFILES_*` and `POSTMARK_*` settings.
+
+### Email invitations
+
+An admin invites an email address to become an author or admin; the person
+signs in, or signs up, through Auth0 and the app accepts the invitation for
+them. No email address of a user is stored: the invitee's is read from Auth0
+when they accept.
+
+| Route | What it does |
+| --- | --- |
+| `POST /v2/admin/invitations` `{"email": …, "user_type": "author" or "admin"}` | Creates the invitation (201), then emails its link. `email` is stripped and must be one address (an `@` with text on both sides, no whitespace, `<` or `>`, at most 320 characters). An open invitation to the same address, compared ignoring case, is revoked first. |
+| `GET /v2/admin/invitations?offset=&limit=` | Open invitations (neither accepted nor revoked), newest first, expired ones included. |
+| `POST /v2/admin/invitations/{invitation_id}/resend` | A new link and a new 7-day expiry, the caller as its inviting admin, and the email again; 404 unless the invitation is open. An expired one can be resent. |
+| `DELETE /v2/admin/invitations/{invitation_id}` | Revokes it (204); 404 unless it is open. |
+| `POST /v2/me/invitations/accept?country_id=` `{"token": …}` | Signed-in users only (401 for the unauthenticated-user header). Accepts it; see below. |
+
+An invitation item is `{id, email, user_type, invited_by_user_id, created_at,
+expires_at, expired, last_sent_at, last_send_error}`. `last_sent_at` is when
+Postmark accepted the email with the current link; `last_send_error` names
+why the last send failed, as `not_configured`, `timeout`,
+`connection_error`, `http_<status>`, `postmark_<ErrorCode>` (`postmark_406`
+for an address Postmark suppresses) or `secret_unavailable`. A failed send
+still answers 201 or 200, and the invitation stays open for a resend.
+
+Each invitation's token is 32 random bytes from `secrets`, URL-safe base64,
+sent only in the email's link, `<POLICYENGINE_APP_URL>/invitations/accept#token=<token>`:
+in the fragment, which browsers never send to a server. `user_invitations`
+stores only its SHA-256 digest, in hexadecimal. A resend replaces it, so the
+earlier link finds no invitation.
+
+Acceptance first reads the signed-in identity's profile from the users'
+Auth0 tenant by its Auth0 user ID, through the `AUTH0_USER_PROFILES_*`
+client (503 `auth0_unavailable` without those settings or when Auth0 can't
+answer; the app tries again). An identity from another issuer, or one Auth0
+doesn't know, has no verified email. Then, in one transaction, the caller's
+user is provisioned as on any first signed-in request, the user-type change
+lock is taken, and these are checked in order, each refusal naming its
+`code` next to `status` and `message`:
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 410 | `invitation_not_found` | No invitation has the token's digest. |
+| 410 | `invitation_revoked` | It was revoked, or replaced by a newer invitation to the address. |
+| 410 | `invitation_accepted` | It was accepted already. |
+| 410 | `invitation_expired` | Its 7 days have passed. |
+| 409 | `inviter_not_admin` | Its inviting admin is no longer among the admins read after the lock. |
+| 409 | `email_not_verified` | Auth0 has no verified email for the user; it may after they open Auth0's verification email. |
+| 403 | `email_mismatch` | The verified email isn't the invited address, compared whole and ignoring case. The invitation stays open. |
+
+Otherwise the invitation is marked accepted by the user, and the user gets
+its type unless they already have it or a higher one: an invitation never
+lowers a type, so the last-admin rule can't apply. A change is recorded with
+`source = invitation` and the inviting admin as `changed_by_user_id`. The
+response is `{user_type, previous_user_type, type_changed}`. Nothing changes
+when any check refuses.
+
+### Type-change emails and the notice
+
+After a type change commits, through an admin's `PATCH`, an invitation or
+the script, the user, and only the user, is emailed. The address is the
+first verified Auth0 email among the user's identities from the users'
+issuer, most recently seen first, read then and never stored; an
+acceptance uses the address it already read. When there are no `POSTMARK_*`
+settings, no user profile settings, no verified email, Auth0 can't answer,
+or the send fails, nothing is sent and the WARNING
+`user_type_change_email_not_sent` names only the v2 user ID and a cause
+(`not_configured`, `no_user_profiles`, `no_verified_email`,
+`profiles_unavailable`, or the sender's cause); an unsent invitation is the
+WARNING `user_invitation_email_not_sent` with the invitation's ID. A failed
+email never undoes or fails the change, and there is no queue: an admin
+resends an invitation instead.
+
+`GET /v2/me` answers `result.latest_type_change`, `{id, previous_user_type,
+user_type, changed_at}`, for the user's most recent change until
+`POST /v2/me/type-changes/{type_change_id}/dismiss?country_id=` (204;
+signed-in users only; 404 for a change that isn't the caller's) sets its
+`dismissed_at`. It is null when the user's type never changed, once the most
+recent change is dismissed (an older one doesn't come back), and for a
+signed-out browser. `PATCH /v2/me` answers only `result.item`.
+
+### Sending through Postmark
+
+`policyengine_api/libs/postmark_email.py` sends each email with Postmark's
+`POST https://api.postmarkapp.com/email/withTemplate`, on the `outbound`
+transactional message stream, from `POSTMARK_SENDER_ADDRESS`, with the
+template alias and its data:
+
+| Template alias | To | Template data |
+| --- | --- | --- |
+| `user-invitation` | The invited address | `user_type`, `accept_url`, `expires_at` (for example `19 November 2026, 14:05 UTC`), `app_url` |
+| `user-type-changed` | The user's verified Auth0 email | `previous_user_type`, `user_type`, `promoted` (the new type has more permissions), `app_url` |
+
+A timeout, a connection error, 429 or a 5xx is tried again, three attempts in
+all, after waits of 0.5 and 1 second, within the request; a retried timeout
+may send an email twice. Any other answer, such as 422 with Postmark's own
+error code, is final. Postmark keeps the templates and their layout, delivers
+to the recipient's mail server, signs with DKIM, suppresses addresses that
+bounced or complained, and logs each message, so the Public API does none of
+that. The templates are created on each environment's Postmark server
+(C3 · 14).
 
 ## Provisioning strategies
 
@@ -553,9 +658,11 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the user type changes revision (`970be5d29283`) drops
-  every recorded change, the user types revision (`617f531f1506`) needs no
-  author or admin, and the simulation runs revision (`1356f658347d`) needs
+  downgrades run first: the user invitations revision (`bb09a374231f`) drops
+  every invitation and dismissal and needs no change with source
+  `invitation`, the user type changes revision (`970be5d29283`) drops every
+  recorded change, the user types revision (`617f531f1506`) needs no author
+  or admin, and the simulation runs revision (`1356f658347d`) needs
   `simulations` empty.
 
 ### Schema compatibility
@@ -613,6 +720,9 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 | `AUTH0_USER_PROFILES_DOMAIN` | GitHub variable (optional, `staging` and `production`) | The users' tenant's canonical domain, for reading users' emails and names for the admin routes; the group needs `PUBLIC_API_AUTH_ISSUER` |
 | `AUTH0_USER_PROFILES_CLIENT_ID` | GitHub variable (optional, `staging` and `production`) | Read-only M2M client with `read:users` |
 | `AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE` | GitHub secret (optional, `staging` and `production`) | Secret Manager version holding that client's secret |
+| `POSTMARK_SERVER_TOKEN_SECRET_RESOURCE` | GitHub secret (optional, `staging` and `production`) | Secret Manager version holding the environment's Postmark server token, read when an email is sent (`POSTMARK_SERVER_TOKEN`, the token itself, is for local use) |
+| `POSTMARK_SENDER_ADDRESS` | GitHub variable (optional, `staging` and `production`) | The emails' From address, on a sender signature or domain the Postmark server has verified; may carry a display name |
+| `POLICYENGINE_APP_URL` | GitHub variable (optional, `staging` and `production`) | The app's HTTPS address the emails link to, with no query or fragment; the accept page is its `/invitations/accept` |
 
 > **Set the final issuer before the first sign-in.** `user_identities` is
 > keyed by `(issuer, subject)`, so `PUBLIC_API_AUTH_ISSUER` must hold its
@@ -630,10 +740,16 @@ each all-or-none: a domain, a client ID and exactly one client-secret source
 the same client code and token cache; they are separate so that staging can
 read users without being able to delete them.
 
+The email settings, `POSTMARK_SENDER_ADDRESS`, `POLICYENGINE_APP_URL` and
+exactly one server-token source, are all-or-none too. Without them no email
+is sent, each unsent one is a WARNING, and invitations stay open with
+`last_send_error` `not_configured`. Invitations can be accepted only with the
+`AUTH0_USER_PROFILES_*` settings, and type-change emails need both groups.
+
 `readiness.validate_policy_runtime_configuration` validates the
 `PUBLIC_API_AUTH_*`, `PUBLIC_API_SERVER_AUTH_ISSUER`,
-`PUBLIC_API_SERVER_CLIENT_IDS`, `AUTH0_MANAGEMENT_*` and
-`AUTH0_USER_PROFILES_*` settings. Inconsistent values fail
+`PUBLIC_API_SERVER_CLIENT_IDS`, `AUTH0_MANAGEMENT_*`,
+`AUTH0_USER_PROFILES_*` and email settings. Inconsistent values fail
 readiness, which the deploy waits on. Request handling reads the
 `PUBLIC_API_AUTH_*` settings only for a bearer token, so nothing in them
 blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
@@ -641,11 +757,13 @@ blocks a signed-out request. `validate_cloud_run_deploy_env.sh` requires
 all-or-none Management and user profile settings, and it rejects Management
 settings outside production, user profile settings without
 `PUBLIC_API_AUTH_ISSUER` and a malformed `PUBLIC_API_SERVER_CLIENT_IDS`.
-It allows the user profile settings in staging and production.
-`deploy_cloud_run_candidate.sh` writes them to the revision. The release test
-step unsets the `PUBLIC_API_AUTH_*` and `PUBLIC_API_SERVER_*` settings; the
-`release-tests` job never receives the `AUTH0_MANAGEMENT_*` or
-`AUTH0_USER_PROFILES_*` settings.
+It allows the user profile settings in staging and production, and the
+email settings there too, all three or none, with an HTTPS
+`POLICYENGINE_APP_URL`. `deploy_cloud_run_candidate.sh` writes them to the
+revision from each deploy job's `env:` in `push.yml`. The release test step
+unsets the `PUBLIC_API_AUTH_*` and `PUBLIC_API_SERVER_*` settings; the
+`release-tests` job never receives the `AUTH0_MANAGEMENT_*`,
+`AUTH0_USER_PROFILES_*` or email settings.
 
 Every request's `Authorization` header is checked before route matching
 (`policyengine_api.request_caller`), so a bearer token sent to any route, not
@@ -780,6 +898,25 @@ Configure staging first, then production:
    production) `roles/secretmanager.secretAccessor` on that secret, with the
    command above. Without the grant, or without `read:users`, admins see
    stored values and an email search answers 503.
+
+## Postmark prerequisites (operator)
+
+For each environment, staging first (C3 · 14):
+
+1. **A Postmark server** with a verified sender signature or domain for the
+   sender address (DKIM and Return-Path records in the sending domain's DNS).
+   Postmark may review a new account before it sends to outside addresses.
+2. **Two templates**, with the aliases `user-invitation` and
+   `user-type-changed`, filled from the template data under "Sending through
+   Postmark"; create them on the staging server and copy them to the
+   production server with Postmark's template copying.
+3. **The server token** in Secret Manager, its version's resource name in
+   the environment's `POSTMARK_SERVER_TOKEN_SECRET_RESOURCE` GitHub secret,
+   and `roles/secretmanager.secretAccessor` on that secret for the
+   environment's Cloud Run runtime service account, with the command above.
+   Without the grant every email fails with `secret_unavailable`.
+4. **`POSTMARK_SENDER_ADDRESS` and `POLICYENGINE_APP_URL`**, GitHub variables
+   of the environment. They take effect at the next deploy.
 
 ## Rollout
 

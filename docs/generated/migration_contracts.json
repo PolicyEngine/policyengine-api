@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 92,
+    "request_count": 94,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 17
@@ -1179,7 +1179,8 @@
             "result.item.first_name",
             "result.item.last_name",
             "result.item.email",
-            "result.item.created_at"
+            "result.item.created_at",
+            "result.latest_type_change"
           ]
         },
         {
@@ -1199,7 +1200,8 @@
             "result.item.first_name",
             "result.item.last_name",
             "result.item.email",
-            "result.item.created_at"
+            "result.item.created_at",
+            "result.latest_type_change"
           ]
         },
         {
@@ -1272,6 +1274,32 @@
             "result.item.primary_country",
             "result.outcome"
           ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "POST",
+          "path": "/v2/me/invitations/accept?country_id=us",
+          "route_group": "user_profile",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.user_type",
+            "result.item.previous_user_type",
+            "result.item.type_changed"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "POST",
+          "path": "/v2/me/type-changes/{type_change_id}/dismiss?country_id=us",
+          "route_group": "user_profile",
+          "stable_response_fields": []
         },
         {
           "expected_status": 204,

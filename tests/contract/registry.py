@@ -474,6 +474,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                         "result.item.last_name",
                         "result.item.email",
                         "result.item.created_at",
+                        "result.latest_type_change",
                     ),
                     route_group="user_profile",
                     headers=headers,
@@ -528,6 +529,28 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 ),
                 route_group="user_profile",
                 headers=(AUTHORIZATION_HEADER, UNAUTHENTICATED_USER_HEADER),
+            ),
+            ContractRequest(
+                method="POST",
+                path="/v2/me/invitations/accept?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.item.user_type",
+                    "result.item.previous_user_type",
+                    "result.item.type_changed",
+                ),
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
+            ),
+            ContractRequest(
+                method="POST",
+                path="/v2/me/type-changes/{type_change_id}/dismiss?country_id=us",
+                expected_status=204,
+                stable_response_fields=(),
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
             ),
             *(
                 ContractRequest(

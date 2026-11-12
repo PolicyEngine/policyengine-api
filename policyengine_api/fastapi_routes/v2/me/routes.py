@@ -5,6 +5,9 @@ with ``primary_country`` taken from ``country_id``. A signed-out browser's
 unauthenticated user exists only after its first saved record, so reading
 an absent one returns 404 and exporting it returns nothing. Every route
 requires a credential; authentication is a router-level dependency.
+
+Reading the account also reports the user's latest type change until it is
+dismissed; ``user_type_routes`` accepts invitations and dismisses changes.
 """
 
 from collections.abc import Callable
@@ -17,10 +20,13 @@ from starlette.responses import JSONResponse, Response
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
     V2AccountResourceService,
-    _default_v2_account_service_factory,
 )
-from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.me.account_support import (
+    CountryQueryDependency,
+    account_service_factory,
+    signed_in_user_dependency,
+)
 from policyengine_api.fastapi_routes.v2.me.request_models import (
     AccountPatchRequest,
 )
@@ -30,11 +36,10 @@ from policyengine_api.fastapi_routes.v2.me.response_models import (
     MeExportResponse,
     MeExportResult,
     MeItem,
+    MeReadResponse,
+    MeReadResult,
     MeUpgradeResponse,
     MeUpgradeResult,
-)
-from policyengine_api.fastapi_routes.v2.user_auth_support import (
-    require_signed_in_principal,
 )
 from policyengine_api.fastapi_routes.v2.user_resources_support import (
     USER_RESOURCE_ERROR_RESPONSES,
@@ -45,36 +50,10 @@ from policyengine_api.libs.user_auth import (
     CANONICAL_UUID_PATTERN,
     UNAUTHENTICATED_USER_HEADER,
 )
-from policyengine_api.query_parameters import CountryQuery
 from policyengine_api.services.v2.identity.types import (
     AccountPrincipal,
     UserPrincipal,
 )
-
-CountryQueryDependency = Annotated[
-    CountryQuery, Depends(query_dependency(CountryQuery))
-]
-
-
-def _service_factory(
-    dependencies: NativeRouteDependencies,
-) -> Callable[[], V2AccountResourceService]:
-    if dependencies.v2_account_service_factory is not None:
-        return dependencies.v2_account_service_factory
-    return _default_v2_account_service_factory
-
-
-def _signed_in_user_dependency(
-    require_user: Callable[..., AccountPrincipal],
-) -> Callable[..., UserPrincipal]:
-    """Build a dependency that admits only a signed-in principal of ``require_user``."""
-
-    def require_signed_in_user(
-        principal: Annotated[AccountPrincipal, Depends(require_user)],
-    ) -> UserPrincipal:
-        return require_signed_in_principal(principal)
-
-    return require_signed_in_user
 
 
 def _upgrade_account(
@@ -104,31 +83,32 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         responses=USER_RESOURCE_ERROR_RESPONSES,
         dependencies=[Depends(require_user)],
     )
-    service_factory = _service_factory(dependencies)
-    require_signed_in_user = _signed_in_user_dependency(require_user)
+    service_factory = account_service_factory(dependencies)
+    require_signed_in_user = signed_in_user_dependency(require_user)
 
     @router.get(
         "/me",
-        response_model=MeDetailResponse,
+        response_model=MeReadResponse,
         summary="Read the current user",
         description=(
             "For a bearer access token, returns the PolicyEngine user, creating "
             "it on the first call with primary_country set from country_id. For "
             "the PolicyEngine-Unauthenticated-User header, returns the "
             "browser's unauthenticated user, or 404 before its first saved "
-            "record; reading never creates one."
+            "record; reading never creates one. latest_type_change is the "
+            "user's most recent type change until it is dismissed, else null."
         ),
     )
     def get_me(
         query: CountryQueryDependency,
         principal: Annotated[AccountPrincipal, Depends(require_user)],
-    ) -> MeDetailResponse | JSONResponse:
-        def read() -> MeDetailResponse:
-            item = service_factory().get_account(
+    ) -> MeReadResponse | JSONResponse:
+        def read() -> MeReadResponse:
+            account = service_factory().get_account(
                 principal=principal,
                 country_id=query.country_id,
             )
-            return MeDetailResponse(result=MeDetailResult(item=MeItem.from_read(item)))
+            return MeReadResponse(result=MeReadResult.from_read(account))
 
         return user_resource_operation(read)
 

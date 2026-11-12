@@ -8,7 +8,10 @@ Usage::
 The email is compared whole, ignoring case, with the user's own email and its
 sign-in identities' emails; exactly one signed-in user must match. The change
 is recorded in the user's type history with no admin named. Demoting the last
-admin is refused, as it is through the admin routes.
+admin is refused, as it is through the admin routes. After the change, the
+user is emailed at their verified Auth0 email, as for an admin's change, when
+the ``AUTH0_USER_PROFILES_*`` and ``POSTMARK_*`` settings are set; otherwise a
+WARNING record says no email was sent.
 
 It connects as the Public API's runtime role, configured as the deployed
 Public API is: ``V2_RUNTIME_DATABASE_URL`` (or
@@ -24,6 +27,9 @@ import sys
 from typing import TYPE_CHECKING, Protocol
 
 from policyengine_api.data.v2.models import SIGNED_IN_USER_TYPES, UserType
+
+# The route dependencies build the email service the admin routes use.
+from policyengine_api.fastapi_routes.dependencies import _default_user_email_service
 from policyengine_api.services.v2.user_types.validators import (
     LastAdminDemotionError,
     UserEmailMatchError,
@@ -51,9 +57,7 @@ def _runtime_user_type_service() -> UserTypeSetter:
     """Build the user-type service on the runtime role's database connection."""
     # These modules are imported only when the command runs, as they read the
     # database settings or need the connection.
-    from policyengine_api.data.v2.database import (
-        get_v2_session_factory,
-    )
+    from policyengine_api.data.v2 import database
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
     )
@@ -61,7 +65,10 @@ def _runtime_user_type_service() -> UserTypeSetter:
         V2UserTypeService,
     )
 
-    return V2UserTypeService(UserTypeDatabaseSession(get_v2_session_factory()))
+    return V2UserTypeService(
+        UserTypeDatabaseSession(database.get_v2_session_factory()),
+        user_email_service=_default_user_email_service(),
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
