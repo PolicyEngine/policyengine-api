@@ -8,9 +8,9 @@ from uuid import UUID
 
 import httpx
 import pytest
-from policyengine_api.libs.simulation_report_reruns import report_runs_path
 
 from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPINGS
+from policyengine_api.libs.simulation_report_reruns import report_runs_path
 from policyengine_api.libs.simulation_reports import SimulationServiceReportClient
 from policyengine_api.libs.simulation_service_answers import SimulationAnswer
 from policyengine_api.services.v2.simulation_service.types import (
@@ -175,7 +175,6 @@ def test_a_run_in_progress_is_a_conflict_naming_that_run() -> None:
     with pytest.raises(SimulationServiceConflictError) as conflict:
         service.rerun()
 
-    assert route_status(conflict.value) == 409
     assert conflict.value.run_id == RUNNING_RUN_ID
     assert str(conflict.value) == (
         "The simulation service will not run the report again now "

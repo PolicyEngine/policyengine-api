@@ -8,6 +8,7 @@ country and policies, and reading the report and its runs back.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -45,6 +46,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     PackageVersions,
     ReportRerunInput,
     SimulationServiceConflictError,
+    SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
@@ -89,18 +91,23 @@ class RerunningSimulationService:
 
     With ``delete_report``, the report is deleted once its new run is stored,
     so reading it back finds nothing. With ``refusal``, it stores nothing and
-    raises it, as the simulation service refuses.
+    raises it, as the simulation service refuses. With ``database_session``,
+    it records how many of the report service's sessions are open when asked.
     """
 
     engine: Engine
     catalog: CatalogRows
     delete_report: bool = False
     refusal: Exception | None = None
+    database_session: CountingDatabaseSession | None = None
     reruns: list[ReportRerunInput] = field(default_factory=list)
     new_run_ids: list[UUID] = field(default_factory=list)
+    open_sessions_when_asked: list[int] = field(default_factory=list)
 
     def rerun_report(self, rerun: ReportRerunInput) -> None:
         self.reruns.append(rerun)
+        if self.database_session is not None:
+            self.open_sessions_when_asked.append(self.database_session.open_sessions)
         if self.refusal is not None:
             raise self.refusal
         with self.engine.begin() as connection:
@@ -159,8 +166,27 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
     engine.dispose()
 
 
+class CountingDatabaseSession(StoredReportDatabaseSession):
+    """Count the report service's read sessions open at each moment."""
+
+    def __init__(self, sessions: Any) -> None:
+        super().__init__(sessions)
+        self.open_sessions = 0
+
+    @contextmanager
+    def read(self) -> Iterator[Session]:
+        self.open_sessions += 1
+        try:
+            with super().read() as session:
+                yield session
+        finally:
+            self.open_sessions -= 1
+
+
 def client_for(
-    sessions: Any, simulation_service: RerunningSimulationService
+    sessions: Any,
+    simulation_service: RerunningSimulationService,
+    database_session: StoredReportDatabaseSession | None = None,
 ) -> TestClient:
     """Serve the routes as the runtime role, running reports through the stand-in."""
     submissions = SimulationSubmissionService(
@@ -175,7 +201,7 @@ def client_for(
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
         v2_stored_report_service_factory=lambda: V2StoredReportService(
-            StoredReportDatabaseSession(sessions),
+            database_session or StoredReportDatabaseSession(sessions),
             current_versions=current_versions,
             submissions=submissions,
         ),
@@ -317,7 +343,10 @@ def test_a_budget_windows_runs_are_not_listed_or_started_here_yet(
     )
 
     assert response.status_code == 422
-    assert "budget window" in response.json()["message"]
+    assert response.json()["message"] == (
+        f"Report {budget_window.report_id} is a budget window, whose runs these "
+        "routes do not start or list yet"
+    )
     assert simulation_service.reruns == []
 
 
@@ -418,3 +447,43 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id(
         ),
         "report_id": str(report.report_id),
     }
+
+
+def test_no_report_session_is_open_while_the_simulation_service_is_asked(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    database_session = CountingDatabaseSession(runtime_sessions)
+    simulation_service = RerunningSimulationService(
+        owner_engine, catalog, database_session=database_session
+    )
+    client = client_for(runtime_sessions, simulation_service, database_session)
+
+    response = client.post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 201, response.text
+    assert simulation_service.open_sessions_when_asked == [0]
+    assert database_session.open_sessions == 0
+
+
+def test_the_simulation_services_refusal_is_answered_as_its_own(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    # The report exists, so the service's refusal is not mistaken for a
+    # report that cannot be read back.
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    message = "The simulation service is unavailable (503 manifest_unavailable)."
+    simulation_service = RerunningSimulationService(
+        owner_engine, catalog, refusal=SimulationServiceUnavailableError(message)
+    )
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "error", "message": message}
