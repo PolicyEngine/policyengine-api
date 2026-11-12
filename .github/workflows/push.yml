@@ -519,7 +519,8 @@ jobs:
       PUBLIC_API_SERVER_CREDENTIAL_REQUIRED: ${{ vars.PUBLIC_API_SERVER_CREDENTIAL_REQUIRED }}
       PUBLIC_API_SERVER_AUTH_ISSUER: ${{ vars.PUBLIC_API_SERVER_AUTH_ISSUER }}
       # Read-only (read:users) Auth0 client for admins' views of users. Unlike
-      # AUTH0_MANAGEMENT_*, it can't delete the staging CI user.
+      # the production-only account-deletion settings, it can't delete the
+      # staging CI user.
       AUTH0_USER_PROFILES_DOMAIN: ${{ vars.AUTH0_USER_PROFILES_DOMAIN }}
       AUTH0_USER_PROFILES_CLIENT_ID: ${{ vars.AUTH0_USER_PROFILES_CLIENT_ID }}
       AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE: ${{ secrets.AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE }}
