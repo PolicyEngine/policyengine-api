@@ -17,6 +17,7 @@ from policyengine_api.fastapi_routes.metadata_protocols import (
 from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2AccountResourceService,
     V2CountryResourceService,
+    V2HouseholdCalculationResourceService,
     V2HouseholdResourceService,
     V2PolicyResourceService,
     V2UserHouseholdResourceService,
@@ -36,12 +37,14 @@ from policyengine_api.libs.server_credentials import CallerKind
 from policyengine_api.libs.user_auth import (
     FORWARDED_USER_AUTHORIZATION_HEADER,
     UNAUTHENTICATED_USER_HEADER,
+    load_user_auth_settings,
 )
 from policyengine_api.readiness import is_ready
 from policyengine_api.request_caller import current_request_caller
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
+from policyengine_api.services.v2.user_types.types import UserProfileSource
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -59,6 +62,7 @@ __all__ = [
     "SimulationGatewayProbe",
     "V2AccountResourceService",
     "V2CountryResourceService",
+    "V2HouseholdCalculationResourceService",
     "V2HouseholdResourceService",
     "V2MetadataResourceReader",
     "V2PolicyResourceService",
@@ -169,6 +173,31 @@ def _default_v2_household_service_factory() -> V2HouseholdResourceService:
 
     return V2HouseholdService(
         HouseholdDatabaseSession(get_v2_session_factory()),
+    )
+
+
+def _default_v2_household_calculation_service_factory() -> (
+    V2HouseholdCalculationResourceService
+):
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.libs.simulation_household_calculations import (
+        process_simulation_household_calculation_client,
+    )
+    from policyengine_api.services.v2.household_calculations.database_session import (
+        HouseholdCalculationDatabaseSession,
+    )
+    from policyengine_api.services.v2.household_calculations.services import (
+        V2HouseholdCalculationService,
+    )
+
+    return V2HouseholdCalculationService(
+        countries=_default_v2_country_service_factory(),
+        households=_default_v2_household_service_factory(),
+        policies=_default_v2_policy_service_factory(),
+        database_session=HouseholdCalculationDatabaseSession(get_v2_session_factory()),
+        simulation_factory=process_simulation_household_calculation_client,
     )
 
 
@@ -322,6 +351,24 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
     )
 
 
+def _default_user_profile_source() -> UserProfileSource | None:
+    """Return the users' Auth0 tenant to read admins' user profiles from.
+
+    None without the AUTH0_USER_PROFILES_* settings. The users' issuer says
+    which identities are that tenant's users; the settings are refused
+    without it. Settings are read on each call, and raise when they are
+    unusable.
+    """
+    from policyengine_api.libs.auth0_management import (
+        build_auth0_user_profile_reader,
+    )
+
+    reader = build_auth0_user_profile_reader()
+    if reader is None:
+        return None
+    return UserProfileSource(issuer=load_user_auth_settings().issuer, reader=reader)
+
+
 def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -331,7 +378,10 @@ def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     )
     from policyengine_api.services.v2.user_types.services import V2UserTypeService
 
-    return V2UserTypeService(UserTypeDatabaseSession(get_v2_session_factory()))
+    return V2UserTypeService(
+        UserTypeDatabaseSession(get_v2_session_factory()),
+        user_profile_source_factory=_default_user_profile_source,
+    )
 
 
 @dataclass(frozen=True)
@@ -345,6 +395,9 @@ class NativeRouteDependencies:
     v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
+    v2_household_calculation_service_factory: (
+        Callable[[], V2HouseholdCalculationResourceService] | None
+    ) = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
         None
     )
@@ -380,6 +433,9 @@ class NativeRouteDependencies:
             v2_metadata_response_cache=_process_metadata_response_cache(),
             v2_policy_service_factory=_default_v2_policy_service_factory,
             v2_household_service_factory=_default_v2_household_service_factory,
+            v2_household_calculation_service_factory=(
+                _default_v2_household_calculation_service_factory
+            ),
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
             v2_user_household_service_factory=(
                 _default_v2_user_household_service_factory

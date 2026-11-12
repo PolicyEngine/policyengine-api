@@ -72,6 +72,17 @@ if [[ -n "${AUTH0_MANAGEMENT_DOMAIN:-}" ]]; then
   )
 fi
 
+# Optional: the admin user routes read users' emails and names from Auth0
+# only when the read-only profile client is configured. Validation requires
+# all three values or none.
+if [[ -n "${AUTH0_USER_PROFILES_DOMAIN:-}" ]]; then
+  env_vars+=(
+    "AUTH0_USER_PROFILES_DOMAIN=${AUTH0_USER_PROFILES_DOMAIN}"
+    "AUTH0_USER_PROFILES_CLIENT_ID=${AUTH0_USER_PROFILES_CLIENT_ID}"
+    "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE=${AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE}"
+  )
+fi
+
 if [[ -n "${OLD_SIMULATION_GATEWAY_URL:-}" ]]; then
   env_vars+=("OLD_SIMULATION_GATEWAY_URL=${OLD_SIMULATION_GATEWAY_URL}")
 fi

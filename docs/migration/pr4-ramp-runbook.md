@@ -118,8 +118,12 @@ direct-GAE (non-LB) baseline — path overhead would contaminate the delta.
 
 ## 5. Functional gate — suites and app E2E
 
+`CI_SERVER_ACCESS_TOKEN` must hold a server token the host accepts (see
+"Settings" in `docs/migration/stage-12a-user-login.md`); the tests
+fail without one.
+
 ```bash
-API_BASE_URL="https://$HOST" python -m pytest \
+API_BASE_URL="https://$HOST" CI_SERVER_ACCESS_TOKEN="$TOKEN" python -m pytest \
   tests/integration/test_live_calculate.py \
   tests/integration/test_live_economy.py \
   tests/integration/test_live_budget_window_cache.py -v

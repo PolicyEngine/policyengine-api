@@ -20,12 +20,15 @@ from policyengine_api.services.v2.user_accounts.validators import (
     AccountIdentityDeletionError,
 )
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserPage,
     AdminUserRead,
     AdminUserSearch,
     UserTypeChangeRead,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserEmailSearchRefusedError,
+    AdminUserProfilesUnavailableError,
     LastAdminDeletionError,
     LastAdminDemotionError,
     SignedInUserNotFoundError,
@@ -451,3 +454,76 @@ def test_the_admin_account_deletion_route_documents_its_responses() -> None:
         in operation["responses"]["502"]["description"]
     )
     assert "nothing was deleted" in operation["responses"]["503"]["description"]
+
+
+def test_an_email_search_answers_503_when_auth0_profiles_are_unavailable() -> None:
+    error = AdminUserProfilesUnavailableError(
+        "Users can't be searched by email now: their emails could not be read "
+        "from Auth0. Try again shortly."
+    )
+
+    def unavailable(name: str, kwargs: dict):
+        if name == "require_minimum_user_type":
+            return UserType.ADMIN
+        raise error
+
+    client, _service = _client(RecordingService(unavailable))
+
+    response = client.get("/v2/admin/users?email=bob")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "error", "message": str(error)}
+
+
+def test_openapi_says_where_admins_read_emails_and_names() -> None:
+    client, _service = _client()
+
+    document = client.get("/v2/openapi.json").json()
+
+    list_users = document["paths"]["/v2/admin/users"]["get"]
+    read_user = document["paths"]["/v2/admin/users/{user_id}"]["get"]
+    user_item = document["components"]["schemas"]["AdminUserItem"]
+    change_item = document["components"]["schemas"]["UserTypeChangeItem"]
+    for description in (
+        list_users["description"],
+        read_user["description"],
+        user_item["description"],
+        change_item["description"],
+    ):
+        assert "Auth0" in description
+    assert "stored" in user_item["description"]
+    assert "email search" in list_users["responses"]["503"]["description"]
+    (email,) = [
+        parameter
+        for parameter in list_users["parameters"]
+        if parameter["name"] == "email"
+    ]
+    # The optional parameter's text is on its string schema.
+    (email_text, _no_email) = email["schema"]["anyOf"]
+    # The route and its email parameter say which searches are refused.
+    for description in (list_users["description"], email_text["description"]):
+        assert "< or >" in description
+        assert f"more than {MAXIMUM_EMAIL_SEARCH_MATCHES}" in description
+    assert "1,000" not in list_users["description"]
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        f"More than {MAXIMUM_EMAIL_SEARCH_MATCHES} users match that email text; "
+        "enter more of it",
+        "Email search text can't contain < or >: no email address holds them",
+    ],
+)
+def test_refused_email_searches_answer_422(message: str) -> None:
+    def refuse(name: str, kwargs: dict):
+        if name == "require_minimum_user_type":
+            return UserType.ADMIN
+        raise AdminUserEmailSearchRefusedError(message)
+
+    client, _service = _client(RecordingService(refuse))
+
+    response = client.get("/v2/admin/users?email=gmail")
+
+    assert response.status_code == 422
+    assert response.json() == {"status": "error", "message": message}

@@ -232,6 +232,21 @@ def _assert_live_tests_run_in_parallel_after_readiness(
     assert "tests/integration/test_live_budget_window_cache.py" in live_test_script
     assert "tests/integration/test_live_calculate.py" in live_test_script
     assert "tests/integration/test_live_economy.py" in live_test_script
+    # The household calculation checks run after the other live tests, with
+    # fewer workers, so the parallel submissions never overlap them.
+    household_checks = live_test_script.index(
+        "tests/integration/test_live_v2_household_calculations.py"
+    )
+    assert live_test_script.index("tests/integration/test_live_economy.py") < (
+        household_checks
+    )
+    assert (
+        "tests/integration/test_live_v2_household_parity.py"
+        in (live_test_script[household_checks:])
+    )
+    assert "-n 4" in live_test_script[household_checks - 200 : household_checks]
+    # They wait on Modal; 30 minutes leaves room for both runs.
+    assert "timeout-minutes: 30" in parallel_live_tests
     assert "tests/integration/test_live_v2_policies.py" not in parallel_live_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
@@ -530,3 +545,22 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
     ):
         assert name in integration
     assert "STAGING_AUTH0_TEST" not in production
+
+
+def test_push_workflow_wires_auth0_user_profile_settings_to_both_deploys():
+    """Each deploy job gets its environment's read-only profile client."""
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    for job, environment in ((staging, "staging"), (production, "production")):
+        assert f"    environment: {environment}\n" in job
+        for line in (
+            "AUTH0_USER_PROFILES_DOMAIN: ${{ vars.AUTH0_USER_PROFILES_DOMAIN }}",
+            "AUTH0_USER_PROFILES_CLIENT_ID: ${{ vars.AUTH0_USER_PROFILES_CLIENT_ID }}",
+            "AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE: "
+            "${{ secrets.AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE }}",
+        ):
+            assert line in job
+    # The release tests never see them.
+    assert "AUTH0_USER_PROFILES" not in _workflow_job_block(workflow, RELEASE_TESTS_JOB)

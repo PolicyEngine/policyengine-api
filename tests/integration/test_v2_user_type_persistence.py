@@ -32,6 +32,11 @@ from policyengine_api.data.v2.models import (
     UserTypeChange,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from policyengine_api.libs.auth0_management import (
+    Auth0UserIdSearch,
+    Auth0UserProfile,
+)
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_connectors.deletes import (
     delete_account_legacy_user_mappings,
@@ -53,7 +58,11 @@ from policyengine_api.services.v2.user_types.database_session import (
     UserTypeDatabaseSession,
 )
 from policyengine_api.services.v2.user_types.services import V2UserTypeService
-from policyengine_api.services.v2.user_types.types import AdminUserSearch
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+    AdminUserSearch,
+    UserProfileSource,
+)
 from policyengine_api.services.v2.user_types.validators import (
     LastAdminDeletionError,
     UserTypeBelowMinimumError,
@@ -207,6 +216,78 @@ def test_the_runtime_role_changes_types_and_records_them(sessions) -> None:
         (UserType.AUTHOR, UserType.ADMIN, None),
         (UserType.STANDARD, UserType.AUTHOR, alice_id),
     ]
+
+
+class StandInAuth0:
+    """Find one Auth0 user by email and give its profile, as Auth0 would."""
+
+    def __init__(self, profile: Auth0UserProfile) -> None:
+        self.profile = profile
+
+    def search_user_ids_by_email(
+        self,
+        text: str,
+        *,
+        match_limit: int,
+        wait_budget: RateLimitWaitBudget | None = None,
+    ) -> Auth0UserIdSearch:
+        assert self.profile.email is not None
+        assert match_limit == MAXIMUM_EMAIL_SEARCH_MATCHES
+        assert isinstance(wait_budget, RateLimitWaitBudget)
+        found = text.lower() in self.profile.email
+        return Auth0UserIdSearch(
+            user_ids=(self.profile.user_id,) if found else (), more_than_limit=False
+        )
+
+    def read_user_profiles(
+        self, user_ids, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> dict[str, Auth0UserProfile]:
+        assert isinstance(wait_budget, RateLimitWaitBudget)
+        return {
+            user_id: self.profile
+            for user_id in user_ids
+            if user_id == self.profile.user_id
+        }
+
+
+def test_the_runtime_role_finds_users_by_their_auth0_email(sessions) -> None:
+    alice = _principal(sessions, "alice")
+    accounts = _accounts(sessions)
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    accounts.get_account(principal=_principal(sessions, "bob"), country_id="us")
+    # Carol's token carried no email, so none is stored for her.
+    carol = UserPrincipal(
+        issuer=sessions.kw["info"]["issuer"], subject="google-oauth2|carol"
+    )
+    carol_id = accounts.get_account(principal=carol, country_id="uk").id
+    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    auth0 = StandInAuth0(
+        Auth0UserProfile(
+            user_id=carol.subject,
+            email="carol@auth0-profiles.example.test",
+            email_verified=True,
+            given_name="Carol",
+            family_name=None,
+            name=None,
+        )
+    )
+    user_types = V2UserTypeService(
+        UserTypeDatabaseSession(sessions),
+        user_profile_source_factory=lambda: UserProfileSource(
+            issuer=sessions.kw["info"]["issuer"], reader=auth0
+        ),
+    )
+
+    found = user_types.list_users(
+        principal=alice, search=AdminUserSearch(email="AUTH0-PROFILES")
+    )
+
+    assert [(user.id, user.email, user.first_name) for user in found.items] == [
+        (carol_id, "carol@auth0-profiles.example.test", "Carol")
+    ]
+    with sessions() as session:
+        stored_carol = session.get(User, carol_id)
+        assert stored_carol.email is None
 
 
 def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
