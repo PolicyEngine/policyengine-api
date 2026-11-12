@@ -52,3 +52,34 @@ def require_not_mirror_owned(*, mirror_owned: bool, association_id: UUID) -> Non
             "and cannot be changed here"
         )
         raise MirrorOwnedAssociationError(msg)
+
+
+def require_one_reference(
+    kind: str, *, detailed_save_id: UUID | None, legacy_id: int | None
+) -> None:
+    """Raise AssociationReferenceConflictError when both references are named.
+
+    v1 report and simulation numbers are not connected to detailed-save
+    records, so a saved ``kind`` names one or the other; only the
+    production migration writes records holding both.
+    """
+    if detailed_save_id is not None and legacy_id is not None:
+        msg = (
+            f"A saved {kind} names a detailed-save {kind} or a v1 {kind} "
+            "number, not both"
+        )
+        raise AssociationReferenceConflictError(msg)
+
+
+def violates_foreign_key(error: Exception, constraint_name: str) -> bool:
+    """Return whether a database error is a violation of the named foreign key.
+
+    That is SQLSTATE 23503 (``foreign_key_violation``) on ``constraint_name``,
+    as psycopg reports it on the error SQLAlchemy wraps.
+    """
+    driver_error = getattr(error, "orig", None)
+    diagnostics = getattr(driver_error, "diag", None)
+    return (
+        getattr(driver_error, "sqlstate", None) == "23503"
+        and getattr(diagnostics, "constraint_name", None) == constraint_name
+    )
