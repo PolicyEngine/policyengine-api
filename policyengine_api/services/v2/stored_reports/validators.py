@@ -22,7 +22,7 @@ READABLE_KIND = "economy"
 KIND_NAMES = {"household": "a household report", "budget_window": "a budget window"}
 # The kinds of report whose runs the run routes start and list; they refuse
 # any other kind, naming it.
-RUN_ROUTE_KINDS = frozenset({"economy"})
+RUN_ROUTE_KINDS: frozenset[ReportKind] = frozenset({"economy"})
 REPORT_KIND_NAMES: dict[ReportKind, str] = {
     "economy": "an economy report",
     "household": "a household report",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,8 +15,13 @@ from policyengine_api.services.v2.stored_reports.services import (
     SubmissionsNotConfiguredError,
     V2StoredReportService,
 )
-from policyengine_api.services.v2.stored_reports.types import StoredReportRows
+from policyengine_api.services.v2.stored_reports.types import (
+    ReportKind,
+    StoredReportRows,
+)
 from policyengine_api.services.v2.stored_reports.validators import (
+    REPORT_KIND_NAMES,
+    RUN_ROUTE_KINDS,
     ReportKindUnsupportedError,
     ReportStorageError,
     require_economy_report_runs,
@@ -149,3 +154,9 @@ def test_another_kinds_runs_are_not_run_or_listed_yet(
         f"Report {REPORT_ID} is {kind_name}, whose runs these routes do not start "
         "or list yet"
     )
+
+
+def test_every_report_kind_has_a_name_and_the_run_routes_take_only_kinds() -> None:
+    # A kind added later is refused with its name (422), not a KeyError (500).
+    assert set(REPORT_KIND_NAMES) == set(get_args(ReportKind))
+    assert RUN_ROUTE_KINDS.issubset(get_args(ReportKind))
