@@ -620,6 +620,7 @@ uv run --frozen pytest \
   tests/unit/v2/test_user_type_service.py \
   tests/unit/v2/test_admin_user_routes.py \
   tests/unit/v2/test_admin_user_profile_service.py \
+  tests/unit/v2/test_admin_user_deletion.py \
   tests/unit/v2/test_admin_user_saved_items_service.py \
   tests/unit/test_set_v2_user_type_script.py \
   tests/unit/v2/test_user_policy_routes.py \
@@ -641,8 +642,9 @@ uv run --frozen pytest \
 
 Prove provisioning races (signed-in and signed-out), conversion and merge at
 sign-in under concurrency, the row locks that keep a signed-out browser from
-acting on its converted user, named conflict targets, and the reshape
-lifecycle against the disposable Postgres database:
+acting on its converted user, type changes and account deletions (admins'
+included) racing each other without leaving no admin, named conflict targets,
+and the reshape lifecycle against the disposable Postgres database:
 
 ```bash
 V2_ALEMBIC_DISPOSABLE_TEST=1 \

@@ -23,7 +23,15 @@ class AccountEditRequiresSignInError(PermissionError):
 
 
 class AccountIdentityDeletionError(RuntimeError):
-    """Raised when account data was removed but the Auth0 user was not."""
+    """Raised when account data was removed but some of its Auth0 users were not.
+
+    ``undeleted_auth0_user_count`` is how many of them remain in Auth0.
+    """
+
+    def __init__(self, message: str, *, undeleted_auth0_user_count: int) -> None:
+        """Keep ``message`` as the error's text and the count of remaining users."""
+        super().__init__(message)
+        self.undeleted_auth0_user_count = undeleted_auth0_user_count
 
 
 class AccountDeletionUnavailableError(RuntimeError):

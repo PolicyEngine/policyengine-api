@@ -3,8 +3,10 @@
 Two settings groups each configure one Management API machine-to-machine
 client, and both use the same client code, token cache and secret handling:
 
-- ``AUTH0_MANAGEMENT_*``: ``DELETE /v2/me`` removes the Auth0 user only when a
-  client with the ``delete:users`` permission is configured. Without it,
+- ``AUTH0_MANAGEMENT_*``: account deletion, by ``DELETE /v2/me`` for the
+  caller's own account or by ``DELETE /v2/admin/users/{user_id}`` for an
+  admin, removes the Auth0 users of the account's sign-in identities only when
+  a client with the ``delete:users`` permission is configured. Without it,
   account deletion removes only Public API data and logs that the Auth0
   deletion was skipped. Deployments allow it in production only.
 - ``AUTH0_USER_PROFILES_*``: the admin user routes read users' emails and
@@ -513,8 +515,9 @@ class Auth0ManagementClient:
     def prepare_deletion(self) -> None:
         """Load the client secret and obtain a token before any data changes.
 
-        Callers run this before deleting their own records, so a credential or
-        Secret Manager failure stops the deletion with nothing removed.
+        Account deletion runs this before it deletes any Public API data, so a
+        credential or Secret Manager failure stops the deletion with nothing
+        removed.
         """
         self._access_token()
 
