@@ -4,6 +4,9 @@ Every route requires an admin: the router checks the caller's stored type
 before any route runs (403 below admin), and each service operation checks it
 again inside its own transaction. Unauthenticated users are never listed or
 changed, since their IDs are their browsers' credentials.
+
+Users' emails and names come from Auth0 when the Public API has user profile
+settings, read for each request and never stored; see AdminUserItem.
 """
 
 from collections.abc import Callable
@@ -43,7 +46,10 @@ from policyengine_api.fastapi_routes.v2.user_type_support import (
 )
 from policyengine_api.query_parameters import AdminUserCollectionQuery
 from policyengine_api.services.v2.identity.types import AccountPrincipal
-from policyengine_api.services.v2.user_types.types import AdminUserSearch
+from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
+    AdminUserSearch,
+)
 
 AdminUserCollectionQueryDependency = Annotated[
     AdminUserCollectionQuery, Depends(query_dependency(AdminUserCollectionQuery))
@@ -78,7 +84,11 @@ ADMIN_USER_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     422: {
         "model": V2ErrorResponse,
-        "description": "The request does not match the schema.",
+        "description": (
+            "The request does not match the schema, or an email search's text "
+            f"holds < or >, or more than {MAXIMUM_EMAIL_SEARCH_MATCHES} Auth0 "
+            "users match it."
+        ),
     },
     500: {
         "model": V2ErrorResponse,
@@ -86,9 +96,18 @@ ADMIN_USER_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     503: {
         "model": V2ErrorResponse,
-        "description": "User authentication or persistence is unavailable.",
+        "description": (
+            "User authentication or persistence is unavailable, or, for an "
+            "email search, users' emails can't be read from Auth0."
+        ),
     },
 }
+
+EMAILS_AND_NAMES_DESCRIPTION = (
+    "Each user's email, first_name and last_name are read from Auth0 for "
+    "this request and never stored; when Auth0 has none, or can't answer, "
+    "the stored values are returned."
+)
 
 
 def _service_factory(
@@ -118,8 +137,18 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         summary="List signed-in users, newest first",
         description=(
             "Admins only. With email, lists only users with an email address "
-            "containing it, ignoring case; % and _ match themselves. "
-            "Unauthenticated users are never listed."
+            "containing it, ignoring case; every character matches itself. "
+            "The search covers stored emails and, with Auth0 user profiles "
+            "configured, Auth0 emails: an Auth0 email matches when it "
+            "contains the text, or, for fewer than three characters, starts "
+            "with it. Auth0's search is eventually consistent, so a "
+            "just-changed email may be missing. Text with < or >, which no "
+            "email address holds, is refused (422), and so is text that "
+            f"more than {MAXIMUM_EMAIL_SEARCH_MATCHES} Auth0 users match: "
+            "enter more of it. When Auth0 "
+            "can't answer the search, the response is 503. "
+            + EMAILS_AND_NAMES_DESCRIPTION
+            + " Unauthenticated users are never listed."
         ),
     )
     def list_users(
@@ -141,7 +170,10 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         "/users/{user_id}",
         response_model=AdminUserResponse,
         summary="Read one signed-in user",
-        description="Admins only. An unauthenticated user's ID is not found (404).",
+        description=(
+            "Admins only. An unauthenticated user's ID is not found (404). "
+            + EMAILS_AND_NAMES_DESCRIPTION
+        ),
     )
     def get_user(
         user_id: UUID,
@@ -166,7 +198,9 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
             "as the admin last read it, must still be the stored type: when it "
             "differs, the change is refused (409) and nothing is written. Only "
             "the type is compared, so a type changed and changed back since the "
-            "read is not detected. Demoting the last admin is refused (409) too."
+            "read is not detected. Demoting the last admin is refused (409) too. "
+            "The change is committed before the response's email and names are "
+            "read; " + EMAILS_AND_NAMES_DESCRIPTION
         ),
     )
     def change_user_type(
@@ -192,7 +226,11 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         "/users/{user_id}/user-type-changes",
         response_model=UserTypeChangeListResponse,
         summary="Read a signed-in user's recorded type changes, newest first",
-        description="Admins only.",
+        description=(
+            "Admins only. changed_by_email is the admin's email, read from "
+            "Auth0 for this request and never stored; when Auth0 has none, or "
+            "can't answer, it is the stored one."
+        ),
     )
     def list_user_type_changes(
         user_id: UUID,

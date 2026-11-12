@@ -25,9 +25,16 @@ class StrictAdminUserAPIModel(BaseModel):
 class AdminUserItem(StrictAdminUserAPIModel):
     """A signed-in user as admins see it.
 
-    ``email`` is the email of the most recently seen of the user's sign-in
-    identities that has one, else the user's own. ``last_seen_at`` is when the
-    user's most recently seen identity was last seen.
+    With Auth0 user profile settings, ``email``, ``first_name`` and
+    ``last_name`` are read from Auth0 for each request and never stored: the
+    user's sign-in identities from the users' Auth0 tenant are looked up, the
+    most recently seen first, and a verified email comes before an unverified
+    one. Where Auth0 has no value, or can't answer, the stored value is
+    returned: the email of the most recently seen of the user's identities
+    that has one, else the user's own, and the user's stored names. When
+    neither has a first or last name, Auth0's full name, if it isn't an
+    email address, is the first name. ``last_seen_at`` is when the user's
+    most recently seen identity was last seen.
     """
 
     id: UUID
@@ -104,6 +111,8 @@ class UserTypeChangeItem(StrictAdminUserAPIModel):
     routes, named by ``changed_by_user_id`` and ``changed_by_email``, and
     ``script`` for one the type script made, which names no admin.
     ``changed_by_user_id`` is also null once that admin's account is deleted.
+    ``changed_by_email`` is read from Auth0 like an admin user item's email,
+    else stored.
     """
 
     id: UUID
