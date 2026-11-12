@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
-from policyengine_api.services.v2.stored_reports.transformations import report_kind
+from policyengine_api.services.v2.stored_reports.transformations import (
+    READABLE_KINDS,
+    report_kind,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -18,8 +21,7 @@ if TYPE_CHECKING:
         StoredReportRows,
     )
 
-READABLE_KIND = "economy"
-KIND_NAMES = {"household": "a household report", "budget_window": "a budget window"}
+KIND_NAMES = {"household": "a household report"}
 # The kinds of report whose runs the run routes start and list; they refuse
 # any other kind, naming it.
 RUN_ROUTE_KINDS: frozenset[ReportKind] = frozenset({"economy"})
@@ -78,9 +80,10 @@ class RerunReportUnreadableError(RuntimeError):
 class ReportKindUnsupportedError(ValueError):
     """The report is of a kind a route does not read, or start and list runs of, yet.
 
-    Household reports and budget windows are stored in the same tables, and
-    each route takes them once their own PRs add them; the message says which
-    kind the report is and what the route does not do with it.
+    Household reports, and for the run routes budget windows, are stored
+    in the same tables, and each route takes them once its own PR adds
+    them; the message says which kind the report is and what the route
+    does not do with it.
     """
 
 
@@ -94,15 +97,19 @@ def require_report(
     return rows
 
 
-def require_economy_report(rows: StoredReportRows) -> None:
-    """Raise ReportKindUnsupportedError unless the report is an economy report."""
+def require_readable_report(rows: StoredReportRows) -> ReportKind:
+    """Return the report's kind: an economy report or a budget window.
+
+    Raise ReportKindUnsupportedError for a household report.
+    """
     kind = report_kind(rows.report)
-    if kind != READABLE_KIND:
+    if kind not in READABLE_KINDS:
         msg = (
             f"Report {rows.report.id} is {KIND_NAMES[kind]}, which this route "
             "cannot read yet"
         )
         raise ReportKindUnsupportedError(msg)
+    return kind
 
 
 def require_economy_report_runs(rows: StoredReportRows) -> None:

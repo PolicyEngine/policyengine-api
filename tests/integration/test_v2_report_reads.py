@@ -326,7 +326,7 @@ def test_a_household_report_cannot_be_read_here_yet(
     assert "household report" in response.json()["message"]
 
 
-def test_listing_reads_named_economy_reports_in_the_order_asked(
+def test_listing_reads_named_reports_in_the_order_asked(
     owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
 ) -> None:
     catalog = catalogs["us"]
@@ -361,8 +361,14 @@ def test_listing_reads_named_economy_reports_in_the_order_asked(
     assert [item["id"] for item in items] == [
         str(second.report_id),
         str(first.report_id),
+        str(budget_window.report_id),
     ]
-    assert [item["status"] for item in items] == ["not_run", "succeeded"]
+    assert [item["kind"] for item in items] == [
+        "economy",
+        "economy",
+        "budget_window",
+    ]
+    assert [item["status"] for item in items] == ["not_run", "succeeded", "not_run"]
     assert all("result" not in item for item in items)
     assert items[1]["run"]["country_package_version"] == "1.5.0"
 

@@ -32,13 +32,13 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
     )
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        ReportCreationInput,
     )
     from policyengine_api.services.v2.stored_reports.types import (
-        ReportRead,
         ReportRunsRead,
-        ReportSummaryRead,
+        StoredReportRead,
+        StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
     from policyengine_api.services.v2.user_accounts.types import (
@@ -191,23 +191,25 @@ class V2HouseholdCalculationResourceService(Protocol):
 class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        """Return the country's economy report, its newest run and that run's result.
+    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
+        """Return the country's report, its newest run and that run's result.
 
-        Raise ``StoredReportNotFoundError`` when the country has no such
-        report, ``ReportKindUnsupportedError`` for a household report or
-        budget window, and ``EconomyResultUnreadableError`` when a succeeded
-        run's result cannot be read.
+        The report is an economy report or a budget window. Raise
+        ``StoredReportNotFoundError`` when the country has no such report,
+        ``ReportKindUnsupportedError`` for a household report, and
+        ``EconomyResultUnreadableError`` or
+        ``BudgetWindowResultUnreadableError`` when a succeeded run's result
+        cannot be read.
         """
         ...
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[ReportSummaryRead, ...]:
-        """Return the country's economy reports among ``report_ids``, in that order."""
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's economy reports and budget windows, as named."""
         ...
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
         Raise ``EconomyCalculationsUnsupportedError`` for a country without
@@ -223,7 +225,7 @@ class V2StoredReportResourceService(Protocol):
 
     def rerun_report(
         self, *, country_id: str, report_id: UUID, force: bool
-    ) -> ReportRead:
+    ) -> StoredReportRead:
         """Run the country's economy report again; return it with its new run.
 
         Raise ``StoredReportNotFoundError`` when the country has no such
@@ -622,4 +624,14 @@ class V2UserTypeResourceService(Protocol):
         self, *, principal: AccountPrincipal, user_id: UUID
     ) -> tuple[UserTypeChangeRead, ...]:
         """Return a signed-in user's recorded type changes, newest first."""
+        ...
+
+    def get_user_saved_items(
+        self, *, principal: AccountPrincipal, user_id: UUID
+    ) -> AccountExport:
+        """Return a signed-in user's account and saved items, in every country.
+
+        The result is what the user's own export returns. Raise
+        ``SignedInUserNotFoundError`` when no signed-in user has the ID.
+        """
         ...
