@@ -6,6 +6,9 @@ connected to detailed-save reports, and only the production migration writes
 saved reports holding both. A detailed-save report is checked with a SELECT
 in the write's own transaction; one deleted before the write commits is
 refused by the ``RESTRICT`` foreign key, which is answered as not found too.
+A saved report naming one gives that report's own budget window as
+``budget_window_years``, or none for a report without a window of two or
+more years.
 The owner always comes from the verified session principal (a signed-in user
 or a signed-out browser), and v1 references are checked in a short read-only
 v1 transaction before the v2 transaction opens. Reads never provision a
@@ -44,6 +47,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.reads import 
     read_owned_user_policy_exists,
     read_owned_user_policy_row,
     read_owned_user_report_row,
+    read_report_budget_window_size,
     read_report_exists,
     read_user_report_row,
     read_user_report_rows,
@@ -60,6 +64,7 @@ from policyengine_api.services.v2.user_reports.transformations import (
 )
 from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
+    require_matching_budget_window,
     require_owned_user_policy,
     require_stored_report,
     require_user_report,
@@ -146,6 +151,60 @@ def validate_stored_report(
     )
 
 
+def validate_saved_budget_window(
+    session: Session,
+    *,
+    country_id: str,
+    report_id: UUID | None,
+    budget_window_years: int | None,
+) -> None:
+    """Check, in the write's transaction, the saved window against the report's.
+
+    A None ``report_id`` passes: a v1 report output stores no window of its
+    own. Otherwise raise AssociationBudgetWindowConflictError unless
+    ``budget_window_years`` agrees with the report's budget window.
+    """
+    if report_id is None:
+        return
+    require_matching_budget_window(
+        report_id=report_id,
+        budget_window_size=read_report_budget_window_size(
+            session, country_id=country_id, report_id=report_id
+        ),
+        budget_window_years=budget_window_years,
+    )
+
+
+def validate_saved_budget_window_after_update(
+    session: Session,
+    *,
+    association: UserReportAssociation,
+    association_input: UserReportUpdateInput,
+) -> None:
+    """Check the window the update leaves against the report it leaves named.
+
+    Only an update that names a report or a window is checked, so a record
+    saved before the check can still be renamed.
+    """
+    supplied = association_input.model_fields_set
+    if not supplied.intersection({"report_id", "budget_window_years"}):
+        return
+    validate_saved_budget_window(
+        session,
+        country_id=association.country_id,
+        report_id=(
+            association_input.report_id
+            if "report_id" in supplied
+            else association.report_id
+        ),
+        budget_window_years=(
+            association_input.budget_window_years
+            if "budget_window_years" in supplied
+            else association.budget_window_years
+        ),
+    )
+
+
 def require_one_report_after_update(
     association: UserReportAssociation, association_input: UserReportUpdateInput
 ) -> None:
@@ -220,9 +279,11 @@ class V2UserReportService:
         read-only v1 transaction, and LegacyReferenceNotFoundError is raised
         if it does not exist in the country; a detailed-save report is
         checked in the write's transaction, and
-        AssociationReportNotFoundError is raised if the country has none.
-        Each saved-reform link must name the owner's saved policy in the same
-        country, or AssociationLinkNotFoundError is raised.
+        AssociationReportNotFoundError is raised if the country has none, or
+        AssociationBudgetWindowConflictError if ``budget_window_years``
+        disagrees with its budget window. Each saved-reform link must name the
+        owner's saved policy in the same country, or
+        AssociationLinkNotFoundError is raised.
         """
         country_id = association_input.country_id
         require_one_reference(
@@ -243,6 +304,12 @@ class V2UserReportService:
             )
             validate_stored_report(
                 session, country_id=country_id, report_id=association_input.report_id
+            )
+            validate_saved_budget_window(
+                session,
+                country_id=country_id,
+                report_id=association_input.report_id,
+                budget_window_years=association_input.budget_window_years,
             )
             for linked_user_policy_id in (
                 association_input.user_policy_id,
@@ -364,7 +431,9 @@ class V2UserReportService:
         ``report_id`` in the write's transaction, as on create, and a supplied
         saved-reform link must name the owner's saved policy in this country.
         Raise AssociationReferenceConflictError when the update would leave
-        the saved report naming both, and UserReportNotFoundError if the
+        the saved report naming both, AssociationBudgetWindowConflictError
+        when it would leave a ``budget_window_years`` that disagrees with the
+        named report's budget window, and UserReportNotFoundError if the
         principal has no such report in this country.
         """
         require_one_reference(
@@ -390,6 +459,9 @@ class V2UserReportService:
             require_one_report_after_update(association, association_input)
             validate_stored_report(
                 session, country_id=country_id, report_id=association_input.report_id
+            )
+            validate_saved_budget_window_after_update(
+                session, association=association, association_input=association_input
             )
             for link_field in ("user_policy_id", "baseline_user_policy_id"):
                 if link_field in association_input.model_fields_set:

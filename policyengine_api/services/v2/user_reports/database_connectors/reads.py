@@ -143,3 +143,18 @@ def read_report_exists(session: Session, *, country_id: str, report_id: UUID) ->
         ).one_or_none()
         is not None
     )
+
+
+def read_report_budget_window_size(
+    session: Session, *, country_id: str, report_id: UUID
+) -> int | None:
+    """Return the country's report's budget window size, or None.
+
+    None means the report has no budget window, or the country has no such
+    report.
+    """
+    return session.exec(
+        select(Report.budget_window_size).where(
+            Report.id == report_id, Report.country == country_id
+        )
+    ).one_or_none()
