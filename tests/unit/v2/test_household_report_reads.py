@@ -180,7 +180,6 @@ def store_household_report(
     country: str = "us",
     with_reform: bool = True,
     run: RunToStore | None = None,
-    inputs: dict[str, Any] | None = None,
 ) -> StoredHouseholdReport:
     """Store a household report as the simulation service and its functions do.
 
@@ -235,7 +234,7 @@ def store_household_report(
         household_id=household.id,
         policy_id=None if reform is None else policy.id,
         year=2026,
-        inputs={} if inputs is None else inputs,
+        inputs={},
         created_at=STORED_AT,
     )
     session.add(report)
@@ -318,7 +317,7 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
     sessions: sessionmaker[Session], reports: V2StoredReportService
 ) -> None:
     with sessions() as session:
-        stored = store_household_report(session, run=succeeded_run(), inputs={})
+        stored = store_household_report(session, run=succeeded_run())
 
     report = reports.get_report(country_id="us", report_id=stored.report_id)
 
