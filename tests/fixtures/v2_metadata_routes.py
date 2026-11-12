@@ -35,6 +35,7 @@ from policyengine_api.services.v2.metadata.types import (
     MetadataParameterSummary,
     MetadataRegion,
     MetadataRegionOption,
+    MetadataSPMAvailability,
     MetadataTimePeriodOption,
     MetadataVariable,
 )
@@ -251,6 +252,11 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
                             name="populace_us_2024", label="Microcosm"
                         )
                     ],
+                ),
+                spm=MetadataSPMAvailability(
+                    available=True,
+                    settings_schema={"type": "object"},
+                    defaults={"scenario": "ce_trend"},
                 ),
             ),
             "get_economy_options": MetadataEconomyOptionsResult(

@@ -20,16 +20,26 @@ Every change, and every signed-in account deletion, first takes one
 transaction-scoped advisory lock, then reads the admins and checks the caller
 or the deleted user against them, so they run one at a time and none can leave
 no admin.
+
+With a user profile source, admins see each user's email and names as Auth0
+has them, read after the database work and never stored: only identities
+from the users' issuer are looked up, and an email search also finds users
+through Auth0. When Auth0 can't answer, reads keep the stored values and
+record a warning, and an email search is refused. A type change commits
+before its response reads Auth0.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
+import re
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
+from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
 )
@@ -51,54 +61,230 @@ from policyengine_api.services.v2.user_types.database_connectors.updates import 
 )
 from policyengine_api.services.v2.user_types.transformations import (
     admin_user_read,
+    admin_user_read_with_profiles,
     caller_user_type,
     identities_by_user,
     known_email,
-    user_type_change_read,
+    profiles_of,
+    stored_admin_user,
+    stored_user_type_change,
+    user_type_change_read_with_profiles,
 )
 from policyengine_api.services.v2.user_types.types import (
+    MAXIMUM_EMAIL_SEARCH_MATCHES,
     AdminUserPage,
     AdminUserRead,
     AdminUserSearch,
+    IdentitySubjects,
     RequestedUserType,
     ScriptedUserTypeChange,
+    StoredAdminUser,
     UserTypeChangeOrigin,
     UserTypeChangeRead,
 )
 from policyengine_api.services.v2.user_types.validators import (
+    AdminUserProfilesUnavailableError,
     UserTypeCheckUnavailableError,
     require_admin_after_deletion,
     require_admin_caller,
     require_another_admin,
+    require_email_search_within_limit,
     require_expected_user_type,
     require_listed_admin,
     require_minimum_user_type,
     require_one_user_with_email,
+    require_searchable_email_text,
     require_signed_in_user,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping
     from uuid import UUID
 
     from sqlmodel import Session
 
     from policyengine_api.data.v2.models import User, UserIdentity, UserTypeChange
+    from policyengine_api.libs.auth0_management import Auth0UserProfile
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_accounts.types import AccountExport
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
     )
+    from policyengine_api.services.v2.user_types.types import UserProfileSource
 
+logger = logging.getLogger(__name__)
+
+PROFILES_UNAVAILABLE_EVENT = "admin_user_profiles_unavailable"
 # The runtime event recorded for each admin's read of a user's saved items.
 ADMIN_SAVED_ITEMS_READ_EVENT = "admin_read_v2_user_saved_items"
+EMAIL_SEARCH_UNAVAILABLE_MESSAGE = (
+    "Users can't be searched by email now: their emails could not be read "
+    "from Auth0. Try again shortly."
+)
+PROFILES_UNREADABLE_MESSAGE = "Users' emails and names could not be read from Auth0"
+# A recorded cause is a short identifier such as http_403 or timeout, so no
+# email address or subject can pass as one.
+SAFE_CAUSE_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,39}")
+
+
+def _safe_cause(error: Exception) -> str:
+    """Return the cause the profile reader's error names, else ``unknown``.
+
+    The reader's errors carry a ``cause`` such as an HTTP status
+    (``http_403``, ``http_429``), ``timeout``, ``connection_error`` or
+    ``unreadable_answer``.
+    """
+    cause = getattr(error, "cause", None)
+    if isinstance(cause, str) and SAFE_CAUSE_PATTERN.fullmatch(cause):
+        return cause
+    return "unknown"
+
+
+def _record_profiles_unavailable(
+    operation: str, error: Exception, *, cause: str | None = None
+) -> None:
+    """Record why Auth0 couldn't answer, by error type and safe cause only.
+
+    An error's message may name a subject or an email, so it is left out.
+    """
+    logger.warning(
+        PROFILES_UNAVAILABLE_EVENT,
+        extra={
+            "policyengine_attributes": {
+                "operation": operation,
+                "error_type": type(error).__name__,
+                "cause": _safe_cause(error) if cause is None else cause,
+            }
+        },
+    )
 
 
 class V2UserTypeService:
     """Sequence user-type checks and changes through explicit sessions."""
 
-    def __init__(self, database_session: UserTypeDatabaseSession) -> None:
-        """Open every session through ``database_session``."""
+    def __init__(
+        self,
+        database_session: UserTypeDatabaseSession,
+        *,
+        user_profile_source_factory: (
+            Callable[[], UserProfileSource | None] | None
+        ) = None,
+    ) -> None:
+        """Open every session through ``database_session``.
+
+        ``user_profile_source_factory`` is called once by each admin read or
+        change; without it, or when it returns None, admins see stored emails
+        and names only, and an email search reads only stored emails.
+        """
         self._database_session = database_session
+        self._user_profile_source_factory = user_profile_source_factory
+
+    def _profile_source(self) -> UserProfileSource | None:
+        """Return the configured profile source, or None when there is none.
+
+        Raise AdminUserProfilesUnavailableError when its settings are unusable.
+        """
+        if self._user_profile_source_factory is None:
+            return None
+        try:
+            return self._user_profile_source_factory()
+        except Exception as error:
+            _record_profiles_unavailable("configure", error, cause="invalid_settings")
+            raise AdminUserProfilesUnavailableError(
+                EMAIL_SEARCH_UNAVAILABLE_MESSAGE
+            ) from error
+
+    def _profile_source_for_reads(self) -> UserProfileSource | None:
+        """Return the profile source, or None when it is absent or unusable."""
+        try:
+            return self._profile_source()
+        except AdminUserProfilesUnavailableError:
+            # Reads answer with stored values; the failure is recorded.
+            return None
+
+    def _email_matching_identities(
+        self,
+        principal: AccountPrincipal,
+        source: UserProfileSource,
+        text: str,
+        wait_budget: RateLimitWaitBudget,
+    ) -> IdentitySubjects:
+        """Return the users' subjects whose Auth0 email contains ``text``.
+
+        Only an admin's search reaches Auth0. Raise
+        AdminUserProfilesUnavailableError when Auth0 can't answer, and
+        AdminUserEmailSearchRefusedError when more than 200 users match.
+        """
+        with self._database_session.read() as session:
+            _require_caller_type(session, principal, UserType.ADMIN)
+        try:
+            found = source.reader.search_user_ids_by_email(
+                text,
+                match_limit=MAXIMUM_EMAIL_SEARCH_MATCHES,
+                wait_budget=wait_budget,
+            )
+        except Exception as error:
+            _record_profiles_unavailable("search_by_email", error)
+            raise AdminUserProfilesUnavailableError(
+                EMAIL_SEARCH_UNAVAILABLE_MESSAGE
+            ) from error
+        return IdentitySubjects(
+            issuer=source.issuer, subjects=require_email_search_within_limit(found)
+        )
+
+    def _read_profiles(
+        self,
+        source: UserProfileSource,
+        subjects: tuple[str, ...],
+        wait_budget: RateLimitWaitBudget,
+    ) -> Mapping[str, Auth0UserProfile]:
+        """Raise AdminUserProfilesUnavailableError when Auth0 can't answer."""
+        try:
+            return source.reader.read_user_profiles(subjects, wait_budget=wait_budget)
+        except Exception as error:
+            _record_profiles_unavailable("read_profiles", error)
+            raise AdminUserProfilesUnavailableError(
+                PROFILES_UNREADABLE_MESSAGE
+            ) from error
+
+    def _profiles(
+        self,
+        source: UserProfileSource | None,
+        subjects: Iterable[str],
+        wait_budget: RateLimitWaitBudget,
+    ) -> Mapping[str, Auth0UserProfile]:
+        """Read these subjects' profiles in one call to the reader.
+
+        Return none when there is no source or subject, or when Auth0 can't
+        answer: admins then see stored values.
+        """
+        unique_subjects = tuple(dict.fromkeys(subjects))
+        if source is None or not unique_subjects:
+            return {}
+        try:
+            return self._read_profiles(source, unique_subjects, wait_budget)
+        except AdminUserProfilesUnavailableError:
+            return {}
+
+    def _with_profiles(
+        self,
+        source: UserProfileSource | None,
+        stored: Iterable[StoredAdminUser],
+        wait_budget: RateLimitWaitBudget,
+    ) -> tuple[AdminUserRead, ...]:
+        """Fill stored users' emails and names from Auth0, after the database."""
+        users = tuple(stored)
+        profiles = self._profiles(
+            source,
+            (subject for user in users for subject in user.profile_subjects),
+            wait_budget,
+        )
+        return tuple(
+            admin_user_read_with_profiles(
+                user.read, profiles_of(user.profile_subjects, profiles)
+            )
+            for user in users
+        )
 
     def require_minimum_user_type(
         self, *, principal: AccountPrincipal, minimum: UserType
@@ -118,7 +304,27 @@ class V2UserTypeService:
     def list_users(
         self, *, principal: AccountPrincipal, search: AdminUserSearch
     ) -> AdminUserPage:
-        """Return one page of signed-in users, newest first, to an admin."""
+        """Return one page of signed-in users, newest first, to an admin.
+
+        With a profile source, an email search also finds users whose Auth0
+        email matches; raise AdminUserProfilesUnavailableError when Auth0
+        can't answer it. Raise AdminUserEmailSearchRefusedError for search
+        text with ``<`` or ``>``, before any Auth0 call, and for text more
+        than 200 Auth0 users match.
+        """
+        email_matching_identities = None
+        if search.email is None:
+            source = self._profile_source_for_reads()
+        else:
+            require_searchable_email_text(search.email)
+            source = self._profile_source()
+        # Every Auth0 call of this admin request waits from one budget.
+        wait_budget = RateLimitWaitBudget()
+        if search.email is not None and source is not None:
+            email_matching_identities = self._email_matching_identities(
+                principal, source, search.email, wait_budget
+            )
+        issuer = None if source is None else source.issuer
         with self._database_session.read() as session:
             _require_caller_type(session, principal, UserType.ADMIN)
             users = read_signed_in_users(
@@ -126,22 +332,26 @@ class V2UserTypeService:
                 email_contains=search.email,
                 offset=search.offset,
                 limit=search.limit + 1,
+                email_matching_identities=email_matching_identities,
             )
-            page = users[: search.limit]
-            return AdminUserPage(
-                items=_admin_user_reads(session, page),
-                offset=search.offset,
-                limit=search.limit,
-                has_more=len(users) > search.limit,
-            )
+            stored = _stored_admin_users(session, users[: search.limit], issuer)
+        return AdminUserPage(
+            items=self._with_profiles(source, stored, wait_budget),
+            offset=search.offset,
+            limit=search.limit,
+            has_more=len(users) > search.limit,
+        )
 
     def get_user(self, *, principal: AccountPrincipal, user_id: UUID) -> AdminUserRead:
         """Return one signed-in user to an admin."""
+        source = self._profile_source_for_reads()
+        issuer = None if source is None else source.issuer
         with self._database_session.read() as session:
             _require_caller_type(session, principal, UserType.ADMIN)
             user = require_signed_in_user(read_signed_in_user(session, user_id))
-            (read,) = _admin_user_reads(session, [user])
-            return read
+            stored = _stored_admin_users(session, [user], issuer)
+        (read,) = self._with_profiles(source, stored, RateLimitWaitBudget())
+        return read
 
     def change_user_type(
         self,
@@ -158,7 +368,10 @@ class V2UserTypeService:
         must still be ``expected_user_type``, the type the admin last read;
         raise UserTypeChangedError if it isn't. The check compares types only,
         so a type changed and changed back since the read is not detected.
+        The change commits before Auth0 is read for the response.
         """
+        source = self._profile_source_for_reads()
+        issuer = None if source is None else source.issuer
         with self._database_session.transaction() as session:
             caller = find_principal_user_in_session(session, principal)
             caller_user_id = None if caller is None else caller.user_id
@@ -180,13 +393,20 @@ class V2UserTypeService:
                     source=UserTypeChangeSource.ADMIN_ROUTE,
                 ),
             )
-            (read,) = _admin_user_reads(session, [user])
-            return read
+            stored = _stored_admin_users(session, [user], issuer)
+        (read,) = self._with_profiles(source, stored, RateLimitWaitBudget())
+        return read
 
     def list_user_type_changes(
         self, *, principal: AccountPrincipal, user_id: UUID
     ) -> tuple[UserTypeChangeRead, ...]:
-        """Return a signed-in user's recorded type changes, newest first."""
+        """Return a signed-in user's recorded type changes, newest first.
+
+        Each change names its admin by the admin's Auth0 email when there is
+        a profile source, else by the stored one.
+        """
+        source = self._profile_source_for_reads()
+        issuer = None if source is None else source.issuer
         with self._database_session.read() as session:
             _require_caller_type(session, principal, UserType.ADMIN)
             require_signed_in_user(read_signed_in_user(session, user_id))
@@ -211,9 +431,25 @@ class V2UserTypeService:
                     admin_identities.get(change.changed_by_user_id, []),
                 )
 
-            return tuple(
-                user_type_change_read(change, *admin_of(change)) for change in changes
+            stored = tuple(
+                stored_user_type_change(change, *admin_of(change), issuer)
+                for change in changes
             )
+        profiles = self._profiles(
+            source,
+            (
+                subject
+                for change in stored
+                for subject in change.changed_by_profile_subjects
+            ),
+            RateLimitWaitBudget(),
+        )
+        return tuple(
+            user_type_change_read_with_profiles(
+                change.read, profiles_of(change.changed_by_profile_subjects, profiles)
+            )
+            for change in stored
+        )
 
     def get_user_saved_items(
         self, *, principal: AccountPrincipal, user_id: UUID
@@ -327,6 +563,18 @@ def _admin_user_reads(session: Session, users: list[User]) -> tuple[AdminUserRea
         read_identities_newest_first(session, [user.id for user in users])
     )
     return tuple(admin_user_read(user, identities.get(user.id, [])) for user in users)
+
+
+def _stored_admin_users(
+    session: Session, users: list[User], issuer: str | None
+) -> tuple[StoredAdminUser, ...]:
+    """Describe users as stored, with their subjects from ``issuer``."""
+    identities = identities_by_user(
+        read_identities_newest_first(session, [user.id for user in users])
+    )
+    return tuple(
+        stored_admin_user(user, identities.get(user.id, []), issuer) for user in users
+    )
 
 
 def _change_type_in_session(

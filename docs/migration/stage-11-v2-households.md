@@ -296,3 +296,97 @@ packages are no longer installed. Their v1 household requests are rejected as
 unknown countries before any write, so the Cloud SQL-only path described
 above for those countries no longer runs. Existing Cloud SQL rows for them
 are kept.
+
+## Household Calculations
+
+`POST /v2/household-calculations` calculates a household stored through
+`/v2/households`, under a policy stored through `/v2/policies` or under
+current law, on the simulation service's v2 household functions. It needs no
+account. The body names `country_id`, `household_id`, an optional
+`policy_id`, optional `axes` (at most 8 groups of at most 32 axes, one point
+count per group, at most 10,000 points in all), `add_missing_variables` and
+optional `spm` settings. The year calculated is the household's
+`default_year`. Before anything is sent, the Public API checks, in order:
+
+1. that the country's `countries` row has `household_enabled` (422 otherwise);
+2. that the household, and the policy when one is named, exist in that
+   country (404 otherwise);
+3. that the household has a `default_year` (422 otherwise);
+4. that the policy sets no parameter the running catalog version lacks (422
+   with `code` `missing_parameters` and the parameters' names in
+   `missing_parameters`). A policy no published catalog of the running
+   PolicyEngine.py version can check passes.
+
+It then sends the simulation service's `POST /household-calculations` the
+IDs and options, with the request's ID and observability ID headers. The
+answer is 202 with the new job's `calculation_id` and `status`; each
+submission creates a new job. The simulation service's 422 reasons reach the
+caller as 422.
+
+Answers after which no job of the submission runs are 503: its 400 (a
+household, policy or catalog version it can't find, with its reason), its
+401, 403, 404, 405, 413 and 429 (its authentication, routing, body-size and
+rate limits, before its route runs), its own 503, which names its code (it
+isn't configured, its manifest or database can't be read, or Modal refused
+the call, after which it fails the job it had created), a refusal the Public
+API can't read, a connection never made, missing configuration and a gateway
+token it can't fetch. A failed catalog query in the policy check is 503 too.
+
+Answers that may come after it created the job are 502: a 202 whose body the
+Public API can't read, its 500 (`internal_error`), any status not named
+above (such as 200, a redirect, 408, 409 or 501), an answer lost after the
+submission may have been sent (a read timeout or a dropped connection), and
+an answer a proxy in front of it gave in its place: a 502 or 504, which it
+never answers itself, or a 503 without its code. No route finds a
+household job without its ID, so the 502's message asks the caller to submit
+the household calculation again, and says that this creates a second job if
+the first request went through.
+
+The simulation service's text may hold stored data, and the route needs no
+account, so after its 500 or 503, or a status not named above, the message
+gives only its status and its `code` when that is a fixed identifier
+(lower-case letters, digits and underscores, starting with a letter, at most
+64 characters), for example "The simulation service may have created the
+household job, but it failed (500 internal_error)." The 400 and 422 refusals
+keep its reasons, which name the caller's own household, policy and fields.
+After a lost answer or a proxy's status, the message says "its answer was
+lost" and names the transport error or the proxy's status. Every
+answer given once the call was attempted carries
+`X-PolicyEngine-Observability-Id` with the attempt's ID, which the
+simulation service never received after a connection never made or a token
+that couldn't be fetched; a refusal before the attempt carries none, not even
+the caller's.
+
+`GET /v2/household-calculations/{calculation_id}` reads the job from
+`household_jobs`, which the simulation service inserts and its household
+function completes, as the runtime role, and never calls the simulation
+service. It answers the job's status, catalog and package versions and
+times; once it succeeded, `result` (the calculated household in its stored
+key order, its warnings, the SPM selection applied and the SPM receipt);
+once it failed, `error` (the household function's error code and message,
+with the inputs it doesn't recognize and its SPM error, or only the job's
+error message when it failed without one). An unknown ID is 404, and a
+succeeded job whose result can't be read is 500.
+
+The call to the simulation service goes through
+`policyengine_api/libs/simulation_household_calculations.py`, at
+`SIMULATION_ENTRYPOINT_URL` with the gateway credentials of every other
+simulation call. `post_household_calculation` is the only code that sends
+the request, so moving to the generated simulation client changes that
+function and the dependency.
+
+The live staging job runs, after the other live tests: a submit and read
+cycle, six calculations submitted at once (each accepted within
+`STAGING_HOUSEHOLD_SUBMIT_LIMIT_SECONDS`, 10 by default, and finished within
+`STAGING_HOUSEHOLD_FINISH_LIMIT_SECONDS`, 300), a household across 401 axis
+points, and a parity set of three US and three UK households compared value
+by value with `/calculate` and `/calculate-full`. The parity set waits 320 s
+for each `/calculate` or `/calculate-full` answer, longer than the candidate's
+300 s Cloud Run request timeout: `/calculate-full` calculates every variable
+the household leaves out, which took 224 s on staging. A unit test sends each
+parity household through those routes with the installed country models and
+replaces only the calculation, so a household the routes refuse before
+calculating, in their input checks or situation parsing, fails before a
+release. The checks
+need the simulation service's household calculation route deployed to staging
+first.

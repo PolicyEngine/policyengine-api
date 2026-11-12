@@ -1,3 +1,38 @@
+## [5.41.1] - 2026-11-12
+
+### Fixed
+
+- Fix the live staging household parity checks: the US household's `income_tax` is on its tax unit, where `/calculate` expects it, and the checks wait longer than the candidate's 300 s request timeout for `/calculate-full`.
+
+
+## [5.41.0] - 2026-11-12
+
+### Added
+
+- The admin user routes show each user's email and names from Auth0, read when an admin asks and never stored, and an email search finds users by their Auth0 email; it refuses text with `<` or `>`, and text that more than 200 Auth0 users match. The optional, read-only `AUTH0_USER_PROFILES_*` settings, which need `PUBLIC_API_AUTH_ISSUER`, configure it in staging and production.
+
+
+## [5.40.0] - 2026-11-11
+
+### Added
+
+- Add `POST /v2/household-calculations`, which calculates a stored household through the simulation service after checking the country, the household and policy, the household's default year and the policy's parameters, and `GET /v2/household-calculations/{calculation_id}`, which reads the calculation's status, result and error. `/v2/model-catalog` now says whether each catalog version offers SPM settings, as `spm`.
+
+
+## [5.39.1] - 2026-11-11
+
+### Changed
+
+- The release workflow's tests of the deployed staging and production candidates send the CI server credential, so they keep passing once the Public API requires one.
+
+
+## [5.39.0] - 2026-11-10
+
+### Added
+
+- Admins can find signed-in v2 users by email, change their types and read each change at `/v2/admin/users`; routes can require a minimum user type; and `scripts/set_v2_user_type.py` sets a user's type by email.
+
+
 ## [5.38.0] - 2026-11-10
 
 ### Added

@@ -6,6 +6,11 @@ from dataclasses import dataclass
 import httpx
 import pytest
 
+from tests.integration.deployed_api_credentials import (
+    MissingServerCredentialError,
+    deployed_api_client,
+)
+
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
 )
@@ -157,6 +162,23 @@ def api_base_url() -> str:
 
 @pytest.fixture
 def api_client(api_base_url: str):
+    """Call the deployed Public API with the CI server credential on every request.
+
+    The client is ``deployed_api_client``'s
+    (``tests/integration/deployed_api_credentials.py``). The test fails, rather
+    than skips, without ``CI_SERVER_ACCESS_TOKEN``.
+    """
+    try:
+        client = deployed_api_client(api_base_url)
+    except MissingServerCredentialError as error:
+        pytest.fail(str(error), pytrace=False)
+    with client:
+        yield client
+
+
+@pytest.fixture
+def uncredentialed_api_client(api_base_url: str):
+    """Call the deployed Public API without any credential, as an outside caller."""
     with httpx.Client(
         base_url=api_base_url,
         timeout=90.0,

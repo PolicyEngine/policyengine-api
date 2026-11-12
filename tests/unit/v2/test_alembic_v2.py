@@ -76,7 +76,8 @@ SIMULATION_RUNS_REVISION = "1356f658347d"
 SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
 # The user types revision, on the saved-item keys revision.
 USER_TYPES_REVISION = "617f531f1506"
-# The user type changes revision, on the user types revision.
+# The user type changes revision, on the user types revision, and parent of
+# the SPM availability revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
@@ -259,6 +260,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        USER_TYPE_CHANGES_REVISION,
         USER_TYPES_REVISION,
         SAVED_ITEM_KEYS_REVISION,
         SIMULATION_RUNS_REVISION,
@@ -1280,3 +1282,49 @@ def test_saved_item_keys_revision_adds_only_two_foreign_keys() -> None:
         assert "op.drop_table(" not in body
         assert "op.add_column(" not in body
         assert "op.drop_column(" not in body
+
+
+def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
+    """The revision after the user type changes records SPM availability.
+
+    It is generated, adds the nullable JSON ``spm_availability`` column to
+    ``tax_benefit_model_versions`` and drops it on downgrade, and writes no
+    data: catalog publication records it.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == USER_TYPE_CHANGES_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    # The revision stays as Alembic wrote it, in either quote style.
+    assert upgrade.count("op.add_column(") == 1
+    assert re.search(
+        r"""op\.add_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""sa\.Column\(\s*["']spm_availability["'],\s*sa\.JSON\(\),\s*"""
+        r"nullable=True,?\s*\),?\s*\)",
+        upgrade,
+    )
+    assert downgrade.count("op.drop_column(") == 1
+    assert re.search(
+        r"""op\.drop_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""["']spm_availability["'],?\s*\)""",
+        downgrade,
+    )
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body

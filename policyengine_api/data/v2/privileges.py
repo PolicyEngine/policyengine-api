@@ -255,8 +255,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "regions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
-    # Catalog publication updates a version's time periods and
-    # catalog_last_published_at, and catalog pruning its
+    # Catalog publication updates a version's time periods,
+    # catalog_last_published_at and spm_availability, and catalog pruning its
     # catalog_values_pruned_at.
     "tax_benefit_model_versions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
