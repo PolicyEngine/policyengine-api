@@ -281,7 +281,9 @@ class SimulationServiceClient(Protocol):
 
     ``rerun_report`` raises the same errors, apart from naming a created
     record, and SimulationServiceConflictError when the service will not run
-    the report again now.
+    the report again now; a 409 that cannot be read is
+    SimulationServiceUnavailableError, since the service answers 409 only
+    before writing anything.
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,

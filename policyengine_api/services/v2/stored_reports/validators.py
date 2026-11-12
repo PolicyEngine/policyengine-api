@@ -13,12 +13,18 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.data.v2.models import ReportRun
-    from policyengine_api.services.v2.stored_reports.types import StoredReportRows
+    from policyengine_api.services.v2.stored_reports.types import (
+        ReportKind,
+        StoredReportRows,
+    )
 
 READABLE_KIND = "economy"
 KIND_NAMES = {"household": "a household report", "budget_window": "a budget window"}
-# The kinds of report whose runs the run routes do not start or list yet.
-KINDS_WITHOUT_RUN_ROUTES = {
+# The kinds of report whose runs the run routes start and list; they refuse
+# any other kind, naming it.
+RUN_ROUTE_KINDS = frozenset({"economy"})
+REPORT_KIND_NAMES: dict[ReportKind, str] = {
+    "economy": "an economy report",
     "household": "a household report",
     "budget_window": "a budget window",
 }
@@ -70,10 +76,11 @@ class RerunReportUnreadableError(RuntimeError):
 
 
 class ReportKindUnsupportedError(ValueError):
-    """The report is of a kind these routes do not read yet.
+    """The report is of a kind a route does not read, or start and list runs of, yet.
 
     Household reports and budget windows are stored in the same tables, and
-    are read once their own routes exist.
+    each route takes them once their own PRs add them; the message says which
+    kind the report is and what the route does not do with it.
     """
 
 
@@ -106,10 +113,10 @@ def require_economy_report_runs(rows: StoredReportRows) -> None:
     the read routes' kinds.
     """
     kind = report_kind(rows.report)
-    if kind in KINDS_WITHOUT_RUN_ROUTES:
+    if kind not in RUN_ROUTE_KINDS:
         msg = (
-            f"Report {rows.report.id} is {KINDS_WITHOUT_RUN_ROUTES[kind]}, whose "
-            "runs these routes do not start or list yet"
+            f"Report {rows.report.id} is {REPORT_KIND_NAMES[kind]}, whose runs "
+            "these routes do not start or list yet"
         )
         raise ReportKindUnsupportedError(msg)
 

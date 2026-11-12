@@ -226,21 +226,23 @@ class V2StoredReportResourceService(Protocol):
     ) -> ReportRead:
         """Run the country's economy report again; return it with its new run.
 
-        Raise ``StoredReportNotFoundError`` and ``ReportKindUnsupportedError``
-        as ``get_report`` does, the checks' errors as ``create_report`` does
-        for the policies of the report's simulations, the simulation
-        service's errors, among them ``SimulationServiceConflictError`` when
-        it will not run the report again now, and
-        ``RerunReportUnreadableError`` when the report cannot be read back
-        once its new run was started.
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report, ``ReportKindUnsupportedError`` for a kind whose runs the run
+        routes do not start yet (household reports and budget windows), the
+        checks' errors as ``create_report`` does for the policies of the
+        report's simulations, the simulation service's errors, among them
+        ``SimulationServiceConflictError`` when it will not run the report
+        again now, and ``RerunReportUnreadableError`` when the report cannot
+        be read back once its new run was started.
         """
         ...
 
     def list_report_runs(self, *, country_id: str, report_id: UUID) -> ReportRunsRead:
         """Return the country's economy report's runs, newest first.
 
-        Raise ``StoredReportNotFoundError`` and ``ReportKindUnsupportedError``
-        as ``get_report`` does.
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report, and ``ReportKindUnsupportedError`` for a kind whose runs the
+        run routes do not list yet (household reports and budget windows).
         """
         ...
 

@@ -137,7 +137,7 @@ class V2StoredReportService:
         ``current_versions`` returns the country package and PolicyEngine.py
         versions the Public API runs for a country. ``submissions`` is the
         checking ``SimulationSubmissionService``; without it, creating a
-        report raises SubmissionsNotConfiguredError.
+        report or running one again raises SubmissionsNotConfiguredError.
         """
         self._database_session = database_session
         self._current_versions = current_versions

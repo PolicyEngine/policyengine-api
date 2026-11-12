@@ -52,6 +52,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from tests.integration.simulation_rows import insert_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     RunSettings,
@@ -63,7 +64,7 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from sqlalchemy import Connection, Engine
 
@@ -329,23 +330,64 @@ def test_another_countrys_report_or_an_unknown_one_is_not_found(
     assert simulation_service.reruns == []
 
 
+def store_household_report(connection: Connection, catalog: CatalogRows) -> UUID:
+    """Store a household and a report over it; return the report's ID."""
+    household_id = uuid4()
+    insert_row(
+        connection,
+        "households",
+        id=household_id,
+        country_id=catalog.country,
+        household_data="{}",
+        canonicalization_version=1,
+        content_hash=uuid4().hex * 2,
+    )
+    catalog.household_ids.append(household_id)
+    return store_report(connection, catalog, household_id=household_id).report_id
+
+
+def store_budget_window(connection: Connection, catalog: CatalogRows) -> UUID:
+    """Store a three-year budget window; return its report's ID."""
+    return store_report(connection, catalog, budget_window_size=3).report_id
+
+
+@dataclass(frozen=True)
+class OtherKind:
+    """A kind of report the run routes refuse: its name and how to store one."""
+
+    name: str
+    store: Callable[[Connection, CatalogRows], UUID]
+
+
 @pytest.mark.parametrize("method", ["get", "post"])
-def test_a_budget_windows_runs_are_not_listed_or_started_here_yet(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any, method: str
+@pytest.mark.parametrize(
+    "other_kind",
+    [
+        OtherKind("a budget window", store_budget_window),
+        OtherKind("a household report", store_household_report),
+    ],
+    ids=["budget-window", "household"],
+)
+def test_other_kinds_runs_are_not_listed_or_started_here_yet(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    method: str,
+    other_kind: OtherKind,
 ) -> None:
     with owner_engine.begin() as connection:
-        budget_window = store_report(connection, catalog, budget_window_size=3)
+        report_id = other_kind.store(connection, catalog)
     simulation_service = RerunningSimulationService(owner_engine, catalog)
     client = client_for(runtime_sessions, simulation_service)
 
     response = client.request(
-        method, f"/v2/reports/{budget_window.report_id}/runs?country_id=us", json={}
+        method, f"/v2/reports/{report_id}/runs?country_id=us", json={}
     )
 
     assert response.status_code == 422
     assert response.json()["message"] == (
-        f"Report {budget_window.report_id} is a budget window, whose runs these "
-        "routes do not start or list yet"
+        f"Report {report_id} is {other_kind.name}, whose runs these routes do not "
+        "start or list yet"
     )
     assert simulation_service.reruns == []
 
