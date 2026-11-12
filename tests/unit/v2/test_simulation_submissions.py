@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -13,6 +14,7 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
     PolicyParametersMissingError,
@@ -68,12 +70,23 @@ class StoredCountries:
         return self.countries
 
 
-@dataclass(frozen=True)
-class CheckedPolicy:
-    """The parts of a checked policy (``CheckedPolicyRead``) the checks read."""
+STORED_AT = datetime(2026, 11, 12, tzinfo=UTC)
 
-    id: UUID
-    missing_parameters: tuple[str, ...] | None
+
+def checked_policy(
+    policy_id: UUID, country_id: str, missing_parameters: tuple[str, ...] | None
+) -> CheckedPolicyRead:
+    """Return a stored policy as the policy service checks it."""
+    return CheckedPolicyRead(
+        id=policy_id,
+        country_id=country_id,
+        tax_benefit_model_id=uuid4(),
+        tax_benefit_model_version_id=uuid4(),
+        created_at=STORED_AT,
+        updated_at=STORED_AT,
+        parameter_values=(),
+        missing_parameters=missing_parameters,
+    )
 
 
 @dataclass
@@ -87,14 +100,14 @@ class StoredPolicies:
     error: Exception | None = None
     asked: list[tuple[str, UUID]] = field(default_factory=list)
 
-    def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicy:
+    def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicyRead:
         self.asked.append((country_id, policy_id))
         if self.error is not None:
             raise self.error
         if policy_id not in MISSING_PARAMETERS:
             msg = f"Policy {policy_id} was not found"
             raise PolicyNotFoundError(msg)
-        return CheckedPolicy(policy_id, MISSING_PARAMETERS[policy_id])
+        return checked_policy(policy_id, country_id, MISSING_PARAMETERS[policy_id])
 
 
 @dataclass

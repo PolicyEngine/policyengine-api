@@ -423,7 +423,10 @@ REMOVED_PARAMETERS = ("gov.example.removed_amount", "gov.example.removed_rate")
     ],
 )
 def test_a_policy_setting_parameters_the_running_catalog_lacks_answers_422(
-    client_for_error, path: str, body: dict[str, Any], caplog
+    client_for_error: Callable[[Exception], TestClient],
+    path: str,
+    body: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     error = PolicyParametersMissingError(POLICY_ID, REMOVED_PARAMETERS)
     client = client_for_error(error)

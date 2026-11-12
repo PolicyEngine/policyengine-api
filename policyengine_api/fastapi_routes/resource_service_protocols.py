@@ -211,7 +211,10 @@ class V2StoredReportResourceService(Protocol):
 
         Raise ``EconomyCalculationsUnsupportedError`` for a country without
         economy reports, ``PolicyNotFoundError`` for a policy the country
-        does not store, and the simulation service's errors.
+        does not store, ``PolicyParametersMissingError`` for a policy that
+        sets parameters the running catalog version lacks,
+        ``SubmissionStorageError`` when the database or its catalog cannot be
+        read for those checks, and the simulation service's errors.
         """
         ...
 
