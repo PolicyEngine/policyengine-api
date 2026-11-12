@@ -15,12 +15,16 @@ and the stored policy and dynamic (null for current law). A report request
 names the country, ``report_type`` (``economy``), the label and description,
 the year, region and dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
-caller gave them. Neither names a PolicyEngine.py version: the simulation
-service runs its default worker's. The simulation service answers:
+caller gave them. A budget window goes to the same ``POST /reports`` as
+``report_type`` ``budget_window``, naming its first year and
+``budget_window_size`` in place of the year, and no ``include_cliffs``.
+None names a PolicyEngine.py version: the simulation service runs its
+default worker's. The simulation service answers:
 
-- 201 or 202 with the created record's ID and its first run's ID. One whose
-  body cannot be read is SimulationServiceAnswerUnreadableError: the record
-  exists;
+- 201 or 202 with the created record's ID and its first run's ID: for a
+  budget window, its budget-window run's ID (``budget_window_run_id``). One
+  whose body cannot be read is SimulationServiceAnswerUnreadableError: the
+  record exists;
 - 422 with its reasons when it refuses the caller's data, as text or one
   per field as FastAPI writes them, and 400 with a code in
   ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region, dataset or
@@ -119,6 +123,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
+    SubmittedBudgetWindow,
     SubmittedReport,
     SubmittedSimulation,
 )
@@ -129,6 +134,7 @@ if TYPE_CHECKING:
     import httpx
 
     from policyengine_api.services.v2.simulation_service.types import (
+        BudgetWindowReportCreationInput,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         PolicyChoice,
@@ -176,6 +182,11 @@ class _CreatedSimulation(AnswerModel):
 class _CreatedReport(AnswerModel):
     report_id: UUID
     report_run_id: UUID
+
+
+class _CreatedBudgetWindow(AnswerModel):
+    report_id: UUID
+    budget_window_run_id: UUID
 
 
 class _Refusal(Refusal):
@@ -235,6 +246,28 @@ def report_request(report: EconomyReportCreationInput) -> dict[str, Any]:
         "baseline": _policy_choice(report.baseline),
         "reform": _policy_choice(report.reform),
         "include_cliffs": report.include_cliffs,
+    }
+    if report.spm is not None:
+        body["spm"] = report.spm.model_dump(mode="json")
+    return body
+
+
+def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, Any]:
+    """Return the simulation service's request body for the budget window.
+
+    ``spm`` is sent only when the caller gave it.
+    """
+    body: dict[str, Any] = {
+        "country": report.country_id,
+        "report_type": report.kind,
+        "label": report.label,
+        "description": report.description,
+        "year": report.year,
+        "budget_window_size": report.budget_window_size,
+        "region_code": report.region_code,
+        "dataset_name": report.dataset_name,
+        "baseline": _policy_choice(report.baseline),
+        "reform": _policy_choice(report.reform),
     }
     if report.spm is not None:
         body["spm"] = report.spm.model_dump(mode="json")
@@ -493,6 +526,32 @@ class SimulationServiceReportClient:
             raise SimulationServiceAnswerUnreadableError(msg) from error
         return SubmittedReport(
             report_id=created.report_id, report_run_id=created.report_run_id
+        )
+
+    def submit_budget_window(
+        self, report: BudgetWindowReportCreationInput
+    ) -> SubmittedBudgetWindow:
+        """Create the budget window, its simulations and runs; return its IDs.
+
+        It is sent to the report route, so its refusals and failures are a
+        report's. Raise the errors ``SimulationServiceClient`` names.
+        """
+        answer = self._answer(
+            self._send_report, budget_window_request(report), record="report"
+        )
+        if answer.status_code not in CREATED_STATUSES:
+            _raise_for_refusal(answer, "report")
+        try:
+            created = _CreatedBudgetWindow.model_validate_json(answer.content)
+        except ValidationError as error:
+            msg = (
+                "The simulation service created the budget window, but its answer "
+                "could not be read."
+            )
+            raise SimulationServiceAnswerUnreadableError(msg) from error
+        return SubmittedBudgetWindow(
+            report_id=created.report_id,
+            budget_window_run_id=created.budget_window_run_id,
         )
 
 

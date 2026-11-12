@@ -32,8 +32,8 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
     )
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        ReportCreationInput,
     )
     from policyengine_api.services.v2.stored_reports.types import (
         StoredReportRead,
@@ -208,9 +208,7 @@ class V2StoredReportResourceService(Protocol):
         """Return the country's economy reports and budget windows, as named."""
         ...
 
-    def create_report(
-        self, report_input: EconomyReportCreationInput
-    ) -> StoredReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
         Raise ``EconomyCalculationsUnsupportedError`` for a country without

@@ -14,6 +14,8 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+
+from policyengine_api.data.v2.models import BudgetSummary
 from policyengine_api.services.v2.stored_reports.budget_window_results import (
     transformations as window_transformations,
 )
@@ -22,8 +24,6 @@ from policyengine_api.services.v2.stored_reports.budget_window_results.types imp
     BudgetWindowResultUnreadableError,
     BudgetWindowYearRows,
 )
-
-from policyengine_api.data.v2.models import BudgetSummary
 from tests.fixtures.economy_results import (
     RunIds,
     economy_result_rows,

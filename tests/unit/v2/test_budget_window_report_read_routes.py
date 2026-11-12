@@ -7,7 +7,6 @@ from dataclasses import replace
 from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
     BudgetWindowResultUnreadableError,
 )
-
 from tests.unit.v2.budget_window_report_support import (
     BUDGET_WINDOW_REPORT_ID,
     BUDGET_WINDOW_RESULT,

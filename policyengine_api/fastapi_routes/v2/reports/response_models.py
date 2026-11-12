@@ -308,7 +308,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
-            "The request does not match the schema; the country has no economy "
+            "The request does not match the schema (such as a budget window of "
+            "fewer than 1 or more than 75 years, or one ending after 2200); the "
+            "country has no economy "
             "reports (such as a household-only country); a policy the report "
             "names sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "

@@ -8,7 +8,6 @@ from uuid import UUID
 from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
     BudgetWindowResult,
 )
-
 from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportRead,
     BudgetWindowReportSummaryRead,

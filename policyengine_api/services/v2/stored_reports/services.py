@@ -19,9 +19,9 @@ succeeded window can find them unreadable. Lists name at most 25 reports and
 read them, with their newest runs and any window's years, in two queries,
 without results.
 
-Creating a report checks the country and the policies the report names, asks
-the simulation service to create and start it, then reads it back from the
-tables. Once the simulation service has answered with the report's ID, the
+Creating a report or budget window checks the country and the policies it
+names, asks the simulation service to create and start it, then reads it
+back from the tables. Once the simulation service has answered with the report's ID, the
 report exists: a failure to read it back raises CreatedReportUnreadableError,
 which names it, so the caller reads it rather than submitting it again.
 Re-runs and run lists are not here.
@@ -76,8 +76,8 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         PackageVersions,
+        ReportCreationInput,
         SimulationServiceClient,
     )
     from policyengine_api.services.v2.stored_reports.database_session import (
@@ -210,27 +210,29 @@ class V2StoredReportService:
                 for stored in listed_reports(rows, report_ids=report_ids)
             )
 
-    def create_report(
-        self, report_input: EconomyReportCreationInput
-    ) -> StoredReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service and return it as stored.
 
-        Raise the submission's errors (see ``SimulationSubmissionService``),
-        and CreatedReportUnreadableError, caused by the read's own error, when
-        the report the simulation service created cannot be read back in the
-        country: not stored there, the database unavailable, or any other
-        failure of the read.
+        An economy report and a budget window each go through their own
+        submission. Raise the submission's errors (see
+        ``SimulationSubmissionService``), and CreatedReportUnreadableError,
+        caused by the read's own error, when the report the simulation service
+        created cannot be read back in the country: not stored there, the
+        database unavailable, or any other failure of the read.
         """
         if self._submissions is None:
             msg = "The simulation service is not configured here"
             raise SubmissionsNotConfiguredError(msg)
-        submitted = self._submissions.submit_report(report_input)
+        if report_input.kind == "budget_window":
+            report_id = self._submissions.submit_budget_window(report_input).report_id
+        else:
+            report_id = self._submissions.submit_report(report_input).report_id
         try:
             return self.get_report(
-                country_id=report_input.country_id, report_id=submitted.report_id
+                country_id=report_input.country_id, report_id=report_id
             )
         except Exception as error:
             # The report exists whatever failed, so the caller gets its ID.
             raise CreatedReportUnreadableError(
-                report_id=submitted.report_id, country_id=report_input.country_id
+                report_id=report_id, country_id=report_input.country_id
             ) from error

@@ -22,9 +22,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
+from policyengine_api.data.v2.models.reports import LAST_YEAR, MAX_BUDGET_WINDOW_YEARS
 from policyengine_api.query_parameters import CountryId, ResourceId
 from policyengine_api.spm import SPMSelection
 
@@ -39,6 +47,14 @@ SimulationYear = Annotated[int, Field(ge=1900, le=2200, description="The year")]
 CatalogKey = Annotated[str, Field(min_length=1, max_length=255, pattern=r"^\S+$")]
 ReportLabel = Annotated[str, Field(min_length=1, max_length=255)]
 ReportDescription = Annotated[str, Field(max_length=10_000)]
+BudgetWindowSize = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=MAX_BUDGET_WINDOW_YEARS,
+        description="How many consecutive years the window has, from its year",
+    ),
+]
 
 
 class SimulationServiceUnavailableError(RuntimeError):
@@ -191,16 +207,70 @@ class EconomyReportFields(StrictSubmissionModel):
     @classmethod
     def require_spm_object(cls, value: object) -> object:
         """Refuse an explicit null ``spm``; omit the field to send no settings."""
-        if value is None:
-            msg = "spm must be an object when supplied"
-            raise ValueError(msg)
-        return value
+        return _spm_object(value)
+
+
+def _spm_object(value: object) -> object:
+    """Return ``value``, refusing an explicit null for ``spm``."""
+    if value is None:
+        msg = "spm must be an object when supplied"
+        raise ValueError(msg)
+    return value
 
 
 class EconomyReportCreationInput(EconomyReportFields):
     """An economy report to create in the country."""
 
     country_id: CountryId
+
+
+class BudgetWindowReportFields(StrictSubmissionModel):
+    """A budget window: a baseline and a reform simulation in each of several years.
+
+    The window is ``budget_window_size`` consecutive years from ``year``,
+    ending in 2200 or earlier. Each year compares the two simulations of one
+    region's data in that year, as an economy report does
+    (``EconomyReportFields`` describes ``region_code``, ``dataset_name`` and
+    ``spm``). Cliff impacts are not calculated for a budget window, so it
+    takes no ``include_cliffs``.
+    """
+
+    kind: Literal["budget_window"]
+    label: ReportLabel
+    description: ReportDescription | None = None
+    year: SimulationYear
+    budget_window_size: BudgetWindowSize
+    region_code: CatalogKey
+    dataset_name: CatalogKey | None = None
+    baseline: PolicyChoice
+    reform: PolicyChoice
+    spm: SPMSelection | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_spm_default
+    )
+
+    @field_validator("spm", mode="before")
+    @classmethod
+    def require_spm_object(cls, value: object) -> object:
+        """Refuse an explicit null ``spm``; omit the field to send no settings."""
+        return _spm_object(value)
+
+    @model_validator(mode="after")
+    def require_window_within_the_years_stored(self) -> BudgetWindowReportFields:
+        """Refuse a window whose last year is after 2200."""
+        if self.year + self.budget_window_size - 1 > LAST_YEAR:
+            msg = f"a budget window must end in {LAST_YEAR} or earlier"
+            raise ValueError(msg)
+        return self
+
+
+class BudgetWindowReportCreationInput(BudgetWindowReportFields):
+    """A budget window to create in the country."""
+
+    country_id: CountryId
+
+
+# A report of either kind to create.
+ReportCreationInput = EconomyReportCreationInput | BudgetWindowReportCreationInput
 
 
 @dataclass(frozen=True)
@@ -217,6 +287,18 @@ class SubmittedReport:
 
     report_id: UUID
     report_run_id: UUID
+
+
+@dataclass(frozen=True)
+class SubmittedBudgetWindow:
+    """The budget window the simulation service created, and its first run.
+
+    ``budget_window_run_id`` is the budget-window run, whose years the
+    service created and started.
+    """
+
+    report_id: UUID
+    budget_window_run_id: UUID
 
 
 class SimulationServiceClient(Protocol):
@@ -256,6 +338,16 @@ class SimulationServiceClient(Protocol):
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         """Create the report, its simulations and their runs, and start them."""
+        ...
+
+    def submit_budget_window(
+        self, report: BudgetWindowReportCreationInput
+    ) -> SubmittedBudgetWindow:
+        """Create the budget window, its simulations and a run per year; start them.
+
+        It goes to the same route as ``submit_report``, so it raises the same
+        errors.
+        """
         ...
 
 

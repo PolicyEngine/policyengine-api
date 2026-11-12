@@ -186,15 +186,18 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         response_model=ReportDetailResponse,
         status_code=201,
         responses=CREATE_RESPONSES,
-        summary="Create an economy report",
+        summary="Create an economy report or a budget window",
         description=(
             "Checks that the country has economy reports and stores each named "
             "policy, and that the running catalog version has every parameter "
             "those policies set, then has the simulation service create the "
             "report, its two "
             "simulations and their runs on its default worker's PolicyEngine.py "
-            "version, and start the run. Answers the report as stored, with its "
-            "pending run; read it again to follow the run. A created report "
+            "version, and start the run. A budget window (kind budget_window) is "
+            "checked the same way; the simulation service creates a "
+            "budget-window run with a report run for each year, and starts its "
+            "years. Answers the report as stored, with its pending run; read it "
+            "again to follow the run. A created report "
             "that cannot be read back answers 502 with its report_id, and one "
             "whose run the simulation service failed before answering 503 "
             "answers 503 with its report_id."
