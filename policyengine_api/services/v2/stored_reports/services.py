@@ -19,7 +19,17 @@ the simulation service to create and start it, then reads it back from the
 tables. Once the simulation service has answered with the report's ID, the
 report exists: a failure to read it back raises CreatedReportUnreadableError,
 which names it, so the caller reads it rather than submitting it again.
-Re-runs and run lists are not here.
+
+Running a report again reads it in its country, checks its country and the
+policies its simulations name as a new report's are checked, has the
+simulation service create and start its new run on the current versions,
+then reads the report back with that run as its newest. The database session
+is closed while the simulation service is asked. A failure to read it back
+raises RerunReportUnreadableError, since the new run exists. A report's runs
+are listed newest first, whatever their status and versions, beside the
+versions the Public API runs, so a caller can tell which are out of date.
+Household reports and budget windows are neither run again nor listed here
+yet.
 """
 
 from __future__ import annotations
@@ -31,6 +41,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import ReportRunStatus
 from policyengine_api.services.v2.simulation_service.types import (
+    ReportRerunInput,
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors import (
@@ -39,17 +50,23 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
     read_report_rows,
 )
+from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs import (
+    read_report_runs,
+)
 from policyengine_api.services.v2.stored_reports.economy_results import (
     transformations as result_transformations,
 )
 from policyengine_api.services.v2.stored_reports.transformations import (
     listed_economy_reports,
+    report_policy_ids,
     report_read,
+    report_runs_read,
     report_summary_read,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportStorageError,
+    RerunReportUnreadableError,
     require_economy_report,
     require_reform_run,
     require_report,
@@ -58,6 +75,8 @@ from policyengine_api.services.v2.stored_reports.validators import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
     from uuid import UUID
+
+    from sqlmodel import Session
 
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
@@ -69,7 +88,9 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportRead,
+        ReportRunsRead,
         ReportSummaryRead,
+        StoredReportRows,
     )
 
 
@@ -85,6 +106,19 @@ def _storage_failures() -> Iterator[None]:
     except SQLAlchemyError as error:
         msg = "V2 report storage is unavailable"
         raise ReportStorageError(msg) from error
+
+
+def _stored_report(
+    session: Session, *, country_id: str, report_id: UUID
+) -> StoredReportRows:
+    """Return the country's report with its newest run.
+
+    Raise StoredReportNotFoundError when the country has no such report.
+    """
+    rows = read_report_rows(session, country_id=country_id, report_ids=(report_id,))
+    return require_report(
+        next(iter(rows), None), report_id=report_id, country_id=country_id
+    )
 
 
 class V2StoredReportService:
@@ -108,6 +142,13 @@ class V2StoredReportService:
         self._current_versions = current_versions
         self._submissions = submissions
 
+    def _configured_submissions(self) -> SimulationServiceClient:
+        """Return the submissions, or raise SubmissionsNotConfiguredError."""
+        if self._submissions is None:
+            msg = "The simulation service is not configured here"
+            raise SubmissionsNotConfiguredError(msg)
+        return self._submissions
+
     def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
         """Return the country's economy report, its newest run and that run's result.
 
@@ -118,18 +159,7 @@ class V2StoredReportService:
         read.
         """
         with _storage_failures(), self._database_session.read() as session:
-            stored = require_report(
-                next(
-                    iter(
-                        read_report_rows(
-                            session, country_id=country_id, report_ids=(report_id,)
-                        )
-                    ),
-                    None,
-                ),
-                report_id=report_id,
-                country_id=country_id,
-            )
+            stored = _stored_report(session, country_id=country_id, report_id=report_id)
             require_economy_report(stored)
             run = stored.newest_run
             result = None
@@ -176,10 +206,7 @@ class V2StoredReportService:
         country: not stored there, the database unavailable, or any other
         failure of the read.
         """
-        if self._submissions is None:
-            msg = "The simulation service is not configured here"
-            raise SubmissionsNotConfiguredError(msg)
-        submitted = self._submissions.submit_report(report_input)
+        submitted = self._configured_submissions().submit_report(report_input)
         try:
             return self.get_report(
                 country_id=report_input.country_id, report_id=submitted.report_id
@@ -189,3 +216,54 @@ class V2StoredReportService:
             raise CreatedReportUnreadableError(
                 report_id=submitted.report_id, country_id=report_input.country_id
             ) from error
+
+    def rerun_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> ReportRead:
+        """Run the country's economy report again and return it with its new run.
+
+        Without ``force``, each side reuses a run of its own simulation that
+        succeeded on the current versions; with it, both are calculated
+        again. Raise StoredReportNotFoundError when the country has no such
+        report, ReportKindUnsupportedError for a household report or budget
+        window, ReportStorageError when it cannot be read, the submission's
+        checks' and the simulation service's errors (see
+        ``SimulationSubmissionService.rerun_report``), and
+        RerunReportUnreadableError, caused by the read's own error, when the
+        report cannot be read back once its new run was started.
+        """
+        submissions = self._configured_submissions()
+        with _storage_failures(), self._database_session.read() as session:
+            stored = _stored_report(session, country_id=country_id, report_id=report_id)
+            require_economy_report(stored)
+        submissions.rerun_report(
+            ReportRerunInput(
+                country_id=country_id,
+                report_id=report_id,
+                force=force,
+                policy_ids=report_policy_ids(stored),
+            )
+        )
+        try:
+            return self.get_report(country_id=country_id, report_id=report_id)
+        except Exception as error:
+            # The new run exists whatever failed, so the caller reads it.
+            raise RerunReportUnreadableError(
+                report_id=report_id, country_id=country_id
+            ) from error
+
+    def list_report_runs(self, *, country_id: str, report_id: UUID) -> ReportRunsRead:
+        """Return the country's economy report's runs, newest first.
+
+        Raise StoredReportNotFoundError when the country has no such report,
+        ReportKindUnsupportedError for a household report or budget window,
+        and ReportStorageError when the database cannot be read.
+        """
+        with _storage_failures(), self._database_session.read() as session:
+            stored = _stored_report(session, country_id=country_id, report_id=report_id)
+            require_economy_report(stored)
+            return report_runs_read(
+                stored,
+                read_report_runs(session, report_id=report_id),
+                current_versions=self._current_versions(country_id),
+            )

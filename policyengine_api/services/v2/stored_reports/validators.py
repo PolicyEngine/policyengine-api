@@ -46,6 +46,24 @@ class CreatedReportUnreadableError(RuntimeError):
         self.country_id = country_id
 
 
+class RerunReportUnreadableError(RuntimeError):
+    """The simulation service started the report's new run, but it could not be read.
+
+    The new run exists, so the caller reads the report rather than running
+    it again. ``report_id`` and ``country_id`` say where to read it; the
+    error's cause says why reading it back failed.
+    """
+
+    def __init__(self, *, report_id: UUID, country_id: str) -> None:
+        """Name the report and its country."""
+        super().__init__(
+            f"The simulation service started a new run of report {report_id} in "
+            f"country {country_id!r}, but the report could not be read back"
+        )
+        self.report_id = report_id
+        self.country_id = country_id
+
+
 class ReportKindUnsupportedError(ValueError):
     """The report is of a kind these routes do not read yet.
 

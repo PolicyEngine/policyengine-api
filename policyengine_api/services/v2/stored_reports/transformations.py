@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.stored_reports.types import (
     ReportRead,
     ReportRunRead,
+    ReportRunsRead,
     ReportSimulationRead,
     ReportSummaryRead,
 )
@@ -119,3 +120,29 @@ def listed_economy_reports(
         if stored is not None:
             listed.append(stored)
     return listed
+
+
+def report_policy_ids(rows: StoredReportRows) -> tuple[UUID | None, ...]:
+    """Return the policies of the report's simulations, baseline first.
+
+    A simulation of current law, or one that is gone, names none.
+    """
+    return tuple(
+        None if simulation is None else simulation.policy_id
+        for simulation in (rows.baseline_simulation, rows.reform_simulation)
+    )
+
+
+def report_runs_read(
+    rows: StoredReportRows,
+    runs: Iterable[ReportRun],
+    *,
+    current_versions: PackageVersions,
+) -> ReportRunsRead:
+    """Return an economy report's runs, in the order given, and the current versions."""
+    return ReportRunsRead(
+        report_id=rows.report.id,
+        kind="economy",
+        runs=tuple(report_run_read(run) for run in runs),
+        current_versions=current_versions,
+    )

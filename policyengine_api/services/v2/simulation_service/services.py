@@ -10,7 +10,9 @@ none), and that none of those policies sets a parameter the running catalog
 version lacks (``require_runnable_policies``, which re-runs should call too).
 Only then is the simulation service asked. The dynamics a submission names,
 its region and its dataset are checked by the simulation service, which reads
-them in the catalog version its default worker runs.
+them in the catalog version its default worker runs. Running a stored report
+again (``POST /reports/{report_id}/runs``) goes through the same checks, of
+the policies its simulations name.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ if TYPE_CHECKING:
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         PolicySource,
+        ReportRerunInput,
         SimulationServiceClient,
         SubmittedReport,
         SubmittedSimulation,
@@ -138,3 +141,13 @@ class SimulationSubmissionService:
             report.country_id, (report.baseline.policy_id, report.reform.policy_id)
         )
         return self._client_factory().submit_report(report)
+
+    def rerun_report(self, rerun: ReportRerunInput) -> None:
+        """Check the stored report, then have the simulation service run it again.
+
+        The country is checked, then the policies of the report's
+        simulations, the baseline's first, as for a new report. Raise the
+        checks' errors, then the simulation service's.
+        """
+        self._check(rerun.country_id, rerun.policy_ids)
+        self._client_factory().rerun_report(rerun)

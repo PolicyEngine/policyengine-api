@@ -98,6 +98,20 @@ class ReportRead(ReportSummaryRead):
 
 
 @dataclass(frozen=True)
+class ReportRunsRead:
+    """A report's runs, newest first, and the versions the Public API runs.
+
+    Each run names the country package and PolicyEngine.py versions it ran
+    on; one on other versions than ``current_versions`` is out of date.
+    """
+
+    report_id: UUID
+    kind: Literal["economy"]
+    runs: tuple[ReportRunRead, ...]
+    current_versions: PackageVersions
+
+
+@dataclass(frozen=True)
 class StoredReportRows:
     """A report's row, its newest run and the catalog and simulation rows it names.
 

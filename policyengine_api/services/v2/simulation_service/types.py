@@ -278,6 +278,10 @@ class SimulationServiceClient(Protocol):
       record the service created when the service's 503 names the
       submission's own.
 
+    ``rerun_report`` raises the same errors, apart from naming a created
+    record, and SimulationServiceConflictError when the service will not run
+    the report again now.
+
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
     PolicyNotFoundError, PolicyParametersMissingError and
@@ -292,6 +296,10 @@ class SimulationServiceClient(Protocol):
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         """Create the report, its simulations and their runs, and start them."""
+        ...
+
+    def rerun_report(self, rerun: ReportRerunInput) -> None:
+        """Create the stored report's new run on the current versions, and start it."""
         ...
 
 

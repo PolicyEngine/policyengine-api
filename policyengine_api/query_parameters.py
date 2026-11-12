@@ -433,6 +433,10 @@ class ReportDetailQuery(CountryQuery):
     """Query contract for reading one report in a country."""
 
 
+class ReportRunsQuery(CountryQuery):
+    """Query contract for a report's runs in a country: listing or starting one."""
+
+
 class ReportCollectionQuery(CountryQuery):
     """Query contract for listing chosen reports of a country.
 

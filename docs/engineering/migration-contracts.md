@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 18 |
-| request count | 97 |
+| request count | 99 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -207,6 +207,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/reports?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.kind`, `result.item.status`, `result.item.run`, `result.item.current_versions`, `result.item.result` |
 | `GET` | `/v2/reports?country_id=us&report_id={report_id}` | 200 | `report` | none | `status`, `message`, `result.items` |
 | `GET` | `/v2/reports/{report_id}?country_id=us` | 200 | `report` | none | `status`, `message`, `result.item.id`, `result.item.status`, `result.item.run`, `result.item.current_versions`, `result.item.result` |
+| `POST` | `/v2/reports/{report_id}/runs?country_id=us` | 201 | `report` | none | `status`, `message`, `result.item.id`, `result.item.status`, `result.item.run`, `result.item.current_versions` |
+| `GET` | `/v2/reports/{report_id}/runs?country_id=us` | 200 | `report` | none | `status`, `message`, `result.report_id`, `result.kind`, `result.items`, `result.current_versions` |
 | `POST` | `/v2/simulations?country_id=us` | 201 | `simulation` | none | `status`, `message`, `result.item.id`, `result.item.kind`, `result.item.status`, `result.item.run` |
 | `GET` | `/v2/simulations/{simulation_id}?country_id=us` | 200 | `simulation` | none | `status`, `message`, `result.item.id`, `result.item.status`, `result.item.run`, `result.item.current_versions` |
 

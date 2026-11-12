@@ -245,6 +245,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v2_country_routes.py" in workflow
     assert "test_v2_report_reads.py" in workflow
     assert "test_v2_report_creation.py" in workflow
+    assert "test_v2_report_runs.py" in workflow
     assert "test_v2_saved_detailed_save_records.py" in workflow
     assert "test_v2_policy_persistence.py" in workflow
     assert "test_v1_policy_dual_write.py" in workflow
