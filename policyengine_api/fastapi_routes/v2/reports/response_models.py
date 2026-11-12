@@ -13,6 +13,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.household_calculations.response_models import (
+    HouseholdCalculationErrorItem,
     HouseholdCalculationOutputItem,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
@@ -169,13 +170,30 @@ class HouseholdReportResultItem(StrictReportAPIModel):
     reform: HouseholdCalculationOutputItem | None
 
 
-class HouseholdReportItem(HouseholdReportSummaryItem):
-    """A household report with its newest run's calculated households.
+class HouseholdReportFailureItem(StrictReportAPIModel):
+    """Why each side of a failed run failed, as the household function said.
 
-    ``result`` is there once the newest run has succeeded, and null otherwise.
+    Each is that side's calculation error, as ``/v2/household-calculations``
+    answers one. A side is null when it succeeded, or failed without the
+    household function's error, as a run Modal refused does; the run's
+    ``error_message`` still says why it failed. ``reform`` is also null for
+    a report of the baseline alone.
+    """
+
+    baseline: HouseholdCalculationErrorItem | None
+    reform: HouseholdCalculationErrorItem | None
+
+
+class HouseholdReportItem(HouseholdReportSummaryItem):
+    """A household report with its newest run's outcome.
+
+    ``result`` holds the calculated households once the newest run has
+    succeeded, and ``failure`` each side's error once it has failed; each is
+    null otherwise.
     """
 
     result: HouseholdReportResultItem | None
+    failure: HouseholdReportFailureItem | None
 
     @classmethod
     def from_read(cls, read: HouseholdReportRead) -> HouseholdReportItem:

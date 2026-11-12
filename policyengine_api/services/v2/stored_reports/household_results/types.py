@@ -4,9 +4,11 @@ A household report's simulations each calculate the report's stored
 household under one policy. The household function stores each simulation
 run's calculation in ``simulation_runs.household_result``, as the same
 result document a household calculation stores in ``household_jobs.result``
-(``household_calculations.types.StoredExecutionResult``). Once the report's
-run has succeeded, the result is both calculations, read from those
-documents.
+(``household_calculations.types.StoredExecutionResult``), or, for a
+calculation the household function refused, its failure document
+(``StoredExecutionFailure``). Once the report's run has succeeded, the result
+is both calculations, read from those documents; once it has failed, each
+side's failure, where its document records one.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.household_calculations.types import (
+        HouseholdCalculationFailure,
         HouseholdCalculationOutput,
     )
 
@@ -52,3 +55,20 @@ class HouseholdReportResult:
 
     baseline: HouseholdCalculationOutput
     reform: HouseholdCalculationOutput | None
+
+
+@dataclass(frozen=True)
+class HouseholdReportFailure:
+    """Why each side of a failed household report run failed, where it says.
+
+    Each is the household function's error for that side's calculation: its
+    code, message, the inputs the country model does not recognize and any
+    SPM error. A side is None when it succeeded, has no failure document (a
+    run failed outside its calculation, such as one Modal refused, records
+    none) or has one that cannot be read; the report run's error message
+    still says why it failed. ``reform`` is also None for a report of the
+    baseline alone.
+    """
+
+    baseline: HouseholdCalculationFailure | None
+    reform: HouseholdCalculationFailure | None

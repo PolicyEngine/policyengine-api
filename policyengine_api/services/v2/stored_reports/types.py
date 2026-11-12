@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         EconomyResult,
     )
     from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportFailure,
         HouseholdReportResult,
     )
 
@@ -126,9 +127,15 @@ class HouseholdReportSummaryRead(ReportDefinitionRead):
 
 @dataclass(frozen=True)
 class HouseholdReportRead(HouseholdReportSummaryRead):
-    """A household report with its calculated households, once its run succeeded."""
+    """A household report with its newest run's outcome.
+
+    ``result`` holds the calculated households once that run has succeeded;
+    ``failure`` says why each side failed once it has failed. Both are None
+    otherwise.
+    """
 
     result: HouseholdReportResult | None
+    failure: HouseholdReportFailure | None
 
 
 # A report of any kind these routes read.

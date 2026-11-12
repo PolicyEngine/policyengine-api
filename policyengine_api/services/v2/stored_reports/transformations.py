@@ -26,6 +26,7 @@ if TYPE_CHECKING:
         EconomyResult,
     )
     from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportFailure,
         HouseholdReportResult,
     )
     from policyengine_api.services.v2.stored_reports.types import (
@@ -146,10 +147,11 @@ def household_report_read(
     *,
     current_versions: PackageVersions,
     result: HouseholdReportResult | None,
+    failure: HouseholdReportFailure | None,
 ) -> HouseholdReportRead:
-    """Return a household report with its calculated households, if it has them."""
+    """Return a household report with its newest run's outcome, if it has one."""
     summary = household_report_summary_read(rows, current_versions=current_versions)
-    return HouseholdReportRead(**vars(summary), result=result)
+    return HouseholdReportRead(**vars(summary), result=result, failure=failure)
 
 
 def listed_reports(

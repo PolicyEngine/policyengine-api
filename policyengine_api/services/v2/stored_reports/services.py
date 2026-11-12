@@ -48,6 +48,9 @@ from policyengine_api.services.v2.stored_reports.database_connectors.reads impor
 from policyengine_api.services.v2.stored_reports.economy_results import (
     transformations as result_transformations,
 )
+from policyengine_api.services.v2.stored_reports.household_results import (
+    transformations as household_result_transformations,
+)
 from policyengine_api.services.v2.stored_reports.household_results.validators import (
     require_household_report_result,
 )
@@ -170,20 +173,31 @@ class V2StoredReportService:
     def _household_report(
         self, session: Session, stored: StoredReportRows
     ) -> HouseholdReportRead:
-        """Return a household report, with its result once its newest run succeeded."""
+        """Return a household report with its newest run's outcome.
+
+        Its calculated households are read once that run has succeeded, and
+        each side's failure once it has failed.
+        """
         run = stored.newest_run
-        result = None
-        if run is not None and run.status is ReportRunStatus.SUCCEEDED:
-            result = require_household_report_result(
-                run,
-                household_result_reads.read_household_result_rows(
-                    session, report_run=run
-                ),
+        result = failure = None
+        if run is not None and run.status in {
+            ReportRunStatus.SUCCEEDED,
+            ReportRunStatus.FAILED,
+        }:
+            rows = household_result_reads.read_household_result_rows(
+                session, report_run=run
             )
+            if run.status is ReportRunStatus.SUCCEEDED:
+                result = require_household_report_result(run, rows)
+            else:
+                failure = household_result_transformations.household_report_failure(
+                    run, rows
+                )
         return household_report_read(
             stored,
             current_versions=self._current_versions(stored.report.country),
             result=result,
+            failure=failure,
         )
 
     def list_reports(
