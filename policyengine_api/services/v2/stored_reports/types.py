@@ -3,7 +3,9 @@
 A report compares a baseline and a reform simulation; each calculation of it
 is a report run. The simulation service creates reports and their runs, and
 its Modal workers store each run's result in the result tables; the Public
-API reads all of them directly.
+API reads all of them directly. A household report's simulations each
+calculate one stored household, and its result is each simulation run's
+calculated household.
 """
 
 from __future__ import annotations
@@ -23,6 +25,9 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
+    )
+    from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportResult,
     )
 
 # A report's status is its newest run's, or not_run while it has none, as a
@@ -65,8 +70,8 @@ class ReportSimulationRead:
 
 
 @dataclass(frozen=True)
-class ReportSummaryRead:
-    """A report's definition, its newest run and the versions the Public API runs.
+class ReportDefinitionRead:
+    """What every report's read gives: its definition and the current versions.
 
     ``current_versions`` are the country package and PolicyEngine.py versions
     the Public API serves now; a newest run on other versions is out of date.
@@ -75,7 +80,6 @@ class ReportSummaryRead:
 
     id: UUID
     country_id: str
-    kind: Literal["economy"]
     label: str
     description: str | None
     year: int | None
@@ -85,9 +89,16 @@ class ReportSummaryRead:
     reform_simulation: ReportSimulationRead | None
     options: dict[str, JsonValue]
     created_at: datetime
+    current_versions: PackageVersions
+
+
+@dataclass(frozen=True)
+class ReportSummaryRead(ReportDefinitionRead):
+    """An economy report's definition, its newest run and the current versions."""
+
+    kind: Literal["economy"]
     status: ReportStatusName
     run: ReportRunRead | None
-    current_versions: PackageVersions
 
 
 @dataclass(frozen=True)
@@ -95,6 +106,34 @@ class ReportRead(ReportSummaryRead):
     """A report with its newest run's result, once that run has succeeded."""
 
     result: EconomyResult | None
+
+
+@dataclass(frozen=True)
+class HouseholdReportSummaryRead(ReportDefinitionRead):
+    """A household report's definition, its newest run and the current versions.
+
+    Both simulations calculate the stored household ``household_id`` in
+    ``year``; ``reform_simulation`` is None for a report of the baseline
+    alone. It has no region or dataset. ``run`` is the newest report run,
+    whatever its status and versions, naming each simulation's run.
+    """
+
+    kind: Literal["household"]
+    household_id: UUID
+    status: ReportStatusName
+    run: ReportRunRead | None
+
+
+@dataclass(frozen=True)
+class HouseholdReportRead(HouseholdReportSummaryRead):
+    """A household report with its calculated households, once its run succeeded."""
+
+    result: HouseholdReportResult | None
+
+
+# A report of any kind these routes read.
+StoredReportRead = ReportRead | HouseholdReportRead
+StoredReportSummaryRead = ReportSummaryRead | HouseholdReportSummaryRead
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,10 @@
 The routes need no user credential: a user keeps a report through
 ``/v2/user-reports``. Reports, their runs and results are read from the
 detailed-save tables the simulation service and its Modal workers write;
-reading never calls the simulation service and never starts a run. Creating
-a report checks it, has the simulation service create and start it, and
-reads it back.
+reading never calls the simulation service and never starts a run. A report
+is an economy report or a household report, which its ``kind`` names.
+Creating a report checks it, has the simulation service create and start it,
+and reads it back.
 """
 
 from __future__ import annotations
@@ -34,11 +35,11 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     CreatedReportUnreadableResponse,
     ReportDetailResponse,
     ReportDetailResult,
-    ReportItem,
     ReportListResponse,
     ReportListResult,
-    ReportSummaryItem,
     UnavailableAfterReportCreatedResponse,
+    report_item,
+    report_summary_item,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     SUBMISSION_ERROR_MAPPINGS,
@@ -60,6 +61,9 @@ from policyengine_api.services.v2.simulation_service.types import (
 )
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
+)
+from policyengine_api.services.v2.stored_reports.household_results.types import (
+    HouseholdResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
@@ -101,7 +105,7 @@ REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((ReportKindUnsupportedError,), 422),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
-        (EconomyResultUnreadableError,),
+        (EconomyResultUnreadableError, HouseholdResultUnreadableError),
         500,
         "The report's stored result cannot be read",
     ),
@@ -169,9 +173,7 @@ def _create_report(
                 message=str(error), report_id=error.created_record_id
             ),
         )
-    return ReportDetailResponse(
-        result=ReportDetailResult(item=ReportItem.from_read(report))
-    )
+    return ReportDetailResponse(result=ReportDetailResult(item=report_item(report)))
 
 
 def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
@@ -184,14 +186,19 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         response_model=ReportDetailResponse,
         status_code=201,
         responses=CREATE_RESPONSES,
-        summary="Create an economy report",
+        summary="Create an economy report or a household report",
         description=(
             "Checks that the country has economy reports and stores each named "
             "policy, and that the running catalog version has every parameter "
             "those policies set, then has the simulation service create the "
             "report, its two "
             "simulations and their runs on its default worker's PolicyEngine.py "
-            "version, and start the run. Answers the report as stored, with its "
+            "version, and start the run. A household report (kind household) "
+            "is checked the same way, except that the country must have "
+            "household calculations instead (a household-only country does), "
+            "and the household it names must be stored in the country; its "
+            "simulations each calculate that household in the report's year. "
+            "Answers the report as stored, with its "
             "pending run; read it again to follow the run. A created report "
             "that cannot be read back answers 502 with its report_id, and one "
             "whose run the simulation service failed before answering 503 "
@@ -214,12 +221,12 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.get(
         "/reports",
         response_model=ReportListResponse,
-        summary="List chosen economy reports",
+        summary="List chosen reports",
         description=(
-            "Lists the country's economy reports among the report_id values (at "
-            "most 25), in the order named and once each, with their newest runs "
-            "but without results, read in one query. Unknown reports, other "
-            "countries' and reports of other kinds are left out."
+            "Lists the country's economy and household reports among the "
+            "report_id values (at most 25), in the order named and once each, "
+            "with their newest runs but without results, read in one query. "
+            "Unknown reports, other countries' and budget windows are left out."
         ),
     )
     def list_reports(
@@ -231,7 +238,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             )
             return ReportListResponse(
                 result=ReportListResult(
-                    items=[ReportSummaryItem.from_summary(report) for report in reports]
+                    items=[report_summary_item(report) for report in reports]
                 )
             )
 
@@ -241,13 +248,16 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         "/reports/{report_id}",
         response_model=ReportDetailResponse,
         responses=READ_RESPONSES,
-        summary="Read an economy report",
+        summary="Read a report",
         description=(
-            "Returns the report, its newest run whatever its status and "
-            "versions, the versions the Public API runs now, and, once the "
-            "newest run has succeeded, its result in today's economy result "
-            "format. A report with no run, such as one migrated from v1, "
-            "answers its definition with no result; reading starts no run."
+            "Returns the economy or household report, its newest run whatever "
+            "its status and versions, the versions the Public API runs now, "
+            "and, once the newest run has succeeded, its result. An economy "
+            "report's result is in today's economy result format; a household "
+            "report's is each simulation's calculated household, as "
+            "/v2/household-calculations answers one. A report with no run, such "
+            "as one migrated from v1, answers its definition with no result; "
+            "reading starts no run."
         ),
     )
     def get_report(
@@ -259,7 +269,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
                 country_id=query.country_id, report_id=report_id
             )
             return ReportDetailResponse(
-                result=ReportDetailResult(item=ReportItem.from_read(report))
+                result=ReportDetailResult(item=report_item(report))
             )
 
         return _report_operation(read)

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
     V2MissingParametersErrorResponse,
+)
+from policyengine_api.fastapi_routes.v2.household_calculations.response_models import (
+    HouseholdCalculationOutputItem,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
@@ -21,8 +24,12 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
+        HouseholdReportRead,
+        HouseholdReportSummaryRead,
         ReportRead,
         ReportSummaryRead,
+        StoredReportRead,
+        StoredReportSummaryRead,
     )
 
 
@@ -115,16 +122,98 @@ class ReportItem(ReportSummaryItem):
         return cls.model_validate(read)
 
 
-class ReportDetailResult(StrictReportAPIModel):
-    """Result holding one report in ``item``."""
+class HouseholdReportSummaryItem(StrictReportAPIModel):
+    """A household report: one stored household under a baseline and a reform.
 
-    item: ReportItem
+    Both simulations calculate the household ``household_id`` in ``year``;
+    ``reform_simulation`` is null for a report of the baseline alone.
+    ``status`` is the newest run's, or ``not_run`` for a report with no run.
+    ``run`` is the newest run, whatever its status and versions, naming each
+    simulation's run; ``current_versions`` are the versions the Public API
+    runs now, so a newest run on other versions is out of date. ``options``
+    are the options the report was created with.
+    """
+
+    id: UUID
+    country_id: str
+    kind: Literal["household"]
+    label: str
+    description: str | None
+    year: int | None
+    household_id: UUID
+    baseline_simulation: ReportSimulationItem | None
+    reform_simulation: ReportSimulationItem | None
+    options: dict[str, JsonValue]
+    created_at: datetime
+    status: Literal["not_run", "pending", "running", "succeeded", "failed"]
+    run: ReportRunItem | None
+    current_versions: PackageVersionsItem
+
+    @classmethod
+    def from_summary(
+        cls, read: HouseholdReportSummaryRead
+    ) -> HouseholdReportSummaryItem:
+        """Build the summary from the service's read, without a result."""
+        return cls.model_validate(read)
+
+
+class HouseholdReportResultItem(StrictReportAPIModel):
+    """Each simulation's calculated household.
+
+    Each is the stored household with every value its calculation filled in,
+    as ``/v2/household-calculations`` answers one. ``reform`` is null for a
+    report of the baseline alone.
+    """
+
+    baseline: HouseholdCalculationOutputItem
+    reform: HouseholdCalculationOutputItem | None
+
+
+class HouseholdReportItem(HouseholdReportSummaryItem):
+    """A household report with its newest run's calculated households.
+
+    ``result`` is there once the newest run has succeeded, and null otherwise.
+    """
+
+    result: HouseholdReportResultItem | None
+
+    @classmethod
+    def from_read(cls, read: HouseholdReportRead) -> HouseholdReportItem:
+        """Build the item from the service's read, with its result."""
+        return cls.model_validate(read)
+
+
+def report_item(read: StoredReportRead) -> ReportItem | HouseholdReportItem:
+    """Build the item of the report's kind from the service's read."""
+    if read.kind == "household":
+        return HouseholdReportItem.from_read(read)
+    return ReportItem.from_read(read)
+
+
+def report_summary_item(
+    read: StoredReportSummaryRead,
+) -> ReportSummaryItem | HouseholdReportSummaryItem:
+    """Build the summary of the report's kind from the service's read."""
+    if read.kind == "household":
+        return HouseholdReportSummaryItem.from_summary(read)
+    return ReportSummaryItem.from_summary(read)
+
+
+class ReportDetailResult(StrictReportAPIModel):
+    """Result holding one report in ``item``; its ``kind`` says which model it is."""
+
+    item: Annotated[ReportItem | HouseholdReportItem, Field(discriminator="kind")]
 
 
 class ReportListResult(StrictReportAPIModel):
     """The listed reports in ``items``, in the order named, without results."""
 
-    items: list[ReportSummaryItem]
+    items: list[
+        Annotated[
+            ReportSummaryItem | HouseholdReportSummaryItem,
+            Field(discriminator="kind"),
+        ]
+    ]
 
 
 ResultT = TypeVar("ResultT")
@@ -175,23 +264,29 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response("No report has this ID in this country."),
     422: error_response(
-        "The request does not match the schema, or the report is a household "
-        "report or a budget window, which this route does not read yet."
+        "The request does not match the schema, or the report is a budget "
+        "window, which this route does not read yet."
     ),
     500: error_response(
-        "The newest run succeeded but its stored result cannot be read, or the "
+        "The newest run succeeded but its stored result cannot be read (for a "
+        "household report, a simulation run's calculated household), or the "
         "operation could not be completed."
     ),
 }
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
-    404: error_response("A policy the report names is not stored in the country."),
+    404: error_response(
+        "A policy the report names, or a household report's household, is not "
+        "stored in the country."
+    ),
     413: error_response("The request body exceeds 16 KiB."),
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
             "The request does not match the schema; the country has no economy "
-            "reports (such as a household-only country); a policy the report "
+            "reports (such as a household-only country), for an economy report, "
+            "or no household calculations, for a household report; a policy the "
+            "report "
             "names sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "
             "checked first); or the simulation service cannot run the report: its "

@@ -22,6 +22,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     run_v2_operation,
     v2_missing_parameters_response,
 )
+from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
     PolicyParametersMissingError,
@@ -34,6 +35,7 @@ from policyengine_api.services.v2.simulation_service.types import (
 )
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
+    HouseholdCalculationsUnsupportedError,
     SubmissionStorageError,
 )
 
@@ -47,7 +49,9 @@ logger = logging.getLogger(__name__)
 # not logged.
 SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
     PolicyNotFoundError,
+    HouseholdNotFoundError,
     EconomyCalculationsUnsupportedError,
+    HouseholdCalculationsUnsupportedError,
     SimulationServiceInvalidRequestError,
 )
 # How the simulation service's answers and the submission checks are answered.
@@ -61,9 +65,14 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
 # the record it created and failed is still a 503, and each create route
 # answers it with the record's ID (``unavailable_after_creation_answer``).
 SUBMISSION_ERROR_MAPPINGS = (
-    V2ErrorMapping((PolicyNotFoundError,), 404),
+    V2ErrorMapping((PolicyNotFoundError, HouseholdNotFoundError), 404),
     V2ErrorMapping(
-        (EconomyCalculationsUnsupportedError, SimulationServiceInvalidRequestError), 422
+        (
+            EconomyCalculationsUnsupportedError,
+            HouseholdCalculationsUnsupportedError,
+            SimulationServiceInvalidRequestError,
+        ),
+        422,
     ),
     V2ErrorMapping(
         (SimulationServiceInternalError, SimulationServiceAnswerUnreadableError), 502

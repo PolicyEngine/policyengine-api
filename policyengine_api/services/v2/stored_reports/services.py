@@ -11,12 +11,15 @@ calculated again on a read. A report with no run, as a report migrated from
 v1 has none, answers its definition with no result.
 
 The result is rebuilt from the newest run's result rows once it has
-succeeded. Lists name at most 25 reports and read them, with their newest
-runs, in one query, without results.
+succeeded. A household report's result is instead each of its simulation
+runs' calculated household (``simulation_runs.household_result``), read once
+its newest report run has succeeded. Lists name at most 25 reports and read
+them, with their newest runs, in one query, without results.
 
-Creating a report checks the country and the policies the report names, asks
-the simulation service to create and start it, then reads it back from the
-tables. Once the simulation service has answered with the report's ID, the
+Creating a report checks the country and the policies the report names (and
+a household report's household), asks the simulation service to create and
+start it, then reads it back from the tables. Once the simulation service
+has answered with the report's ID, the
 report exists: a failure to read it back raises CreatedReportUnreadableError,
 which names it, so the caller reads it rather than submitting it again.
 Re-runs and run lists are not here.
@@ -34,6 +37,9 @@ from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceUnavailableError,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors import (
+    reads_household_results as household_result_reads,
+)
+from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_results as result_reads,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
@@ -42,15 +48,21 @@ from policyengine_api.services.v2.stored_reports.database_connectors.reads impor
 from policyengine_api.services.v2.stored_reports.economy_results import (
     transformations as result_transformations,
 )
+from policyengine_api.services.v2.stored_reports.household_results.validators import (
+    require_household_report_result,
+)
 from policyengine_api.services.v2.stored_reports.transformations import (
-    listed_economy_reports,
+    household_report_read,
+    household_report_summary_read,
+    listed_reports,
+    report_kind,
     report_read,
     report_summary_read,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportStorageError,
-    require_economy_report,
+    require_readable_report,
     require_reform_run,
     require_report,
 )
@@ -59,17 +71,21 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
     from uuid import UUID
 
+    from sqlmodel import Session
+
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         PackageVersions,
+        ReportCreationInput,
         SimulationServiceClient,
     )
     from policyengine_api.services.v2.stored_reports.database_session import (
         StoredReportDatabaseSession,
     )
     from policyengine_api.services.v2.stored_reports.types import (
-        ReportRead,
-        ReportSummaryRead,
+        HouseholdReportRead,
+        StoredReportRead,
+        StoredReportRows,
+        StoredReportSummaryRead,
     )
 
 
@@ -88,7 +104,7 @@ def _storage_failures() -> Iterator[None]:
 
 
 class V2StoredReportService:
-    """Read v2 reports and their results, and create economy reports."""
+    """Read v2 reports and their results, and create economy and household reports."""
 
     def __init__(
         self,
@@ -108,14 +124,16 @@ class V2StoredReportService:
         self._current_versions = current_versions
         self._submissions = submissions
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        """Return the country's economy report, its newest run and that run's result.
+    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
+        """Return the country's report, its newest run and that run's result.
 
-        Raise StoredReportNotFoundError when the country has no such report,
-        ReportKindUnsupportedError for a household report or budget window,
+        The report is an economy report or a household report. Raise
+        StoredReportNotFoundError when the country has no such report,
+        ReportKindUnsupportedError for a budget window,
         EconomyResultUnreadableError when a succeeded run's rows lack a part
-        every result has, and ReportStorageError when the database cannot be
-        read.
+        every result has, HouseholdResultUnreadableError when a succeeded
+        household report run's calculated households cannot be read, and
+        ReportStorageError when the database cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = require_report(
@@ -130,7 +148,8 @@ class V2StoredReportService:
                 report_id=report_id,
                 country_id=country_id,
             )
-            require_economy_report(stored)
+            if require_readable_report(stored) == "household":
+                return self._household_report(session, stored)
             run = stored.newest_run
             result = None
             if run is not None and run.status is ReportRunStatus.SUCCEEDED:
@@ -148,14 +167,33 @@ class V2StoredReportService:
                 result=result,
             )
 
+    def _household_report(
+        self, session: Session, stored: StoredReportRows
+    ) -> HouseholdReportRead:
+        """Return a household report, with its result once its newest run succeeded."""
+        run = stored.newest_run
+        result = None
+        if run is not None and run.status is ReportRunStatus.SUCCEEDED:
+            result = require_household_report_result(
+                run,
+                household_result_reads.read_household_result_rows(
+                    session, report_run=run
+                ),
+            )
+        return household_report_read(
+            stored,
+            current_versions=self._current_versions(stored.report.country),
+            result=result,
+        )
+
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[ReportSummaryRead, ...]:
-        """Return the country's economy reports among ``report_ids``, without results.
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports among ``report_ids``, without results.
 
-        They are in the order named, each once; unknown reports, other
-        countries' and reports of other kinds are left out. Raise
-        ReportStorageError when the database cannot be read.
+        They are economy and household reports, in the order named, each
+        once; unknown reports, other countries' and budget windows are left
+        out. Raise ReportStorageError when the database cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
             rows = read_report_rows(
@@ -163,23 +201,29 @@ class V2StoredReportService:
             )
             current_versions = self._current_versions(country_id)
             return tuple(
-                report_summary_read(stored, current_versions=current_versions)
-                for stored in listed_economy_reports(rows, report_ids=report_ids)
+                household_report_summary_read(stored, current_versions=current_versions)
+                if report_kind(stored.report) == "household"
+                else report_summary_read(stored, current_versions=current_versions)
+                for stored in listed_reports(rows, report_ids=report_ids)
             )
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service and return it as stored.
 
-        Raise the submission's errors (see ``SimulationSubmissionService``),
-        and CreatedReportUnreadableError, caused by the read's own error, when
-        the report the simulation service created cannot be read back in the
-        country: not stored there, the database unavailable, or any other
-        failure of the read.
+        An economy report and a household report each go through their own
+        submission. Raise the submission's errors (see
+        ``SimulationSubmissionService``), and CreatedReportUnreadableError,
+        caused by the read's own error, when the report the simulation service
+        created cannot be read back in the country: not stored there, the
+        database unavailable, or any other failure of the read.
         """
         if self._submissions is None:
             msg = "The simulation service is not configured here"
             raise SubmissionsNotConfiguredError(msg)
-        submitted = self._submissions.submit_report(report_input)
+        if report_input.kind == "household":
+            submitted = self._submissions.submit_household_report(report_input)
+        else:
+            submitted = self._submissions.submit_report(report_input)
         try:
             return self.get_report(
                 country_id=report_input.country_id, report_id=submitted.report_id

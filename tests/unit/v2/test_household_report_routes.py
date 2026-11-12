@@ -130,8 +130,10 @@ def test_a_household_report_is_created_and_answered_as_stored() -> None:
     assert item["options"] == {"add_missing_variables": True}
     ((name, arguments),) = service.calls
     assert name == "create_report"
-    assert arguments["report_input"] == HouseholdReportCreationInput.model_validate(
-        household_body()
+    report_input = arguments["report_input"]
+    assert isinstance(report_input, HouseholdReportCreationInput)
+    assert report_input.model_dump() == (
+        HouseholdReportCreationInput.model_validate(household_body()).model_dump()
     )
 
 

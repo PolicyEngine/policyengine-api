@@ -43,7 +43,6 @@ from policyengine_api.services.v2.stored_simulations.services import (
     V2StoredSimulationService,
 )
 from tests.fixtures.economy_results import uk_economy_result, us_economy_result
-from tests.integration.simulation_rows import insert_row
 from tests.integration.stored_report_rows import (
     REGION_CODES,
     STARTED_AT,
@@ -302,28 +301,16 @@ def test_a_succeeded_run_without_result_rows_is_unreadable(
     }
 
 
-def test_a_household_report_cannot_be_read_here_yet(
+def test_a_budget_window_cannot_be_read_here_yet(
     owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
 ) -> None:
-    catalog = catalogs["us"]
-    household_id = uuid4()
     with owner_engine.begin() as connection:
-        insert_row(
-            connection,
-            "households",
-            id=household_id,
-            country_id="us",
-            household_data="{}",
-            canonicalization_version=1,
-            content_hash=uuid4().hex * 2,
-        )
-        catalog.household_ids.append(household_id)
-        report = store_report(connection, catalog, household_id=household_id)
+        report = store_report(connection, catalogs["us"], budget_window_size=3)
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id=us")
 
     assert response.status_code == 422
-    assert "household report" in response.json()["message"]
+    assert "budget window" in response.json()["message"]
 
 
 def test_listing_reads_named_economy_reports_in_the_order_asked(

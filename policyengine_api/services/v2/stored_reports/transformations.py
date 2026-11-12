@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.stored_reports.types import (
+    HouseholdReportRead,
+    HouseholdReportSummaryRead,
+    ReportDefinitionRead,
     ReportRead,
     ReportRunRead,
     ReportSimulationRead,
@@ -22,10 +25,17 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
     )
+    from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportResult,
+    )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
         StoredReportRows,
     )
+
+# The kinds of report the report routes read; budget windows are read once
+# their own routes exist.
+READABLE_KINDS: frozenset[ReportKind] = frozenset({"economy", "household"})
 
 
 def report_kind(report: Report) -> ReportKind:
@@ -64,16 +74,14 @@ def _simulation(simulation: Simulation | None) -> ReportSimulationRead | None:
     )
 
 
-def report_summary_read(
+def _report_definition(
     rows: StoredReportRows, *, current_versions: PackageVersions
-) -> ReportSummaryRead:
-    """Return an economy report's definition and newest run, without a result."""
+) -> ReportDefinitionRead:
+    """Return what every report's read gives: its definition and current versions."""
     report = rows.report
-    run = rows.newest_run
-    return ReportSummaryRead(
+    return ReportDefinitionRead(
         id=report.id,
         country_id=report.country,
-        kind="economy",
         label=report.label,
         description=report.description,
         year=report.year,
@@ -83,9 +91,20 @@ def report_summary_read(
         reform_simulation=_simulation(rows.reform_simulation),
         options=dict(report.inputs),
         created_at=report.created_at,
+        current_versions=current_versions,
+    )
+
+
+def report_summary_read(
+    rows: StoredReportRows, *, current_versions: PackageVersions
+) -> ReportSummaryRead:
+    """Return an economy report's definition and newest run, without a result."""
+    run = rows.newest_run
+    return ReportSummaryRead(
+        **vars(_report_definition(rows, current_versions=current_versions)),
+        kind="economy",
         status="not_run" if run is None else run.status.value,
         run=None if run is None else report_run_read(run),
-        current_versions=current_versions,
     )
 
 
@@ -100,18 +119,51 @@ def report_read(
     return ReportRead(**vars(summary), result=result)
 
 
-def listed_economy_reports(
+def household_report_summary_read(
+    rows: StoredReportRows, *, current_versions: PackageVersions
+) -> HouseholdReportSummaryRead:
+    """Return a household report's definition and newest run, without a result.
+
+    Raise ValueError for a report naming no household, which is not a
+    household report.
+    """
+    report = rows.report
+    if report.household_id is None:
+        msg = f"Report {report.id} is not a household report"
+        raise ValueError(msg)
+    run = rows.newest_run
+    return HouseholdReportSummaryRead(
+        **vars(_report_definition(rows, current_versions=current_versions)),
+        kind="household",
+        household_id=report.household_id,
+        status="not_run" if run is None else run.status.value,
+        run=None if run is None else report_run_read(run),
+    )
+
+
+def household_report_read(
+    rows: StoredReportRows,
+    *,
+    current_versions: PackageVersions,
+    result: HouseholdReportResult | None,
+) -> HouseholdReportRead:
+    """Return a household report with its calculated households, if it has them."""
+    summary = household_report_summary_read(rows, current_versions=current_versions)
+    return HouseholdReportRead(**vars(summary), result=result)
+
+
+def listed_reports(
     rows: Iterable[StoredReportRows], *, report_ids: Sequence[UUID]
 ) -> list[StoredReportRows]:
-    """Return the economy reports among ``rows`` in the order of ``report_ids``.
+    """Return the economy and household reports among ``rows``, as named.
 
-    A report named twice is listed once, where it is first named; reports of
-    other kinds are left out.
+    They are in the order of ``report_ids``. A report named twice is listed
+    once, where it is first named; budget windows are left out.
     """
     by_id = {
         stored.report.id: stored
         for stored in rows
-        if report_kind(stored.report) == "economy"
+        if report_kind(stored.report) in READABLE_KINDS
     }
     listed: list[StoredReportRows] = []
     for report_id in dict.fromkeys(report_ids):

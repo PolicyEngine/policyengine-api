@@ -32,12 +32,12 @@ if TYPE_CHECKING:
         NativePolicyCreationInput,
     )
     from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        ReportCreationInput,
     )
     from policyengine_api.services.v2.stored_reports.types import (
-        ReportRead,
-        ReportSummaryRead,
+        StoredReportRead,
+        StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
     from policyengine_api.services.v2.user_accounts.types import (
@@ -190,33 +190,37 @@ class V2HouseholdCalculationResourceService(Protocol):
 class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        """Return the country's economy report, its newest run and that run's result.
+    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
+        """Return the country's report, its newest run and that run's result.
 
-        Raise ``StoredReportNotFoundError`` when the country has no such
-        report, ``ReportKindUnsupportedError`` for a household report or
-        budget window, and ``EconomyResultUnreadableError`` when a succeeded
-        run's result cannot be read.
+        The report is an economy report or a household report. Raise
+        ``StoredReportNotFoundError`` when the country has no such report,
+        ``ReportKindUnsupportedError`` for a budget window, and
+        ``EconomyResultUnreadableError`` or ``HouseholdResultUnreadableError``
+        when a succeeded run's result cannot be read.
         """
         ...
 
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
-    ) -> tuple[ReportSummaryRead, ...]:
-        """Return the country's economy reports among ``report_ids``, in that order."""
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's economy and household reports, as named."""
         ...
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
-        Raise ``EconomyCalculationsUnsupportedError`` for a country without
-        economy reports, ``PolicyNotFoundError`` for a policy the country
-        does not store, ``PolicyParametersMissingError`` for a policy that
-        sets parameters the running catalog version lacks,
-        ``SubmissionStorageError`` when the database or its catalog cannot be
-        read for those checks, the simulation service's errors, and
-        ``CreatedReportUnreadableError`` when the report it created cannot be
-        read back.
+        Raise ``EconomyCalculationsUnsupportedError`` for an economy report in
+        a country without economy reports,
+        ``HouseholdCalculationsUnsupportedError`` for a household report in a
+        country without household calculations, ``HouseholdNotFoundError``
+        for a household the country does not store, ``PolicyNotFoundError``
+        for a policy the country does not store,
+        ``PolicyParametersMissingError`` for a policy that sets parameters the
+        running catalog version lacks, ``SubmissionStorageError`` when the
+        database or its catalog cannot be read for those checks, the
+        simulation service's errors, and ``CreatedReportUnreadableError`` when
+        the report it created cannot be read back.
         """
         ...
 
