@@ -35,9 +35,13 @@ from policyengine_api.services.v2.user_reports.validators import (
     AssociationBudgetWindowConflictError,
 )
 from tests.integration.stored_report_rows import (
+    BudgetWindowYear,
+    RunSettings,
     delete_catalog,
+    store_budget_window_run,
     store_catalog,
     store_report,
+    store_report_run,
 )
 from tests.unit.v2.user_service_support import default_legacy_references
 
@@ -206,3 +210,37 @@ def test_a_v1_saved_report_keeps_its_own_window(
     )
 
     assert saved.budget_window_years == 10
+
+
+def test_a_succeeded_window_whose_result_cannot_be_read_can_still_be_saved(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    browsers: list[UUID],
+    service: V2UserReportService,
+) -> None:
+    # Saving reads only the report's window size, never its figures, so a
+    # window whose years stored no result rows is saved like any other.
+    versions = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
+    with owner_engine.begin() as connection:
+        window = store_report(connection, catalog, budget_window_size=2)
+        window_run_id = store_budget_window_run(
+            connection, catalog, window, RunSettings(versions=versions)
+        )
+        for year in (2026, 2027):
+            store_report_run(
+                connection,
+                catalog,
+                window,
+                RunSettings(
+                    versions=versions,
+                    budget_window_year=BudgetWindowYear(
+                        budget_window_run_id=window_run_id, year=year
+                    ),
+                ),
+            )
+
+    saved = save(
+        service, browser(browsers), report_id=window.report_id, budget_window_years=2
+    )
+
+    assert (saved.report_id, saved.budget_window_years) == (window.report_id, 2)

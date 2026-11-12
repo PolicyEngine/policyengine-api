@@ -163,3 +163,4 @@ def test_the_openapi_document_tells_the_report_bodies_apart_by_kind() -> None:
     window = document["components"]["schemas"]["BudgetWindowReportCreateRequest"]
     assert {"year", "budget_window_size"} <= set(window["required"])
     assert "include_cliffs" not in window["properties"]
+    assert window["properties"]["year"]["description"] == "The window's first year"

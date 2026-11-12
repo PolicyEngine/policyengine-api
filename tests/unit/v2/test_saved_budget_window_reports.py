@@ -19,6 +19,7 @@ from policyengine_api.services.v2.user_reports.validators import (
     AssociationBudgetWindowConflictError,
     require_matching_budget_window,
 )
+from tests.unit.v2.user_route_support import user_route_client
 
 
 @pytest.mark.parametrize(
@@ -60,3 +61,39 @@ def test_a_saved_window_disagreeing_with_the_reports_is_a_conflict(
 
     # Answered 400, as other contradicting references are.
     assert isinstance(raised.value, AssociationReferenceConflictError)
+
+
+class RefusingReports:
+    """A saved-report service whose create raises ``error``."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def create_user_report(self, **_arguments: object) -> object:
+        raise self.error
+
+
+def test_a_saved_window_disagreeing_with_its_report_answers_400() -> None:
+    error = AssociationBudgetWindowConflictError(
+        "budget_window_years must be 10, the budget window of report r"
+    )
+    client, _flask_calls = user_route_client(
+        v2_user_report_service_factory=lambda: RefusingReports(error)
+    )
+
+    response = client.post(
+        "/v2/user-reports?country_id=us",
+        json={"country_id": "us", "report_id": str(uuid4()), "budget_window_years": 5},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"status": "error", "message": str(error)}
+
+
+def test_the_openapi_document_names_the_saved_window_refusal() -> None:
+    client, _flask_calls = user_route_client()
+
+    document = client.get("/v2/openapi.json").json()
+
+    answer = document["paths"]["/v2/user-reports"]["post"]["responses"]["400"]
+    assert "budget_window_years" in answer["description"]

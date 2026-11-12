@@ -20,7 +20,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
@@ -495,3 +495,79 @@ def test_listing_answers_budget_windows_with_their_years_beside_economy_reports(
     assert window["run"]["id"] == str(window_run_id)
     assert [year["year"] for year in window["run"]["years"]] == [2026, 2027]
     assert (items[2]["status"], items[2]["run"]) == ("not_run", None)
+
+
+def test_a_succeeded_window_whose_result_cannot_be_read_is_still_listed(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    # Listing never reads the window's figures, so a window whose years
+    # stored no result rows is listed like any other.
+    catalog = catalogs["us"]
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog, budget_window_size=2)
+        store_window(
+            connection,
+            catalog,
+            report,
+            StoredWindow(
+                RunSettings(versions=CURRENT_VERSIONS),
+                {2026: "succeeded", 2027: "succeeded"},
+                with_results=False,
+            ),
+        )
+
+    response = client.get(f"/v2/reports?country_id=us&report_id={report.report_id}")
+
+    assert response.status_code == 200, response.text
+    (item,) = response.json()["result"]["items"]
+    assert (item["kind"], item["status"]) == ("budget_window", "succeeded")
+    assert "result" not in item
+
+
+def test_listing_reads_any_number_of_windows_in_two_queries(
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    managed_v2_roles,
+    v2_engine_as_role,
+) -> None:
+    catalog = catalogs["us"]
+    with owner_engine.begin() as connection:
+        reports = [store_report(connection, catalog)]
+        for _ in range(3):
+            window = store_report(connection, catalog, budget_window_size=2)
+            store_window(
+                connection,
+                catalog,
+                window,
+                StoredWindow(
+                    RunSettings(versions=CURRENT_VERSIONS),
+                    {2026: "succeeded", 2027: "running"},
+                ),
+            )
+            reports.append(window)
+    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
+    statements: list[str] = []
+
+    def record_statement(
+        _connection: Any, _cursor: Any, statement: str, *_arguments: Any
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(runtime_engine, "before_cursor_execute", record_statement)
+    service = V2StoredReportService(
+        StoredReportDatabaseSession(sessionmaker(runtime_engine, class_=Session)),
+        current_versions=current_versions,
+    )
+
+    listed = service.list_reports(
+        country_id="us", report_ids=[report.report_id for report in reports]
+    )
+    runtime_engine.dispose()
+
+    assert [read.kind for read in listed] == [
+        "economy",
+        "budget_window",
+        "budget_window",
+        "budget_window",
+    ]
+    assert [statement.split()[0] for statement in statements] == ["SELECT", "SELECT"]
