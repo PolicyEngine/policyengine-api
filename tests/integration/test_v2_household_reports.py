@@ -112,7 +112,9 @@ class StoredHouseholdReport:
     report_run_id: UUID
 
 
-def store_household(connection: Connection, catalog: CatalogRows) -> UUID:
+def store_household(
+    connection: Connection, catalog: CatalogRows, *, default_year: int | None = 2026
+) -> UUID:
     """Store a household in the catalog's country; ``delete_catalog`` removes it."""
     household_id = uuid4()
     insert_row(
@@ -120,7 +122,7 @@ def store_household(connection: Connection, catalog: CatalogRows) -> UUID:
         "households",
         id=household_id,
         country_id=catalog.country,
-        default_year=2026,
+        default_year=default_year,
         household_data=json.dumps(STORED_HOUSEHOLD),
         canonicalization_version=1,
         content_hash=uuid4().hex * 2,
@@ -342,7 +344,6 @@ def household_body(household_id: UUID, policy_id: UUID) -> dict[str, Any]:
         "kind": "household",
         "label": "My household under the reform",
         "household_id": str(household_id),
-        "year": 2026,
         "baseline": {},
         "reform": {"policy_id": str(policy_id)},
         "add_missing_variables": True,
@@ -435,6 +436,25 @@ def test_a_household_the_country_does_not_store_is_not_sent(
     )
 
     assert response.status_code == 404
+    assert simulation_service.household_reports == []
+
+
+def test_a_household_with_no_default_year_is_not_sent(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        household_id = store_household(connection, household_only_uk, default_year=None)
+    simulation_service = StoringHouseholdReportService(owner_engine, household_only_uk)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=uk",
+        json=household_body(household_id, household_only_uk.policy_id),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["message"] == (
+        "This household has no default year to calculate."
+    )
     assert simulation_service.household_reports == []
 
 

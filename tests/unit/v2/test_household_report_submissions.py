@@ -15,6 +15,9 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationYearError,
+)
 from policyengine_api.services.v2.households.types import HouseholdRead
 from policyengine_api.services.v2.households.validators import (
     HouseholdNotFoundError,
@@ -48,6 +51,8 @@ from tests.unit.v2.test_simulation_submissions import (
 
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-00000000d001")
 OTHER_HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-00000000d002")
+# A stored household with no default year, which no report can calculate.
+UNDATED_HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-00000000d003")
 STORED_AT = datetime(2026, 11, 13, tzinfo=UTC)
 # A country whose countries row offers economy reports but no household
 # calculations.
@@ -59,7 +64,10 @@ ECONOMY_ONLY_US = [
 
 @dataclass
 class StoredHouseholds:
-    """HOUSEHOLD_ID, stored in every country; any other household is not stored.
+    """HOUSEHOLD_ID and UNDATED_HOUSEHOLD_ID, stored in every country.
+
+    Any other household is not stored. UNDATED_HOUSEHOLD_ID has no default
+    year.
 
     With ``error``, every read raises it, as a database that cannot be read
     does.
@@ -72,13 +80,13 @@ class StoredHouseholds:
         self.asked.append((country_id, household_id))
         if self.error is not None:
             raise self.error
-        if household_id != HOUSEHOLD_ID:
+        if household_id not in {HOUSEHOLD_ID, UNDATED_HOUSEHOLD_ID}:
             msg = f"Household {household_id} was not found"
             raise HouseholdNotFoundError(msg)
         return HouseholdRead(
             id=household_id,
             country_id=country_id,
-            default_year=2026,
+            default_year=None if household_id == UNDATED_HOUSEHOLD_ID else 2026,
             household_data={"people": {"you": {"age": {"2026": 40}}}},
             created_at=STORED_AT,
             updated_at=STORED_AT,
@@ -109,7 +117,6 @@ def household_report_input(**changes: Any) -> HouseholdReportCreationInput:
         "kind": "household",
         "label": "My household under the reform",
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2026,
         "baseline": {},
         "reform": {"policy_id": str(STORED_POLICY_ID)},
     }
@@ -194,6 +201,20 @@ def test_a_household_not_stored_in_the_country_is_refused_before_the_policies() 
     with pytest.raises(HouseholdNotFoundError, match=str(OTHER_HOUSEHOLD_ID)):
         service.submit_household_report(
             household_report_input(household_id=str(OTHER_HOUSEHOLD_ID))
+        )
+    assert policies.asked == []
+
+
+def test_a_household_with_no_default_year_is_refused_before_the_policies() -> None:
+    policies = StoredPolicies()
+    service = household_submissions(unconfigured_client, policies=policies)
+
+    with pytest.raises(HouseholdCalculationYearError):
+        service.submit_household_report(
+            household_report_input(
+                household_id=str(UNDATED_HOUSEHOLD_ID),
+                reform={"policy_id": str(OTHER_POLICY_ID)},
+            )
         )
     assert policies.asked == []
 
@@ -290,7 +311,6 @@ def test_a_household_report_without_a_reform_is_of_the_baseline_alone() -> None:
             "kind": "household",
             "label": "My household",
             "household_id": str(HOUSEHOLD_ID),
-            "year": 2026,
             "baseline": {},
         }
     )
@@ -304,8 +324,8 @@ def test_a_household_report_without_a_reform_is_of_the_baseline_alone() -> None:
     "changes",
     [
         pytest.param({"label": ""}, id="empty-label"),
-        pytest.param({"year": 1899}, id="year-before-1900"),
-        pytest.param({"year": 2201}, id="year-after-2200"),
+        # The report is for the household's default year, so it names none.
+        pytest.param({"year": 2026}, id="year"),
         pytest.param({"add_missing_variables": "true"}, id="option-not-a-boolean"),
         pytest.param({"baseline": {"dynamic_id": str(uuid4())}}, id="dynamic"),
         pytest.param({"region_code": "us"}, id="region"),
@@ -320,8 +340,8 @@ def test_a_household_report_outside_its_schema_is_refused(
         household_report_input(**changes)
 
 
-@pytest.mark.parametrize("missing", ["label", "household_id", "year", "baseline"])
-def test_a_household_report_needs_its_label_household_year_and_baseline(
+@pytest.mark.parametrize("missing", ["label", "household_id", "baseline"])
+def test_a_household_report_needs_its_label_household_and_baseline(
     missing: str,
 ) -> None:
     values: dict[str, Any] = {
@@ -329,7 +349,6 @@ def test_a_household_report_needs_its_label_household_year_and_baseline(
         "kind": "household",
         "label": "My household",
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2026,
         "baseline": {},
     }
     del values[missing]

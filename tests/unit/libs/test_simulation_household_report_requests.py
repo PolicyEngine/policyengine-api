@@ -50,7 +50,6 @@ def household_report_input(**changes: Any) -> HouseholdReportCreationInput:
         "kind": "household",
         "label": "My household under the reform",
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2027,
         "baseline": {},
         "reform": {"policy_id": str(POLICY_ID)},
     }
@@ -76,7 +75,6 @@ def test_a_household_report_is_posted_and_the_created_report_returned() -> None:
         "label": "My household under the reform",
         "description": "Doubles the credit",
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2027,
         "baseline": {"policy_id": None},
         "reform": {"policy_id": str(POLICY_ID)},
         "add_missing_variables": False,
@@ -96,7 +94,6 @@ def test_a_report_of_the_baseline_alone_sends_a_null_reform() -> None:
         "label": "My household under the reform",
         "description": None,
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2027,
         "baseline": {"policy_id": str(POLICY_ID)},
         "reform": None,
         "add_missing_variables": True,
@@ -107,8 +104,8 @@ def test_a_household_report_the_service_refuses_is_reported_with_its_reason() ->
     service = RecordingService(
         status_code=422,
         body={
-            "code": "invalid_household",
-            "detail": "The household's people have no ages",
+            "code": "household_not_calculable",
+            "detail": "The household has no default year",
         },
     )
 
@@ -116,8 +113,8 @@ def test_a_household_report_the_service_refuses_is_reported_with_its_reason() ->
         service.client().submit_household_report(household_report_input())
 
     assert str(refused.value) == (
-        "The simulation service cannot run this request (invalid_household): "
-        "The household's people have no ages"
+        "The simulation service cannot run this request (household_not_calculable): "
+        "The household has no default year"
     )
 
 

@@ -11,6 +11,9 @@ import pytest
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationOutput,
 )
+from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationYearError,
+)
 from policyengine_api.services.v2.households.validators import (
     HouseholdNotFoundError,
 )
@@ -102,7 +105,6 @@ def household_body(**changes: Any) -> dict[str, Any]:
         "kind": "household",
         "label": "My household under the reform",
         "household_id": str(HOUSEHOLD_ID),
-        "year": 2026,
         "baseline": {},
         "reform": {"policy_id": str(POLICY_ID)},
         "add_missing_variables": True,
@@ -156,7 +158,8 @@ def test_a_household_report_of_the_baseline_alone_can_be_created() -> None:
     "changes",
     [
         pytest.param({"label": None}, id="no-label"),
-        pytest.param({"year": None}, id="no-year"),
+        # The report is for the household's default year, so it names none.
+        pytest.param({"year": 2026}, id="year"),
         pytest.param({"household_id": None}, id="no-household"),
         pytest.param({"region_code": "us"}, id="economy-field"),
         pytest.param({"include_cliffs": True}, id="economy-option"),
@@ -205,6 +208,13 @@ def test_a_household_report_naming_another_country_is_refused_with_400() -> None
             HouseholdNotFoundError(f"Household {HOUSEHOLD_ID} was not found"),
             404,
             id="household-not-stored",
+        ),
+        pytest.param(
+            HouseholdCalculationYearError(
+                "This household has no default year to calculate."
+            ),
+            422,
+            id="household-without-default-year",
         ),
     ],
 )
@@ -311,7 +321,7 @@ def test_the_create_routes_schema_offers_the_household_kind() -> None:
         "kind",
         "label",
         "household_id",
-        "year",
         "baseline",
     }
+    assert "year" not in household_request["properties"]
     assert "HouseholdReportItem" in components
