@@ -21,7 +21,12 @@ if TYPE_CHECKING:
         StoredReportRows,
     )
 
-KIND_NAMES = {"budget_window": "a budget window"}
+# Every kind's name, so a kind left out of READABLE_KINDS is still named.
+KIND_NAMES: dict[ReportKind, str] = {
+    "economy": "an economy report",
+    "household": "a household report",
+    "budget_window": "a budget window",
+}
 
 
 class StoredReportNotFoundError(LookupError):

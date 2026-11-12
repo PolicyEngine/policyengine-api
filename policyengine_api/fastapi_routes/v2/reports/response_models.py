@@ -13,7 +13,6 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.household_calculations.response_models import (
-    HouseholdCalculationErrorItem,
     HouseholdCalculationOutputItem,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
@@ -166,18 +165,31 @@ class HouseholdReportResultItem(StrictReportAPIModel):
     reform: HouseholdCalculationOutputItem | None
 
 
+class HouseholdReportSideFailureItem(StrictReportAPIModel):
+    """The household function's error for one side's calculation.
+
+    ``code`` is its error code, such as ``invalid_inputs``, with
+    ``input_errors`` naming each input the country model does not recognize
+    and ``spm_error`` an SPM error.
+    """
+
+    code: str
+    message: str
+    input_errors: list[dict[str, JsonValue]]
+    spm_error: dict[str, JsonValue] | None
+
+
 class HouseholdReportFailureItem(StrictReportAPIModel):
     """Why each side of a failed run failed, as the household function said.
 
-    Each is that side's calculation error, as ``/v2/household-calculations``
-    answers one. A side is null when it succeeded, or failed without the
-    household function's error, as a run Modal refused does; the run's
+    A side is null when it succeeded, or failed without the household
+    function's error, as a run Modal refused does; the run's
     ``error_message`` still says why it failed. ``reform`` is also null for
     a report of the baseline alone.
     """
 
-    baseline: HouseholdCalculationErrorItem | None
-    reform: HouseholdCalculationErrorItem | None
+    baseline: HouseholdReportSideFailureItem | None
+    reform: HouseholdReportSideFailureItem | None
 
 
 class HouseholdReportItem(HouseholdReportSummaryItem):
@@ -300,9 +312,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "The request does not match the schema; the country has no economy "
             "reports (such as a household-only country), for an economy report, "
             "or no household calculations, for a household report; a household "
-            "report's household has no default year; a policy the "
-            "report "
-            "names sets parameters the running catalog version does not have "
+            "report's household has no default year; a policy the report names "
+            "sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "
             "checked first); or the simulation service cannot run the report: its "
             "422, or its 400 for a region, dataset or dynamic it does not have. The "

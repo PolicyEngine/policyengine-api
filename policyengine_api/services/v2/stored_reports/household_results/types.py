@@ -14,10 +14,12 @@ side's failure, where its document records one.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from pydantic import JsonValue
 
     from policyengine_api.services.v2.household_calculations.types import (
         HouseholdCalculationFailure,
@@ -41,7 +43,7 @@ class HouseholdResultRows:
     absent.
     """
 
-    documents: dict[UUID, Any]
+    documents: dict[UUID, JsonValue]
 
 
 @dataclass(frozen=True)
