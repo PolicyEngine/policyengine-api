@@ -8,7 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorResponse,
+    V2MissingParametersErrorResponse,
+)
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
     PackageVersionsItem,
 )
@@ -126,14 +129,18 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "The policy the simulation names is not stored in the country."
     ),
     413: error_response("The request body exceeds 16 KiB."),
-    422: error_response(
-        "The request does not match the schema, the country has no economy "
-        "calculations, or the simulation service cannot run the simulation: "
-        "its 422, or its 400 for a region, dataset or dynamic it does not "
-        "have. The message says which; for the simulation service's refusal, "
-        "it gives the service's code, when it gave one, and its reason, but "
-        "not its status."
-    ),
+    422: {
+        "model": V2MissingParametersErrorResponse | V2ErrorResponse,
+        "description": (
+            "The request does not match the schema; the country has no economy "
+            "calculations; the policy sets parameters the running catalog version "
+            "does not have (code missing_parameters, which names them); or the "
+            "simulation service cannot run the simulation: its 422, or its 400 "
+            "for a region, dataset or dynamic it does not have. The message says "
+            "which; for the simulation service's refusal, it gives the service's "
+            "code, when it gave one, and its reason, but not its status."
+        ),
+    },
     502: {
         "model": V2ErrorResponse | CreatedSimulationUnreadableResponse,
         "description": (
@@ -163,7 +170,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "release deploys), and the message gives its code and reason; it "
             "answered 400 or 422 in a shape the Public API cannot read; or it answered "
             "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
-            "the v2 database is unavailable. Or the service created the simulation, "
+            "the v2 database, or the catalog the policy is checked against, cannot "
+            "be read. Or the service created the simulation, "
             "then Modal refused the run's call and the service failed the run: its 503 "
             "named the simulation, with its status and code, and the answer gives its "
             "simulation_id."

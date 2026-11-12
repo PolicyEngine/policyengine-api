@@ -20,8 +20,12 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorMapping,
     V2ErrorResponse,
     run_v2_operation,
+    v2_missing_parameters_response,
 )
-from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
+from policyengine_api.services.v2.policies.validators import (
+    PolicyNotFoundError,
+    PolicyParametersMissingError,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
@@ -136,13 +140,17 @@ def simulation_resource_operation(
 ) -> OperationT | JSONResponse:
     """Run one service call and answer its failure with a typed v2 error.
 
-    A failure of a type in ``refusals`` is the caller's to act on and is not
-    logged; any other is logged under ``event``.
+    A policy that sets parameters the running catalog version lacks answers
+    422 with code ``missing_parameters``, naming them, whatever the route. A
+    failure of a type in ``refusals`` is the caller's to act on and is not
+    logged, nor is that 422; any other is logged under ``event``.
     """
 
-    def logged() -> OperationT:
+    def logged() -> OperationT | JSONResponse:
         try:
             return operation()
+        except PolicyParametersMissingError as error:
+            return v2_missing_parameters_response(str(error), error.missing_parameters)
         except Exception as error:
             if not isinstance(error, refusals):
                 _log_failure(event, error)

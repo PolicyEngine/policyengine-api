@@ -244,7 +244,8 @@ class SimulationServiceClient(Protocol):
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
-    PolicyNotFoundError and SubmissionStorageError from its checks.
+    PolicyNotFoundError, PolicyParametersMissingError and
+    SubmissionStorageError from its checks.
     """
 
     def submit_simulation(

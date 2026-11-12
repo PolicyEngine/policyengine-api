@@ -15,7 +15,10 @@ from policyengine_api.fastapi_routes.v2.simulations.routes import (
     SIMULATION_ERROR_MAPPINGS,
 )
 from policyengine_api.libs.simulation_reports import SimulationServiceReportClient
-from policyengine_api.services.v2.policies.validators import PolicyNotFoundError
+from policyengine_api.services.v2.policies.validators import (
+    PolicyNotFoundError,
+    PolicyParametersMissingError,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
     SimulationServiceInternalError,
@@ -393,6 +396,67 @@ def test_a_simulation_the_unavailable_service_created_answers_its_id(
         "simulation_id": str(simulation_id),
     }
     assert logged_events(caplog) == ["v2_simulation_unavailable_after_creation"]
+
+
+# The parameters a refused policy sets that the running catalog lacks.
+REMOVED_PARAMETERS = ("gov.example.removed_amount", "gov.example.removed_rate")
+
+
+@pytest.mark.usefixtures("enabled_route_support_logger")
+@pytest.mark.parametrize(
+    ("client_for_error", "path", "body"),
+    [
+        pytest.param(
+            lambda error: report_route_client(reports=FakeReportService(error=error)),
+            "/v2/reports?country_id=us",
+            report_body(),
+            id="report",
+        ),
+        pytest.param(
+            lambda error: report_route_client(
+                simulations=FakeSimulationService(error=error)
+            ),
+            "/v2/simulations?country_id=us",
+            simulation_body(),
+            id="simulation",
+        ),
+    ],
+)
+def test_a_policy_setting_parameters_the_running_catalog_lacks_answers_422(
+    client_for_error: Callable[[Exception], TestClient],
+    path: str,
+    body: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    error = PolicyParametersMissingError(POLICY_ID, REMOVED_PARAMETERS)
+    client = client_for_error(error)
+
+    with caplog.at_level("ERROR", logger=ROUTE_SUPPORT_LOGGER):
+        response = client.post(path, json=body)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"Policy {POLICY_ID} sets parameters the running catalog version "
+            "does not have: gov.example.removed_amount, gov.example.removed_rate"
+        ),
+        "code": "missing_parameters",
+        "missing_parameters": list(REMOVED_PARAMETERS),
+    }
+    # The caller can act on the refusal, so it is not logged as a failure.
+    assert logged_events(caplog) == []
+
+
+@pytest.mark.parametrize("path", ["/v2/reports", "/v2/simulations"])
+def test_the_openapi_document_gives_the_missing_parameters_refusal(path: str) -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+
+    answer = document["paths"][path]["post"]["responses"]["422"]
+    assert {"$ref": "#/components/schemas/V2MissingParametersErrorResponse"} in answer[
+        "content"
+    ]["application/json"]["schema"]["anyOf"]
+    assert "missing_parameters" in answer["description"]
 
 
 @pytest.mark.parametrize(
