@@ -9,7 +9,6 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.services.v2.household_calculations.types import (
-    HouseholdCalculationFailure,
     HouseholdCalculationOutput,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
@@ -25,6 +24,7 @@ from policyengine_api.services.v2.simulation_service.types import (
 from policyengine_api.services.v2.stored_reports.household_results.types import (
     HouseholdReportFailure,
     HouseholdReportResult,
+    HouseholdReportSideFailure,
     HouseholdResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.types import (
@@ -285,7 +285,7 @@ def test_a_failed_household_report_answers_each_sides_failure() -> None:
             result=None,
             failure=HouseholdReportFailure(
                 baseline=None,
-                reform=HouseholdCalculationFailure(
+                reform=HouseholdReportSideFailure(
                     code="invalid_inputs",
                     message="The household names inputs the model does not have.",
                     input_errors=({"name": "employment_incme"},),

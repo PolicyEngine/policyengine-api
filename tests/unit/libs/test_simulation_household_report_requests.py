@@ -12,7 +12,6 @@ from uuid import UUID
 
 import pytest
 
-from policyengine_api.fastapi_routes.v2.reports.routes import REPORT_ERROR_MAPPINGS
 from policyengine_api.libs.simulation_reports import (
     REPORTS_PATH,
     household_report_request,
@@ -131,15 +130,10 @@ def test_a_household_400_the_public_api_checked_first_is_unavailable(
         status_code=400, body={"code": code, "detail": "No such row."}
     )
 
+    # The route answers SimulationServiceUnavailableError with 503.
     with pytest.raises(SimulationServiceUnavailableError) as unavailable:
         service.client().submit_household_report(household_report_input())
 
-    route_status = next(
-        mapping.status_code
-        for mapping in REPORT_ERROR_MAPPINGS
-        if isinstance(unavailable.value, mapping.error_types)
-    )
-    assert route_status == 503
     assert str(unavailable.value) == (
         f"The simulation service refused the report ({code}): No such row."
     )

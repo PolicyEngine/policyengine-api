@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 from uuid import UUID, uuid4
 
 import pytest
@@ -34,7 +34,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.services.v2.household_calculations.types import (
-    HouseholdCalculationFailure,
     HouseholdCalculationOutput,
 )
 from policyengine_api.services.v2.simulation_service.types import (
@@ -48,15 +47,18 @@ from policyengine_api.services.v2.stored_reports.database_session import (
 from policyengine_api.services.v2.stored_reports.household_results.types import (
     HouseholdReportFailure,
     HouseholdReportResult,
+    HouseholdReportSideFailure,
     HouseholdResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 from policyengine_api.services.v2.stored_reports.types import (
     HouseholdReportRead,
     HouseholdReportSummaryRead,
+    ReportKind,
     ReportSummaryRead,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    KIND_NAMES,
     CreatedReportUnreadableError,
     StoredReportNotFoundError,
 )
@@ -428,7 +430,7 @@ def test_a_failed_household_report_answers_each_sides_failure(
     assert report.result is None
     assert report.failure == HouseholdReportFailure(
         baseline=None,
-        reform=HouseholdCalculationFailure(
+        reform=HouseholdReportSideFailure(
             code="invalid_inputs",
             message="The household names inputs the model does not have.",
             input_errors=tuple(INPUT_ERRORS),
@@ -654,3 +656,7 @@ def test_a_created_household_report_that_cannot_be_read_back_is_named(
 
     assert unreadable.value.country_id == "us"
     assert isinstance(unreadable.value.__cause__, StoredReportNotFoundError)
+
+
+def test_every_report_kind_has_a_name_for_the_unsupported_kind_message() -> None:
+    assert set(KIND_NAMES) == set(get_args(ReportKind))

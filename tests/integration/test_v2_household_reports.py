@@ -196,16 +196,33 @@ def store_household_simulation(
 
 @dataclass(frozen=True)
 class HouseholdReportToStore:
-    """A household report's run status, its sides, and their documents.
+    """A household report's run status, and the run of each of its sides.
 
-    A succeeded run's simulation runs hold their calculated households,
-    unless ``documents`` gives the baseline's and the reform's documents.
-    Without ``with_reform``, it is a report of the baseline alone.
+    ``side_runs`` gives the baseline's and the reform's simulation runs.
+    Without it, each side's run has the report run's status and, once
+    succeeded, its calculated household. Without ``with_reform``, it is a
+    report of the baseline alone, and the reform's run is not stored.
     """
 
     status: str = "succeeded"
     with_reform: bool = True
-    documents: tuple[dict[str, Any] | None, dict[str, Any] | None] | None = None
+    side_runs: tuple[SimulationRunToStore, SimulationRunToStore] | None = None
+
+    def runs(self) -> tuple[SimulationRunToStore, SimulationRunToStore]:
+        """Return the baseline's and the reform's simulation runs to store."""
+        if self.side_runs is not None:
+            return self.side_runs
+        succeeded = self.status == "succeeded"
+        return (
+            SimulationRunToStore(
+                self.status,
+                succeeded_document(BASELINE_HOUSEHOLD) if succeeded else None,
+            ),
+            SimulationRunToStore(
+                self.status,
+                succeeded_document(REFORM_HOUSEHOLD) if succeeded else None,
+            ),
+        )
 
 
 def store_household_report(
@@ -221,22 +238,9 @@ def store_household_report(
     report = report or HouseholdReportToStore()
     status = report.status
     with_reform = report.with_reform
-    documents = report.documents
-    succeeded = status == "succeeded"
-    baseline_document, reform_document = (
-        (
-            succeeded_document(BASELINE_HOUSEHOLD) if succeeded else None,
-            succeeded_document(REFORM_HOUSEHOLD) if succeeded else None,
-        )
-        if documents is None
-        else documents
-    )
+    baseline_run, reform_run = report.runs()
     baseline_id, baseline_run_id = store_household_simulation(
-        connection,
-        catalog,
-        household_id,
-        policy_id=None,
-        run=SimulationRunToStore(status, baseline_document),
+        connection, catalog, household_id, policy_id=None, run=baseline_run
     )
     reform_id = reform_run_id = None
     if with_reform:
@@ -245,7 +249,7 @@ def store_household_report(
             catalog,
             household_id,
             policy_id=catalog.policy_id,
-            run=SimulationRunToStore(status, reform_document),
+            run=reform_run,
         )
     report_id = uuid4()
     insert_row(
@@ -446,9 +450,16 @@ def test_a_failed_household_report_answers_each_sides_failure(
             connection,
             household_only_uk,
             household_id,
+            # Both sides are calculated: the baseline succeeded, the reform's
+            # calculation was refused, so the report run failed.
             HouseholdReportToStore(
                 status="failed",
-                documents=(succeeded_document(BASELINE_HOUSEHOLD), FAILED_DOCUMENT),
+                side_runs=(
+                    SimulationRunToStore(
+                        "succeeded", succeeded_document(BASELINE_HOUSEHOLD)
+                    ),
+                    SimulationRunToStore("failed", FAILED_DOCUMENT),
+                ),
             ),
         )
 
@@ -472,7 +483,12 @@ def test_a_succeeded_household_report_missing_a_calculation_answers_500(
             household_only_uk,
             household_id,
             HouseholdReportToStore(
-                documents=(succeeded_document(BASELINE_HOUSEHOLD), None)
+                side_runs=(
+                    SimulationRunToStore(
+                        "succeeded", succeeded_document(BASELINE_HOUSEHOLD)
+                    ),
+                    SimulationRunToStore("succeeded", None),
+                )
             ),
         )
 
