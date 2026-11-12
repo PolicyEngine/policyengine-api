@@ -125,9 +125,10 @@ class ReportItem(ReportSummaryItem):
 class BudgetWindowYearItem(ReportRunItem):
     """One year of a budget-window run: the report run calculating that year.
 
-    Its fields are a report run's, as ``ReportRunItem`` describes them. A
-    year still waiting to start is ``pending``, and one the window failed
-    before it started is ``failed``, its ``error_message`` saying so.
+    Its fields are a report run's, as ``ReportRunItem`` describes them; its
+    simulation runs are that year's own. A year still waiting to start is
+    ``pending``, and one the window failed before it started is ``failed``,
+    its ``error_message`` saying so.
     """
 
     year: int
@@ -160,10 +161,12 @@ class BudgetWindowRunItem(StrictReportAPIModel):
 
 
 class BudgetWindowReportSummaryItem(StrictReportAPIModel):
-    """A budget window: a baseline and a reform simulation compared in each year.
+    """A budget window: a baseline and a reform policy compared in each year.
 
     The window is ``budget_window_size`` years from ``year``, in the region
-    and dataset named. ``status`` is the newest run's, or ``not_run`` for a
+    and dataset named. ``baseline_simulation`` and ``reform_simulation`` are
+    the first year's; each year's run names that year's own simulation runs.
+    ``status`` is the newest run's, or ``not_run`` for a
     report with no run. ``run`` is the newest budget-window run, whatever its
     status and versions, with its years; ``current_versions`` are the
     versions the Public API runs now, so a newest run on other versions is

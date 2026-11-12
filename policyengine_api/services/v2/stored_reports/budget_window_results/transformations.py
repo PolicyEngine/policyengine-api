@@ -16,6 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from policyengine_api.data.v2.models import ReportRunStatus
 from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
     BudgetWindowAnnualImpact,
     BudgetWindowResult,
@@ -32,10 +33,7 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-
-SUCCEEDED = "succeeded"
+    from collections.abc import Callable, Sequence
 
 
 def budget_window_result(rows: BudgetWindowResultRows) -> BudgetWindowResult:
@@ -73,7 +71,7 @@ def _window_years(rows: BudgetWindowResultRows) -> Sequence[BudgetWindowYearRows
         if year_rows is None:
             msg = f"the window has no {year} report run"
             raise BudgetWindowResultUnreadableError(msg)
-        if year_rows.status != SUCCEEDED:
+        if year_rows.status is not ReportRunStatus.SUCCEEDED:
             msg = f"the window's {year} report run has not succeeded"
             raise BudgetWindowResultUnreadableError(msg)
         years.append(year_rows)
@@ -109,11 +107,14 @@ def _annual_impact(
     )
 
 
-def _total(annual_impacts: Sequence[BudgetWindowAnnualImpact], figure: str) -> float:
+def _total(
+    annual_impacts: Sequence[BudgetWindowAnnualImpact],
+    figure: Callable[[BudgetWindowAnnualImpact], float],
+) -> float:
     """Sum one figure of every year as exact decimals."""
     return float(
         sum(
-            (Decimal(str(getattr(impact, figure))) for impact in annual_impacts),
+            (Decimal(str(figure(impact))) for impact in annual_impacts),
             Decimal(0),
         )
     )
@@ -121,9 +122,17 @@ def _total(annual_impacts: Sequence[BudgetWindowAnnualImpact], figure: str) -> f
 
 def _totals(annual_impacts: Sequence[BudgetWindowAnnualImpact]) -> BudgetWindowTotals:
     return BudgetWindowTotals(
-        tax_revenue_impact=_total(annual_impacts, "tax_revenue_impact"),
-        federal_tax_revenue_impact=_total(annual_impacts, "federal_tax_revenue_impact"),
-        state_tax_revenue_impact=_total(annual_impacts, "state_tax_revenue_impact"),
-        benefit_spending_impact=_total(annual_impacts, "benefit_spending_impact"),
-        budgetary_impact=_total(annual_impacts, "budgetary_impact"),
+        tax_revenue_impact=_total(
+            annual_impacts, lambda impact: impact.tax_revenue_impact
+        ),
+        federal_tax_revenue_impact=_total(
+            annual_impacts, lambda impact: impact.federal_tax_revenue_impact
+        ),
+        state_tax_revenue_impact=_total(
+            annual_impacts, lambda impact: impact.state_tax_revenue_impact
+        ),
+        benefit_spending_impact=_total(
+            annual_impacts, lambda impact: impact.benefit_spending_impact
+        ),
+        budgetary_impact=_total(annual_impacts, lambda impact: impact.budgetary_impact),
     )

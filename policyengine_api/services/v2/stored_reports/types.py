@@ -1,9 +1,10 @@
 """Framework-independent data exchanged by the v2 report layers.
 
 A report compares a baseline and a reform simulation; each calculation of it
-is a report run. A budget-window report compares them in each year of a
-window of consecutive years: each calculation of it is a budget-window run,
-and each year of that a report run naming the window run and its year. The
+is a report run. A budget-window report compares the same policies in each
+year of a window of consecutive years: each calculation of it is a
+budget-window run, and each year of that a report run naming the window run,
+its year and that year's own simulation runs. The
 simulation service creates reports and their runs, and its Modal workers
 store each run's result in the result tables; the Public API reads all of
 them directly.
@@ -76,8 +77,8 @@ class ReportSimulationRead:
 
 
 @dataclass(frozen=True)
-class ReportSummaryRead:
-    """A report's definition, its newest run and the versions the Public API runs.
+class ReportDefinitionRead:
+    """What every report's read gives: its definition and the current versions.
 
     ``current_versions`` are the country package and PolicyEngine.py versions
     the Public API serves now; a newest run on other versions is out of date.
@@ -86,7 +87,6 @@ class ReportSummaryRead:
 
     id: UUID
     country_id: str
-    kind: Literal["economy"]
     label: str
     description: str | None
     year: int | None
@@ -96,9 +96,16 @@ class ReportSummaryRead:
     reform_simulation: ReportSimulationRead | None
     options: dict[str, JsonValue]
     created_at: datetime
+    current_versions: PackageVersions
+
+
+@dataclass(frozen=True)
+class ReportSummaryRead(ReportDefinitionRead):
+    """An economy report's definition, its newest run and the current versions."""
+
+    kind: Literal["economy"]
     status: ReportStatusName
     run: ReportRunRead | None
-    current_versions: PackageVersions
 
 
 @dataclass(frozen=True)
@@ -119,8 +126,9 @@ class BudgetWindowYearRead(ReportRunRead):
 class BudgetWindowRunRead:
     """One calculation of a budget-window report, and its years in year order.
 
-    ``status`` is ``pending`` until a year starts running, ``failed`` once a
-    year has failed, and ``succeeded`` once every year has; ``error_message``
+    ``status`` is ``pending`` until a year starts running, ``running`` while
+    its years run, ``failed`` once a year has failed, and ``succeeded`` once
+    every year has; ``error_message``
     says why a failed run failed. ``recalculate`` says whether its years
     calculate their simulations again rather than reusing successful runs.
     ``country_package_version`` and ``policyengine_version`` are the versions
@@ -142,30 +150,19 @@ class BudgetWindowRunRead:
 
 
 @dataclass(frozen=True)
-class BudgetWindowReportSummaryRead:
+class BudgetWindowReportSummaryRead(ReportDefinitionRead):
     """A budget-window report's definition, its newest run and the current versions.
 
-    The window is ``budget_window_size`` years from ``year``. ``run`` is the
-    newest budget-window run, whatever its status and versions, with its
-    years; the other fields are as ``ReportSummaryRead`` describes them.
+    The window is ``budget_window_size`` years from ``year``. The report's
+    two simulations are its first year's; each year's report run names that
+    year's own simulation runs. ``run`` is the newest budget-window run,
+    whatever its status and versions, with its years.
     """
 
-    id: UUID
-    country_id: str
     kind: Literal["budget_window"]
-    label: str
-    description: str | None
-    year: int | None
     budget_window_size: int
-    region_code: str | None
-    dataset_name: str | None
-    baseline_simulation: ReportSimulationRead | None
-    reform_simulation: ReportSimulationRead | None
-    options: dict[str, JsonValue]
-    created_at: datetime
     status: ReportStatusName
     run: BudgetWindowRunRead | None
-    current_versions: PackageVersions
 
 
 @dataclass(frozen=True)

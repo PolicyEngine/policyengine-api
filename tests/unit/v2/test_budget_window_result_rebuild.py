@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import pytest
 
-from policyengine_api.data.v2.models import BudgetSummary
+from policyengine_api.data.v2.models import BudgetSummary, ReportRunStatus
 from policyengine_api.services.v2.stored_reports.budget_window_results import (
     transformations as window_transformations,
 )
@@ -67,7 +67,7 @@ def year_rows(
     )
     return BudgetWindowYearRows(
         year=year,
-        status=status,
+        status=ReportRunStatus(status),
         spm_provenance=stored.report_run_columns["spm_provenance"],
         budget_summary=tuple(
             BudgetSummary(id=uuid4(), **row) for row in stored.rows["budget_summary"]

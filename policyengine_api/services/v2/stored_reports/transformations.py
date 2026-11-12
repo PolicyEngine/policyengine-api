@@ -9,6 +9,7 @@ from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportSummaryRead,
     BudgetWindowRunRead,
     BudgetWindowYearRead,
+    ReportDefinitionRead,
     ReportRead,
     ReportRunRead,
     ReportSimulationRead,
@@ -80,16 +81,14 @@ def _simulation(simulation: Simulation | None) -> ReportSimulationRead | None:
     )
 
 
-def report_summary_read(
+def _report_definition(
     rows: StoredReportRows, *, current_versions: PackageVersions
-) -> ReportSummaryRead:
-    """Return an economy report's definition and newest run, without a result."""
+) -> ReportDefinitionRead:
+    """Return what every report's read gives: its definition and current versions."""
     report = rows.report
-    run = rows.newest_run
-    return ReportSummaryRead(
+    return ReportDefinitionRead(
         id=report.id,
         country_id=report.country,
-        kind="economy",
         label=report.label,
         description=report.description,
         year=report.year,
@@ -99,9 +98,20 @@ def report_summary_read(
         reform_simulation=_simulation(rows.reform_simulation),
         options=dict(report.inputs),
         created_at=report.created_at,
+        current_versions=current_versions,
+    )
+
+
+def report_summary_read(
+    rows: StoredReportRows, *, current_versions: PackageVersions
+) -> ReportSummaryRead:
+    """Return an economy report's definition and newest run, without a result."""
+    run = rows.newest_run
+    return ReportSummaryRead(
+        **vars(_report_definition(rows, current_versions=current_versions)),
+        kind="economy",
         status="not_run" if run is None else run.status.value,
         run=None if run is None else report_run_read(run),
-        current_versions=current_versions,
     )
 
 
@@ -163,26 +173,15 @@ def budget_window_summary_read(
         raise ValueError(msg)
     window_run = rows.newest_budget_window_run
     return BudgetWindowReportSummaryRead(
-        id=report.id,
-        country_id=report.country,
+        **vars(_report_definition(rows, current_versions=current_versions)),
         kind="budget_window",
-        label=report.label,
-        description=report.description,
-        year=report.year,
         budget_window_size=report.budget_window_size,
-        region_code=rows.region_code,
-        dataset_name=rows.dataset_name,
-        baseline_simulation=_simulation(rows.baseline_simulation),
-        reform_simulation=_simulation(rows.reform_simulation),
-        options=dict(report.inputs),
-        created_at=report.created_at,
         status="not_run" if window_run is None else window_run.status.value,
         run=(
             None
             if window_run is None
             else budget_window_run_read(window_run, rows.budget_window_years)
         ),
-        current_versions=current_versions,
     )
 
 

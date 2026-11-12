@@ -48,7 +48,7 @@ def read_budget_window_result_rows(
         years=tuple(
             BudgetWindowYearRows(
                 year=run.year,
-                status=run.status.value,
+                status=run.status,
                 spm_provenance=run.spm_provenance,
                 budget_summary=tuple(budget_rows[run.id]),
             )

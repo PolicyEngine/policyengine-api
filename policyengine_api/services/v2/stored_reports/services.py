@@ -106,7 +106,7 @@ def _storage_failures() -> Iterator[None]:
 
 
 class V2StoredReportService:
-    """Read v2 reports and their results, and create economy reports."""
+    """Read v2 reports and their results, and create economy reports and windows."""
 
     def __init__(
         self,

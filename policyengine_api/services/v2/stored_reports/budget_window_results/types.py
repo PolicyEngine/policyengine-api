@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from policyengine_api.data.v2.models import BudgetSummary as BudgetSummaryRow
+    from policyengine_api.data.v2.models import ReportRunStatus
 
 
 class BudgetWindowResultUnreadableError(ValueError):
@@ -107,7 +108,7 @@ class BudgetWindowYearRows:
     """
 
     year: int
-    status: str
+    status: ReportRunStatus
     spm_provenance: dict[str, JsonValue] | None
     budget_summary: tuple[BudgetSummaryRow, ...]
 

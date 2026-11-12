@@ -98,7 +98,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Literal, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, TypeVar
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -138,6 +138,7 @@ if TYPE_CHECKING:
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         PolicyChoice,
+        ReportCreationInput,
     )
 
 SIMULATIONS_PATH = "/simulations"
@@ -172,6 +173,8 @@ SENT_BEFORE_ROUTE_STATUSES = frozenset(
 
 # What a submission creates.
 RecordName = Literal["report", "simulation"]
+# The simulation service's created answer a submission reads.
+CreatedAnswerT = TypeVar("CreatedAnswerT", bound=AnswerModel)
 
 
 class _CreatedSimulation(AnswerModel):
@@ -230,48 +233,45 @@ def simulation_request(simulation: EconomySimulationCreationInput) -> dict[str, 
     }
 
 
+def _report_definition(report: ReportCreationInput) -> dict[str, Any]:
+    """Return the request fields both kinds of report send.
+
+    ``spm`` is sent only when the caller gave it.
+    """
+    body: dict[str, Any] = {
+        "country": report.country_id,
+        "report_type": report.kind,
+        "label": report.label,
+        "description": report.description,
+        "year": report.year,
+        "region_code": report.region_code,
+        "dataset_name": report.dataset_name,
+        "baseline": _policy_choice(report.baseline),
+        "reform": _policy_choice(report.reform),
+    }
+    if report.spm is not None:
+        body["spm"] = report.spm.model_dump(mode="json")
+    return body
+
+
 def report_request(report: EconomyReportCreationInput) -> dict[str, Any]:
     """Return the simulation service's request body for the report.
 
     ``spm`` is sent only when the caller gave it.
     """
-    body: dict[str, Any] = {
-        "country": report.country_id,
-        "report_type": report.kind,
-        "label": report.label,
-        "description": report.description,
-        "year": report.year,
-        "region_code": report.region_code,
-        "dataset_name": report.dataset_name,
-        "baseline": _policy_choice(report.baseline),
-        "reform": _policy_choice(report.reform),
-        "include_cliffs": report.include_cliffs,
-    }
-    if report.spm is not None:
-        body["spm"] = report.spm.model_dump(mode="json")
-    return body
+    return {**_report_definition(report), "include_cliffs": report.include_cliffs}
 
 
 def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, Any]:
     """Return the simulation service's request body for the budget window.
 
-    ``spm`` is sent only when the caller gave it.
+    ``year`` is the window's first year. ``spm`` is sent only when the
+    caller gave it.
     """
-    body: dict[str, Any] = {
-        "country": report.country_id,
-        "report_type": report.kind,
-        "label": report.label,
-        "description": report.description,
-        "year": report.year,
+    return {
+        **_report_definition(report),
         "budget_window_size": report.budget_window_size,
-        "region_code": report.region_code,
-        "dataset_name": report.dataset_name,
-        "baseline": _policy_choice(report.baseline),
-        "reform": _policy_choice(report.reform),
     }
-    if report.spm is not None:
-        body["spm"] = report.spm.model_dump(mode="json")
-    return body
 
 
 def post_simulation(
@@ -481,6 +481,34 @@ class SimulationServiceReportClient:
             send, self._http_client, body, submit_again_sentence=_submit_again(record)
         )
 
+    def _created(
+        self,
+        send: Callable[[httpx.Client, dict[str, Any]], SimulationAnswer],
+        body: dict[str, Any],
+        created_model: type[CreatedAnswerT],
+        *,
+        record: RecordName,
+        created_name: str,
+    ) -> CreatedAnswerT:
+        """Send ``body`` and read the created answer as ``created_model``.
+
+        ``record`` names what the submission creates, for the refusals and
+        failures; ``created_name`` names it in the error for a created answer
+        that cannot be read, since the record exists. Raise the errors
+        ``SimulationServiceClient`` names.
+        """
+        answer = self._answer(send, body, record=record)
+        if answer.status_code not in CREATED_STATUSES:
+            _raise_for_refusal(answer, record)
+        try:
+            return created_model.model_validate_json(answer.content)
+        except ValidationError as error:
+            msg = (
+                f"The simulation service created the {created_name}, but its "
+                "answer could not be read."
+            )
+            raise SimulationServiceAnswerUnreadableError(msg) from error
+
     def submit_simulation(
         self, simulation: EconomySimulationCreationInput
     ) -> SubmittedSimulation:
@@ -488,19 +516,13 @@ class SimulationServiceReportClient:
 
         Raise the errors ``SimulationServiceClient`` names.
         """
-        answer = self._answer(
-            self._send_simulation, simulation_request(simulation), record="simulation"
+        created = self._created(
+            self._send_simulation,
+            simulation_request(simulation),
+            _CreatedSimulation,
+            record="simulation",
+            created_name="simulation",
         )
-        if answer.status_code not in CREATED_STATUSES:
-            _raise_for_refusal(answer, "simulation")
-        try:
-            created = _CreatedSimulation.model_validate_json(answer.content)
-        except ValidationError as error:
-            msg = (
-                "The simulation service created the simulation, but its answer "
-                "could not be read."
-            )
-            raise SimulationServiceAnswerUnreadableError(msg) from error
         return SubmittedSimulation(
             simulation_id=created.simulation_id,
             simulation_run_id=created.simulation_run_id,
@@ -511,19 +533,13 @@ class SimulationServiceReportClient:
 
         Raise the errors ``SimulationServiceClient`` names.
         """
-        answer = self._answer(
-            self._send_report, report_request(report), record="report"
+        created = self._created(
+            self._send_report,
+            report_request(report),
+            _CreatedReport,
+            record="report",
+            created_name="report",
         )
-        if answer.status_code not in CREATED_STATUSES:
-            _raise_for_refusal(answer, "report")
-        try:
-            created = _CreatedReport.model_validate_json(answer.content)
-        except ValidationError as error:
-            msg = (
-                "The simulation service created the report, but its answer could "
-                "not be read."
-            )
-            raise SimulationServiceAnswerUnreadableError(msg) from error
         return SubmittedReport(
             report_id=created.report_id, report_run_id=created.report_run_id
         )
@@ -536,19 +552,13 @@ class SimulationServiceReportClient:
         It is sent to the report route, so its refusals and failures are a
         report's. Raise the errors ``SimulationServiceClient`` names.
         """
-        answer = self._answer(
-            self._send_report, budget_window_request(report), record="report"
+        created = self._created(
+            self._send_report,
+            budget_window_request(report),
+            _CreatedBudgetWindow,
+            record="report",
+            created_name="budget window",
         )
-        if answer.status_code not in CREATED_STATUSES:
-            _raise_for_refusal(answer, "report")
-        try:
-            created = _CreatedBudgetWindow.model_validate_json(answer.content)
-        except ValidationError as error:
-            msg = (
-                "The simulation service created the budget window, but its answer "
-                "could not be read."
-            )
-            raise SimulationServiceAnswerUnreadableError(msg) from error
         return SubmittedBudgetWindow(
             report_id=created.report_id,
             budget_window_run_id=created.budget_window_run_id,
