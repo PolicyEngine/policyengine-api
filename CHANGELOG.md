@@ -1,3 +1,42 @@
+## [5.40.0] - 2026-11-11
+
+### Added
+
+- Add `POST /v2/household-calculations`, which calculates a stored household through the simulation service after checking the country, the household and policy, the household's default year and the policy's parameters, and `GET /v2/household-calculations/{calculation_id}`, which reads the calculation's status, result and error. `/v2/model-catalog` now says whether each catalog version offers SPM settings, as `spm`.
+
+
+## [5.39.1] - 2026-11-11
+
+### Changed
+
+- The release workflow's tests of the deployed staging and production candidates send the CI server credential, so they keep passing once the Public API requires one.
+
+
+## [5.39.0] - 2026-11-10
+
+### Added
+
+- Admins can find signed-in v2 users by email, change their types and read each change at `/v2/admin/users`; routes can require a minimum user type; and `scripts/set_v2_user_type.py` sets a user's type by email.
+
+
+## [5.38.0] - 2026-11-10
+
+### Added
+
+- Signed-in v2 users can be standard, author or admin users. `/v2/me` returns the type stored for each user, and signing in again never changes it.
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.17.1.
+
+
+## [5.37.2] - 2026-11-10
+
+### Changed
+
+- The v2 database now refuses a saved report or saved simulation that names a v2 report or simulation that doesn't exist, and won't delete a report or simulation that a saved item names.
+
+
 ## [5.37.1] - 2026-11-10
 
 ### Changed

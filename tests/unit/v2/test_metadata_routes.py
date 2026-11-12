@@ -333,6 +333,8 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/countries",
         "/v2/households",
         "/v2/households/{household_id}",
+        "/v2/household-calculations",
+        "/v2/household-calculations/{calculation_id}",
         "/v2/policies",
         "/v2/policies/{policy_id}",
         "/v2/user-households",
@@ -347,6 +349,9 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/me",
         "/v2/me/export",
         "/v2/me/upgrade",
+        "/v2/admin/users",
+        "/v2/admin/users/{user_id}",
+        "/v2/admin/users/{user_id}/user-type-changes",
     }
     assert set(schema["paths"]) == metadata_paths | native_paths
     assert "V2ErrorResponse" in schema["components"]["schemas"]
@@ -391,6 +396,11 @@ def test_model_catalog_route_serves_the_small_parts_of_the_selected_version() ->
     assert result["basic_inputs"] == ["employment_income"]
     assert [region["code"] for region in result["regions"]] == ["us"]
     assert result["economy_options"]["datasets"][0]["default"] is True
+    assert result["spm"] == {
+        "available": True,
+        "settings_schema": {"type": "object"},
+        "defaults": {"scenario": "ce_trend"},
+    }
     assert reader.calls == [("get_model_catalog", ("us", None), {})]
     assert reader.closed
 

@@ -7,7 +7,9 @@ decides how:
 - ``StandardAccountProvisioning`` serves a verified sign-in identity. The
   first request for an unknown ``(issuer, subject)`` provisions a standard
   ``users`` row (with the request country as its primary country) and a
-  ``user_identities`` row, on reads as well as writes. Concurrent first
+  ``user_identities`` row, on reads as well as writes. Every later request
+  resolves the user with its stored type (``standard``, ``author`` or
+  ``admin``), which signing in never changes. Concurrent first
   requests are reconciled by ``UNIQUE(issuer, subject)``: the loser rolls its
   savepoint back and re-reads the winner's identity, so exactly one user is
   created. There is no implicit adoption of legacy users and email is never
@@ -15,12 +17,12 @@ decides how:
 - ``UnauthenticatedAccountProvisioning`` serves a signed-out browser whose
   credential is a UUID. Only writes provision its unauthenticated user, with
   the browser's UUID as ``users.id``; a read for an absent user finds nothing.
-  A UUID that names a standard user is refused.
+  A UUID that names a signed-in user is refused.
 
 :func:`convert_unauthenticated_user_in_session` moves a browser's
 unauthenticated user into a signed-in account at sign-in.
 
-Only standard user UUIDs are logged. An unauthenticated user's UUID is its
+Only signed-in user UUIDs are logged. An unauthenticated user's UUID is its
 credential, so its log records carry only the user type.
 """
 
@@ -56,7 +58,8 @@ from policyengine_api.services.v2.identity.transformations import (
     converted_primary_country,
     identity_refresh_required,
     refreshed_identity_email,
-    standard_resolved_user,
+    signed_in_resolved_user,
+    stored_identity_resolved_user,
     unauthenticated_resolved_user,
 )
 from policyengine_api.services.v2.identity.types import (
@@ -88,22 +91,23 @@ UNAUTHENTICATED_PROVISIONING_ATTEMPTS = 2
 
 
 class StandardAccountProvisioning:
-    """Provision the standard user of a verified sign-in identity on any request."""
+    """Provision the user of a verified sign-in identity on any request.
+
+    A new identity's user is standard; a known one's keeps its stored type.
+    """
 
     def __init__(self, principal: UserPrincipal) -> None:
         """Act for the verified sign-in identity ``principal``."""
         self._principal = principal
 
     def find_in_session(self, session: Session) -> ResolvedUser | None:
-        """Return the identity's standard user, or None before its first request."""
-        identity = read_user_identity(
+        """Return the identity's user, or None before its first request."""
+        stored = read_user_identity(
             session,
             issuer=self._principal.issuer,
             subject=self._principal.subject,
         )
-        if identity is None:
-            return None
-        return standard_resolved_user(identity.user_id, email=identity.email)
+        return None if stored is None else stored_identity_resolved_user(stored)
 
     def resolve_in_session(
         self,
@@ -121,12 +125,13 @@ class StandardAccountProvisioning:
         """
         principal = self._principal
         seen_at = now or utc_now()
-        identity = read_user_identity(
+        stored = read_user_identity(
             session,
             issuer=principal.issuer,
             subject=principal.subject,
         )
-        if identity is not None:
+        if stored is not None:
+            identity = stored.identity
             if identity_refresh_required(identity, email=principal.email, now=seen_at):
                 update_user_identity_activity(
                     session,
@@ -134,7 +139,7 @@ class StandardAccountProvisioning:
                     email=refreshed_identity_email(identity, principal.email),
                     seen_at=seen_at,
                 )
-            return standard_resolved_user(identity.user_id, email=identity.email)
+            return stored_identity_resolved_user(stored)
 
         with provisioning_savepoint(session) as savepoint:
             user = create_provisioned_user(session, primary_country=country_id)
@@ -157,7 +162,11 @@ class StandardAccountProvisioning:
                     }
                 },
             )
-            return standard_resolved_user(created_user_id, email=principal.email)
+            return signed_in_resolved_user(
+                created_user_id,
+                email=principal.email,
+                user_type=UserType(user.user_type),
+            )
 
         concurrent = require_concurrent_identity(
             read_user_identity(
@@ -166,7 +175,7 @@ class StandardAccountProvisioning:
                 subject=principal.subject,
             )
         )
-        return standard_resolved_user(concurrent.user_id, email=concurrent.email)
+        return stored_identity_resolved_user(concurrent)
 
     def resolve_for_read_in_session(
         self,
@@ -189,7 +198,7 @@ class UnauthenticatedAccountProvisioning:
     def find_in_session(self, session: Session) -> ResolvedUser | None:
         """Return the browser's user, or None if it has not saved anything yet.
 
-        Raise StandardUserRequiresSignInError if the UUID names a standard user.
+        Raise StandardUserRequiresSignInError if the UUID names a signed-in user.
         """
         user = require_unauthenticated_user(read_user(session, self._principal.user_id))
         return None if user is None else unauthenticated_resolved_user(user)
@@ -205,7 +214,7 @@ class UnauthenticatedAccountProvisioning:
 
         The user is held ``FOR SHARE`` until the transaction ends, and the insert
         is retried once if the user is deleted before it is re-read. Raise
-        StandardUserRequiresSignInError if the UUID names a standard user.
+        StandardUserRequiresSignInError if the UUID names a signed-in user.
         """
         # An unauthenticated user has no primary country or sign-in activity.
         del country_id, now
@@ -284,7 +293,7 @@ def resolve_principal_user_for_read_in_session(
 ) -> ResolvedUser | None:
     """Return the user a read-only operation acts as.
 
-    A standard principal is provisioned as on any request. An unauthenticated
+    A signed-in principal is provisioned as on any request. An unauthenticated
     principal is not: ``None`` means it owns no records yet.
     """
     return account_provisioning_for(principal).resolve_for_read_in_session(
@@ -302,16 +311,17 @@ def convert_unauthenticated_user_in_session(
 ) -> AccountConversion:
     """Move a browser's unauthenticated user into a signed-in account.
 
-    The unauthenticated user's row is locked first (a standard user's row is
+    The unauthenticated user's row is locked first (a signed-in user's row is
     never locked): concurrent conversions of one browser run one at a time,
     and each waits for that browser's writes in progress, which in turn wait
     for it.
 
     - No user with the identity yet: the unauthenticated user becomes it in
       place, keeping its ID and therefore every association it owns.
-    - The identity already has a standard user: every association moves to
-      that user unchanged, and the unauthenticated user is deleted.
-    - No unauthenticated user, or the ID names a standard user (one already
+    - The identity already has a user: every association moves to that user
+      unchanged, the unauthenticated user is deleted, and the identity's user
+      keeps its stored type.
+    - No unauthenticated user, or the ID names a signed-in user (one already
       converted, or anyone else's): nothing is touched, and the identity's
       user is resolved as on any request.
 
@@ -351,8 +361,10 @@ def convert_unauthenticated_user_in_session(
             ),
         )
         return AccountConversion(
-            owner=standard_resolved_user(
-                unauthenticated_user.id, email=principal.email
+            owner=signed_in_resolved_user(
+                unauthenticated_user.id,
+                email=principal.email,
+                user_type=UserType(unauthenticated_user.user_type),
             ),
             outcome=AccountConversionOutcome.CONVERTED,
         )

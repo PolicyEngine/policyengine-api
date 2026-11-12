@@ -58,6 +58,42 @@ class LegacyPolicyTranslationError(ValueError):
         self.reason = reason
 
 
+class PolicyParametersMissingError(ValueError):
+    """Raised when a policy sets parameters the running catalog version lacks.
+
+    A calculation refuses such a policy before anything runs, rather than
+    calculate it without those values; ``missing_parameters`` lists them,
+    sorted.
+    """
+
+    def __init__(self, policy_id: UUID, missing_parameters: tuple[str, ...]) -> None:
+        """Name the policy and the parameters it sets that are missing."""
+        self.policy_id = policy_id
+        self.missing_parameters = missing_parameters
+        # The arguments, in order, so copy and pickle can rebuild the error.
+        super().__init__(policy_id, missing_parameters)
+
+    def __str__(self) -> str:
+        """Name the policy and each missing parameter."""
+        return (
+            f"Policy {self.policy_id} sets parameters the running catalog "
+            f"version does not have: {', '.join(self.missing_parameters)}"
+        )
+
+
+def require_policy_parameters_present(
+    policy_id: UUID, missing_parameters: tuple[str, ...] | None
+) -> None:
+    """Raise PolicyParametersMissingError when the policy sets missing parameters.
+
+    ``missing_parameters`` is a checked policy's (``CheckedPolicyRead``): None
+    when the running PolicyEngine.py version has no published catalog for the
+    country, so nothing could be checked, which passes.
+    """
+    if missing_parameters:
+        raise PolicyParametersMissingError(policy_id, missing_parameters)
+
+
 def parameters_missing_from_model(
     policy_parameter_names: Iterable[str],
     model_parameter_names: Container[str],

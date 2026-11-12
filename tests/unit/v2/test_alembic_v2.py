@@ -54,6 +54,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+        "user_type_changes",
     }
 )
 POOLER_URL = (
@@ -71,7 +72,13 @@ PARAMETER_SEARCH_FILE_REVISION = "c614b6bcccfc"
 CATALOG_PRUNING_REVISION = "334859ef4fec"
 # The simulation runs revision, parent of the saved-item keys revision.
 SIMULATION_RUNS_REVISION = "1356f658347d"
+# The saved-item keys revision, parent of the user types revision.
 SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
+# The user types revision, on the saved-item keys revision.
+USER_TYPES_REVISION = "617f531f1506"
+# The user type changes revision, on the user types revision, and parent of
+# the SPM availability revision.
+USER_TYPE_CHANGES_REVISION = "970be5d29283"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -253,6 +260,9 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        USER_TYPE_CHANGES_REVISION,
+        USER_TYPES_REVISION,
+        SAVED_ITEM_KEYS_REVISION,
         SIMULATION_RUNS_REVISION,
         CATALOG_PRUNING_REVISION,
         PARAMETER_SEARCH_FILE_REVISION,
@@ -1073,6 +1083,100 @@ def _simulation_runs_revision_source() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _user_types_revision_source() -> str:
+    """Return the source of the one revision after the simulation runs revision."""
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{USER_TYPES_REVISION}_*.py")
+    return path.read_text(encoding="utf-8")
+
+
+def test_user_type_changes_revision_only_adds_the_history_table() -> None:
+    """The generated revision after the user types revision adds one table."""
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{USER_TYPE_CHANGES_REVISION}_*.py"
+    )
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{USER_TYPES_REVISION}"' in revision
+    assert "correction" not in revision.lower()
+    assert sorted(set(re.findall(r"op\.\w+", upgrade))) == [
+        "op.create_index",
+        "op.create_table",
+        "op.f",
+    ]
+    assert upgrade.count("op.create_table(") == 1
+    assert upgrade.count("op.create_index(") == 2
+    assert 'op.create_table(\n        "user_type_changes"' in upgrade
+    assert sorted(set(re.findall(r"op\.\w+", downgrade))) == [
+        "op.drop_index",
+        "op.drop_table",
+    ]
+    assert 'op.drop_table("user_type_changes")' in downgrade
+
+
+def test_user_types_revision_only_replaces_the_user_type_check() -> None:
+    """The generated revision swaps the users type check for one allowing four types.
+
+    Alembic compares check constraints by name only, not by condition, so the
+    check that allows author and admin has a new name, which autogenerate turns
+    into a drop and an add.
+    """
+    revision = _user_types_revision_source()
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{SAVED_ITEM_KEYS_REVISION}"' in revision
+    assert "correction" not in revision.lower()
+    for body in (upgrade, downgrade):
+        assert sorted(re.findall(r"op\.\w+", body)) == [
+            "op.create_check_constraint",
+            "op.drop_constraint",
+            "op.f",
+            "op.f",
+        ]
+    assert re.search(
+        r'op\.drop_constraint\(\s*op\.f\("ck_users_user_type"\),\s*"users",'
+        r'\s*type_="check"',
+        upgrade,
+    )
+    assert re.search(
+        r'op\.create_check_constraint\(\s*op\.f\("ck_users_user_type_allowed"\),'
+        r"\s*\"users\",\s*\"user_type IN \('unauthenticated', 'standard', "
+        r"'author', 'admin'\)\"",
+        upgrade,
+    )
+    assert re.search(
+        r'op\.drop_constraint\(\s*op\.f\("ck_users_user_type_allowed"\),\s*"users",'
+        r'\s*type_="check"',
+        downgrade,
+    )
+    # The restored check allows only the two types the parent revision knew.
+    restored_check = re.search(
+        r'op\.create_check_constraint\(\s*op\.f\("ck_users_user_type"\),'
+        r'\s*"users",\s*(".*?")\s*,?\s*\)',
+        downgrade,
+        flags=re.DOTALL,
+    )
+    assert restored_check is not None
+    assert re.findall(r"'(\w+)'::character varying", restored_check.group(1)) == [
+        "unauthenticated",
+        "standard",
+    ]
+
+
 def test_simulation_runs_revision_is_generated_with_documented_corrections() -> None:
     """One generated revision follows the catalog pruning revision.
 
@@ -1178,3 +1282,49 @@ def test_saved_item_keys_revision_adds_only_two_foreign_keys() -> None:
         assert "op.drop_table(" not in body
         assert "op.add_column(" not in body
         assert "op.drop_column(" not in body
+
+
+def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
+    """The revision after the user type changes records SPM availability.
+
+    It is generated, adds the nullable JSON ``spm_availability`` column to
+    ``tax_benefit_model_versions`` and drops it on downgrade, and writes no
+    data: catalog publication records it.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == USER_TYPE_CHANGES_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    # The revision stays as Alembic wrote it, in either quote style.
+    assert upgrade.count("op.add_column(") == 1
+    assert re.search(
+        r"""op\.add_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""sa\.Column\(\s*["']spm_availability["'],\s*sa\.JSON\(\),\s*"""
+        r"nullable=True,?\s*\),?\s*\)",
+        upgrade,
+    )
+    assert downgrade.count("op.drop_column(") == 1
+    assert re.search(
+        r"""op\.drop_column\(\s*["']tax_benefit_model_versions["'],\s*"""
+        r"""["']spm_availability["'],?\s*\)""",
+        downgrade,
+    )
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.create_table(" not in body
+        assert "op.drop_table(" not in body

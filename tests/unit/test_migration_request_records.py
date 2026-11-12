@@ -59,6 +59,8 @@ def default_migration_flags(monkeypatch) -> None:
         ("/v2", "unknown"),
         ("/v2/us", "unknown"),
         ("/policy", "policy"),
+        ("/v2/admin/users", "user_profile"),
+        ("/v2/admin/users/00000000-0000-0000-0000-000000000081", "user_profile"),
     ],
 )
 def test_route_groups_follow_exact_paths_then_leading_segments(

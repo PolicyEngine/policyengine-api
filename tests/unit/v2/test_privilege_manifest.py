@@ -406,3 +406,12 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
     )
     assert catalog_writer["parameter_values"] == READ_WRITE
+
+
+def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_type_changes"] == READ_INSERT
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_type_changes"] == NO_ACCESS, role

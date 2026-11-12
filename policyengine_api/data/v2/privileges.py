@@ -289,8 +289,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "regions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
-    # Catalog publication updates a version's time periods and
-    # catalog_last_published_at, and catalog pruning its
+    # Catalog publication updates a version's time periods,
+    # catalog_last_published_at and spm_availability, and catalog pruning its
     # catalog_values_pruned_at.
     "tax_benefit_model_versions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
@@ -318,6 +318,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "user_report_associations": _access(runtime=READ_WRITE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
+    # Each change of a signed-in user's type, recorded by the admin routes and
+    # the type script and never changed afterwards.
+    "user_type_changes": _access(runtime=READ_INSERT),
     # Temporary Stage 12 comparison-run tables.
     "stage12_evaluation_reports": _access(runtime=READ_WRITE, stage12=READ_WRITE),
     "stage12_evaluation_simulations": _access(runtime=READ_WRITE, stage12=READ_WRITE),

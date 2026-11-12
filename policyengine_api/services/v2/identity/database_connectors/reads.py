@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import User, UserIdentity, UserType
+from policyengine_api.services.v2.identity.types import StoredIdentity
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -17,14 +18,23 @@ def read_user_identity(
     *,
     issuer: str,
     subject: str,
-) -> UserIdentity | None:
-    """Return the identity for this issuer and subject, or None if never seen."""
-    return session.exec(
-        select(UserIdentity).where(
+) -> StoredIdentity | None:
+    """Return the identity for this issuer and subject, with its user's type.
+
+    Return None if the identity has never been seen.
+    """
+    row = session.exec(
+        select(UserIdentity, User.user_type)
+        .join(User, col(User.id) == col(UserIdentity.user_id))
+        .where(
             UserIdentity.issuer == issuer,
             UserIdentity.subject == subject,
         )
     ).one_or_none()
+    if row is None:
+        return None
+    identity, user_type = row
+    return StoredIdentity(identity=identity, user_type=UserType(user_type))
 
 
 def read_user(
@@ -53,7 +63,7 @@ def read_unauthenticated_user_for_update(
 ) -> User | None:
     """Lock and return an unauthenticated user.
 
-    A standard user is neither returned nor locked. A row converted by a
+    A signed-in user is neither returned nor locked. A row converted by a
     concurrent transaction is re-checked once that transaction commits, so
     it is no longer returned.
     """

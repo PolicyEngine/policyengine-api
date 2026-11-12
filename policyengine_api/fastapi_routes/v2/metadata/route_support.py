@@ -231,7 +231,11 @@ response stays valid until then or until its code's response format changes;
 the ETag lets a client revalidate it cheaply after that. Catalog pruning
 deletes a version's current-law values, which publishing it again restores
 identically, and the 404 answered for a pruned version (503 for the running
-one) is never stored (``Cache-Control: no-store``).
+one) is never stored (``Cache-Control: no-store``). A version's SPM
+availability in ``/v2/model-catalog`` is recorded once after publication:
+until a publication run records it, a response reports it as unknown, a
+process keeps reporting so until it restarts, and a client may
+reuse such a response for up to this long after that.
 """
 RUNNING_VERSION_MAX_AGE_SECONDS = 300
 """How long a response for the running catalog version may be reused.
