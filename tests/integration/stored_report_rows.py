@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}
 STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
-# The year of every report store_report stores.
+# The year of a report store_report stores, unless it is given another.
 STORED_REPORT_YEAR = 2026
 
 
@@ -118,7 +118,7 @@ def store_simulation(
     catalog: CatalogRows,
     *,
     policy_id: UUID | None,
-    year: int = 2026,
+    year: int = STORED_REPORT_YEAR,
 ) -> UUID:
     """Store an economy simulation in ``year`` of the catalog's dataset and region."""
     simulation_id = uuid4()
@@ -173,7 +173,7 @@ def store_simulation_run(
     simulation_id: UUID,
     settings: RunSettings,
     *,
-    year: int = 2026,
+    year: int = STORED_REPORT_YEAR,
 ) -> UUID:
     """Store one run of the simulation in ``year``.
 
@@ -206,6 +206,7 @@ class StoredReport:
     report_id: UUID
     baseline_simulation_id: UUID
     reform_simulation_id: UUID
+    year: int = STORED_REPORT_YEAR
 
 
 def store_report(
@@ -214,14 +215,22 @@ def store_report(
     *,
     household_id: UUID | None = None,
     budget_window_size: int | None = None,
+    year: int = STORED_REPORT_YEAR,
 ) -> StoredReport:
-    """Store a report comparing current law with the catalog's policy."""
+    """Store a report of ``year`` comparing current law with the catalog's policy.
+
+    A budget window's ``year`` is its first year, whose simulations the
+    report names.
+    """
     report = StoredReport(
         report_id=uuid4(),
-        baseline_simulation_id=store_simulation(connection, catalog, policy_id=None),
-        reform_simulation_id=store_simulation(
-            connection, catalog, policy_id=catalog.policy_id
+        baseline_simulation_id=store_simulation(
+            connection, catalog, policy_id=None, year=year
         ),
+        reform_simulation_id=store_simulation(
+            connection, catalog, policy_id=catalog.policy_id, year=year
+        ),
+        year=year,
     )
     connection.execute(
         text(
@@ -230,7 +239,7 @@ def store_report(
             "reform_simulation_id, household_id, dataset_id, region_id, year, "
             "budget_window_size, inputs) VALUES (:id, :label, :description, "
             ":country, :type, :model_id, :policy_id, :baseline, :reform, "
-            ":household_id, :dataset_id, :region_id, 2026, :budget_window_size, "
+            ":household_id, :dataset_id, :region_id, :year, :budget_window_size, "
             "CAST(:inputs AS JSON))"
         ),
         {
@@ -247,6 +256,7 @@ def store_report(
             "dataset_id": catalog.dataset_id,
             "region_id": catalog.region_id,
             "budget_window_size": budget_window_size,
+            "year": year,
             "inputs": '{"include_cliffs": true}',
         },
     )
@@ -268,7 +278,9 @@ def store_report_run(
     """
     budget_window_year = settings.budget_window_year
     simulation_run_settings = replace(settings, run_id=None)
-    simulation_year = 2026 if budget_window_year is None else budget_window_year.year
+    simulation_year = (
+        report.year if budget_window_year is None else budget_window_year.year
+    )
     run_ids = RunIds(
         report_run_id=uuid4() if settings.run_id is None else settings.run_id,
         baseline_simulation_run_id=store_simulation_run(
@@ -402,17 +414,17 @@ def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
         )
 
 
-def year_simulations(
+def store_year_simulations(
     connection: Connection, catalog: CatalogRows, report: StoredReport, year: int
 ) -> StoredReport:
-    """Return the report as a year of its budget window sees it.
+    """Return the report with the simulations a year of its budget window uses.
 
     As the simulation service creates a window, its first year (the report's
-    ``year``, 2026 here) uses the report's two simulations, and each later
-    year a baseline and a reform simulation of its own year, with the same
-    policies.
+    ``year``) uses the report's two simulations. Each later year gets a
+    baseline and a reform simulation of its own year, with the same
+    policies, which this stores.
     """
-    if year == STORED_REPORT_YEAR:
+    if year == report.year:
         return report
     return StoredReport(
         report_id=report.report_id,
@@ -422,4 +434,5 @@ def year_simulations(
         reform_simulation_id=store_simulation(
             connection, catalog, policy_id=catalog.policy_id, year=year
         ),
+        year=report.year,
     )

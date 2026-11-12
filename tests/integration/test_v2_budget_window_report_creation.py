@@ -1,9 +1,10 @@
 """Create v2 budget-window reports, then read them back from migrated PostgreSQL.
 
 A stand-in for the simulation service's client stores the rows the
-simulation service creates for a budget window (the report, its
-budget-window run and a pending report run per year) and answers with the
-report's and window run's IDs. The routes run as the Public API's runtime
+simulation service creates for a budget window (the report with its first
+year's simulations, its budget-window run, and a pending report run per
+year under that year's simulations) and answers with the report's and
+window run's IDs. The routes run as the Public API's runtime
 role, checking the country and policies and reading the window back.
 """
 
@@ -57,7 +58,7 @@ from tests.integration.stored_report_rows import (
     store_catalog,
     store_report,
     store_report_run,
-    year_simulations,
+    store_year_simulations,
 )
 
 if TYPE_CHECKING:
@@ -94,6 +95,7 @@ class StoringSimulationService:
                 connection,
                 self.catalog,
                 budget_window_size=report.budget_window_size,
+                year=report.year,
             )
             pending = RunSettings(versions=CURRENT_VERSIONS, status="pending")
             window_run_id = store_budget_window_run(
@@ -103,7 +105,7 @@ class StoringSimulationService:
                 store_report_run(
                     connection,
                     self.catalog,
-                    year_simulations(connection, self.catalog, stored, year),
+                    store_year_simulations(connection, self.catalog, stored, year),
                     RunSettings(
                         versions=CURRENT_VERSIONS,
                         status="pending",

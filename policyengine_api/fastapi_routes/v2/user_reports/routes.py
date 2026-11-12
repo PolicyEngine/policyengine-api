@@ -49,9 +49,9 @@ from policyengine_api.services.v2.identity.types import AccountPrincipal
 # Only a saved report's writes can refuse its budget window.
 SAVED_REPORT_WRITE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
-        "model": V2ErrorResponse,
+        **USER_RESOURCE_ERROR_RESPONSES[400],
         "description": (
-            "The supplied references or countries contradict each other, or "
+            f"{USER_RESOURCE_ERROR_RESPONSES[400]['description']} Or "
             "budget_window_years disagrees with the budget window of the "
             "detailed-save report the saved report names."
         ),
@@ -141,9 +141,9 @@ def build_v2_user_report_router(
             "country (404 otherwise), or a v1 report output (legacy_report_id), "
             "checked in the v1 database; naming both is refused with 400, since "
             "v1 report numbers are not connected to detailed-save reports. A "
-            "saved detailed-save report gives that report's own budget window "
-            "as budget_window_years (null for a window shorter than two years), "
-            "or is refused with 400. An "
+            "request naming a detailed-save report must give that report's "
+            "budget window as budget_window_years, or null for a report without "
+            "a window of two or more years; otherwise it is refused with 400. An "
             "optional user_policy_id must name the same user's saved policy in "
             "the same country."
         ),

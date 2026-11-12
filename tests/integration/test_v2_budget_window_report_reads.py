@@ -47,7 +47,7 @@ from tests.integration.stored_report_rows import (
     store_catalog,
     store_report,
     store_report_run,
-    year_simulations,
+    store_year_simulations,
 )
 
 if TYPE_CHECKING:
@@ -164,7 +164,7 @@ def store_window(
         run_ids = store_report_run(
             connection,
             catalog,
-            year_simulations(connection, catalog, report, year),
+            store_year_simulations(connection, catalog, report, year),
             RunSettings(
                 versions=settings.versions,
                 status=status,
@@ -233,7 +233,7 @@ def test_a_budget_window_reads_its_newest_run_years_and_result(
         (year, str(year_run_ids[year].report_run_id), "succeeded")
         for year in YEAR_BUDGETS
     ]
-    # Each year names its own simulation runs, not the report's simulations'.
+    # Each year answers the simulation runs its own report run names.
     assert [
         (year["baseline_simulation_run_id"], year["reform_simulation_run_id"])
         for year in run["years"]
