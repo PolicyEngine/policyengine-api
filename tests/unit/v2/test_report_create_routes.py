@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, NoReturn
 from uuid import UUID
 
@@ -55,6 +56,17 @@ if TYPE_CHECKING:
     from fastapi.testclient import TestClient
 
 ROUTE_SUPPORT_LOGGER = "policyengine_api.fastapi_routes.v2.simulation_resources_support"
+
+
+@pytest.fixture
+def enabled_route_support_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Enable the report and simulation routes' logger for one test.
+
+    Alembic's env.py runs logging.config.fileConfig, which disables every
+    logger that already exists. Alembic tests run it in this process, after
+    collection has imported the routes, so the logger may be disabled here.
+    """
+    monkeypatch.setattr(logging.getLogger(ROUTE_SUPPORT_LOGGER), "disabled", False)
 
 
 def logged_events(caplog) -> list[str]:
@@ -338,6 +350,7 @@ def test_a_created_simulation_that_cannot_be_read_back_answers_its_id() -> None:
     }
 
 
+@pytest.mark.usefixtures("enabled_route_support_logger")
 def test_a_report_the_unavailable_service_created_answers_its_id(caplog) -> None:
     message = (
         f"The simulation service created report {REPORT_ID}, but is unavailable "
@@ -358,6 +371,7 @@ def test_a_report_the_unavailable_service_created_answers_its_id(caplog) -> None
     assert logged_events(caplog) == ["v2_report_unavailable_after_creation"]
 
 
+@pytest.mark.usefixtures("enabled_route_support_logger")
 def test_a_simulation_the_unavailable_service_created_answers_its_id(
     caplog,
 ) -> None:
