@@ -187,7 +187,9 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         summary="Create an economy report",
         description=(
             "Checks that the country has economy reports and stores each named "
-            "policy, then has the simulation service create the report, its two "
+            "policy, and that the running catalog version has every parameter "
+            "those policies set, then has the simulation service create the "
+            "report, its two "
             "simulations and their runs on its default worker's PolicyEngine.py "
             "version, and start the run. Answers the report as stored, with its "
             "pending run; read it again to follow the run. A created report "

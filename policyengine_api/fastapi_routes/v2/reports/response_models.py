@@ -8,7 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from policyengine_api.fastapi_routes.v2.errors_support import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.errors_support import (
+    V2ErrorResponse,
+    V2MissingParametersErrorResponse,
+)
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
@@ -184,14 +187,20 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
     404: error_response("A policy the report names is not stored in the country."),
     413: error_response("The request body exceeds 16 KiB."),
-    422: error_response(
-        "The request does not match the schema, the country has no economy "
-        "reports (such as a household-only country), or the simulation service "
-        "cannot run the report: its 422, or its 400 for a region, dataset or "
-        "dynamic it does not have. The message says which; for the simulation "
-        "service's refusal, it gives the service's code, when it gave one, and "
-        "its reason, but not its status."
-    ),
+    422: {
+        "model": V2MissingParametersErrorResponse | V2ErrorResponse,
+        "description": (
+            "The request does not match the schema; the country has no economy "
+            "reports (such as a household-only country); a policy the report "
+            "names sets parameters the running catalog version does not have "
+            "(code missing_parameters, which names them; the baseline's policy is "
+            "checked first); or the simulation service cannot run the report: its "
+            "422, or its 400 for a region, dataset or dynamic it does not have. The "
+            "message says which; for the simulation service's refusal, it gives "
+            "the service's code, when it gave one, and its reason, but not its "
+            "status."
+        ),
+    },
     502: {
         "model": V2ErrorResponse | CreatedReportUnreadableResponse,
         "description": (
@@ -221,7 +230,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "release deploys), and the message gives its code and reason; it "
             "answered 400 or 422 in a shape the Public API cannot read; or it answered "
             "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
-            "the v2 database is unavailable. Or the service created the report, then "
+            "the v2 database, or the catalog the policies are checked against, cannot "
+            "be read. Or the service created the report, then "
             "Modal refused the run's call and the service failed the run: its 503 "
             "named the report, with its status and code, and the answer gives its "
             "report_id."

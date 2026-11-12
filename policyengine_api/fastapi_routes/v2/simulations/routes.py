@@ -170,7 +170,8 @@ def build_v2_simulation_router(dependencies: NativeRouteDependencies) -> APIRout
         summary="Create an economy simulation",
         description=(
             "Checks that the country has economy calculations and stores the "
-            "named policy, then has the simulation service create the "
+            "named policy, and that the running catalog version has every "
+            "parameter it sets, then has the simulation service create the "
             "simulation and its first run on its default worker's "
             "PolicyEngine.py version, and start the run. Answers the simulation "
             "as stored, with its pending run. A created simulation that cannot "
