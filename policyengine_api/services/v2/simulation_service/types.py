@@ -22,9 +22,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
+from policyengine_api.data.v2.models.reports import LAST_YEAR, MAX_BUDGET_WINDOW_YEARS
 from policyengine_api.query_parameters import CountryId, ResourceId
 from policyengine_api.spm import SPMSelection
 
@@ -39,6 +47,17 @@ SimulationYear = Annotated[int, Field(ge=1900, le=2200, description="The year")]
 CatalogKey = Annotated[str, Field(min_length=1, max_length=255, pattern=r"^\S+$")]
 ReportLabel = Annotated[str, Field(min_length=1, max_length=255)]
 ReportDescription = Annotated[str, Field(max_length=10_000)]
+WindowFirstYear = Annotated[
+    int, Field(ge=1900, le=LAST_YEAR, description="The window's first year")
+]
+BudgetWindowSize = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=MAX_BUDGET_WINDOW_YEARS,
+        description="How many consecutive years the window has, from its year",
+    ),
+]
 
 
 class SimulationServiceUnavailableError(RuntimeError):
@@ -164,17 +183,18 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
     schema.pop("default", None)
 
 
-class EconomyReportFields(StrictSubmissionModel):
-    """An economy report: a baseline and a reform simulation of one region's data.
+class ReportDefinitionFields(StrictSubmissionModel):
+    """What every report names: a label, and a baseline and a reform simulation.
 
-    Both simulations use the report's year, region and dataset, as
-    ``EconomySimulationFields`` describes them. ``include_cliffs`` also
-    calculates the baseline's and reform's cliff impact. ``spm`` selects the
-    SPM forecast scenario and geography; omit it, rather than sending null,
-    to use the simulation service's default.
+    Both simulations use the report's year (a budget window's first year;
+    each later year gets simulations of its own), region and dataset, as
+    ``EconomySimulationFields`` describes them. ``spm`` selects the SPM
+    forecast scenario and geography; omit it, rather than sending null, to
+    use the simulation service's default. Each kind of report narrows
+    ``kind`` and adds its own fields.
     """
 
-    kind: Literal["economy"]
+    kind: Literal["economy", "budget_window"]
     label: ReportLabel
     description: ReportDescription | None = None
     year: SimulationYear
@@ -182,7 +202,6 @@ class EconomyReportFields(StrictSubmissionModel):
     dataset_name: CatalogKey | None = None
     baseline: PolicyChoice
     reform: PolicyChoice
-    include_cliffs: StrictBool = False
     spm: SPMSelection | SkipJsonSchema[None] = Field(
         default=None, json_schema_extra=_omit_spm_default
     )
@@ -197,10 +216,55 @@ class EconomyReportFields(StrictSubmissionModel):
         return value
 
 
+class EconomyReportFields(ReportDefinitionFields):
+    """An economy report: a baseline and a reform simulation of one region's data.
+
+    ``include_cliffs`` also calculates the baseline's and reform's cliff
+    impact; the other fields are as ``ReportDefinitionFields`` describes
+    them.
+    """
+
+    kind: Literal["economy"]
+    include_cliffs: StrictBool = False
+
+
 class EconomyReportCreationInput(EconomyReportFields):
     """An economy report to create in the country."""
 
     country_id: CountryId
+
+
+class BudgetWindowReportFields(ReportDefinitionFields):
+    """A budget window: a baseline and a reform simulation in each of several years.
+
+    The window is ``budget_window_size`` consecutive years from ``year``,
+    ending in 2200 or earlier. Each year compares the two simulations of one
+    region's data in that year, as an economy report does; the other fields
+    are as ``ReportDefinitionFields`` describes them. Cliff impacts are not
+    calculated for a budget window, so it takes no ``include_cliffs``.
+    """
+
+    kind: Literal["budget_window"]
+    year: WindowFirstYear
+    budget_window_size: BudgetWindowSize
+
+    @model_validator(mode="after")
+    def require_window_within_the_years_stored(self) -> BudgetWindowReportFields:
+        """Refuse a window whose last year is after 2200."""
+        if self.year + self.budget_window_size - 1 > LAST_YEAR:
+            msg = f"a budget window must end in {LAST_YEAR} or earlier"
+            raise ValueError(msg)
+        return self
+
+
+class BudgetWindowReportCreationInput(BudgetWindowReportFields):
+    """A budget window to create in the country."""
+
+    country_id: CountryId
+
+
+# A report of either kind to create.
+ReportCreationInput = EconomyReportCreationInput | BudgetWindowReportCreationInput
 
 
 @dataclass(frozen=True)
@@ -217,6 +281,18 @@ class SubmittedReport:
 
     report_id: UUID
     report_run_id: UUID
+
+
+@dataclass(frozen=True)
+class SubmittedBudgetWindow:
+    """The budget window the simulation service created, and its first run.
+
+    ``budget_window_run_id`` is the budget-window run, whose years the
+    service created and started.
+    """
+
+    report_id: UUID
+    budget_window_run_id: UUID
 
 
 class SimulationServiceClient(Protocol):
@@ -256,6 +332,16 @@ class SimulationServiceClient(Protocol):
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         """Create the report, its simulations and their runs, and start them."""
+        ...
+
+    def submit_budget_window(
+        self, report: BudgetWindowReportCreationInput
+    ) -> SubmittedBudgetWindow:
+        """Create the budget window, its simulations and a run per year; start them.
+
+        It goes to the same route as ``submit_report``, so it raises the same
+        errors.
+        """
         ...
 
 

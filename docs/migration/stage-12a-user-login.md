@@ -451,6 +451,13 @@ detailed-save `simulation_id` or `report_id` beside the v1
   still be renamed.
 - Neither reference can be cleared. No route looks a detailed-save record up
   by its v1 number, and no read starts a run.
+- A detailed-save report stores its own budget window
+  (`reports.budget_window_size`), so a saved report naming one gives the same
+  `budget_window_years`, or null for a report without a window of two or more
+  years (a saved report stores a one-year window as null). Anything else is
+  400, on create and on any update naming `report_id` or
+  `budget_window_years`; it is read in the write's transaction. A saved v1
+  report keeps the `budget_window_years` it is given.
 
 `MeItem` is `{id, user_type, primary_country, first_name, last_name, email,
 created_at}`; `user_type` is `unauthenticated` or the signed-in user's stored
