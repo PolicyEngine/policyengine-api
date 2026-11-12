@@ -246,10 +246,11 @@ class HouseholdReportFields(StrictSubmissionModel):
     ``household_id`` names a household stored through ``/v2/households`` in
     the report's country, and both simulations calculate it in its default
     year, the year its values name, as a household calculation does.
-    ``reform`` is null, or omitted, for a report of the baseline alone. With
-    ``add_missing_variables``, each simulation also calculates every yearly,
-    monthly and eternal variable the household lacks, as ``/calculate-full``
-    does; otherwise it fills in only the values the household asks for.
+    ``reform`` is null, or omitted, for a report of the baseline alone. Each
+    simulation calculates every yearly, monthly and eternal variable the
+    household lacks, as ``/calculate-full`` does, so the report gives every
+    value; there is no option to fill in only the values the household asks
+    for, as ``/v2/household-calculations`` has.
     """
 
     kind: Literal["household"]
@@ -258,7 +259,6 @@ class HouseholdReportFields(StrictSubmissionModel):
     household_id: ResourceId
     baseline: HouseholdPolicyChoice
     reform: HouseholdPolicyChoice | None = None
-    add_missing_variables: StrictBool = False
 
 
 class HouseholdReportCreationInput(HouseholdReportFields):

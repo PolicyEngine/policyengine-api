@@ -20,9 +20,9 @@ caller gave them. A budget window goes to the same ``POST /reports`` as
 ``budget_window_size`` in place of the year, and no ``include_cliffs``. A
 household report goes there too, as ``report_type`` ``household``, naming
 the label and description, the stored household, each simulation's policy
-(the reform null for a report of the baseline alone) and
-``add_missing_variables``, but no year: the simulation service calculates
-the household's default year. None names a PolicyEngine.py version: the
+(the reform null for a report of the baseline alone), but no year: the
+simulation service calculates the household's default year, adding every
+variable the household lacks. None names a PolicyEngine.py version: the
 simulation service runs its default worker's. The simulation service
 answers:
 
@@ -301,7 +301,6 @@ def household_report_request(report: HouseholdReportCreationInput) -> dict[str, 
         "reform": (
             None if report.reform is None else _household_policy_choice(report.reform)
         ),
-        "add_missing_variables": report.add_missing_variables,
     }
 
 
