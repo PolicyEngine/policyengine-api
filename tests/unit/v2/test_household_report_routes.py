@@ -59,8 +59,6 @@ def household_summary_fields(**changes: Any) -> dict[str, Any]:
         "label": "My household under the reform",
         "description": None,
         "year": 2026,
-        "region_code": None,
-        "dataset_name": None,
         "household_id": HOUSEHOLD_ID,
         "baseline_simulation": ReportSimulationRead(
             id=BASELINE_SIMULATION_ID, policy_id=None, dynamic_id=None

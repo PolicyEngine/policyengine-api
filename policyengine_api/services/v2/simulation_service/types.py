@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.countries.types import CountryRead
-    from policyengine_api.services.v2.households.types import HouseholdRead
     from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 
 # The bounds the simulation service and the tables accept.
@@ -282,7 +281,7 @@ class SimulationServiceClient(Protocol):
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
-    HouseholdCalculationsUnsupportedError, HouseholdNotFoundError,
+    HouseholdCalculationCountryError, HouseholdNotFoundError,
     HouseholdCalculationYearError, PolicyNotFoundError,
     PolicyParametersMissingError and
     SubmissionStorageError from its checks.
@@ -314,14 +313,6 @@ class CountrySource(Protocol):
 
     def list_countries(self) -> list[CountryRead]:
         """Return every served country and what it supports."""
-        ...
-
-
-class HouseholdSource(Protocol):
-    """The stored households a household report names (``V2HouseholdService``)."""
-
-    def get_household(self, *, country_id: str, household_id: UUID) -> HouseholdRead:
-        """Return the country's household, or raise ``HouseholdNotFoundError``."""
         ...
 
 

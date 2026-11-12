@@ -76,11 +76,9 @@ class ReportSimulationItem(StrictReportAPIModel):
     dynamic_id: UUID | None
 
 
-class ReportSummaryItem(StrictReportAPIModel):
-    """An economy report comparing a baseline and a reform simulation.
+class ReportDefinitionItem(StrictReportAPIModel):
+    """What every report item gives: its definition and the current versions.
 
-    ``status`` is the newest run's, or ``not_run`` for a report with no run.
-    ``run`` is the newest run, whatever its status and versions;
     ``current_versions`` are the versions the Public API runs now, so a
     newest run on other versions is out of date. ``options`` are the options
     the report was created with.
@@ -88,19 +86,29 @@ class ReportSummaryItem(StrictReportAPIModel):
 
     id: UUID
     country_id: str
-    kind: Literal["economy"]
     label: str
     description: str | None
     year: int | None
-    region_code: str | None
-    dataset_name: str | None
     baseline_simulation: ReportSimulationItem | None
     reform_simulation: ReportSimulationItem | None
     options: dict[str, JsonValue]
     created_at: datetime
+    current_versions: PackageVersionsItem
+
+
+class ReportSummaryItem(ReportDefinitionItem):
+    """An economy report comparing a baseline and a reform simulation.
+
+    Both simulations use the region and dataset named. ``status`` is the
+    newest run's, or ``not_run`` for a report with no run. ``run`` is the
+    newest run, whatever its status and versions.
+    """
+
+    kind: Literal["economy"]
+    region_code: str | None
+    dataset_name: str | None
     status: Literal["not_run", "pending", "running", "succeeded", "failed"]
     run: ReportRunItem | None
-    current_versions: PackageVersionsItem
 
     @classmethod
     def from_summary(cls, read: ReportSummaryRead) -> ReportSummaryItem:
@@ -123,32 +131,20 @@ class ReportItem(ReportSummaryItem):
         return cls.model_validate(read)
 
 
-class HouseholdReportSummaryItem(StrictReportAPIModel):
+class HouseholdReportSummaryItem(ReportDefinitionItem):
     """A household report: one stored household under a baseline and a reform.
 
-    Both simulations calculate the household ``household_id`` in ``year``;
-    ``reform_simulation`` is null for a report of the baseline alone.
-    ``status`` is the newest run's, or ``not_run`` for a report with no run.
-    ``run`` is the newest run, whatever its status and versions, naming each
-    simulation's run; ``current_versions`` are the versions the Public API
-    runs now, so a newest run on other versions is out of date. ``options``
-    are the options the report was created with.
+    Both simulations calculate the household ``household_id`` in its default
+    year, ``year``; ``reform_simulation`` is null for a report of the
+    baseline alone. ``status`` is the newest run's, or ``not_run`` for a
+    report with no run. ``run`` is the newest run, whatever its status and
+    versions, naming each simulation's run.
     """
 
-    id: UUID
-    country_id: str
     kind: Literal["household"]
-    label: str
-    description: str | None
-    year: int | None
     household_id: UUID
-    baseline_simulation: ReportSimulationItem | None
-    reform_simulation: ReportSimulationItem | None
-    options: dict[str, JsonValue]
-    created_at: datetime
     status: Literal["not_run", "pending", "running", "succeeded", "failed"]
     run: ReportRunItem | None
-    current_versions: PackageVersionsItem
 
     @classmethod
     def from_summary(

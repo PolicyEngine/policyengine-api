@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
+        ReportStatusName,
         StoredReportRows,
     )
 
@@ -86,8 +87,6 @@ def _report_definition(
         label=report.label,
         description=report.description,
         year=report.year,
-        region_code=rows.region_code,
-        dataset_name=rows.dataset_name,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),
         options=dict(report.inputs),
@@ -96,16 +95,28 @@ def _report_definition(
     )
 
 
+def _newest_run(
+    rows: StoredReportRows,
+) -> tuple[ReportStatusName, ReportRunRead | None]:
+    """Return the report's status and newest run: ``not_run`` and None without one."""
+    run = rows.newest_run
+    if run is None:
+        return "not_run", None
+    return run.status.value, report_run_read(run)
+
+
 def report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> ReportSummaryRead:
     """Return an economy report's definition and newest run, without a result."""
-    run = rows.newest_run
+    status, run = _newest_run(rows)
     return ReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="economy",
-        status="not_run" if run is None else run.status.value,
-        run=None if run is None else report_run_read(run),
+        region_code=rows.region_code,
+        dataset_name=rows.dataset_name,
+        status=status,
+        run=run,
     )
 
 
@@ -132,13 +143,13 @@ def household_report_summary_read(
     if report.household_id is None:
         msg = f"Report {report.id} is not a household report"
         raise ValueError(msg)
-    run = rows.newest_run
+    status, run = _newest_run(rows)
     return HouseholdReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="household",
         household_id=report.household_id,
-        status="not_run" if run is None else run.status.value,
-        run=None if run is None else report_run_read(run),
+        status=status,
+        run=run,
     )
 
 

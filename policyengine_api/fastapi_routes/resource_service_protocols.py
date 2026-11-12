@@ -212,9 +212,11 @@ class V2StoredReportResourceService(Protocol):
 
         Raise ``EconomyCalculationsUnsupportedError`` for an economy report in
         a country without economy reports,
-        ``HouseholdCalculationsUnsupportedError`` for a household report in a
+        ``HouseholdCalculationCountryError`` for a household report in a
         country without household calculations, ``HouseholdNotFoundError``
-        for a household the country does not store, ``PolicyNotFoundError``
+        for a household the country does not store,
+        ``HouseholdCalculationYearError`` for one with no default year,
+        ``PolicyNotFoundError``
         for a policy the country does not store,
         ``PolicyParametersMissingError`` for a policy that sets parameters the
         running catalog version lacks, ``SubmissionStorageError`` when the

@@ -16,7 +16,8 @@ A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),
 and the household it names must be stored in the country, through the same
 service as ``/v2/households``, with a default year, which the report
-calculates; the household is checked before the policies.
+calculates; the household is checked before the policies. These are the
+checks ``/v2/household-calculations`` makes, with the same errors.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     require_default_year,
+    require_household_country,
 )
 from policyengine_api.services.v2.policies.validators import (
     require_policy_parameters_present,
@@ -38,19 +40,20 @@ from policyengine_api.services.v2.policies.validators import (
 from policyengine_api.services.v2.simulation_service.validators import (
     SubmissionStorageError,
     require_economy_country,
-    require_household_country,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from uuid import UUID
 
+    from policyengine_api.services.v2.household_calculations.types import (
+        HouseholdSource,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         CountrySource,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         HouseholdReportCreationInput,
-        HouseholdSource,
         PolicySource,
         SimulationServiceClient,
         SubmittedReport,
@@ -159,7 +162,7 @@ class SimulationSubmissionService:
     ) -> SubmittedReport:
         """Check the household report, then have the simulation service create it.
 
-        Raise HouseholdCalculationsUnsupportedError unless the country's row
+        Raise HouseholdCalculationCountryError unless the country's row
         allows household calculations, then HouseholdNotFoundError for a
         household the country does not store, then
         HouseholdCalculationYearError for one with no default year, then the

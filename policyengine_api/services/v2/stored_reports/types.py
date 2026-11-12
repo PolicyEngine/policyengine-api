@@ -84,8 +84,6 @@ class ReportDefinitionRead:
     label: str
     description: str | None
     year: int | None
-    region_code: str | None
-    dataset_name: str | None
     baseline_simulation: ReportSimulationRead | None
     reform_simulation: ReportSimulationRead | None
     options: dict[str, JsonValue]
@@ -95,9 +93,15 @@ class ReportDefinitionRead:
 
 @dataclass(frozen=True)
 class ReportSummaryRead(ReportDefinitionRead):
-    """An economy report's definition, its newest run and the current versions."""
+    """An economy report's definition, its newest run and the current versions.
+
+    ``region_code`` and ``dataset_name`` are the region and dataset both
+    simulations use, null when the report names none.
+    """
 
     kind: Literal["economy"]
+    region_code: str | None
+    dataset_name: str | None
     status: ReportStatusName
     run: ReportRunRead | None
 
@@ -113,10 +117,10 @@ class ReportRead(ReportSummaryRead):
 class HouseholdReportSummaryRead(ReportDefinitionRead):
     """A household report's definition, its newest run and the current versions.
 
-    Both simulations calculate the stored household ``household_id`` in
-    ``year``; ``reform_simulation`` is None for a report of the baseline
-    alone. It has no region or dataset. ``run`` is the newest report run,
-    whatever its status and versions, naming each simulation's run.
+    Both simulations calculate the stored household ``household_id`` in its
+    default year, ``year``; ``reform_simulation`` is None for a report of the
+    baseline alone. It has no region or dataset. ``run`` is the newest report
+    run, whatever its status and versions, naming each simulation's run.
     """
 
     kind: Literal["household"]
