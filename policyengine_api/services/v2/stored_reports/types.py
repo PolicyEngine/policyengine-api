@@ -192,6 +192,24 @@ class ReportRunsRead:
 
 
 @dataclass(frozen=True)
+class BudgetWindowRunsRead:
+    """A budget window's runs, newest first, each with its years.
+
+    Each budget-window run names the versions its years ran on; one on other
+    versions than ``current_versions`` is out of date.
+    """
+
+    report_id: UUID
+    kind: Literal["budget_window"]
+    runs: tuple[BudgetWindowRunRead, ...]
+    current_versions: PackageVersions
+
+
+# The runs of a report of either kind the run routes take.
+StoredReportRunsRead = ReportRunsRead | BudgetWindowRunsRead
+
+
+@dataclass(frozen=True)
 class StoredReportRows:
     """A report's row, its newest runs and the catalog and simulation rows it names.
 

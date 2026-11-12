@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import StrictBool
+from pydantic import Field, StrictBool
 
 from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    BudgetWindowRunItem,
     PackageVersionsItem,
     ReportRunItem,
     ReportSuccessResponse,
@@ -25,7 +26,11 @@ from policyengine_api.services.v2.simulation_service.types import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.stored_reports.types import ReportRunsRead
+    from policyengine_api.services.v2.stored_reports.types import (
+        BudgetWindowRunsRead,
+        ReportRunsRead,
+        StoredReportRunsRead,
+    )
 
 
 class ReportRerunRequest(StrictSubmissionModel):
@@ -40,7 +45,7 @@ class ReportRerunRequest(StrictSubmissionModel):
 
 
 class ReportRunListResult(StrictReportAPIModel):
-    """A report's runs in ``items``, newest first, whatever their status.
+    """An economy report's runs in ``items``, newest first, whatever their status.
 
     Each run names the country package and PolicyEngine.py versions it ran
     on; ``current_versions`` are those the Public API runs now, so a run on
@@ -63,8 +68,47 @@ class ReportRunListResult(StrictReportAPIModel):
         )
 
 
-class ReportRunListResponse(ReportSuccessResponse[ReportRunListResult]):
-    """Success response holding a report's runs."""
+class BudgetWindowRunListResult(StrictReportAPIModel):
+    """A budget window's runs in ``items``, newest first, each with its years.
+
+    Each budget-window run names the country package and PolicyEngine.py
+    versions its years ran on; ``current_versions`` are those the Public API
+    runs now, so a run on other versions is out of date.
+    """
+
+    report_id: UUID
+    kind: Literal["budget_window"]
+    items: list[BudgetWindowRunItem]
+    current_versions: PackageVersionsItem
+
+    @classmethod
+    def from_read(cls, read: BudgetWindowRunsRead) -> BudgetWindowRunListResult:
+        """Build the list from the service's read of the window's runs."""
+        return cls(
+            report_id=read.report_id,
+            kind=read.kind,
+            items=[BudgetWindowRunItem.model_validate(run) for run in read.runs],
+            current_versions=PackageVersionsItem.model_validate(read.current_versions),
+        )
+
+
+# A report's runs, as the list of its kind; ``kind`` says which.
+StoredReportRunListResult = Annotated[
+    ReportRunListResult | BudgetWindowRunListResult, Field(discriminator="kind")
+]
+
+
+def report_run_list_result(
+    read: StoredReportRunsRead,
+) -> ReportRunListResult | BudgetWindowRunListResult:
+    """Build the run list of the report's kind from the service's read."""
+    if read.kind == "budget_window":
+        return BudgetWindowRunListResult.from_read(read)
+    return ReportRunListResult.from_read(read)
+
+
+class ReportRunListResponse(ReportSuccessResponse[StoredReportRunListResult]):
+    """Success response holding a report's runs; ``result.kind`` says which list."""
 
 
 class ReportRerunConflictResponse(V2ErrorResponse):
@@ -92,8 +136,8 @@ class RerunReportUnreadableResponse(V2ErrorResponse):
 
 NOT_FOUND = "No report has this ID in this country."
 OTHER_KIND = (
-    "or the report is a household report or a budget window, whose runs these "
-    "routes do not start or list yet"
+    "or the report is a household report, whose runs these routes do not start "
+    "or list yet"
 )
 RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),

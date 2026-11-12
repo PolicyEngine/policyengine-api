@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 KIND_NAMES = {"household": "a household report"}
 # The kinds of report whose runs the run routes start and list; they refuse
 # any other kind, naming it.
-RUN_ROUTE_KINDS: frozenset[ReportKind] = frozenset({"economy"})
+RUN_ROUTE_KINDS: frozenset[ReportKind] = frozenset({"economy", "budget_window"})
 REPORT_KIND_NAMES: dict[ReportKind, str] = {
     "economy": "an economy report",
     "household": "a household report",
@@ -80,10 +80,9 @@ class RerunReportUnreadableError(RuntimeError):
 class ReportKindUnsupportedError(ValueError):
     """The report is of a kind a route does not read, or start and list runs of, yet.
 
-    Household reports, and for the run routes budget windows, are stored
-    in the same tables, and each route takes them once its own PR adds
-    them; the message says which kind the report is and what the route
-    does not do with it.
+    Household reports are stored in the same tables, and each route takes
+    them once its own PR adds them; the message says which kind the report
+    is and what the route does not do with it.
     """
 
 
@@ -112,12 +111,12 @@ def require_readable_report(rows: StoredReportRows) -> ReportKind:
     return kind
 
 
-def require_economy_report_runs(rows: StoredReportRows) -> None:
-    """Raise ReportKindUnsupportedError unless the run routes take the report's kind.
+def require_run_route_kind(rows: StoredReportRows) -> ReportKind:
+    """Return the report's kind, or raise ReportKindUnsupportedError.
 
-    They start and list runs of economy reports. They take household
-    reports and budget windows once their own PRs add them, separately from
-    the read routes' kinds.
+    The run routes start and list runs of economy reports and budget
+    windows. They take household reports once their own PR adds them,
+    separately from the read routes' kinds.
     """
     kind = report_kind(rows.report)
     if kind not in RUN_ROUTE_KINDS:
@@ -126,6 +125,7 @@ def require_economy_report_runs(rows: StoredReportRows) -> None:
             "these routes do not start or list yet"
         )
         raise ReportKindUnsupportedError(msg)
+    return kind
 
 
 def require_reform_run(report_run: ReportRun) -> UUID:

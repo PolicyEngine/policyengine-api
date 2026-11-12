@@ -36,8 +36,8 @@ if TYPE_CHECKING:
         ReportCreationInput,
     )
     from policyengine_api.services.v2.stored_reports.types import (
-        ReportRunsRead,
         StoredReportRead,
+        StoredReportRunsRead,
         StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
@@ -226,11 +226,12 @@ class V2StoredReportResourceService(Protocol):
     def rerun_report(
         self, *, country_id: str, report_id: UUID, force: bool
     ) -> StoredReportRead:
-        """Run the country's economy report again; return it with its new run.
+        """Run the country's economy report or budget window again; return it.
 
-        Raise ``StoredReportNotFoundError`` when the country has no such
-        report, ``ReportKindUnsupportedError`` for a kind whose runs the run
-        routes do not start yet (household reports and budget windows), the
+        It is returned with its new run as its newest. Raise
+        ``StoredReportNotFoundError`` when the country has no such report,
+        ``ReportKindUnsupportedError`` for a kind whose runs the run routes do
+        not start yet (household reports), the
         checks' errors as ``create_report`` does for the policies of the
         report's simulations, the simulation service's errors, among them
         ``SimulationServiceConflictError`` when it will not run the report
@@ -239,12 +240,15 @@ class V2StoredReportResourceService(Protocol):
         """
         ...
 
-    def list_report_runs(self, *, country_id: str, report_id: UUID) -> ReportRunsRead:
-        """Return the country's economy report's runs, newest first.
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> StoredReportRunsRead:
+        """Return the runs of the country's economy report or budget window.
 
-        Raise ``StoredReportNotFoundError`` when the country has no such
-        report, and ``ReportKindUnsupportedError`` for a kind whose runs the
-        run routes do not list yet (household reports and budget windows).
+        They are newest first; a budget window's are its budget-window runs,
+        each with its years. Raise ``StoredReportNotFoundError`` when the
+        country has no such report, and ``ReportKindUnsupportedError`` for a
+        kind whose runs the run routes do not list yet (household reports).
         """
         ...
 

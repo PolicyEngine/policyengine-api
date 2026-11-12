@@ -32,9 +32,9 @@ then reads the report back with that run as its newest. The database session
 is closed while the simulation service is asked. A failure to read it back
 raises RerunReportUnreadableError, since the new run exists. A report's runs
 are listed newest first, whatever their status and versions, beside the
-versions the Public API runs, so a caller can tell which are out of date.
-Household reports and budget windows are neither run again nor listed here
-yet.
+versions the Public API runs, so a caller can tell which are out of date: an
+economy report's report runs, or a budget window's budget-window runs with
+their years. Household reports are neither run again nor listed here yet.
 """
 
 from __future__ import annotations
@@ -59,9 +59,11 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_results as result_reads,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
+    read_budget_window_years,
     read_report_rows,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs import (
+    read_budget_window_runs,
     read_report_runs,
 )
 from policyengine_api.services.v2.stored_reports.economy_results import (
@@ -69,6 +71,7 @@ from policyengine_api.services.v2.stored_reports.economy_results import (
 )
 from policyengine_api.services.v2.stored_reports.transformations import (
     budget_window_read,
+    budget_window_runs_read,
     budget_window_summary_read,
     listed_reports,
     report_kind,
@@ -81,10 +84,10 @@ from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportStorageError,
     RerunReportUnreadableError,
-    require_economy_report_runs,
     require_readable_report,
     require_reform_run,
     require_report,
+    require_run_route_kind,
 )
 
 if TYPE_CHECKING:
@@ -103,9 +106,9 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         BudgetWindowReportRead,
-        ReportRunsRead,
         StoredReportRead,
         StoredReportRows,
+        StoredReportRunsRead,
         StoredReportSummaryRead,
     )
 
@@ -266,13 +269,15 @@ class V2StoredReportService:
     def rerun_report(
         self, *, country_id: str, report_id: UUID, force: bool
     ) -> StoredReportRead:
-        """Run the country's economy report again and return it with its new run.
+        """Run the country's economy report or budget window again; return it.
 
-        Without ``force``, each side reuses a run of its own simulation that
-        succeeded on the current versions; with it, both are calculated
-        again. Raise StoredReportNotFoundError when the country has no such
-        report, ReportKindUnsupportedError for a household report or budget
-        window, ReportStorageError when it cannot be read, the submission's
+        It is returned with its new run as its newest. Without ``force``, each
+        side reuses a run of its own simulation that succeeded on the current
+        versions; with it, both are calculated again (a budget window's
+        new run then recalculates each year). Raise StoredReportNotFoundError
+        when the country has no such report, ReportKindUnsupportedError for a
+        household report, ReportStorageError when it cannot be read, the
+        submission's
         checks' and the simulation service's errors (see
         ``SimulationSubmissionService.rerun_report``), and
         RerunReportUnreadableError, caused by the read's own error, when the
@@ -281,7 +286,7 @@ class V2StoredReportService:
         submissions = self._configured_submissions()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            require_economy_report_runs(stored)
+            require_run_route_kind(stored)
         submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -298,18 +303,32 @@ class V2StoredReportService:
                 report_id=report_id, country_id=country_id
             ) from error
 
-    def list_report_runs(self, *, country_id: str, report_id: UUID) -> ReportRunsRead:
-        """Return the country's economy report's runs, newest first.
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> StoredReportRunsRead:
+        """Return the runs of the country's economy report or budget window.
 
-        Raise StoredReportNotFoundError when the country has no such report,
-        ReportKindUnsupportedError for a household report or budget window,
-        and ReportStorageError when the database cannot be read.
+        They are newest first: an economy report's report runs, or a budget
+        window's budget-window runs, each with its years. Raise
+        StoredReportNotFoundError when the country has no such report,
+        ReportKindUnsupportedError for a household report, and
+        ReportStorageError when the database cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            require_economy_report_runs(stored)
+            current_versions = self._current_versions(country_id)
+            if require_run_route_kind(stored) == "budget_window":
+                window_runs = read_budget_window_runs(session, report_id=report_id)
+                return budget_window_runs_read(
+                    stored,
+                    window_runs,
+                    read_budget_window_years(
+                        session, [window_run.id for window_run in window_runs]
+                    ),
+                    current_versions=current_versions,
+                )
             return report_runs_read(
                 stored,
                 read_report_runs(session, report_id=report_id),
-                current_versions=self._current_versions(country_id),
+                current_versions=current_versions,
             )

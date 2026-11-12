@@ -49,8 +49,8 @@ from policyengine_api.fastapi_routes.v2.reports.run_models import (
     ReportRerunConflictResponse,
     ReportRerunRequest,
     ReportRunListResponse,
-    ReportRunListResult,
     RerunReportUnreadableResponse,
+    report_run_list_result,
 )
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     SUBMISSION_ERROR_MAPPINGS,
@@ -241,7 +241,7 @@ def _add_report_run_routes(
         response_model=ReportDetailResponse,
         status_code=201,
         responses=RERUN_RESPONSES,
-        summary="Run an economy report again",
+        summary="Run an economy report or budget window again",
         description=(
             "Checks the report as a new report is checked (the country has "
             "economy reports, and each policy its simulations name is stored and "
@@ -250,8 +250,11 @@ def _add_report_run_routes(
             "trigger, on its default worker's PolicyEngine.py version, and start "
             "it. Every earlier run is kept. Without force, each side reuses a "
             "run of its own simulation that succeeded on those versions; with "
-            "force, both simulations are calculated again. Answers the report as "
-            "stored, whose newest run is then the new one, since no other run "
+            "force, both simulations are calculated again. A budget window's new "
+            "run is a budget-window run with a report run for each year, and "
+            "with force each year calculates its simulations again. Answers the "
+            "report as stored, whose newest run is then the new one, since no "
+            "other run "
             "starts while it is pending or running: a report with a run pending "
             "or running answers 409 naming that run. Read the report again to "
             "follow the run."
@@ -277,13 +280,15 @@ def _add_report_run_routes(
         "/reports/{report_id}/runs",
         response_model=ReportRunListResponse,
         responses=RUN_LIST_RESPONSES,
-        summary="List an economy report's runs",
+        summary="List an economy report's or budget window's runs",
         description=(
             "Lists every run of the report, newest first, whatever its status "
             "and versions, each with the country package and PolicyEngine.py "
             "versions it ran on, beside the versions the Public API runs now. A "
-            "run on other versions than those is out of date. Reading starts no "
-            "run."
+            "run on other versions than those is out of date. An economy "
+            "report's runs are its report runs (kind economy); a budget "
+            "window's are its budget-window runs, each with its years (kind "
+            "budget_window). Reading starts no run."
         ),
     )
     def list_report_runs(
@@ -294,7 +299,7 @@ def _add_report_run_routes(
             runs = service_factory().list_report_runs(
                 country_id=query.country_id, report_id=report_id
             )
-            return ReportRunListResponse(result=ReportRunListResult.from_read(runs))
+            return ReportRunListResponse(result=report_run_list_result(runs))
 
         return _report_operation(read)
 
