@@ -14,10 +14,6 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
-from policyengine_api.services.v2.stored_reports.household_results.types import (
-    HouseholdReportResult,
-    HouseholdResultUnreadableError,
-)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
@@ -38,11 +34,17 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationFailure,
     HouseholdCalculationOutput,
 )
 from policyengine_api.services.v2.simulation_service.types import PackageVersions
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
+)
+from policyengine_api.services.v2.stored_reports.household_results.types import (
+    HouseholdReportFailure,
+    HouseholdReportResult,
+    HouseholdResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 from policyengine_api.services.v2.stored_reports.types import (
@@ -72,6 +74,7 @@ REFORM_HOUSEHOLD = {
     "people": {"you": {"age": {"2026": 40}, "net_income": {"2026": 31_250.5}}}
 }
 SPM_PROVENANCE = {"scenario": "baseline", "geography": "national"}
+INPUT_ERRORS = [{"name": "employment_incme", "message": "is not a variable"}]
 
 
 def succeeded_document(
@@ -87,6 +90,21 @@ def succeeded_document(
             "spm_config": None,
             "spm_provenance": None,
             **output_changes,
+        },
+    }
+
+
+def failed_document(**error_changes: Any) -> dict[str, Any]:
+    """Return the household function's failure document for a refused calculation."""
+    return {
+        "status": "failed",
+        "schema_version": 1,
+        "error": {
+            "code": "invalid_inputs",
+            "message": "The household names inputs the model does not have.",
+            "input_errors": INPUT_ERRORS,
+            "spm_error": None,
+            **error_changes,
         },
     }
 
@@ -312,6 +330,7 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
     assert report.run.reform_simulation_run_id == stored.reform_run_id
     assert report.run.country_package_version == "1.4.0"
     assert report.current_versions == CURRENT_VERSIONS
+    assert report.failure is None
     assert report.result == HouseholdReportResult(
         baseline=HouseholdCalculationOutput(
             household=BASELINE_HOUSEHOLD,
@@ -371,6 +390,74 @@ def test_a_household_report_whose_newest_run_has_not_succeeded_has_no_result(
     assert report.run is not None
     assert report.run.error_message == error_message
     assert report.result is None
+    # Neither simulation run holds a failure document here.
+    assert report.failure == (
+        HouseholdReportFailure(baseline=None, reform=None)
+        if status is ReportRunStatus.FAILED
+        else None
+    )
+
+
+def test_a_failed_household_report_answers_each_sides_failure(
+    sessions: sessionmaker[Session], reports: V2StoredReportService
+) -> None:
+    # Both sides are always calculated: the baseline succeeded, the reform's
+    # calculation was refused, so the report run failed.
+    with sessions() as session:
+        stored = store_household_report(
+            session,
+            run=RunToStore(
+                status=ReportRunStatus.FAILED,
+                error_message="household_calculation_failed: invalid_inputs",
+                baseline_result=succeeded_document(BASELINE_HOUSEHOLD),
+                reform_result=failed_document(),
+            ),
+        )
+
+    report = reports.get_report(country_id="us", report_id=stored.report_id)
+
+    assert isinstance(report, HouseholdReportRead)
+    assert report.result is None
+    assert report.failure == HouseholdReportFailure(
+        baseline=None,
+        reform=HouseholdCalculationFailure(
+            code="invalid_inputs",
+            message="The household names inputs the model does not have.",
+            input_errors=tuple(INPUT_ERRORS),
+            spm_error=None,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param({"status": "failed", "schema_version": 1}, id="no-error"),
+        pytest.param({**failed_document(), "schema_version": 2}, id="version-2"),
+        pytest.param({"unexpected": True}, id="another-document"),
+    ],
+)
+def test_a_failure_document_that_cannot_be_read_names_no_failure(
+    sessions: sessionmaker[Session],
+    reports: V2StoredReportService,
+    document: dict[str, Any],
+) -> None:
+    # The run's error message still says why it failed.
+    with sessions() as session:
+        stored = store_household_report(
+            session,
+            with_reform=False,
+            run=RunToStore(
+                status=ReportRunStatus.FAILED,
+                error_message="household_calculation_failed",
+                baseline_result=document,
+            ),
+        )
+
+    report = reports.get_report(country_id="us", report_id=stored.report_id)
+
+    assert isinstance(report, HouseholdReportRead)
+    assert report.failure == HouseholdReportFailure(baseline=None, reform=None)
 
 
 def test_a_household_report_with_no_run_answers_its_definition(
@@ -383,6 +470,7 @@ def test_a_household_report_with_no_run_answers_its_definition(
 
     assert isinstance(report, HouseholdReportRead)
     assert (report.status, report.run, report.result) == ("not_run", None, None)
+    assert report.failure is None
 
 
 @pytest.mark.parametrize(

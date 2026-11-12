@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationFailure,
     HouseholdCalculationOutput,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
@@ -24,6 +25,7 @@ from policyengine_api.services.v2.simulation_service.validators import (
     HouseholdCalculationsUnsupportedError,
 )
 from policyengine_api.services.v2.stored_reports.household_results.types import (
+    HouseholdReportFailure,
     HouseholdReportResult,
     HouseholdResultUnreadableError,
 )
@@ -93,6 +95,7 @@ def household_report_read(**changes: Any) -> HouseholdReportRead:
                 spm_provenance={"scenario": "baseline"},
             ),
         ),
+        "failure": None,
         **household_summary_fields(),
         **changes,
     }
@@ -276,6 +279,44 @@ def test_a_household_report_of_the_baseline_alone_answers_no_reform() -> None:
     assert item["result"]["reform"] is None
 
 
+def test_a_failed_household_report_answers_each_sides_failure() -> None:
+    service = FakeReportService(
+        report=household_report_read(
+            status="failed",
+            run=report_run_read(
+                status="failed", error_message="household_calculation_failed"
+            ),
+            result=None,
+            failure=HouseholdReportFailure(
+                baseline=None,
+                reform=HouseholdCalculationFailure(
+                    code="invalid_inputs",
+                    message="The household names inputs the model does not have.",
+                    input_errors=({"name": "employment_incme"},),
+                    spm_error=None,
+                ),
+            ),
+        )
+    )
+
+    item = (
+        report_route_client(reports=service)
+        .get(f"/v2/reports/{REPORT_ID}?country_id=us")
+        .json()["result"]["item"]
+    )
+
+    assert item["result"] is None
+    assert item["failure"] == {
+        "baseline": None,
+        "reform": {
+            "code": "invalid_inputs",
+            "message": "The household names inputs the model does not have.",
+            "input_errors": [{"name": "employment_incme"}],
+            "spm_error": None,
+        },
+    }
+
+
 def test_a_household_report_whose_households_cannot_be_read_answers_500() -> None:
     service = FakeReportService(
         error=HouseholdResultUnreadableError("simulation run has no result")
@@ -306,6 +347,7 @@ def test_a_list_answers_household_and_economy_reports_by_kind_without_results() 
     assert household_item["kind"] == "household"
     assert household_item["household_id"] == str(HOUSEHOLD_ID)
     assert "result" not in household_item
+    assert "failure" not in household_item
     assert economy_item["kind"] == "economy"
     assert "result" not in economy_item
 
