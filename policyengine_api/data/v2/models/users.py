@@ -223,8 +223,9 @@ class UserInvitation(IdentifiedModel, table=True):
     Resending gives it a new token and expiry. ``last_sent_at`` is when the
     email with the current token was sent, and ``last_send_error`` names why
     the last send failed. ``invited_by_user_id`` is the admin who created or
-    last resent it, and ``accepted_by_user_id`` the user who accepted it; each
-    becomes empty if that user's account is deleted.
+    last resent it, and becomes empty if that admin's account is deleted.
+    ``accepted_by_user_id`` is the user who accepted it: deleting that user's
+    account deletes the invitation, whose address was the user's own.
     """
 
     __tablename__ = "user_invitations"
@@ -238,8 +239,8 @@ class UserInvitation(IdentifiedModel, table=True):
             name="ck_user_invitations_accepted_or_revoked",
         ),
         sa.UniqueConstraint("token_hash", name="uq_user_invitations_token_hash"),
-        # Deleting any user sets its invitations' users to NULL, which
-        # searches here.
+        # Deleting any user sets the invitations it sent to NULL and deletes
+        # those it accepted, which searches here.
         sa.Index("ix_user_invitations_invited_by_user_id", "invited_by_user_id"),
         sa.Index("ix_user_invitations_accepted_by_user_id", "accepted_by_user_id"),
     )
@@ -259,7 +260,7 @@ class UserInvitation(IdentifiedModel, table=True):
         default=None, sa_type=sa.DateTime(timezone=True)
     )
     accepted_by_user_id: UUID | None = Field(
-        default=None, foreign_key="users.id", ondelete="SET NULL"
+        default=None, foreign_key="users.id", ondelete="CASCADE"
     )
     revoked_at: datetime | None = Field(
         default=None, sa_type=sa.DateTime(timezone=True)

@@ -4,7 +4,7 @@ Revision 617f531f1506 replaces the users type check with one that also allows
 author and admin, and changes nothing else; its downgrade restores the check
 that allows only unauthenticated and standard, so it fails while any user is
 an author or an admin. Revision 970be5d29283, on it, adds user_type_changes and
-changes nothing else. Revision bb09a374231f, on the SPM availability revision,
+changes nothing else. Revision f519a77ba122, on the SPM availability revision,
 adds user_invitations and user_type_changes.dismissed_at, and lets a change's
 source be invitation; its downgrade fails while any change's source is
 invitation.
@@ -32,7 +32,7 @@ USER_TYPES_REVISION = "617f531f1506"
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
 # The SPM availability revision, and the user invitations revision on it.
 SPM_AVAILABILITY_REVISION = "0c136a278f29"
-USER_INVITATIONS_REVISION = "bb09a374231f"
+USER_INVITATIONS_REVISION = "f519a77ba122"
 
 
 def _check_names(engine: Engine, table_name: str) -> set[str]:

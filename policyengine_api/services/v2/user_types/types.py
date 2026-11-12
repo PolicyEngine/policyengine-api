@@ -106,10 +106,16 @@ class UserTypeChangeOrigin:
 
 @dataclass(frozen=True)
 class ScriptedUserTypeChange:
-    """What the type script did: the user as it is now, and its type before."""
+    """What the type script did: the user as it is now, and its type before.
+
+    ``email_failure`` names why the user wasn't emailed about the change,
+    such as ``no_verified_email``; it is None when the email was sent, or
+    when nothing changed and none was needed.
+    """
 
     user: AdminUserRead
     previous_user_type: UserType
+    email_failure: str | None = None
 
 
 @dataclass(frozen=True)

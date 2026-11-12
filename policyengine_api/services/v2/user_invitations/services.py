@@ -15,9 +15,11 @@ The user then gets the invited type, unless they already have it or a higher
 one: an invitation never lowers a type. A change is recorded with the
 inviting admin named, and the user is emailed about it after the commit.
 
-Every invitation write takes the user-type change lock, which type changes
-and account deletions take too, and checks the caller against the admins
-read after it.
+Creating, resending, revoking and accepting an invitation each take the
+user-type change lock, which type changes and account deletions take too, and
+check the caller or the inviting admin against the admins read after it.
+Recording how a send went takes only the invitation's row lock, and records
+nothing when a resend replaced its token meanwhile.
 """
 
 from __future__ import annotations
@@ -298,6 +300,9 @@ class V2UserInvitationService:
     def _invitee_profile(self, principal: UserPrincipal) -> Auth0UserProfile | None:
         """Read the signed-in invitee's Auth0 profile by their Auth0 user ID.
 
+        It is read with ``GET /api/v2/users/{id}``, never the search, so a
+        just-created or just-verified user is seen.
+
         Return None when the identity isn't from the users' Auth0 tenant or
         Auth0 doesn't know it. Raise InvitationEmailUnavailableError when
         there are no profile settings or Auth0 can't answer.
@@ -315,8 +320,10 @@ class V2UserInvitationService:
         if principal.issuer != source.issuer:
             return None
         try:
-            profiles = source.reader.read_user_profiles(
-                (principal.subject,), wait_budget=RateLimitWaitBudget()
+            # Read by ID, which Auth0 answers at once: its search may not yet
+            # see someone who signed up, or verified their email, moments ago.
+            return source.reader.read_user_profile(
+                principal.subject, wait_budget=RateLimitWaitBudget()
             )
         except Exception as error:
             cause = getattr(error, "cause", None)
@@ -324,7 +331,6 @@ class V2UserInvitationService:
             raise InvitationEmailUnavailableError(
                 INVITEE_EMAIL_UNAVAILABLE_MESSAGE
             ) from error
-        return profiles.get(principal.subject)
 
     @staticmethod
     def _record_unavailable(cause: str) -> None:

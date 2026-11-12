@@ -28,9 +28,11 @@ class FakeUserTypes:
         self,
         previous_user_type: UserType = UserType.STANDARD,
         error: Exception | None = None,
+        email_failure: str | None = None,
     ) -> None:
         self.previous_user_type = previous_user_type
         self.error = error
+        self.email_failure = email_failure
         self.calls: list[dict] = []
 
     def set_user_type_by_email(
@@ -51,6 +53,7 @@ class FakeUserTypes:
                 last_seen_at=None,
             ),
             previous_user_type=self.previous_user_type,
+            email_failure=self.email_failure,
         )
 
 
@@ -68,6 +71,23 @@ def test_the_command_sets_a_type_and_says_what_changed(capsys) -> None:
     ]
     assert capsys.readouterr().out == (
         f"Changed ada@example.test (user {USER_ID}) from standard to admin.\n"
+        "Emailed the user about the change.\n"
+    )
+
+
+def test_the_command_says_why_the_user_was_not_emailed(capsys) -> None:
+    user_types = FakeUserTypes(email_failure="no_verified_email")
+
+    status = set_v2_user_type.main(
+        ["--email", "ada@example.test", "--user-type", "admin"],
+        user_type_service_factory=lambda: user_types,
+    )
+
+    # The change stands, so the command still succeeds.
+    assert status == 0
+    assert capsys.readouterr().out == (
+        f"Changed ada@example.test (user {USER_ID}) from standard to admin.\n"
+        "The user was not emailed: no_verified_email.\n"
     )
 
 
@@ -123,7 +143,7 @@ def test_the_command_refuses_missing_or_unknown_arguments(arguments) -> None:
     assert user_types.calls == []
 
 
-def test_the_command_emails_the_user_whose_type_it_changed(monkeypatch) -> None:
+def test_the_command_emails_the_user_whose_type_it_changed(monkeypatch, capsys) -> None:
     """The command's own service emails the user, as the admin routes do."""
     from policyengine_api.data.v2 import database
     from policyengine_api.fastapi_routes import dependencies
@@ -168,3 +188,4 @@ def test_the_command_emails_the_user_whose_type_it_changed(monkeypatch) -> None:
     assert [(email["to"], email["template_alias"]) for email in sender.sent] == [
         ("ada@auth0.test", "user-type-changed")
     ]
+    assert capsys.readouterr().out.endswith("Emailed the user about the change.\n")

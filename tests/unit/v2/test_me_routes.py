@@ -702,5 +702,23 @@ def test_the_openapi_document_names_each_refused_acceptance_code() -> None:
     accept = document["paths"]["/v2/me/invitations/accept"]["post"]
 
     assert {"200", "401", "403", "409", "410", "422", "503"} <= set(accept["responses"])
+
+    def schemas(status: str) -> set[str]:
+        schema = accept["responses"][status]["content"]["application/json"]["schema"]
+        options = schema.get("anyOf", [schema])
+        return {option["$ref"].rsplit("/", 1)[1] for option in options}
+
+    # Only acceptance refusals answer 403 and 410, each with a code; 409 and
+    # 503 may also be a conflict with stored state or unavailable
+    # persistence, which carry none.
+    assert schemas("403") == schemas("410") == {"V2CodedErrorResponse"}
+    assert (
+        schemas("409")
+        == schemas("503")
+        == {
+            "V2CodedErrorResponse",
+            "V2ErrorResponse",
+        }
+    )
     for status in ("403", "409", "410", "503"):
-        assert "code" in str(accept["responses"][status])
+        assert "code" in accept["responses"][status]["description"]

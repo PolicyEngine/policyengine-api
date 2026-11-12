@@ -14,11 +14,11 @@ changed, since their IDs are their browsers' credentials. Each change records
 the previous and new type, who made it and how. A change that would leave no
 admin is refused.
 
-Every change, every invitation write and every signed-in account deletion
-first takes one transaction-scoped advisory lock, then reads the admins and
-checks the caller or the deleted user against them, so they run one at a time
-and none can leave no admin. After a change commits, the user is emailed about
-it when an email service is configured.
+Every change, every invitation created, resent, revoked or accepted, and
+every signed-in account deletion first takes one transaction-scoped advisory
+lock, then reads the admins and checks the caller or the deleted user against
+them, so they run one at a time and none can leave no admin. After a change
+commits, the user is emailed about it when an email service is configured.
 
 With a user profile source, admins see each user's email and names as Auth0
 has them, read after the database work and never stored: only identities
@@ -115,6 +115,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PROFILES_UNAVAILABLE_EVENT = "admin_user_profiles_unavailable"
+# Why a change's email wasn't sent when the service was built without emails.
+NO_EMAIL_SERVICE = "not_configured"
 EMAIL_SEARCH_UNAVAILABLE_MESSAGE = (
     "Users can't be searched by email now: their emails could not be read "
     "from Auth0. Try again shortly."
@@ -181,10 +183,16 @@ class V2UserTypeService:
         self._user_profile_source_factory = user_profile_source_factory
         self._user_email_service = user_email_service
 
-    def _email_type_change(self, change: UserTypeChangeEmail | None) -> None:
-        """Email the user about a committed change; never raises for a failure."""
-        if change is not None and self._user_email_service is not None:
-            self._user_email_service.send_type_change(change)
+    def _email_type_change(self, change: UserTypeChangeEmail | None) -> str | None:
+        """Email the user about a committed change; never raise for a failure.
+
+        Return why it wasn't sent, or None when it was or none was needed.
+        """
+        if change is None:
+            return None
+        if self._user_email_service is None:
+            return NO_EMAIL_SERVICE
+        return self._user_email_service.send_type_change(change)
 
     def _profile_source(self) -> UserProfileSource | None:
         """Return the configured profile source, or None when there is none.
@@ -489,8 +497,11 @@ class V2UserTypeService:
                 ),
             )
             (read,) = _admin_user_reads(session, [user])
-        self._email_type_change(change)
-        return ScriptedUserTypeChange(user=read, previous_user_type=previous_user_type)
+        return ScriptedUserTypeChange(
+            user=read,
+            previous_user_type=previous_user_type,
+            email_failure=self._email_type_change(change),
+        )
 
 
 def lock_and_require_admin_in_session(

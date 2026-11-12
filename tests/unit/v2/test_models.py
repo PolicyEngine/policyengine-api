@@ -1096,10 +1096,11 @@ def test_user_invitations_hold_each_invitation_and_only_its_token_hash() -> None
         key.parent.name: (key.column.table.name, key.ondelete)
         for key in invitations.foreign_keys
     }
-    # Deleting the inviting or accepting user keeps the invitation.
+    # Deleting the inviting admin keeps the invitation; deleting the user who
+    # accepted it deletes it, so the address, theirs, goes with the account.
     assert foreign_keys == {
         "invited_by_user_id": ("users", "SET NULL"),
-        "accepted_by_user_id": ("users", "SET NULL"),
+        "accepted_by_user_id": ("users", "CASCADE"),
     }
     checks = {
         constraint.name: str(constraint.sqltext)
@@ -1118,7 +1119,7 @@ def test_user_invitations_hold_each_invitation_and_only_its_token_hash() -> None
         if isinstance(constraint, sa.UniqueConstraint)
     }
     assert unique == {("token_hash",)}
-    # The users' indexes serve the SET NULL that each user deletion runs.
+    # The users' indexes serve what each user deletion runs on them.
     assert {
         tuple(column.name for column in index.columns) for index in invitations.indexes
     } == {("invited_by_user_id",), ("accepted_by_user_id",)}

@@ -588,7 +588,10 @@ def test_the_scripts_change_emails_the_user(store: V2Store) -> None:
     reader = StandInProfileReader([auth0_profile(BOB.subject, "bob@auth0.test")])
     user_types = _emailing_user_types(store, sender, reader)
 
-    user_types.set_user_type_by_email(
+    scripted = user_types.set_user_type_by_email(
+        email="bob@example.test", user_type=UserType.ADMIN
+    )
+    unchanged = user_types.set_user_type_by_email(
         email="bob@example.test", user_type=UserType.ADMIN
     )
 
@@ -603,6 +606,21 @@ def test_the_scripts_change_emails_the_user(store: V2Store) -> None:
             },
         )
     ]
+    assert scripted.email_failure is None
+    assert unchanged.email_failure is None
+
+
+def test_the_script_learns_why_the_user_was_not_emailed(store: V2Store) -> None:
+    _signed_in_admin(store, ALICE)
+    _sign_in(store, BOB_WITH_EMAIL)
+    reader = StandInProfileReader()
+
+    scripted = _emailing_user_types(
+        store, RecordingEmailSender(), reader
+    ).set_user_type_by_email(email="bob@example.test", user_type=UserType.AUTHOR)
+
+    assert scripted.user.user_type is UserType.AUTHOR
+    assert scripted.email_failure == "no_verified_email"
 
 
 def test_an_unsent_type_change_email_leaves_the_change_committed(

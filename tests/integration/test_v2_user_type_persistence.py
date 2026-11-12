@@ -266,6 +266,12 @@ class StandInAuth0:
             if user_id == self.profile.user_id
         }
 
+    def read_user_profile(
+        self, user_id: str, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> Auth0UserProfile | None:
+        assert isinstance(wait_budget, RateLimitWaitBudget)
+        return self.profile if user_id == self.profile.user_id else None
+
 
 def test_the_runtime_role_finds_users_by_their_auth0_email(sessions) -> None:
     alice = _principal(sessions, "alice")

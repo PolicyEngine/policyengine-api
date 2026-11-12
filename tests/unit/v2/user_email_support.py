@@ -55,7 +55,9 @@ class StandInProfileReader:
     ) -> None:
         self.profiles = {profile.user_id: profile for profile in profiles}
         self.failure = failure
+        # Reads of several users (Auth0's search) and of one user by ID.
         self.profile_reads: list[tuple[str, ...]] = []
+        self.single_reads: list[str] = []
 
     def read_user_profiles(
         self,
@@ -73,6 +75,15 @@ class StandInProfileReader:
             for user_id in requested
             if user_id in self.profiles
         }
+
+    def read_user_profile(
+        self, user_id: str, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> Auth0UserProfile | None:
+        del wait_budget
+        self.single_reads.append(user_id)
+        if self.failure is not None:
+            raise self.failure
+        return self.profiles.get(user_id)
 
     def search_user_ids_by_email(self, *_args: object, **_kwargs: object) -> object:
         msg = "invitations and type-change emails never search by email"

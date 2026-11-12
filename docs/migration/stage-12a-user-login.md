@@ -237,8 +237,10 @@ settings (`V2_RUNTIME_DATABASE_URL` or
 `V2_SUPABASE_ENVIRONMENT`), and refuses an address with no signed-in user, or
 several, and the last admin's demotion. A person's user exists only after
 their first signed-in request to the detailed-save routes. Like an admin's
-change, the script's change emails the user (below) when it has the
-`AUTH0_USER_PROFILES_*` and `POSTMARK_*` settings.
+change, the script's change emails the user (below), and the script says
+whether it did and, if not, why (for example `no_verified_email`). That needs
+the `POSTMARK_*` settings, and the `AUTH0_USER_PROFILES_*` settings with
+`PUBLIC_API_AUTH_ISSUER` and `PUBLIC_API_AUTH_AUDIENCE`.
 
 ### Email invitations
 
@@ -293,7 +295,10 @@ its type unless they already have it or a higher one: an invitation never
 lowers a type, so the last-admin rule can't apply. A change is recorded with
 `source = invitation` and the inviting admin as `changed_by_user_id`. The
 response is `{user_type, previous_user_type, type_changed}`. Nothing changes
-when any check refuses.
+when any check refuses. Deleting an account deletes the invitations it
+accepted, whose address was the user's own; the invitations an admin sent
+are kept without the admin. An invitation that is never accepted keeps its
+address until someone deletes it.
 
 ### Type-change emails and the notice
 
@@ -658,7 +663,7 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the user invitations revision (`bb09a374231f`) drops
+  downgrades run first: the user invitations revision (`f519a77ba122`) drops
   every invitation and dismissal and needs no change with source
   `invitation`, the user type changes revision (`970be5d29283`) drops every
   recorded change, the user types revision (`617f531f1506`) needs no author

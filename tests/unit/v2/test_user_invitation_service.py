@@ -421,9 +421,11 @@ def test_accepting_gives_the_invited_type_and_emails_the_user(
         "author",
         "invitation",
     )
-    # Auth0's verified email was read once, before the change, and the
-    # type-change email goes there after the commit.
-    assert invitations.reader.profile_reads == [(BOB.subject,)]
+    # Auth0's verified email was read once by user ID, which Auth0 answers at
+    # once, unlike its search, before the change; the type-change email goes
+    # there after the commit.
+    assert invitations.reader.single_reads == [BOB.subject]
+    assert invitations.reader.profile_reads == []
     assert invitations.sender.sent[-1] == {
         "to": BOB_EMAIL,
         "template_alias": "user-type-changed",
@@ -649,3 +651,88 @@ def test_the_token_is_checked_before_the_inviter_and_the_email(
     invitations.reader.profiles[BOB.subject] = auth0_profile(BOB.subject, BOB_EMAIL)
     with pytest.raises(InvitationEmailMismatchError):
         _accept(invitations, token)
+
+
+def test_deleting_an_account_deletes_the_invitations_it_accepted(
+    invitations: Invitations,
+) -> None:
+    invitations.sign_in(ALICE, UserType.ADMIN)
+    invitations.sign_in(BOB, UserType.STANDARD)
+    _invite(invitations)
+    (token,) = invitations.sent_tokens()
+    _accept(invitations, token)
+    open_invitation = _invite(invitations, email="carol@example.test")
+
+    V2AccountService(
+        AccountDatabaseSession(invitations.store.sessions),
+        auth0_user_deleter_factory=lambda: None,
+    ).delete_account(principal=BOB)
+
+    # The accepted invitation held Bob's address; the open one is kept.
+    assert [invitation.id for invitation in invitations.invitations()] == [
+        open_invitation.id
+    ]
+
+
+class ResendingSender(RecordingEmailSender):
+    """Fail the first email after a resend has replaced its invitation's token."""
+
+    def __init__(self, invitations: Invitations) -> None:
+        super().__init__()
+        self.invitations = invitations
+
+    def send_template(self, *, to, template_alias, template_model) -> None:
+        super().send_template(
+            to=to, template_alias=template_alias, template_model=template_model
+        )
+        if len(self.sent) == 1:
+            (invitation,) = self.invitations.invitations()
+            self.invitations.service().resend_invitation(
+                principal=ALICE, invitation_id=invitation.id
+            )
+            cause = "timeout"
+            raise EmailSendError(cause)
+
+
+def test_a_send_isnt_recorded_over_a_resend_that_replaced_its_link(
+    invitations: Invitations,
+) -> None:
+    invitations.sign_in(ALICE, UserType.ADMIN)
+    invitations.sender = ResendingSender(invitations)
+
+    created = _invite(invitations)
+
+    # The resend's successful send stands; the earlier link's failure is
+    # not recorded over it.
+    assert created.last_send_error is None
+    assert created.last_sent_at == NOW
+    (stored,) = invitations.invitations()
+    _earlier_token, later_token = invitations.sent_tokens()
+    assert stored.token_hash == _hash(later_token)
+    assert stored.last_send_error is None
+
+
+class DeletingSender(RecordingEmailSender):
+    """Delete the invitation while its email is sent."""
+
+    def __init__(self, invitations: Invitations) -> None:
+        super().__init__()
+        self.invitations = invitations
+
+    def send_template(self, *, to, template_alias, template_model) -> None:
+        super().send_template(
+            to=to, template_alias=template_alias, template_model=template_model
+        )
+        with self.invitations.store.sessions.begin() as session:
+            for invitation in session.exec(select(UserInvitation)).all():
+                session.delete(invitation)
+
+
+def test_an_invitation_gone_before_its_send_is_recorded_is_not_found(
+    invitations: Invitations,
+) -> None:
+    invitations.sign_in(ALICE, UserType.ADMIN)
+    invitations.sender = DeletingSender(invitations)
+
+    with pytest.raises(InvitationNotFoundError):
+        _invite(invitations)

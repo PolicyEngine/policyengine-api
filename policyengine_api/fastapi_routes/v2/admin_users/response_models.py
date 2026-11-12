@@ -108,9 +108,11 @@ class UserTypeChangeItem(StrictAdminUserAPIModel):
     """One recorded change of a signed-in user's type.
 
     ``source`` is ``admin_route`` for a change an admin made through these
-    routes, named by ``changed_by_user_id`` and ``changed_by_email``, and
-    ``script`` for one the type script made, which names no admin.
-    ``changed_by_user_id`` is also null once that admin's account is deleted.
+    routes, named by ``changed_by_user_id`` and ``changed_by_email``,
+    ``invitation`` for one the user made by accepting an admin's email
+    invitation, which names that admin, and ``script`` for one the type
+    script made, which names no admin. ``changed_by_user_id`` is also null
+    once that admin's account is deleted.
     ``changed_by_email`` is read from Auth0 like an admin user item's email,
     else stored.
     """
@@ -121,7 +123,7 @@ class UserTypeChangeItem(StrictAdminUserAPIModel):
     new_user_type: Literal["standard", "author", "admin"]
     changed_by_user_id: UUID | None
     changed_by_email: str | None
-    source: Literal["admin_route", "script"]
+    source: Literal["admin_route", "invitation", "script"]
     created_at: datetime
 
     @classmethod

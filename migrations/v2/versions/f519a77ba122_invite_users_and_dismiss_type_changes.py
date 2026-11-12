@@ -1,16 +1,17 @@
 """invite users and dismiss type changes
 
-Revision ID: bb09a374231f
+Revision ID: f519a77ba122
 Revises: 0c136a278f29
-Create Date: 2026-11-12 23:37:15.642213
+Create Date: 2026-11-13 00:29:54.681740
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
 Adds user_invitations, one row per admin's invitation for an email address to
 become an author or admin: the address, the type, the SHA-256 digest of its
 token (the token itself is never stored), the inviting admin, its expiry, its
 last send, and when it was accepted (and by whom) or revoked. Deleting the
-inviting or accepting user keeps the invitation without them; an index on
-each serves the SET NULL that every user deletion runs. user_type_changes
+inviting admin keeps the invitation without them; deleting the user who
+accepted it deletes it, since its address was theirs. An index on each of
+those two columns serves what every user deletion runs. user_type_changes
 gains dismissed_at, when the user dismissed the app's notice of the change,
 and its source check, renamed ck_user_type_changes_source_allowed because
 Alembic compares checks by name only, also allows invitation. The operations
@@ -31,7 +32,7 @@ import sqlalchemy as sa
 import sqlmodel
 
 
-revision: str = "bb09a374231f"
+revision: str = "f519a77ba122"
 down_revision: Union[str, None] = "0c136a278f29"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -80,7 +81,7 @@ def upgrade() -> None:
             ["accepted_by_user_id"],
             ["users.id"],
             name=op.f("fk_user_invitations_accepted_by_user_id_users"),
-            ondelete="SET NULL",
+            ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
             ["invited_by_user_id"],

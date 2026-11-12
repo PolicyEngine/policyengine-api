@@ -68,11 +68,13 @@ ACCEPTANCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         ),
     },
     409: {
-        "model": V2CodedErrorResponse,
+        # A conflict with stored state answers without a code.
+        "model": V2CodedErrorResponse | V2ErrorResponse,
         "description": (
             "code inviter_not_admin: the admin who sent the invitation is no "
             "longer an admin. code email_not_verified: Auth0 has no verified "
-            "email for the signed-in user yet; try again once it is verified."
+            "email for the signed-in user yet; try again once it is verified. "
+            "A conflict with stored state is also 409, without a code."
         ),
     },
     410: {
@@ -85,7 +87,8 @@ ACCEPTANCE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         ),
     },
     503: {
-        "model": V2CodedErrorResponse,
+        # Unavailable persistence answers without a code.
+        "model": V2CodedErrorResponse | V2ErrorResponse,
         "description": (
             "code auth0_unavailable: the signed-in user's email couldn't be "
             "read from Auth0; try again shortly. Persistence being unavailable "

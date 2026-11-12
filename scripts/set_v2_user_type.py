@@ -9,9 +9,11 @@ The email is compared whole, ignoring case, with the user's own email and its
 sign-in identities' emails; exactly one signed-in user must match. The change
 is recorded in the user's type history with no admin named. Demoting the last
 admin is refused, as it is through the admin routes. After the change, the
-user is emailed at their verified Auth0 email, as for an admin's change, when
-the ``AUTH0_USER_PROFILES_*`` and ``POSTMARK_*`` settings are set; otherwise a
-WARNING record says no email was sent.
+user is emailed at their verified Auth0 email, as for an admin's change; the
+command says whether it was, and why not. The email needs the
+``POSTMARK_*`` settings, and the ``AUTH0_USER_PROFILES_*`` settings with
+``PUBLIC_API_AUTH_ISSUER`` and ``PUBLIC_API_AUTH_AUDIENCE``, as the deployed
+Public API has them.
 
 It connects as the Public API's runtime role, configured as the deployed
 Public API is: ``V2_RUNTIME_DATABASE_URL`` (or
@@ -92,10 +94,13 @@ def _describe(change: ScriptedUserTypeChange, email: str) -> str:
             f"{email} (user {user.id}) is already {user.user_type.value}; "
             "nothing changed."
         )
-    return (
+    changed = (
         f"Changed {email} (user {user.id}) from "
-        f"{change.previous_user_type.value} to {user.user_type.value}."
+        f"{change.previous_user_type.value} to {user.user_type.value}.\n"
     )
+    if change.email_failure is None:
+        return changed + "Emailed the user about the change."
+    return changed + f"The user was not emailed: {change.email_failure}."
 
 
 def main(
