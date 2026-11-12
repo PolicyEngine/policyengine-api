@@ -214,7 +214,9 @@ class V2StoredReportResourceService(Protocol):
         does not store, ``PolicyParametersMissingError`` for a policy that
         sets parameters the running catalog version lacks,
         ``SubmissionStorageError`` when the database or its catalog cannot be
-        read for those checks, and the simulation service's errors.
+        read for those checks, the simulation service's errors, and
+        ``CreatedReportUnreadableError`` when the report it created cannot be
+        read back.
         """
         ...
 
@@ -234,7 +236,10 @@ class V2StoredSimulationResourceService(Protocol):
     ) -> SimulationRead:
         """Create the simulation through the simulation service; return it as stored.
 
-        Raise as ``V2StoredReportResourceService.create_report`` does.
+        Raise the checks' and the simulation service's errors as
+        ``V2StoredReportResourceService.create_report`` does, for the
+        simulation's one policy, and ``CreatedSimulationUnreadableError`` when
+        the simulation it created cannot be read back.
         """
         ...
 
