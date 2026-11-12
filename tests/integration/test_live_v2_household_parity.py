@@ -39,7 +39,6 @@ def parity_households(run_amount: int) -> list[LiveHousehold]:
                     "employment_income": {YEAR: 42_000 + run_amount},
                     # Deprecated: dropped with a warning by both calculations.
                     "medical_out_of_pocket_expenses": {YEAR: 1_000},
-                    "income_tax": CALCULATED,
                 }
             },
             groups={
@@ -47,7 +46,11 @@ def parity_households(run_amount: int) -> list[LiveHousehold]:
                     "state_name": {YEAR: "CA"},
                     "household_net_income": CALCULATED,
                 },
-                "tax_unit": {"eitc": CALCULATED, "ctc": CALCULATED},
+                "tax_unit": {
+                    "income_tax": CALCULATED,
+                    "eitc": CALCULATED,
+                    "ctc": CALCULATED,
+                },
                 "spm_unit": {"snap": CALCULATED},
             },
             expects_warnings=True,
@@ -174,9 +177,11 @@ def test_a_v2_household_calculation_matches_api_v1(
     policy_id = store_reform(api_client, household)
 
     finished = calculate(api_client, household, household_id, policy_id)
+    # Checked first, so a failed job is reported without waiting for the
+    # Public API's own calculation, which can take minutes.
+    assert finished.item["status"] == "succeeded", finished.item["error"]
     v1_answer = calculate_with_v1(api_client, household)
 
-    assert finished.item["status"] == "succeeded", finished.item["error"]
     result = finished.item["result"]
     differences = household_differences(v1_answer["result"], result["household"])
     assert differences == [], "\n".join(differences[:50])

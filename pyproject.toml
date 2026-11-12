@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "5.40.0"
+version = "5.41.1"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -197,6 +197,7 @@ files = [
     "policyengine_api/content_encoding.py",
     "policyengine_api/libs/user_auth.py",
     "policyengine_api/libs/auth0_management.py",
+    "policyengine_api/libs/rate_limit_wait_budget.py",
     "policyengine_api/startup_country_check.py",
     "policyengine_api/supported_countries.py",
 ]
