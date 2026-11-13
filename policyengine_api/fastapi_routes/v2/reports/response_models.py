@@ -454,9 +454,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": (
             "The simulation service created nothing: it cannot be reached or is not "
             "configured; it answered a readable 503 naming no record, and the message "
-            "gives its status and code; it answered a 400 naming no region, dataset or "
-            "dynamic of the caller's (such as a catalog version missing while a "
-            "release deploys), and the message gives its code and reason; it "
+            "gives its status and code; it answered a 400 for anything but a missing "
+            "region, dynamic or region dataset (such as a catalog version missing "
+            "while a release deploys), and the message gives its code and reason; it "
             "answered 400 or 422 in a shape the Public API cannot read; or it answered "
             "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
             "the v2 database, or the catalog the policies are checked against, cannot "

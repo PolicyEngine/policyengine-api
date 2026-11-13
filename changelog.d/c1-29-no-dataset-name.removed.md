@@ -1,0 +1,1 @@
+`POST /v2/reports` and `POST /v2/simulations` no longer take `dataset_name`, and the Public API no longer sends it to the simulation service: a report or simulation calculates on the dataset the catalog gives its region.

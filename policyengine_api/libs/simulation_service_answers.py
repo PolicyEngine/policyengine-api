@@ -74,11 +74,11 @@ CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
 REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
 # The codes of the simulation service's report and simulation routes' 400
 # that name a row the caller chose, or a stored report names, and the Public
-# API does not check: the region, the dataset, or a dynamic the catalog
-# version its default worker runs does not have. Each is the caller's error
-# and answers 422. Any other 400 is a state of the service, such as a catalog
-# version missing while a release deploys, or a row the Public API already
-# checked, and answers 503.
+# API does not check: the region, the region's dataset (or a stored report's
+# dataset), or a dynamic the catalog version its default worker runs does not
+# have. Each is the caller's error and answers 422. Any other 400 is a state
+# of the service, such as a catalog version missing while a release deploys,
+# or a row the Public API already checked, and answers 503.
 CALLER_ROW_REFUSAL_CODES = frozenset(
     {"unknown_region", "unknown_dataset", "unknown_dynamic"}
 )
