@@ -131,7 +131,13 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         table_name
         for table_name in parent
         if revision[table_name] != parent[table_name]
-    ) == ["report_runs", "reports", "simulation_runs", "simulations"]
+    ) == [
+        "budget_window_runs",
+        "report_runs",
+        "reports",
+        "simulation_runs",
+        "simulations",
+    ]
 
     for table_name in ("simulations", "reports"):
         parent_table, revision_table = parent[table_name], revision[table_name]
@@ -203,6 +209,24 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         }
         for part in ("unique_constraints", "checks", "foreign_keys"):
             assert revision_table[part] == parent_table[part], (table_name, part)
+
+    # A window run records its .py version, and recalculate marks it forced.
+    parent_windows, revision_windows = (
+        parent["budget_window_runs"],
+        revision["budget_window_runs"],
+    )
+    assert _added(parent_windows, revision_windows, "columns") == {
+        "policyengine_version": ("VARCHAR(128)", True, None)
+    }
+    assert _added(parent_windows, revision_windows, "indexes") == {
+        "uq_budget_window_runs_unfailed_unforced_versions": (
+            ("report_id", "tax_benefit_model_version_id", "policyengine_version"),
+            True,
+            "((status <> 'failed'::v2_report_run_status) AND (NOT recalculate))",
+        )
+    }
+    for part in ("unique_constraints", "checks", "foreign_keys"):
+        assert revision_windows[part] == parent_windows[part], part
 
     records = revision["user_report_run_associations"]
     assert records["columns"] == {

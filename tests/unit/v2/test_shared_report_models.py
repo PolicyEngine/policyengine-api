@@ -18,7 +18,9 @@ from sqlalchemy.orm import Session
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    BudgetWindowRun,
     ReportRun,
+    ReportRunStatus,
     Simulation,
     SimulationRun,
     SimulationStatus,
@@ -145,6 +147,71 @@ def test_a_definition_has_one_unfailed_unforced_run_per_version_set(
     assert tuple(column.name for column in index.columns) == columns
     assert str(index.dialect_options["postgresql"]["where"]) == condition
     assert str(index.dialect_options["sqlite"]["where"]) == condition
+
+
+def test_a_report_has_one_unfailed_unrecalculated_window_run_per_version_set() -> None:
+    """A budget window's runs record their .py version; ``recalculate`` is forced.
+
+    The version stays optional, since window runs written before it have
+    none, and an unversioned run is never joined.
+    """
+    windows = V2_METADATA.tables["budget_window_runs"]
+    index = _index(
+        "budget_window_runs", "uq_budget_window_runs_unfailed_unforced_versions"
+    )
+
+    assert windows.c.policyengine_version.nullable
+    assert windows.c.policyengine_version.type.length == 128
+    assert index.unique
+    assert tuple(column.name for column in index.columns) == (
+        "report_id",
+        "tax_benefit_model_version_id",
+        "policyengine_version",
+    )
+    condition = "status <> 'failed' AND NOT recalculate"
+    assert str(index.dialect_options["postgresql"]["where"]) == condition
+    assert str(index.dialect_options["sqlite"]["where"]) == condition
+
+
+def test_sqlite_refuses_a_second_unfailed_unrecalculated_window_run(
+    sqlite_session: Session,
+) -> None:
+    report_id = uuid4()
+    catalog_version_id = uuid4()
+
+    def window_run(
+        *,
+        policyengine_version: str | None = "4.2.0",
+        recalculate: bool = False,
+        status: ReportRunStatus = ReportRunStatus.PENDING,
+    ) -> BudgetWindowRun:
+        finished = status in {ReportRunStatus.SUCCEEDED, ReportRunStatus.FAILED}
+        return BudgetWindowRun(
+            report_id=report_id,
+            tax_benefit_model_version_id=catalog_version_id,
+            policyengine_version=policyengine_version,
+            recalculate=recalculate,
+            status=status,
+            completed_at=datetime.now(UTC) if finished else None,
+        )
+
+    sqlite_session.add_all(
+        [
+            window_run(status=ReportRunStatus.FAILED),
+            window_run(status=ReportRunStatus.SUCCEEDED),
+            window_run(recalculate=True),
+            window_run(policyengine_version="4.3.0"),
+            window_run(policyengine_version=None),
+            window_run(policyengine_version=None),
+        ]
+    )
+    sqlite_session.commit()
+
+    sqlite_session.add(window_run(status=ReportRunStatus.RUNNING))
+    with pytest.raises(
+        IntegrityError, match="UNIQUE constraint failed: budget_window_runs"
+    ):
+        sqlite_session.commit()
 
 
 def test_user_report_run_associations_record_each_users_request_for_a_run() -> None:

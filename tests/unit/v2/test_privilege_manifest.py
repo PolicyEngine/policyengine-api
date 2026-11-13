@@ -138,7 +138,13 @@ RUN_DEFINITION_COLUMNS = {
         }
     ),
     "budget_window_runs": frozenset(
-        {"report_id", "tax_benefit_model_version_id", "trigger", "recalculate"}
+        {
+            "report_id",
+            "tax_benefit_model_version_id",
+            "policyengine_version",
+            "trigger",
+            "recalculate",
+        }
     ),
 }
 # The policy, dynamic, household and catalog rows a run needs.

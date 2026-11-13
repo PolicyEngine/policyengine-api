@@ -1370,7 +1370,7 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
     assert re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade) == [
         "user_report_run_associations"
     ]
-    assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 7
+    assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 8
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body

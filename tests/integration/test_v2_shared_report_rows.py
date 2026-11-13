@@ -75,6 +75,14 @@ FIND_OR_CREATE_REPORT_RUN = (
     "WHERE budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced "
     "DO NOTHING RETURNING id"
 )
+FIND_OR_CREATE_WINDOW_RUN = (
+    "INSERT INTO budget_window_runs (id, report_id, tax_benefit_model_version_id, "
+    "policyengine_version, trigger, recalculate, status) "
+    "VALUES (:id, :report_id, :version_id, :policyengine_version, 'initial', "
+    ":recalculate, 'pending') "
+    "ON CONFLICT (report_id, tax_benefit_model_version_id, policyengine_version) "
+    "WHERE status <> 'failed' AND NOT recalculate DO NOTHING RETURNING id"
+)
 RECORD_REQUEST = (
     "INSERT INTO user_report_run_associations (id, user_id, report_run_id, "
     "requested_at, trigger) VALUES (:id, :user_id, :report_run_id, now(), :trigger)"
@@ -514,6 +522,47 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
         None,
         first_run,
     }
+
+
+def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """``recalculate`` is a window run's forced marker."""
+    report_id = _report(connection, public_api_rows)
+    _act_as(connection, managed_v2_roles.simulation_service)
+
+    def window_run(
+        *, policyengine_version: str = "4.0.0", recalculate: bool = False
+    ) -> UUID | None:
+        return _inserted_id(
+            connection,
+            FIND_OR_CREATE_WINDOW_RUN,
+            id=uuid4(),
+            report_id=report_id,
+            version_id=public_api_rows.version_id,
+            policyengine_version=policyengine_version,
+            recalculate=recalculate,
+        )
+
+    first_run = window_run()
+    joined = window_run()
+    recalculated = window_run(recalculate=True)
+    newer_versions_run = window_run(policyengine_version="4.1.0")
+
+    assert first_run is not None
+    assert joined is None
+    assert None not in {recalculated, newer_versions_run}
+    _act_as(connection, managed_v2_roles.modal_worker)
+    _fail(connection, "budget_window_runs", first_run)
+    _act_as(connection, managed_v2_roles.simulation_service)
+    assert window_run() not in {None, first_run}
+    _refused(
+        connection,
+        "UPDATE budget_window_runs SET policyengine_version = '4.9.9' WHERE id = :id",
+        ProgrammingError,
+        match="permission denied",
+        id=first_run,
+    )
 
 
 def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(
