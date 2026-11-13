@@ -42,6 +42,13 @@ class DecileType(StrEnum):
     WEALTH = "wealth"
 
 
+class UKAreaType(StrEnum):
+    """The level of UK area a local-area breakdown reports."""
+
+    CONSTITUENCY = "constituency"
+    LOCAL_AUTHORITY = "local_authority"
+
+
 class LaborSupplyResponse(IdentifiedModel, table=True):
     """The labour supply response to the reform in one report run.
 
@@ -552,3 +559,40 @@ class LocalAuthorityImpact(UKAreaImpactBase, table=True):
     local_authority_name: str = Field(max_length=255)
 
     report_run: ReportRun = Relationship(back_populates="local_authority_impacts")
+
+
+class WithheldAreaCode(IdentifiedModel, table=True):
+    """A UK area whose results disclosure control withheld from a report run.
+
+    One row per report run, area type and area code. Every local-area run that
+    succeeds records its list, so a succeeded run without rows withheld none.
+    The withheld area has no row in ``constituency_impacts`` or
+    ``local_authority_impacts``.
+    """
+
+    __tablename__ = "withheld_area_codes"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "report_run_id",
+            "area_type",
+            "code",
+            name="uq_withheld_area_codes_run_type_code",
+        ),
+    )
+
+    report_run_id: UUID = Field(
+        foreign_key="report_runs.id",
+        ondelete="CASCADE",
+    )
+    baseline_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+    )
+    reform_simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="RESTRICT",
+    )
+    area_type: UKAreaType = Field(sa_type=enum_type(UKAreaType, "v2_uk_area_type"))
+    code: str = Field(max_length=64)
+
+    report_run: ReportRun = Relationship(back_populates="withheld_area_codes")
