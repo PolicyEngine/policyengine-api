@@ -65,7 +65,7 @@ def report_run_read(run: ReportRun) -> ReportRunRead:
     return ReportRunRead(
         id=run.id,
         status=run.status.value,
-        trigger=run.trigger.value,
+        trigger=None if run.trigger is None else run.trigger.value,
         country_package_version=run.country_package_version,
         policyengine_version=run.policyengine_version,
         baseline_simulation_run_id=run.baseline_simulation_run_id,
@@ -193,7 +193,7 @@ def budget_window_run_read(
     return BudgetWindowRunRead(
         id=window_run.id,
         status=window_run.status.value,
-        trigger=window_run.trigger.value,
+        trigger=None if window_run.trigger is None else window_run.trigger.value,
         recalculate=window_run.recalculate,
         country_package_version=(
             None if first_year is None else first_year.country_package_version

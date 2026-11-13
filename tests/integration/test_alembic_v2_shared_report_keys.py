@@ -8,8 +8,9 @@ runs. It adds nullable key columns, unique on the key and its version, to
 table that allows one unfailed, unforced run per definition and version set;
 a .py version on ``budget_window_runs``, with a partial unique index allowing
 one unfailed, unrecalculated window run per report and version set; and the
-``user_report_run_associations`` table. It changes nothing else, and
-its downgrade removes exactly those.
+``user_report_run_associations`` table; and it makes ``reports.label``,
+``report_runs.trigger`` and ``budget_window_runs.trigger`` nullable. It changes
+nothing else, and its downgrade reverses exactly those.
 """
 
 from __future__ import annotations
@@ -104,6 +105,24 @@ def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
     }
 
 
+# The per-user columns of shared rows, nullable until a later revision drops them.
+NULLABLE_PER_USER_COLUMNS = {
+    "reports": "label",
+    "report_runs": "trigger",
+    "budget_window_runs": "trigger",
+}
+
+
+def _without_per_user_columns(table_name: str, table: dict[str, Any]) -> dict[str, Any]:
+    """Return the table without the per-user column the revision makes nullable."""
+    column_name = NULLABLE_PER_USER_COLUMNS.get(table_name)
+    if column_name is None:
+        return table
+    columns = dict(table["columns"])
+    del columns[column_name]
+    return {**table, "columns": columns}
+
+
 def _added(
     parent: dict[str, Any], revision: dict[str, Any], part: str
 ) -> dict[str, Any]:
@@ -140,6 +159,26 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         "simulation_runs",
         "simulations",
     ]
+
+    for table_name, column_name in NULLABLE_PER_USER_COLUMNS.items():
+        column_type, parent_nullable, default = parent[table_name]["columns"][
+            column_name
+        ]
+        assert not parent_nullable, (table_name, column_name)
+        assert revision[table_name]["columns"][column_name] == (
+            column_type,
+            True,
+            default,
+        )
+    full_parent = parent
+    parent = {
+        table_name: _without_per_user_columns(table_name, table)
+        for table_name, table in parent.items()
+    }
+    revision = {
+        table_name: _without_per_user_columns(table_name, table)
+        for table_name, table in revision.items()
+    }
 
     for table_name in ("simulations", "reports"):
         parent_table, revision_table = parent[table_name], revision[table_name]
@@ -270,4 +309,4 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
     assert set(records["checks"]) == {"ck_user_report_run_associations_trigger"}
 
     command.downgrade(config, SHARED_REPORTS_PREVIOUS_REVISION)
-    assert _schema_shape(engine) == parent
+    assert _schema_shape(engine) == full_parent

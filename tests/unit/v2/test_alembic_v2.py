@@ -1399,7 +1399,8 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
     It is generated on the withheld area codes revision, with one correction:
     ``user_report_run_associations.trigger`` reuses the report runs'
     ``v2_report_run_trigger`` type. It creates only that table, writes no
-    data, and its downgrade drops what the upgrade adds.
+    data, makes three per-user columns nullable (the integration shape test
+    checks the direction), and its downgrade reverses what the upgrade does.
     """
     script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
     children = [
@@ -1430,9 +1431,16 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
         "user_report_run_associations"
     ]
     assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 8
+    # The per-user columns of shared rows become nullable, and back.
     for body in (upgrade, downgrade):
+        assert sorted(
+            re.findall(r"""op\.alter_column\(\s*["'](\w+)["'],\s*["'](\w+)["']""", body)
+        ) == [
+            ("budget_window_runs", "trigger"),
+            ("report_runs", "trigger"),
+            ("reports", "label"),
+        ]
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
-        assert "op.alter_column(" not in body
     assert "op.drop_column(" not in upgrade
     assert "op.drop_table(" not in upgrade
