@@ -265,6 +265,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "local_authority_impacts": _RESULT,
     "poverty": _RESULT,
     "program_statistics": _RESULT,
+    # The UK areas disclosure control withheld from a local-area run's results.
+    "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(

@@ -56,6 +56,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "user_identities",
         "user_report_run_associations",
         "user_type_changes",
+        "withheld_area_codes",
     }
 )
 POOLER_URL = (
@@ -80,8 +81,12 @@ USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision, and parent of
 # the SPM availability revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
-# The SPM availability revision, parent of the shared reports revision.
+# The SPM availability revision, on the user type changes revision, and parent
+# of the withheld area codes revision.
 SPM_AVAILABILITY_REVISION = "0c136a278f29"
+# The withheld area codes revision, on the SPM availability revision, and
+# parent of the shared reports revision.
+WITHHELD_AREA_CODES_REVISION = "1e1e3f079f2c"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -263,6 +268,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        WITHHELD_AREA_CODES_REVISION,
         SPM_AVAILABILITY_REVISION,
         USER_TYPE_CHANGES_REVISION,
         USER_TYPES_REVISION,
@@ -1334,10 +1340,63 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         assert "op.drop_table(" not in body
 
 
+def test_withheld_area_codes_revision_creates_only_the_table_and_its_type() -> None:
+    """The revision after SPM availability adds ``withheld_area_codes``.
+
+    It is generated, creates the table with its ``v2_uk_area_type`` enum, and
+    writes no data. Its one post-generation correction drops the enum type on
+    downgrade, after the table, which Alembic's generated downgrade leaves.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == SPM_AVAILABILITY_REVISION
+    ]
+    assert [child.revision for child in children] == [WITHHELD_AREA_CODES_REVISION]
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert sorted(set(re.findall(r"op\.\w+", upgrade))) == [
+        "op.create_table",
+        "op.f",
+    ]
+    assert upgrade.count("op.create_table(") == 1
+    assert re.search(r"""op\.create_table\(\s*["']withheld_area_codes["']""", upgrade)
+    assert re.search(
+        r"""sa\.Enum\(\s*["']constituency["'],\s*["']local_authority["'],\s*"""
+        r"""name=["']v2_uk_area_type["']""",
+        upgrade,
+    )
+    assert sorted(set(re.findall(r"op\.\w+", downgrade))) == [
+        "op.drop_table",
+        "op.get_bind",
+    ]
+    assert re.search(r"""op\.drop_table\(\s*["']withheld_area_codes["']""", downgrade)
+    assert revision.count("Post-generation reversibility correction:") == 1
+    corrected_enum_names = re.findall(
+        r"sa\.Enum\(name=[\"']([^\"']+)[\"']\)\.drop\(op\.get_bind\(\)\)",
+        downgrade,
+    )
+    assert corrected_enum_names == ["v2_uk_area_type"]
+    # The type is dropped after the table that uses it.
+    assert downgrade.index("drop_table(") < downgrade.index(".drop(op.get_bind())")
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+
+
 def test_shared_reports_revision_is_generated_with_one_documented_correction() -> None:
     """The head revision lets identical requests share reports and runs.
 
-    It is generated on the SPM availability revision, with one correction:
+    It is generated on the withheld area codes revision, with one correction:
     ``user_report_run_associations.trigger`` reuses the report runs'
     ``v2_report_run_trigger`` type. It creates only that table, writes no
     data, and its downgrade drops what the upgrade adds.
@@ -1346,7 +1405,7 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
     children = [
         revision
         for revision in script.walk_revisions()
-        if revision.down_revision == SPM_AVAILABILITY_REVISION
+        if revision.down_revision == WITHHELD_AREA_CODES_REVISION
     ]
     assert len(children) == 1
     assert children[0].revision == V2_ALEMBIC_HEAD_REVISION

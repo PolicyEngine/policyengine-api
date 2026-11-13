@@ -1,9 +1,13 @@
 """share reports and runs by key and record each user's report runs
 
 Revision ID: 94dc43079186
-Revises: 0c136a278f29
+Revises: 1e1e3f079f2c
 Create Date: 2026-11-14 02:29:22.697033
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id 94dc43079186
+
+It was generated on 0c136a278f29. When master gained the withheld area codes
+revision 1e1e3f079f2c on the same parent, down_revision moved to
+1e1e3f079f2c; generating it again from there gives the same operations.
 
 One post-generation correction, commented where it is made:
 user_report_run_associations.trigger reuses the existing
@@ -36,7 +40,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = '94dc43079186'
-down_revision: Union[str, None] = '0c136a278f29'
+down_revision: Union[str, None] = '1e1e3f079f2c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -90,6 +90,8 @@ from policyengine_api.data.v2.models.run_results import (  # noqa: E402  # table
     OutputStatus,
     Poverty,
     ProgramStatistics,
+    UKAreaType,
+    WithheldAreaCode,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
@@ -166,6 +168,7 @@ __all__ = [
     "Stage12SimulationRole",
     "TaxBenefitModel",
     "TaxBenefitModelVersion",
+    "UKAreaType",
     "User",
     "UserHouseholdAssociation",
     "UserIdentity",
@@ -177,4 +180,5 @@ __all__ = [
     "UserTypeChange",
     "UserTypeChangeSource",
     "Variable",
+    "WithheldAreaCode",
 ]

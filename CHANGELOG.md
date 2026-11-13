@@ -1,3 +1,10 @@
+## [5.48.0] - 2026-11-13
+
+### Added
+
+- The v2 database gains a `withheld_area_codes` table: one row per UK constituency or local authority that disclosure control withheld from a report run's local-area results, keyed by the report run and its two simulation runs. The simulation service's Modal workers may insert its rows and the Public API may read them; no route reads it yet.
+
+
 ## [5.47.0] - 2026-11-13
 
 ### Added

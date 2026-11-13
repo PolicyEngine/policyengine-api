@@ -174,6 +174,7 @@ RESULT_TABLES = frozenset(
         "local_authority_impacts",
         "poverty",
         "program_statistics",
+        "withheld_area_codes",
     }
 )
 WRITE_PRIVILEGES = frozenset(
