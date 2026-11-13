@@ -845,8 +845,8 @@ share simulations, reports and runs:
   `key_version` names. They are nullable, so rows from before the keys stay
   unkeyed, and each table is unique on `(key_version, definition_key)`;
   PostgreSQL's unique constraint allows any number of unkeyed rows. Checks
-  require a key of 64 lowercase characters, a positive `key_version`, and a
-  key with its version (on `reports`, all three columns or none). An index on
+  require a key of 64 lowercase hexadecimal digits, a positive `key_version`,
+  and a key with its version (on `reports`, all three columns or none). An index on
   `(key_version, dataset_independent_key)` finds the reports that share that
   key: a national report and its local-area report.
 - `simulation_runs` and `report_runs` gain `forced` (`false` by default, for
@@ -862,7 +862,8 @@ share simulations, reports and runs:
   next request starts a new run, and a forced re-run is an extra run nothing
   joins. The simulation service finds or creates with `INSERT ... ON
   CONFLICT (...) WHERE status <> 'failed' AND NOT forced DO NOTHING` against
-  them, which needs no privilege beyond its `INSERT`. Both are also declared
+  them; naming a conflict target needs `SELECT` as well as `INSERT` on the
+  table, which its role already holds. Both are also declared
   for SQLite, so the unit tests' databases keep the same rule. A failed run
   can't be set back to another status while a newer unfailed run on its
   versions exists.
@@ -896,8 +897,10 @@ FROM report_runs WHERE budget_window_run_id IS NULL AND status <> 'failed'
 GROUP BY 1, 2, 3 HAVING count(*) > 1;
 ```
 
-Once applied, the indexes refuse those re-runs (a unique violation) until the
-simulation service joins runs instead. The downgrade drops the keys, the
+Once applied, the indexes refuse any such re-run (a unique violation): one
+beside a succeeded run on the same versions, and also one after a failed
+report run whose other side's simulation run succeeded, until the simulation
+service joins runs instead. The downgrade drops the keys, the
 markers, the indexes and every user's run records.
 `tests/integration/test_alembic_v2_shared_report_keys.py` checks that the
 revision changes nothing else and downgrades exactly, and

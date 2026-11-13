@@ -2,7 +2,7 @@
 
 Revision ID: 94dc43079186
 Revises: 0c136a278f29
-Create Date: 2026-11-13 23:24:08.091317
+Create Date: 2026-11-13 23:59:04.051068
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id 94dc43079186
 
 One post-generation correction, commented where it is made:
@@ -74,8 +74,8 @@ def upgrade() -> None:
     op.add_column('reports', sa.Column('dataset_independent_key', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True))
     op.create_index('ix_reports_key_version_dataset_independent_key', 'reports', ['key_version', 'dataset_independent_key'], unique=False)
     op.create_unique_constraint(op.f('uq_reports_key_version_definition_key'), 'reports', ['key_version', 'definition_key'])
-    op.create_check_constraint(op.f('ck_reports_dataset_independent_key'), 'reports', 'length(dataset_independent_key) = 64 AND dataset_independent_key = lower(dataset_independent_key)')
-    op.create_check_constraint(op.f('ck_reports_definition_key'), 'reports', 'length(definition_key) = 64 AND definition_key = lower(definition_key)')
+    op.create_check_constraint(op.f('ck_reports_dataset_independent_key'), 'reports', "length(dataset_independent_key) = 64 AND ltrim(dataset_independent_key, '0123456789abcdef') = ''")
+    op.create_check_constraint(op.f('ck_reports_definition_key'), 'reports', "length(definition_key) = 64 AND ltrim(definition_key, '0123456789abcdef') = ''")
     op.create_check_constraint(op.f('ck_reports_key_version'), 'reports', 'key_version > 0')
     op.create_check_constraint(op.f('ck_reports_keys_complete'), 'reports', '(key_version IS NULL) = (definition_key IS NULL) AND (key_version IS NULL) = (dataset_independent_key IS NULL)')
     op.add_column('simulation_runs', sa.Column('forced', sa.Boolean(), server_default=sa.text('false'), nullable=False))
@@ -83,7 +83,7 @@ def upgrade() -> None:
     op.add_column('simulations', sa.Column('key_version', sa.Integer(), nullable=True))
     op.add_column('simulations', sa.Column('definition_key', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True))
     op.create_unique_constraint(op.f('uq_simulations_key_version_definition_key'), 'simulations', ['key_version', 'definition_key'])
-    op.create_check_constraint(op.f('ck_simulations_definition_key'), 'simulations', 'length(definition_key) = 64 AND definition_key = lower(definition_key)')
+    op.create_check_constraint(op.f('ck_simulations_definition_key'), 'simulations', "length(definition_key) = 64 AND ltrim(definition_key, '0123456789abcdef') = ''")
     op.create_check_constraint(op.f('ck_simulations_key_version'), 'simulations', 'key_version > 0')
     op.create_check_constraint(op.f('ck_simulations_keys_complete'), 'simulations', '(key_version IS NULL) = (definition_key IS NULL)')
     # ### end Alembic commands ###
