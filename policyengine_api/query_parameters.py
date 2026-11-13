@@ -430,7 +430,20 @@ class ReportCreateQuery(CountryQuery):
 
 
 class ReportDetailQuery(CountryQuery):
-    """Query contract for reading one report in a country."""
+    """Query contract for reading one report in a country.
+
+    ``run_id`` names the run to read: a report run of an economy or household
+    report, or a budget-window run of a budget window. Without it the report
+    is read with its newest run.
+    """
+
+    run_id: ResourceId | None = Field(
+        default=None,
+        description=(
+            "The report's run to read: one of its report runs, or a budget "
+            "window's budget-window run. Without it, its newest run."
+        ),
+    )
 
 
 class ReportRunsQuery(CountryQuery):

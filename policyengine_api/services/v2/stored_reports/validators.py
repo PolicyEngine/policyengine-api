@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
@@ -14,9 +14,16 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import ReportRun
     from policyengine_api.services.v2.stored_reports.types import StoredReportRows
 
+# A report run, or a budget window's budget-window run.
+RunT = TypeVar("RunT")
+
 
 class StoredReportNotFoundError(LookupError):
     """No report has this ID in the requested country."""
+
+
+class ReportRunNotFoundError(LookupError):
+    """The report has no run with the ID a read names."""
 
 
 class ReportStorageError(RuntimeError):
@@ -68,6 +75,14 @@ def require_report(
         msg = f"Report {report_id} was not found in country {country_id!r}"
         raise StoredReportNotFoundError(msg)
     return rows
+
+
+def require_report_run(run: RunT | None, *, report_id: UUID, run_id: UUID) -> RunT:
+    """Return the report's run, or raise ReportRunNotFoundError for None."""
+    if run is None:
+        msg = f"Report {report_id} has no run {run_id}"
+        raise ReportRunNotFoundError(msg)
+    return run
 
 
 def require_reform_run(report_run: ReportRun) -> UUID:

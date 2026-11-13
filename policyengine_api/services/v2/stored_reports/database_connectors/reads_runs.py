@@ -50,3 +50,33 @@ def read_budget_window_runs(
         )
     )
     return list(session.scalars(statement).all())
+
+
+def read_report_run(
+    session: Session, *, report_id: UUID, run_id: UUID
+) -> ReportRun | None:
+    """Return the report's own run ``run_id``, or None when it has no such run.
+
+    A run of another report, or of a budget window's year, is not one of its
+    own runs.
+    """
+    statement = select(ReportRun).where(
+        col(ReportRun.id) == run_id,
+        col(ReportRun.report_id) == report_id,
+        col(ReportRun.budget_window_run_id).is_(None),
+    )
+    return session.scalars(statement).one_or_none()
+
+
+def read_budget_window_run(
+    session: Session, *, report_id: UUID, run_id: UUID
+) -> BudgetWindowRun | None:
+    """Return the report's budget-window run ``run_id``, or None without one.
+
+    Its years are read separately (``reads.read_budget_window_years``).
+    """
+    statement = select(BudgetWindowRun).where(
+        col(BudgetWindowRun.id) == run_id,
+        col(BudgetWindowRun.report_id) == report_id,
+    )
+    return session.scalars(statement).one_or_none()

@@ -84,6 +84,7 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
+    ReportRunNotFoundError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
@@ -117,10 +118,11 @@ ReportRunsQueryDependency = Annotated[
 # Refusals a caller can act on carry their own message and are not logged.
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
+    ReportRunNotFoundError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
-    V2ErrorMapping((StoredReportNotFoundError,), 404),
+    V2ErrorMapping((StoredReportNotFoundError, ReportRunNotFoundError), 404),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (
@@ -389,9 +391,11 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         responses=READ_RESPONSES,
         summary="Read a report",
         description=(
-            "Returns the report, its newest run whatever its status and "
-            "versions, the versions the Public API runs now, and, once the newest "
-            "run has succeeded, its result. An economy report's run is one report "
+            "Returns the report, its run named by run_id (404 when it is not "
+            "one of the report's runs), or without run_id its newest run whatever "
+            "its status and versions, the versions the Public API runs now, and, "
+            "once that run has succeeded, its result. An economy report's run is "
+            "one report "
             "run and its result today's economy result. A household report's "
             "result is each simulation's calculated household, as "
             "/v2/household-calculations answers one, and a failed run gives each "
@@ -408,7 +412,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     ) -> ReportDetailResponse | JSONResponse:
         def read() -> ReportDetailResponse:
             report = service_factory().get_report(
-                country_id=query.country_id, report_id=report_id
+                country_id=query.country_id, report_id=report_id, run_id=query.run_id
             )
             return ReportDetailResponse(
                 result=ReportDetailResult(item=report_item(report))

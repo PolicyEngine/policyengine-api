@@ -8,7 +8,9 @@ report whose newest run used an older PolicyEngine.py version still answers
 that run's result, beside the versions the Public API runs now, so the caller
 can show the stored result and say a newer model version exists. Nothing is
 calculated again on a read. A report with no run, as a report migrated from
-v1 has none, answers its definition with no result.
+v1 has none, answers its definition with no result. A read may instead name
+the run to answer: one of the report's own report runs, or a budget window's
+budget-window run, read in place of the newest.
 
 The result is rebuilt from the newest run's result rows once it has
 succeeded. A budget-window report's newest run is its newest budget-window
@@ -44,6 +46,7 @@ budget-window runs with their years.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -70,7 +73,9 @@ from policyengine_api.services.v2.stored_reports.database_connectors.reads impor
     read_report_rows,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs import (
+    read_budget_window_run,
     read_budget_window_runs,
+    read_report_run,
     read_report_runs,
 )
 from policyengine_api.services.v2.stored_reports.economy_results import (
@@ -101,6 +106,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     RerunReportUnreadableError,
     require_reform_run,
     require_report,
+    require_report_run,
 )
 
 if TYPE_CHECKING:
@@ -154,6 +160,36 @@ def _stored_report(
     )
 
 
+def _with_run(
+    session: Session, stored: StoredReportRows, run_id: UUID
+) -> StoredReportRows:
+    """Return the report's rows with its run ``run_id`` in place of its newest.
+
+    A budget window's run is a budget-window run, read with its years; any
+    other report's is one of its own report runs. Raise ReportRunNotFoundError
+    when the report has no such run.
+    """
+    report_id = stored.report.id
+    if report_kind(stored.report) == "budget_window":
+        window_run = require_report_run(
+            read_budget_window_run(session, report_id=report_id, run_id=run_id),
+            report_id=report_id,
+            run_id=run_id,
+        )
+        years = read_budget_window_years(session, [window_run.id])
+        return replace(
+            stored,
+            newest_budget_window_run=window_run,
+            budget_window_years=years.get(window_run.id, ()),
+        )
+    run = require_report_run(
+        read_report_run(session, report_id=report_id, run_id=run_id),
+        report_id=report_id,
+        run_id=run_id,
+    )
+    return replace(stored, newest_run=run)
+
+
 def _summary_read(
     stored: StoredReportRows, *, current_versions: PackageVersions
 ) -> StoredReportSummaryRead:
@@ -194,12 +230,17 @@ class V2StoredReportService:
             raise SubmissionsNotConfiguredError(msg)
         return self._submissions
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
-        """Return the country's report, its newest run and that run's result.
+    def get_report(
+        self, *, country_id: str, report_id: UUID, run_id: UUID | None = None
+    ) -> StoredReportRead:
+        """Return the country's report, a run and that run's result.
 
-        The report is an economy report, a household report or a budget
-        window. Raise StoredReportNotFoundError when the country has no such
-        report, EconomyResultUnreadableError when a succeeded run's rows lack
+        The run is ``run_id``, or the newest without it. The report is an
+        economy report, a household report or a budget window. Raise
+        StoredReportNotFoundError when the country has no such report,
+        ReportRunNotFoundError when it has no run ``run_id`` (a budget
+        window's runs are its budget-window runs; any other report's, its
+        own report runs), EconomyResultUnreadableError when a succeeded run's rows lack
         a part every result has, HouseholdResultUnreadableError when a
         succeeded household report run's calculated households cannot be
         read, BudgetWindowResultUnreadableError when a succeeded window run's
@@ -208,6 +249,8 @@ class V2StoredReportService:
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
+            if run_id is not None:
+                stored = _with_run(session, stored, run_id)
             kind = report_kind(stored.report)
             if kind == "budget_window":
                 return self._budget_window(session, stored)

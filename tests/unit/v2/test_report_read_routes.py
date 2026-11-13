@@ -49,7 +49,7 @@ def test_a_report_answers_its_definition_newest_run_versions_and_result() -> Non
     }
     assert item["reform_simulation"]["policy_id"] is not None
     assert service.calls == [
-        ("get_report", {"country_id": "us", "report_id": REPORT_ID})
+        ("get_report", {"country_id": "us", "report_id": REPORT_ID, "run_id": None})
     ]
 
 

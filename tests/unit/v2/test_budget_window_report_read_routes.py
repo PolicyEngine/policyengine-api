@@ -73,7 +73,10 @@ def test_a_budget_window_answers_its_window_newest_run_years_and_result() -> Non
     }
     assert item["result"] == BUDGET_WINDOW_RESULT
     assert service.calls == [
-        ("get_report", {"country_id": "us", "report_id": BUDGET_WINDOW_REPORT_ID})
+        (
+            "get_report",
+            {"country_id": "us", "report_id": BUDGET_WINDOW_REPORT_ID, "run_id": None},
+        )
     ]
 
 

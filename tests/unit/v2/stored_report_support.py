@@ -156,8 +156,12 @@ class FakeReportService:
         if self.error is not None:
             raise self.error
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        self._answer("get_report", country_id=country_id, report_id=report_id)
+    def get_report(
+        self, *, country_id: str, report_id: UUID, run_id: UUID | None = None
+    ) -> ReportRead:
+        self._answer(
+            "get_report", country_id=country_id, report_id=report_id, run_id=run_id
+        )
         return self.report
 
     def list_reports(

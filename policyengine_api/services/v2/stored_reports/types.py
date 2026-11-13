@@ -266,6 +266,7 @@ class StoredReportRows:
     budget window, whatever its status and versions, or None.
     ``newest_budget_window_run`` is the budget-window run created last, or
     None, and ``budget_window_years`` its years' report runs in year order.
+    A read of a run the caller names holds that run in place of the newest.
     """
 
     report: Report

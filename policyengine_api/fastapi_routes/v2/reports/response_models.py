@@ -396,10 +396,14 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: error_response("The v2 database or the simulation service is unavailable."),
 }
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
-    404: error_response("No report has this ID in this country."),
+    404: error_response(
+        "No report has this ID in this country, or run_id is not one of the "
+        "report's runs (a budget window's budget-window runs; any other "
+        "report's own report runs)."
+    ),
     422: error_response("The request does not match the schema."),
     500: error_response(
-        "The newest run succeeded but its stored result cannot be read (for a "
+        "The run read succeeded but its stored result cannot be read (for a "
         "household report, a simulation run's calculated household; for a "
         "budget window, a year has no succeeded run or no budget figures), or "
         "the operation could not be completed."

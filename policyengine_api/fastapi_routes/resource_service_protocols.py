@@ -191,13 +191,16 @@ class V2HouseholdCalculationResourceService(Protocol):
 class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
-        """Return the country's report, its newest run and that run's result.
+    def get_report(
+        self, *, country_id: str, report_id: UUID, run_id: UUID | None = None
+    ) -> StoredReportRead:
+        """Return the country's report, a run and that run's result.
 
-        The report is an economy report, a household report or a budget
-        window. Raise ``StoredReportNotFoundError`` when the country has no
-        such report, and ``EconomyResultUnreadableError``,
-        ``HouseholdResultUnreadableError`` or
+        The run is ``run_id``, or the newest without it. The report is an
+        economy report, a household report or a budget window. Raise
+        ``StoredReportNotFoundError`` when the country has no such report,
+        ``ReportRunNotFoundError`` when it has no run ``run_id``, and
+        ``EconomyResultUnreadableError``, ``HouseholdResultUnreadableError`` or
         ``BudgetWindowResultUnreadableError`` when a succeeded run's result
         cannot be read.
         """
