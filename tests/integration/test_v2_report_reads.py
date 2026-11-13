@@ -42,13 +42,19 @@ from policyengine_api.services.v2.stored_simulations.database_session import (
 from policyengine_api.services.v2.stored_simulations.services import (
     V2StoredSimulationService,
 )
-from tests.fixtures.economy_results import uk_economy_result, us_economy_result
+from tests.fixtures.economy_results import (
+    uk_economy_result,
+    uk_local_area_economy_result,
+    us_economy_result,
+)
 from tests.integration.stored_report_rows import (
+    LOCAL_AREA_DATASET_NAME,
     REGION_CODES,
     STARTED_AT,
     RunSettings,
     delete_catalog,
     store_catalog,
+    store_local_area_catalog,
     store_report,
     store_report_run,
     store_simulation,
@@ -514,3 +520,54 @@ def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
     assert detail["result"]["item"]["dataset_independent_key"] == (
         DATASET_INDEPENDENT_KEY
     )
+
+
+def test_a_local_area_report_reads_its_areas_and_withheld_codes(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    output = uk_local_area_economy_result()
+    with owner_engine.begin() as connection:
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        report = store_report(connection, local_areas)
+        store_report_run(
+            connection,
+            local_areas,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=output,
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    expected = _as_json(output)
+    expected["model_version"] = CURRENT_VERSIONS["country_package_version"]
+    assert item["data_source"] == "local_area_dataset"
+    assert item["region_code"] == "uk"
+    assert item["dataset_name"] == LOCAL_AREA_DATASET_NAME
+    assert item["result"] == expected
+
+
+def test_a_nation_report_on_its_own_dataset_reads_no_withheld_codes(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    with owner_engine.begin() as connection:
+        store_local_area_catalog(connection, catalogs["uk"])
+        report = store_report(connection, catalogs["uk"])
+        store_report_run(
+            connection,
+            catalogs["uk"],
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=uk_economy_result(),
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    assert item["data_source"] is None
+    assert item["region_code"] == "country/wales"
+    assert "constituency_withheld_codes" not in item["result"]
+    assert "local_authority_withheld_codes" not in item["result"]

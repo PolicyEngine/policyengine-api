@@ -31,6 +31,7 @@ from policyengine_api.data.v2.models import (
     LocalAuthorityImpact,
     Poverty,
     ProgramStatistics,
+    WithheldAreaCode,
 )
 from policyengine_api.services.v2.stored_reports.economy_results import (
     transformations as result_transformations,
@@ -45,6 +46,7 @@ from tests.fixtures.economy_results import (
     RunIds,
     economy_result_rows,
     uk_economy_result,
+    uk_local_area_economy_result,
     us_economy_result,
 )
 
@@ -66,16 +68,23 @@ TABLE_MODELS = {
     "congressional_district_impacts": CongressionalDistrictImpact,
     "constituency_impacts": ConstituencyImpact,
     "local_authority_impacts": LocalAuthorityImpact,
+    "withheld_area_codes": WithheldAreaCode,
 }
 
 
 def stored_rows(
-    output: dict[str, Any], *, country: str, reverse_rows: bool = False
+    output: dict[str, Any],
+    *,
+    country: str,
+    reverse_rows: bool = False,
+    on_local_area_dataset: bool = False,
 ) -> EconomyResultRows:
     """Store ``output`` as the writer does and load its rows as table models.
 
     With ``reverse_rows``, each table's rows come back in reverse order, as a
-    query without an order may return them.
+    query without an order may return them. With ``on_local_area_dataset``,
+    the rows are a local-area report's, read with its withheld area codes;
+    otherwise those are not read, as for every other report.
     """
     run_ids = RunIds(
         report_run_id=uuid4(),
@@ -89,6 +98,12 @@ def stored_rows(
         if reverse_rows:
             loaded.reverse()
         tables[table] = tuple(loaded)
+    withheld_area_codes = tables.pop("withheld_area_codes")
+    local_area_rows: dict[str, Any] = (
+        {"on_local_area_dataset": True, "withheld_area_codes": withheld_area_codes}
+        if on_local_area_dataset
+        else {}
+    )
     return EconomyResultRows(
         country_id=country,
         report_run=ReportRunResultColumns(
@@ -98,6 +113,7 @@ def stored_rows(
         baseline_simulation_run_id=run_ids.baseline_simulation_run_id,
         reform_simulation_run_id=run_ids.reform_simulation_run_id,
         **tables,
+        **local_area_rows,
     )
 
 
@@ -359,3 +375,56 @@ def test_a_country_without_poverty_measures_is_unreadable() -> None:
 
     with pytest.raises(EconomyResultUnreadableError, match="'ca'"):
         result_transformations.economy_result(rows)
+
+
+@pytest.mark.parametrize("row_order", ["as-stored", "reversed"])
+def test_a_local_area_reports_rows_rebuild_its_areas_and_sorted_withheld_codes(
+    row_order: str,
+) -> None:
+    output = uk_local_area_economy_result()
+
+    rebuilt = result_transformations.economy_result(
+        stored_rows(
+            output,
+            country="uk",
+            reverse_rows=row_order == "reversed",
+            on_local_area_dataset=True,
+        )
+    )
+
+    assert rebuilt.model_dump(mode="json", by_alias=True) == as_json(output)
+
+
+def test_a_local_area_report_with_every_area_of_a_level_withheld_reads_it_empty() -> (
+    None
+):
+    output = {
+        **uk_local_area_economy_result(),
+        "constituency_impact": [],
+        "constituency_withheld_codes": ["E14001063", "W07000081"],
+        "local_authority_withheld_codes": [],
+    }
+
+    rebuilt = result_transformations.economy_result(
+        stored_rows(output, country="uk", on_local_area_dataset=True)
+    )
+
+    # The run calculated both levels, so a level with no published area is
+    # empty rather than missing, and one with none withheld lists none.
+    assert rebuilt.constituency_impact == []
+    assert rebuilt.constituency_withheld_codes == ["E14001063", "W07000081"]
+    assert rebuilt.local_authority_withheld_codes == []
+    assert rebuilt.model_dump(mode="json", by_alias=True) == as_json(output)
+
+
+def test_another_reports_result_reports_no_withheld_codes() -> None:
+    rebuilt = result_transformations.economy_result(
+        stored_rows(uk_economy_result(), country="uk")
+    )
+
+    assert rebuilt.constituency_withheld_codes is None
+    assert rebuilt.local_authority_withheld_codes is None
+    # As the simulation service's result, it leaves the two lists out.
+    dumped = rebuilt.model_dump(mode="json", by_alias=True)
+    assert "constituency_withheld_codes" not in dumped
+    assert "local_authority_withheld_codes" not in dumped

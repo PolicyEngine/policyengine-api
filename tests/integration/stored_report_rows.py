@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}
+# The dataset .py 6.17.1's UK bundle gives constituencies and local authorities.
+LOCAL_AREA_DATASET_NAME = "microcosm_uk_2024_25_dense"
 STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
 # The year of a report store_report stores, unless it is given another.
 STORED_REPORT_YEAR = 2026
@@ -39,7 +41,9 @@ class CatalogRows:
     """A country's model, a catalog version of it, a dataset, a region and a policy.
 
     ``created_model`` says whether the model row was stored here, so cleanup
-    leaves a model another test stored.
+    leaves a model another test stored. ``area_region_ids`` and
+    ``area_dataset_ids`` are the UK-wide and area regions and the local-area
+    dataset ``store_local_area_catalog`` adds.
     """
 
     country: str
@@ -52,6 +56,8 @@ class CatalogRows:
     report_ids: list[UUID] = field(default_factory=list)
     simulation_ids: list[UUID] = field(default_factory=list)
     household_ids: list[UUID] = field(default_factory=list)
+    area_region_ids: list[UUID] = field(default_factory=list)
+    area_dataset_ids: list[UUID] = field(default_factory=list)
 
 
 def store_catalog(connection: Connection, country: str) -> CatalogRows:
@@ -114,6 +120,53 @@ def store_catalog(connection: Connection, country: str) -> CatalogRows:
         content_hash=uuid4().hex * 2,
     )
     return rows
+
+
+def store_local_area_catalog(
+    connection: Connection, catalog: CatalogRows
+) -> CatalogRows:
+    """Give a UK catalog version its UK-wide region and local areas, as .py 6.17.1.
+
+    UK-wide uses the catalog's national dataset; a constituency and a local
+    authority use the local-area dataset, which this stores. Return the
+    catalog with the UK-wide region and the local-area dataset in place of
+    its own, for storing a local-area report; it records what it stores in
+    ``catalog``'s lists, so ``delete_catalog(catalog)`` deletes it.
+    """
+    local_area_dataset_id = uuid4()
+    insert_row(
+        connection,
+        "datasets",
+        id=local_area_dataset_id,
+        name=LOCAL_AREA_DATASET_NAME,
+        year=2026,
+        is_output_dataset=False,
+        tax_benefit_model_version_id=catalog.version_id,
+    )
+    catalog.area_dataset_ids.append(local_area_dataset_id)
+    regions = {
+        "uk": ("national", catalog.dataset_id),
+        "constituency/W07000081": ("constituency", local_area_dataset_id),
+        "local_authority/W06000015": ("local_authority", local_area_dataset_id),
+    }
+    region_ids = {}
+    for code, (region_type, dataset_id) in regions.items():
+        region_ids[code] = uuid4()
+        insert_row(
+            connection,
+            "regions",
+            id=region_ids[code],
+            code=code,
+            label=code,
+            region_type=region_type,
+            requires_filter=False,
+            tax_benefit_model_version_id=catalog.version_id,
+            default_dataset_id=dataset_id,
+        )
+        catalog.area_region_ids.append(region_ids[code])
+    return replace(
+        catalog, dataset_id=local_area_dataset_id, region_id=region_ids["uk"]
+    )
 
 
 def store_simulation(
@@ -421,6 +474,14 @@ def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
     for household_id in catalog.household_ids:
         connection.execute(
             text("DELETE FROM households WHERE id = :id"), {"id": household_id}
+        )
+    for region_id in catalog.area_region_ids:
+        connection.execute(
+            text("DELETE FROM regions WHERE id = :id"), {"id": region_id}
+        )
+    for dataset_id in catalog.area_dataset_ids:
+        connection.execute(
+            text("DELETE FROM datasets WHERE id = :id"), {"id": dataset_id}
         )
     for table, row_id in (
         ("policies", catalog.policy_id),
