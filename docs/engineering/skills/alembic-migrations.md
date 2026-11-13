@@ -861,8 +861,11 @@ share simulations, reports and runs:
   windows (`budget_window_run_id IS NULL`). A failed run never counts, so the
   next request starts a new run, and a forced re-run is an extra run nothing
   joins. The simulation service finds or creates with `INSERT ... ON
-  CONFLICT (...) WHERE status <> 'failed' AND NOT forced DO NOTHING` against
-  them; naming a conflict target needs `SELECT` as well as `INSERT` on the
+  CONFLICT (<the index's columns>) WHERE <its condition> DO NOTHING`, naming
+  each index's whole condition: `status <> 'failed' AND NOT forced` for
+  simulation runs, and `budget_window_run_id IS NULL AND status <> 'failed'
+  AND NOT forced` for report runs; with less, PostgreSQL finds no matching
+  index. Naming a conflict target needs `SELECT` as well as `INSERT` on the
   table, which its role already holds. Both are also declared
   for SQLite, so the unit tests' databases keep the same rule. A failed run
   can't be set back to another status while a newer unfailed run on its

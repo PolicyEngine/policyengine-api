@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     ReportRun,
+    Simulation,
     SimulationRun,
     SimulationStatus,
 )
@@ -192,6 +193,46 @@ def sqlite_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session
     engine.dispose()
+
+
+VALID_KEY = "4bb1299756cb0a89" * 4
+
+
+@pytest.mark.parametrize(
+    "definition_key",
+    [
+        VALID_KEY.upper(),
+        VALID_KEY[:-1] + "A",
+        VALID_KEY[:63],
+        "g" * 64,
+        " " * 64,
+        "",
+    ],
+)
+def test_sqlite_refuses_a_key_that_is_not_64_lowercase_hex_digits(
+    sqlite_session: Session, definition_key: str
+) -> None:
+    """The unit tests' SQLite databases check a key's format as PostgreSQL does."""
+    sqlite_session.add(
+        Simulation(
+            dataset_id=uuid4(),
+            tax_benefit_model_version_id=uuid4(),
+            key_version=1,
+            definition_key=VALID_KEY,
+        )
+    )
+    sqlite_session.commit()
+
+    sqlite_session.add(
+        Simulation(
+            dataset_id=uuid4(),
+            tax_benefit_model_version_id=uuid4(),
+            key_version=1,
+            definition_key=definition_key,
+        )
+    )
+    with pytest.raises(IntegrityError, match="ck_simulations_definition_key"):
+        sqlite_session.commit()
 
 
 def _simulation_run(
