@@ -779,3 +779,88 @@ def test_partly_configured_gateway_credentials_are_unavailable(monkeypatch) -> N
 
     with pytest.raises(SimulationServiceUnavailableError, match="not configured"):
         SimulationServiceReportClient.from_environment()
+
+
+def test_a_report_sends_its_data_source_only_when_given() -> None:
+    on_local_areas = RecordingService()
+    on_the_regions_dataset = RecordingService()
+
+    on_local_areas.client().submit_report(
+        report_input(
+            country_id="uk", region_code="uk", data_source="local_area_dataset"
+        )
+    )
+    on_the_regions_dataset.client().submit_report(report_input())
+
+    local_area_body = on_local_areas.sent_body()
+    assert local_area_body["data_source"] == "local_area_dataset"
+    assert "dataset_name" not in local_area_body
+    assert "data_source" not in on_the_regions_dataset.sent_body()
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param(
+            {
+                "code": "no_local_area_dataset",
+                "detail": "This release gives local areas no dataset of their own.",
+            },
+            "The simulation service cannot run this request (no_local_area_dataset): "
+            "This release gives local areas no dataset of their own.",
+            id="release-without-a-local-area-dataset",
+        ),
+        pytest.param(
+            {
+                "detail": [
+                    {
+                        "loc": ["body", "data_source"],
+                        "msg": "Value error, data_source applies to uk and its nations",
+                        "type": "value_error",
+                    }
+                ]
+            },
+            "The simulation service cannot run this request: data_source: "
+            "Value error, data_source applies to uk and its nations",
+            id="another-region",
+        ),
+    ],
+)
+def test_a_data_source_the_service_refuses_is_refused_with_its_reasons(
+    body: dict[str, object], message: str
+) -> None:
+    # The Public API checks only the field's value; the simulation service
+    # checks the country, the region and the release it runs.
+    service = RecordingService(status_code=422, body=body)
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit_report(
+            report_input(region_code="state/ca", data_source="local_area_dataset")
+        )
+
+    assert _report_route_status(refused.value) == 422
+    assert str(refused.value) == message
+
+
+@pytest.mark.parametrize(
+    "code", ["local_areas_unsupported", "local_area_dataset_mismatch"]
+)
+def test_the_services_own_local_area_dataset_state_is_unavailable(code: str) -> None:
+    # Its worker declares no local-area dataset, or a dataset the catalog
+    # version doesn't give the local areas: nothing the caller can change.
+    service = RecordingService(
+        status_code=400, body={"code": code, "detail": "The worker's dataset differs."}
+    )
+
+    with pytest.raises(SimulationServiceUnavailableError) as unavailable:
+        service.client().submit_report(
+            report_input(
+                country_id="uk", region_code="uk", data_source="local_area_dataset"
+            )
+        )
+
+    assert _report_route_status(unavailable.value) == 503
+    assert str(unavailable.value) == (
+        f"The simulation service refused the report ({code}): "
+        "The worker's dataset differs."
+    )

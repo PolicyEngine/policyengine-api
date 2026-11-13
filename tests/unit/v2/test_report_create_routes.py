@@ -1044,3 +1044,79 @@ def test_a_code_that_is_a_fixed_identifier_is_passed_on(record: str, code: str) 
         "status": "error",
         "message": f"The simulation service is unavailable (503 {code}).",
     }
+
+
+def test_an_economy_report_passes_its_data_source_on() -> None:
+    service = FakeReportService()
+
+    response = report_route_client(reports=service).post(
+        "/v2/reports?country_id=uk",
+        json=report_body(
+            country_id="uk", region_code="uk", data_source="local_area_dataset"
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    ((operation, arguments),) = service.calls
+    assert operation == "create_report"
+    assert arguments["report_input"].data_source == "local_area_dataset"
+
+
+def test_an_economy_report_without_a_data_source_names_none() -> None:
+    service = FakeReportService()
+
+    response = report_route_client(reports=service).post(
+        "/v2/reports?country_id=us", json=report_body()
+    )
+
+    assert response.status_code == 201, response.text
+    ((_, arguments),) = service.calls
+    assert arguments["report_input"].data_source is None
+
+
+def test_the_simulation_service_checks_a_data_sources_region() -> None:
+    # The Public API passes data_source on for any region; the simulation
+    # service refuses a region or country it doesn't apply to.
+    service = FakeReportService()
+
+    response = report_route_client(reports=service).post(
+        "/v2/reports?country_id=us",
+        json=report_body(region_code="state/ca", data_source="local_area_dataset"),
+    )
+
+    assert response.status_code == 201, response.text
+    ((_, arguments),) = service.calls
+    assert arguments["report_input"].data_source == "local_area_dataset"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        report_body(data_source=None),
+        report_body(data_source="national_dataset"),
+        report_body(data_source=["local_area_dataset"]),
+        report_body(
+            kind="budget_window", budget_window_size=3, data_source="local_area_dataset"
+        ),
+        {
+            "country_id": "us",
+            "kind": "household",
+            "label": "My household",
+            "household_id": str(REPORT_ID),
+            "baseline": {},
+            "data_source": "local_area_dataset",
+        },
+    ],
+    ids=["null", "another-value", "a-list", "budget-window", "household-report"],
+)
+def test_a_data_source_the_public_api_does_not_take_is_refused_before_the_service(
+    body: dict[str, Any],
+) -> None:
+    service = FakeReportService()
+
+    response = report_route_client(reports=service).post(
+        "/v2/reports?country_id=us", json=body
+    )
+
+    assert response.status_code == 422, response.text
+    assert service.calls == []
