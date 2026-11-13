@@ -648,3 +648,36 @@ def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
     assert repointed.last_run_at == second_request
     assert given_a_time.last_run_at == second_request
     assert renamed.last_run_at == second_request
+
+
+@pytest.mark.parametrize("request_kind", ["create", "rerun"])
+def test_a_run_that_cannot_be_read_back_is_named_in_the_502(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    request_kind: str,
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    # The answer names a run the report doesn't have, so reading it back fails.
+    unreadable_run_id = uuid4()
+    simulation_service = JoiningSimulationService(
+        owner_engine,
+        catalog,
+        joined_run=JoinedRun(
+            report_id=report.report_id, report_run_id=unreadable_run_id
+        ),
+    )
+    client = client_for(runtime_sessions, simulation_service)
+
+    response = (
+        client.post("/v2/reports?country_id=us", json=report_body(catalog.policy_id))
+        if request_kind == "create"
+        else client.post(f"/v2/reports/{report.report_id}/runs?country_id=us", json={})
+    )
+
+    assert response.status_code == 502, response.text
+    body = response.json()
+    assert body["report_id"] == str(report.report_id)
+    assert body["run_id"] == str(unreadable_run_id)
+    assert f"run_id={unreadable_run_id}" in body["message"]

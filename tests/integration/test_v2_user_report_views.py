@@ -339,3 +339,112 @@ def test_a_malformed_browser_credential_on_a_read_is_refused(
     )
 
     assert (read.status_code, listed.status_code) == (401, 401)
+
+
+def test_the_newest_request_wins_whichever_run_was_created_last(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    asker = browsers[0]
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+        created_first = store_run(
+            connection, catalog, report, days_later=0, status="succeeded"
+        )
+        created_last = store_run(
+            connection,
+            catalog,
+            report,
+            days_later=1,
+            status="pending",
+            versions=NEWER_VERSIONS,
+        )
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    client = client_for(runtime_sessions, simulation_service)
+    # Asked for the run created last first, then the one created first.
+    for run_id in (created_last, created_first):
+        simulation_service.joined_run = JoinedRun(
+            report_id=report.report_id, report_run_id=run_id
+        )
+        response = client.post(
+            f"/v2/reports/{report.report_id}/runs?country_id=us",
+            json={},
+            headers=as_browser(asker),
+        )
+        assert response.status_code == 201, response.text
+
+    item = read_item(client, report.report_id, as_browser(asker))
+
+    assert item["run"]["id"] == str(created_first)
+
+
+def test_a_recalculated_window_run_is_never_the_default(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        unrecalculated = store_window(
+            connection,
+            catalog,
+            years=(2026, 2027),
+            settings=RunSettings(versions=CURRENT_VERSIONS, status="pending"),
+        )
+        recalculated = store_window(
+            connection,
+            catalog,
+            years=(2026, 2027),
+            settings=RunSettings(
+                versions=NEWER_VERSIONS,
+                status="pending",
+                created_at=STARTED_AT + timedelta(days=1),
+            ),
+            report=unrecalculated.report,
+        )
+        connection.execute(
+            text("UPDATE budget_window_runs SET recalculate = true WHERE id = :id"),
+            {"id": recalculated.window_run_id},
+        )
+    client = client_for(
+        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+    )
+
+    item = read_item(client, unrecalculated.report.report_id)
+
+    assert item["run"]["id"] == str(unrecalculated.window_run_id)
+
+
+def test_of_two_saved_reports_of_one_report_the_one_saved_last_names_it(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    saver = browsers[0]
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    first_saved = store_saved_report(
+        owner_engine, user_id=saver, report_id=report.report_id
+    )
+    last_saved = store_saved_report(
+        owner_engine, user_id=saver, report_id=report.report_id
+    )
+    with owner_engine.begin() as connection:
+        for saved_report_id, name, saved_at in (
+            (first_saved, "First name", STARTED_AT),
+            (last_saved, "Last name", STARTED_AT + timedelta(days=1)),
+        ):
+            connection.execute(
+                text(
+                    "UPDATE user_report_associations SET name = :name, "
+                    "created_at = :saved_at WHERE id = :id"
+                ),
+                {"name": name, "saved_at": saved_at, "id": saved_report_id},
+            )
+    client = client_for(
+        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+    )
+
+    item = read_item(client, report.report_id, as_browser(saver))
+
+    assert item["label"] == "Last name"
