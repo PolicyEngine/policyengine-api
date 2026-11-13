@@ -333,7 +333,8 @@ class V2StoredReportService:
 
         Without ``force``, each side reuses a run of its own simulation that
         succeeded on the current versions; with it, both are calculated again
-        (a budget window's new run then recalculates each year). Raise
+        (a budget window's new run then recalculates each year). A household
+        report's sides are always calculated again. Raise
         StoredReportNotFoundError when the country has no such report,
         ReportStorageError when it cannot be read, the submission's checks'
         and the simulation service's errors (see

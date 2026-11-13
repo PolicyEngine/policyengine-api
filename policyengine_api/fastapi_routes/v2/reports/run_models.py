@@ -39,7 +39,8 @@ class ReportRerunRequest(StrictSubmissionModel):
 
     Without ``force`` (``{}``), each side reuses a run of its own simulation
     that succeeded on those versions; with it, both simulations are
-    calculated again. The new run is kept beside every earlier one.
+    calculated again. A household report's sides are always calculated
+    again. The new run is kept beside every earlier one.
     """
 
     force: StrictBool = False

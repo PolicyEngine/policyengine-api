@@ -361,8 +361,9 @@ class ReportRerunInput:
 
     The simulation service runs it on its default worker's versions. Without
     ``force``, each side reuses a run of its own simulation that succeeded on
-    those versions; with it, both simulations are calculated again.
-    ``kind`` is the report's, which picks the country check: a household
+    those versions; with it, both simulations are calculated again. A
+    household report's sides are always calculated again. ``kind`` is the
+    report's, which picks the country check: a household
     report's country must have household calculations, any other report's
     economy calculations. ``policy_ids`` are the policies of the report's
     simulations, baseline first, None for current law, a report of the
