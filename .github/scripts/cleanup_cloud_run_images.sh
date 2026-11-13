@@ -20,12 +20,16 @@
 #      tagged manifest is deleted first.
 #   2. Then every untagged manifest uploaded before the oldest kept release is
 #      deleted: the manifests that the indexes deleted in step 1, or by
-#      earlier runs, referenced. Untagged manifests uploaded since then are
-#      kept, which keeps the manifests that kept indexes reference.
+#      earlier runs, referenced. Untagged manifests listed with the same
+#      upload time as the oldest kept release, or a later one, are kept. That
+#      keeps the manifests a kept index references when they are listed with
+#      its upload time, as the releases built on ubuntu-26.04 were.
 #   3. A deletion that Artifact Registry refuses because another manifest
 #      still references the manifest is logged and not counted as a failure.
-#      That manifest is still in use; a later run deletes it once nothing
-#      references it.
+#      A manifest uploaded just before the kept index that references it is
+#      refused like this on every run until that index is deleted. A manifest
+#      whose untagged index (left when a tag is pushed again) is deleted later
+#      in the same run is deleted by the next run.
 #
 # Note: deleting an image that an older Cloud Run *revision* still references
 # stops that revision from starting again. Cloud Run here is the non-primary

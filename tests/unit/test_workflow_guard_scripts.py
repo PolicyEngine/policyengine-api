@@ -56,12 +56,17 @@ def test_require_git_ref_fails_with_an_annotation_on_another_ref() -> None:
 # Stands in for Artifact Registry. Its state lives in FAKE_GCLOUD_DIR: the
 # listing to print and its exit status, the refs whose deletion fails, and
 # which child manifest each parent index references. Like Artifact Registry,
-# it refuses to delete a child manifest until its parent has been deleted.
+# it refuses to delete a child manifest until its parent has been deleted,
+# and a deleted manifest drops out of later listings.
 FAKE_GCLOUD = r"""#!/usr/bin/env bash
 state="${FAKE_GCLOUD_DIR}"
 if [[ "$1 $2 $3 $4" == "artifacts docker images list" ]]; then
   echo "$*" >> "${state}/list_calls.log"
-  cat "${state}/listing.txt"
+  while IFS='|' read -r upload_time package digest tags; do
+    if ! grep -qxF "${package}@${digest}" "${state}/deleted.log"; then
+      echo "${upload_time}|${package}|${digest}|${tags}"
+    fi
+  done < "${state}/listing.txt"
   exit "$(cat "${state}/list_exit.txt")"
 fi
 echo "$*" >> "${state}/calls.log"
@@ -98,9 +103,10 @@ def _index_release(uploaded: str, name: str) -> list[str]:
 
     Docker's default provenance attestation made each push an image index
     (tagged) that references the image manifest and an attestation manifest
-    (both untagged), all three listed with the same upload time. The
-    children's digests sort above the index's, as in the failed release runs,
-    so a newest-first sort that breaks ties by digest reaches them first.
+    (both untagged), all three listed with the same upload time. A
+    newest-first sort that breaks ties by digest puts the attestation
+    manifest before the index, as some children were in the failed release
+    runs, and the image manifest after it.
     """
     return [
         _manifest(uploaded, f"{name}-index", name),
@@ -126,20 +132,15 @@ SINGLE_MANIFEST_RELEASES = [
 ]
 
 
-def _cleanup(
+def _fake_registry(
     tmp_path: Path,
     rows: list[str],
     *,
     failing_refs: tuple[str, ...] = (),
     parents: dict[str, str] | None = None,
     list_exit: int = 0,
-    **env: str,
-) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
-    """Run the cleanup script against the fake gcloud.
-
-    Return the result, the gcloud deletion calls in order, and the arguments
-    of each listing call.
-    """
+) -> Path:
+    """Set up the fake gcloud's state and return its directory."""
     state = tmp_path / "gcloud-state"
     state.mkdir()
     (state / "listing.txt").write_text("".join(f"{row}\n" for row in rows))
@@ -149,11 +150,25 @@ def _cleanup(
         "".join(f"{child} {parent}\n" for child, parent in (parents or {}).items())
     )
     (state / "deleted.log").write_text("")
-    bin_dir = tmp_path / "bin"
+    bin_dir = state / "bin"
     bin_dir.mkdir()
     gcloud = bin_dir / "gcloud"
     gcloud.write_text(FAKE_GCLOUD)
     gcloud.chmod(0o755)
+    return state
+
+
+def _run_cleanup(
+    state: Path, **env: str
+) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+    """Run the cleanup script once against the fake gcloud in ``state``.
+
+    Return the result, this run's gcloud deletion calls in order, and the
+    arguments of its listing calls.
+    """
+    for log_name in ("calls.log", "list_calls.log"):
+        (state / log_name).write_text("")
+    bin_dir = state / "bin"
     result = _run(
         CLEANUP_IMAGES,
         {
@@ -168,6 +183,26 @@ def _cleanup(
         return log_file.read_text().splitlines() if log_file.exists() else []
 
     return result, logged_lines("calls.log"), logged_lines("list_calls.log")
+
+
+def _cleanup(
+    tmp_path: Path,
+    rows: list[str],
+    *,
+    failing_refs: tuple[str, ...] = (),
+    parents: dict[str, str] | None = None,
+    list_exit: int = 0,
+    **env: str,
+) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+    """Run the cleanup script once against a new fake registry holding ``rows``."""
+    state = _fake_registry(
+        tmp_path,
+        rows,
+        failing_refs=failing_refs,
+        parents=parents,
+        list_exit=list_exit,
+    )
+    return _run_cleanup(state, **env)
 
 
 def _delete_call(digest: str) -> str:
@@ -272,6 +307,38 @@ def test_cleanup_skips_a_manifest_that_a_kept_image_still_references(
         "Deleted 1/3 manifest(s); kept 2 that another manifest still references."
     ) in result.stdout
     assert "::error::" not in result.stdout
+
+
+def test_cleanup_deletes_a_manifest_on_the_next_run_after_its_untagged_index(
+    tmp_path: Path,
+) -> None:
+    # Pushing release-1's tag again left its first index untagged, with the
+    # two manifests that index references.
+    rows = [
+        _manifest("2026-11-13T19:28:45Z", "release-2", "release-2"),
+        _manifest("2026-11-12T23:10:00Z", "release-1", "release-1"),
+        _manifest("2026-11-12T22:05:18Z", "stale-index"),
+        _manifest("2026-11-12T22:05:18Z", "stale-image"),
+        _manifest("2026-11-12T22:05:18Z", "stale-provenance"),
+    ]
+    state = _fake_registry(tmp_path, rows, parents=_index_children("stale"))
+
+    first_result, first_calls, _ = _run_cleanup(state, KEEP="1")
+    second_result, second_calls, _ = _run_cleanup(state, KEEP="1")
+
+    assert first_result.returncode == 0, first_result.stdout
+    assert first_calls == [
+        _delete_call("release-1"),
+        _delete_call("stale-provenance"),
+        _delete_call("stale-index"),
+        _delete_call("stale-image"),
+    ]
+    assert (
+        f"Kept {_ref('stale-provenance')}: another manifest still references it.\n"
+    ) in first_result.stdout
+    assert second_result.returncode == 0, second_result.stdout
+    assert second_calls == [_delete_call("stale-provenance")]
+    assert "Deleted 1/1 manifest(s)." in second_result.stdout
 
 
 def test_cleanup_deletes_nothing_without_a_tagged_release(tmp_path: Path) -> None:
