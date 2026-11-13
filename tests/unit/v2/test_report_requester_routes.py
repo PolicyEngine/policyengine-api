@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
+
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.services.v2.identity.types import UnauthenticatedPrincipal
 from policyengine_api.services.v2.identity.validators import (
@@ -110,3 +112,18 @@ def test_a_run_whose_request_was_not_recorded_answers_503_naming_it() -> None:
             "report_id": str(REPORT_ID),
             "report_run_id": str(REPORT_RUN_ID),
         }
+
+
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [("/v2/reports", "post"), ("/v2/reports/{report_id}/runs", "post")],
+)
+def test_openapi_says_the_user_credential_is_optional(path: str, method: str) -> None:
+    document = report_route_client(reports=FakeReportRunService()).get(
+        "/v2/openapi.json"
+    )
+
+    security = document.json()["paths"][path][method]["security"]
+    assert {} in security
+    assert {"UserAccessToken": []} in security
+    assert {"UnauthenticatedUser": []} in security

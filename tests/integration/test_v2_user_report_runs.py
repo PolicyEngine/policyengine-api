@@ -11,7 +11,6 @@ the run the answer names, whichever run is the report's newest.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -19,30 +18,13 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from fastapi.testclient import TestClient
-from flask import Flask
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
 
-from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
-from policyengine_api.migration_flags import (
-    RouteImplementation,
-    RouteImplementationSettings,
-)
-from policyengine_api.services.v2.countries.database_session import (
-    CountryDatabaseSession,
-)
-from policyengine_api.services.v2.countries.services import V2CountryService
-from policyengine_api.services.v2.households.database_session import (
-    HouseholdDatabaseSession,
-)
-from policyengine_api.services.v2.households.services import V2HouseholdService
 from policyengine_api.services.v2.identity.services import (
     convert_unauthenticated_user_in_session,
     resolve_principal_user_in_session,
@@ -52,29 +34,6 @@ from policyengine_api.services.v2.identity.types import (
     UnauthenticatedPrincipal,
     UserPrincipal,
 )
-from policyengine_api.services.v2.policies.database_session import (
-    PolicyDatabaseSession,
-)
-from policyengine_api.services.v2.policies.services import V2PolicyService
-from policyengine_api.services.v2.report_run_records.database_session import (
-    ReportRunRecordDatabaseSession,
-)
-from policyengine_api.services.v2.report_run_records.services import (
-    ReportRunRecordService,
-)
-from policyengine_api.services.v2.simulation_service.services import (
-    SimulationSubmissionService,
-)
-from policyengine_api.services.v2.simulation_service.types import (
-    PackageVersions,
-    ReportRerunInput,
-    StartedReportRun,
-    SubmittedReport,
-)
-from policyengine_api.services.v2.stored_reports.database_session import (
-    StoredReportDatabaseSession,
-)
-from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 from policyengine_api.services.v2.user_reports.database_session import (
     UserReportDatabaseSession,
 )
@@ -83,12 +42,10 @@ from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
     UserReportUpdateInput,
 )
-from tests.fixtures.economy_results import us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
     RunSettings,
-    StoredReport,
     delete_catalog,
     store_budget_window_run,
     store_catalog,
@@ -96,106 +53,30 @@ from tests.integration.stored_report_rows import (
     store_report_run,
     store_year_simulations,
 )
+from tests.integration.user_report_run_support import (
+    CURRENT_VERSIONS,
+    WINDOW_YEARS,
+    JoinedRun,
+    JoiningSimulationService,
+    UnwritableRecordSession,
+    as_browser,
+    client_for,
+    newest_request,
+    report_body,
+    rerun_as_browser,
+    saved_report_last_run_at,
+    store_joined_and_newer_forced_run,
+    store_saved_report,
+    stored_records,
+)
 from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from contextlib import AbstractContextManager
 
     from sqlalchemy import Engine
 
-    from policyengine_api.services.v2.simulation_service.types import (
-        EconomyReportCreationInput,
-    )
     from tests.integration.stored_report_rows import CatalogRows
-
-CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
-WINDOW_YEARS = (2026, 2027)
-
-
-def current_versions(country_id: str) -> PackageVersions:
-    return PackageVersions(**CURRENT_VERSIONS)
-
-
-@dataclass(frozen=True)
-class JoinedRun:
-    """A run an answer names that the request didn't create.
-
-    ``budget_window_run_id`` is set for a budget window's run, whose first
-    year's report run is ``report_run_id``.
-    """
-
-    report_id: UUID
-    report_run_id: UUID
-    budget_window_run_id: UUID | None = None
-
-
-@dataclass
-class JoiningSimulationService:
-    """Answer as the simulation service does once identical requests share runs.
-
-    With ``joined_run``, every create and re-run answers that run and stores
-    nothing, as a request that finds an existing run does. Without it, a
-    create stores a new report with a pending run, and a re-run a new pending
-    run of the report, as before, marked forced for a forced re-run.
-    """
-
-    engine: Engine
-    catalog: CatalogRows
-    joined_run: JoinedRun | None = None
-    reports: list[EconomyReportCreationInput] = field(default_factory=list)
-    reruns: list[ReportRerunInput] = field(default_factory=list)
-
-    def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
-        self.reports.append(report)
-        if self.joined_run is not None:
-            return SubmittedReport(
-                report_id=self.joined_run.report_id,
-                report_run_id=self.joined_run.report_run_id,
-            )
-        with self.engine.begin() as connection:
-            stored = store_report(connection, self.catalog)
-            run_ids = store_report_run(
-                connection,
-                self.catalog,
-                stored,
-                RunSettings(versions=CURRENT_VERSIONS, status="pending"),
-            )
-        return SubmittedReport(
-            report_id=stored.report_id, report_run_id=run_ids.report_run_id
-        )
-
-    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
-        self.reruns.append(rerun)
-        if self.joined_run is not None:
-            return StartedReportRun(
-                report_run_id=self.joined_run.report_run_id,
-                budget_window_run_id=self.joined_run.budget_window_run_id,
-            )
-        with self.engine.begin() as connection:
-            simulations = connection.execute(
-                text(
-                    "SELECT baseline_simulation_id, reform_simulation_id FROM "
-                    "reports WHERE id = :id"
-                ),
-                {"id": rerun.report_id},
-            ).one()
-            run_ids = store_report_run(
-                connection,
-                self.catalog,
-                StoredReport(
-                    report_id=rerun.report_id,
-                    baseline_simulation_id=simulations.baseline_simulation_id,
-                    reform_simulation_id=simulations.reform_simulation_id,
-                ),
-                RunSettings(
-                    versions=CURRENT_VERSIONS,
-                    status="pending",
-                    created_at=STARTED_AT + timedelta(days=30),
-                    forced=rerun.force,
-                ),
-            )
-        return StartedReportRun(report_run_id=run_ids.report_run_id)
 
 
 @pytest.fixture
@@ -220,100 +101,6 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
     engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
     yield sessionmaker(engine, class_=Session)
     engine.dispose()
-
-
-class UnwritableRecordSession(ReportRunRecordDatabaseSession):
-    """Read as usual, but fail every transaction, as an unavailable database does."""
-
-    def transaction(self) -> AbstractContextManager[Session]:
-        statement = "INSERT INTO user_report_run_associations"
-        raise OperationalError(statement, {}, Exception("connection refused"))
-
-
-def client_for(
-    sessions: Any,
-    simulation_service: JoiningSimulationService,
-    *,
-    record_session: ReportRunRecordDatabaseSession | None = None,
-) -> TestClient:
-    """Serve the report routes as the runtime role, through the stand-in.
-
-    Users' report runs are recorded through ``record_session``, by default
-    the runtime role's.
-    """
-    submissions = SimulationSubmissionService(
-        countries=V2CountryService(CountryDatabaseSession(sessions)),
-        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-        policies=V2PolicyService(
-            PolicyDatabaseSession(sessions), running_policyengine_version="4.2.0"
-        ),
-        client_factory=lambda: simulation_service,
-    )
-    dependencies = NativeRouteDependencies(
-        readiness_probe=lambda: True,
-        gateway_client_factory=lambda: None,
-        metadata_reader_factory=lambda: None,
-        v2_stored_report_service_factory=lambda: V2StoredReportService(
-            StoredReportDatabaseSession(sessions),
-            current_versions=current_versions,
-            submissions=submissions,
-            run_records=ReportRunRecordService(
-                record_session or ReportRunRecordDatabaseSession(sessions)
-            ),
-        ),
-    )
-    settings = RouteImplementationSettings(
-        health=RouteImplementation.FLASK_FALLBACK,
-        specification=RouteImplementation.FLASK_FALLBACK,
-        metadata=RouteImplementation.FLASK_FALLBACK,
-    )
-    return TestClient(
-        create_asgi_app(
-            Flask(__name__), dependencies=dependencies, route_settings=settings
-        )
-    )
-
-
-def report_body(policy_id: UUID) -> dict[str, Any]:
-    return {
-        "country_id": "us",
-        "kind": "economy",
-        "label": "Expanded child tax credit",
-        "year": 2026,
-        "region_code": "state/ca",
-        "baseline": {},
-        "reform": {"policy_id": str(policy_id)},
-    }
-
-
-def store_joined_and_newer_forced_run(
-    connection: Any, catalog: CatalogRows, *, joined_status: str
-) -> tuple[StoredReport, UUID, UUID]:
-    """Store a report with a run to join and a newer forced run beside it.
-
-    A succeeded run to join has its result stored. Return the report, the
-    run to join and the forced run, which is the report's newest.
-    """
-    report = store_report(connection, catalog)
-    joined = store_report_run(
-        connection,
-        catalog,
-        report,
-        RunSettings(versions=CURRENT_VERSIONS, status=joined_status),
-        result=us_economy_result() if joined_status == "succeeded" else None,
-    )
-    forced = store_report_run(
-        connection,
-        catalog,
-        report,
-        RunSettings(
-            versions=CURRENT_VERSIONS,
-            status="running",
-            created_at=STARTED_AT + timedelta(days=1),
-            forced=True,
-        ),
-    )
-    return report, joined.report_run_id, forced.report_run_id
 
 
 def test_a_create_that_joins_a_run_answers_that_run_not_the_reports_newest(
@@ -417,16 +204,6 @@ def test_a_budget_window_rerun_answers_the_window_run_it_joined(
     assert item["run"]["id"] == str(window_run_ids[0])
 
 
-@dataclass(frozen=True)
-class RunRecord:
-    """A user's stored request for a report run."""
-
-    user_id: UUID
-    report_run_id: UUID
-    trigger: str
-    requested_at: datetime
-
-
 @pytest.fixture
 def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
     """Name signed-out browsers' users, and delete them and their records after."""
@@ -436,61 +213,6 @@ def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
         connection.execute(
             text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": browser_ids}
         )
-
-
-def as_browser(browser_id: UUID) -> dict[str, str]:
-    return {UNAUTHENTICATED_USER_HEADER: str(browser_id)}
-
-
-def stored_records(engine: Engine, user_ids: list[UUID]) -> list[RunRecord]:
-    with engine.begin() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT user_id, report_run_id, trigger, requested_at FROM "
-                "user_report_run_associations WHERE user_id = ANY(:ids) "
-                "ORDER BY requested_at, user_id"
-            ),
-            {"ids": user_ids},
-        ).all()
-    return [
-        RunRecord(
-            user_id=row.user_id,
-            report_run_id=row.report_run_id,
-            trigger=row.trigger,
-            requested_at=row.requested_at,
-        )
-        for row in rows
-    ]
-
-
-def store_saved_report(engine: Engine, *, user_id: UUID, report_id: UUID) -> UUID:
-    """Save the report for the user, with no last run time, and return its ID."""
-    saved_report_id = uuid4()
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO users (id, user_type) VALUES (:id, 'unauthenticated') "
-                "ON CONFLICT (id) DO NOTHING"
-            ),
-            {"id": user_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO user_report_associations (id, user_id, report_id, "
-                "country_id, name) VALUES (:id, :user_id, :report_id, 'us', "
-                "'My report')"
-            ),
-            {"id": saved_report_id, "user_id": user_id, "report_id": report_id},
-        )
-    return saved_report_id
-
-
-def saved_report_last_run_at(engine: Engine, saved_report_id: UUID) -> datetime | None:
-    with engine.begin() as connection:
-        return connection.execute(
-            text("SELECT last_run_at FROM user_report_associations WHERE id = :id"),
-            {"id": saved_report_id},
-        ).scalar_one()
 
 
 def test_a_create_with_a_signed_out_browsers_credential_records_its_run(
@@ -758,6 +480,9 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
         shared_report, shared_run_id, _ = store_joined_and_newer_forced_run(
             connection, catalog, joined_status="pending"
         )
+        accounts_own_report, accounts_own_run_id, _ = store_joined_and_newer_forced_run(
+            connection, catalog, joined_status="pending"
+        )
     account = UserPrincipal(issuer="https://users.example.test/", subject="auth0|merge")
     with runtime_sessions.begin() as session:
         account_id = resolve_principal_user_in_session(
@@ -765,25 +490,35 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
         ).user_id
     browsers.append(account_id)
     account_asked_at = datetime(2026, 1, 1, tzinfo=UTC)
+    # Later than any request the browser makes in this test.
+    account_asked_for_its_own_at = datetime(2030, 1, 1, tzinfo=UTC)
     with owner_engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO user_report_run_associations (id, user_id, "
-                "report_run_id, requested_at, trigger) VALUES (:id, :user_id, "
-                ":run_id, :requested_at, 'initial')"
-            ),
-            {
-                "id": uuid4(),
-                "user_id": account_id,
-                "run_id": shared_run_id,
-                "requested_at": account_asked_at,
-            },
-        )
+        for run_id, requested_at in (
+            (shared_run_id, account_asked_at),
+            (accounts_own_run_id, account_asked_for_its_own_at),
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO user_report_run_associations (id, user_id, "
+                    "report_run_id, requested_at, trigger) VALUES (:id, "
+                    ":user_id, :run_id, :requested_at, 'initial')"
+                ),
+                {
+                    "id": uuid4(),
+                    "user_id": account_id,
+                    "run_id": run_id,
+                    "requested_at": requested_at,
+                },
+            )
     account_saved_report_id = store_saved_report(
         owner_engine, user_id=account_id, report_id=alone_report.report_id
     )
     browser_saved_report_id = store_saved_report(
         owner_engine, user_id=browser_id, report_id=shared_report.report_id
+    )
+    # The browser saved a report it never asked to run, but the account did.
+    browsers_unrun_saved_report_id = store_saved_report(
+        owner_engine, user_id=browser_id, report_id=accounts_own_report.report_id
     )
     simulation_service = JoiningSimulationService(owner_engine, catalog)
     client = client_for(runtime_sessions, simulation_service)
@@ -822,32 +557,25 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
     } == {
         (account_id, alone_run_id, browser_asked_at[alone_run_id]),
         (account_id, shared_run_id, account_asked_at),
+        (account_id, accounts_own_run_id, account_asked_for_its_own_at),
     }
     assert {record.trigger for record in records} == {"initial"}
-    # The account's saved report takes the time of the request that moved in;
-    # the browser's moved saved report keeps its own.
+    # Every saved report the account now holds shows the account's newest
+    # request for its report: its own saved report takes the request that
+    # moved in, and the browser's moved saved reports take the account's
+    # records, whatever time they held before.
     assert (
         saved_report_last_run_at(owner_engine, account_saved_report_id)
         == browser_asked_at[alone_run_id]
     )
     assert (
         saved_report_last_run_at(owner_engine, browser_saved_report_id)
-        == browser_asked_at[shared_run_id]
+        == account_asked_at
     )
-
-
-def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> None:
-    """Run the report again, forced so each re-run is a new run, as the browser."""
-    response = client.post(
-        f"/v2/reports/{report_id}/runs?country_id=us",
-        json={"force": True},
-        headers=as_browser(browser_id),
+    assert (
+        saved_report_last_run_at(owner_engine, browsers_unrun_saved_report_id)
+        == account_asked_for_its_own_at
     )
-    assert response.status_code == 201, response.text
-
-
-def newest_request(engine: Engine, user_id: UUID) -> datetime:
-    return max(record.requested_at for record in stored_records(engine, [user_id]))
 
 
 def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
