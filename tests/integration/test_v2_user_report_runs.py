@@ -57,6 +57,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from tests.fixtures.economy_results import us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
@@ -244,8 +245,8 @@ def store_joined_and_newer_forced_run(
 ) -> tuple[StoredReport, UUID, UUID]:
     """Store a report with a run to join and a newer forced run beside it.
 
-    Return the report, the run to join and the forced run, which is the
-    report's newest.
+    A succeeded run to join has its result stored. Return the report, the
+    run to join and the forced run, which is the report's newest.
     """
     report = store_report(connection, catalog)
     joined = store_report_run(
@@ -253,6 +254,7 @@ def store_joined_and_newer_forced_run(
         catalog,
         report,
         RunSettings(versions=CURRENT_VERSIONS, status=joined_status),
+        result=us_economy_result() if joined_status == "succeeded" else None,
     )
     forced = store_report_run(
         connection,

@@ -159,6 +159,7 @@ if TYPE_CHECKING:
         HouseholdReportCreationInput,
         PolicyChoice,
         ReportRerunInput,
+        StartedReportRun,
     )
 
 SIMULATIONS_PATH = "/simulations"
@@ -605,13 +606,15 @@ class SimulationServiceReportClient:
             budget_window_run_id=created.budget_window_run_id,
         )
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
-        """Have the service create and start the stored report's new run.
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
+        """Have the service start the stored report's run; return the run it names.
 
         Raise the errors ``policyengine_api.libs.simulation_report_reruns``
         lists for the service's answers.
         """
-        start_report_rerun(self._http_client, rerun, send=self._send_report_rerun)
+        return start_report_rerun(
+            self._http_client, rerun, send=self._send_report_rerun
+        )
 
 
 @lru_cache(maxsize=1)

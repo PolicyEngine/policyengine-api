@@ -26,17 +26,21 @@ queries, without results.
 
 Creating a report or budget window checks the country and the policies it
 names (and a household report's household), asks the simulation service to
-create and start it, then reads it back from the tables. Once the simulation
-service has answered with the report's ID, the report exists: a failure to
-read it back raises CreatedReportUnreadableError, which names it, so the
-caller reads it rather than submitting it again.
+create and start it, then reads it back from the tables with the run the
+service's answer names: a new run, or, once the service finds runs by key,
+an existing one the request joined, which needn't be the newest. Once the
+simulation service has answered with the report's ID, the report exists: a
+failure to read it back raises CreatedReportUnreadableError, which names it,
+so the caller reads it rather than submitting it again.
 
 Running a report again reads it in its country, checks its country and the
 policies its simulations name as a new report of its kind is checked, has the
-simulation service create and start its new run on the current versions,
-then reads the report back with that run as its newest. The database session
-is closed while the simulation service is asked. A failure to read it back
-raises RerunReportUnreadableError, since the new run exists. A report's runs
+simulation service start its run on the current versions, then reads the
+report back with the run the service's answer names: a new run, or one
+already pending, running or succeeded on those versions that the request
+joined. The database session is closed while the simulation service is
+asked. A failure to read it back raises RerunReportUnreadableError, since
+the run exists. A report's runs
 are listed newest first, whatever their status and versions, beside the
 versions the Public API runs, so a caller can tell which are out of date: an
 economy or household report's report runs, or a budget window's
@@ -345,7 +349,9 @@ class V2StoredReportService:
     def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service and return it as stored.
 
-        Each kind of report goes through its own submission. Raise the
+        Each kind of report goes through its own submission, and the report
+        is read back with the run the simulation service's answer names (a
+        budget window's budget-window run). Raise the
         submission's errors (see ``SimulationSubmissionService``), and
         CreatedReportUnreadableError, caused by the read's own error, when the
         report the simulation service created cannot be read back in the
@@ -354,14 +360,18 @@ class V2StoredReportService:
         """
         submissions = self._configured_submissions()
         if report_input.kind == "budget_window":
-            report_id = submissions.submit_budget_window(report_input).report_id
-        elif report_input.kind == "household":
-            report_id = submissions.submit_household_report(report_input).report_id
+            window = submissions.submit_budget_window(report_input)
+            report_id, run_id = window.report_id, window.budget_window_run_id
         else:
-            report_id = submissions.submit_report(report_input).report_id
+            submitted = (
+                submissions.submit_household_report(report_input)
+                if report_input.kind == "household"
+                else submissions.submit_report(report_input)
+            )
+            report_id, run_id = submitted.report_id, submitted.report_run_id
         try:
             return self.get_report(
-                country_id=report_input.country_id, report_id=report_id
+                country_id=report_input.country_id, report_id=report_id, run_id=run_id
             )
         except Exception as error:
             # The report exists whatever failed, so the caller gets its ID.
@@ -372,23 +382,26 @@ class V2StoredReportService:
     def rerun_report(
         self, *, country_id: str, report_id: UUID, force: bool
     ) -> StoredReportRead:
-        """Run the country's report again; return it with its new run as its newest.
+        """Run the country's report again; return it with the run the request ended on.
 
-        Without ``force``, each side reuses a run of its own simulation that
-        succeeded on the current versions; with it, both are calculated again
-        (a budget window's new run then recalculates each year). A household
-        report's sides are always calculated again. Raise
+        That is the run the simulation service's answer names: a new run, or
+        one already pending, running or succeeded on the current versions
+        that the request joined (a budget window's budget-window run). Without
+        ``force``, each side reuses a run of its own simulation that succeeded
+        on the current versions; with it, both are calculated again (a budget
+        window's new run then recalculates each year). A household report's
+        sides are always calculated again. Raise
         StoredReportNotFoundError when the country has no such report,
         ReportStorageError when it cannot be read, the submission's checks'
         and the simulation service's errors (see
         ``SimulationSubmissionService.rerun_report``), and
         RerunReportUnreadableError, caused by the read's own error, when the
-        report cannot be read back once its new run was started.
+        report cannot be read back once its run was started.
         """
         submissions = self._configured_submissions()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-        submissions.rerun_report(
+        started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
                 report_id=report_id,
@@ -397,10 +410,17 @@ class V2StoredReportService:
                 policy_ids=report_policy_ids(stored),
             )
         )
+        run_id = (
+            started.report_run_id
+            if started.budget_window_run_id is None
+            else started.budget_window_run_id
+        )
         try:
-            return self.get_report(country_id=country_id, report_id=report_id)
+            return self.get_report(
+                country_id=country_id, report_id=report_id, run_id=run_id
+            )
         except Exception as error:
-            # The new run exists whatever failed, so the caller reads it.
+            # The run exists whatever failed, so the caller reads it.
             raise RerunReportUnreadableError(
                 report_id=report_id, country_id=country_id
             ) from error

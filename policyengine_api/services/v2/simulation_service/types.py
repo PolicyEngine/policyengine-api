@@ -458,8 +458,12 @@ class SimulationServiceClient(Protocol):
         """
         ...
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
-        """Create the stored report's new run on the current versions, and start it."""
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
+        """Start the stored report's run on the current versions; return that run.
+
+        The run is a new one, or one already pending, running or succeeded on
+        those versions that the request joined.
+        """
         ...
 
 
