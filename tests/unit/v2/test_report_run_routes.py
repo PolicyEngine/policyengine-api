@@ -42,6 +42,7 @@ from tests.unit.v2.report_run_support import (
     report_runs_read,
 )
 from tests.unit.v2.stored_report_support import (
+    BASELINE_RUN_ID,
     POLICY_ID,
     REPORT_ID,
     REPORT_RUN_ID,
@@ -111,9 +112,11 @@ def test_a_household_report_of_the_baseline_alone_lists_no_reform_run() -> None:
     response = report_route_client(reports=service).get(RUNS_PATH)
 
     assert response.status_code == 200, response.text
-    (run,) = response.json()["result"]["items"]
+    result = response.json()["result"]
+    assert result["kind"] == "household"
+    (run,) = result["items"]
     assert run["id"] == str(REPORT_RUN_ID)
-    assert run["baseline_simulation_run_id"] is not None
+    assert run["baseline_simulation_run_id"] == str(BASELINE_RUN_ID)
     assert run["reform_simulation_run_id"] is None
 
 
