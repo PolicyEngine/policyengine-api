@@ -91,11 +91,16 @@ status and code a message gives, and the lost-answer and failure messages
 come from ``policyengine_api.libs.simulation_service_answers``, which the
 household calculation client shares.
 
-Wiring the generated simulation client: ``post_simulation`` and
-``post_report`` are the only code that sends a request, and each returns the
-status and body, which the rest of this module reads. Once a
-``policyengine-api-simulation-client`` release has the two routes, depend on
-that release and make each function call the generated operation, as its
+``rerun_report`` runs a stored report again through the service's
+``POST /reports/{report_id}/runs``; how it reads that route's answers is in
+``policyengine_api.libs.simulation_report_reruns``.
+
+Wiring the generated simulation client: ``post_simulation``,
+``post_report`` and ``post_report_rerun`` are the only code that sends a
+request, and each returns the status and body, which the rest of these
+modules read. Once a
+``policyengine-api-simulation-client`` release has the three routes, depend
+on that release and make each function call the generated operation, as its
 docstring says.
 """
 
@@ -108,8 +113,16 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from policyengine_api.libs.simulation_report_reruns import (
+    post_report_rerun,
+    start_report_rerun,
+)
 from policyengine_api.libs.simulation_service_answers import (
+    CALLER_ROW_REFUSAL_CODES,
+    CREATED_STATUSES,
     PROXY_STAND_IN_STATUSES,
+    REFUSAL_STATUSES,
+    SENT_BEFORE_ROUTE_STATUSES,
     AnswerModel,
     Refusal,
     SimulationAnswer,
@@ -145,36 +158,11 @@ if TYPE_CHECKING:
         HouseholdPolicyChoice,
         HouseholdReportCreationInput,
         PolicyChoice,
+        ReportRerunInput,
     )
 
 SIMULATIONS_PATH = "/simulations"
 REPORTS_PATH = "/reports"
-CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
-REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
-# The codes of the simulation service's 400 that name a row the caller chose
-# and the Public API does not check: the region, the dataset, or a dynamic
-# the catalog version its default worker runs does not have. Each is the
-# caller's error and answers 422. Any other 400 is a state of the service,
-# such as a catalog version missing while a release deploys, or a row the
-# Public API already checked, and answers 503.
-CALLER_ROW_REFUSAL_CODES = frozenset(
-    {"unknown_region", "unknown_dataset", "unknown_dynamic"}
-)
-# Statuses the gateway, Cloud Run or the service's framework answers before
-# the service's route runs, so the service has created nothing: a call not
-# authenticated or not allowed, a route or method the service does not have,
-# a body over the size limit, and too many requests. The route may have
-# written rows before answering any other status the client does not expect.
-SENT_BEFORE_ROUTE_STATUSES = frozenset(
-    {
-        HTTPStatus.UNAUTHORIZED,
-        HTTPStatus.FORBIDDEN,
-        HTTPStatus.NOT_FOUND,
-        HTTPStatus.METHOD_NOT_ALLOWED,
-        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-        HTTPStatus.TOO_MANY_REQUESTS,
-    }
-)
 
 
 # What a submission creates.
@@ -458,7 +446,7 @@ def _raise_for_refusal(answer: SimulationAnswer, record: RecordName) -> NoReturn
 
 
 class SimulationServiceReportClient:
-    """Create simulations and reports through the simulation service."""
+    """Create simulations and reports, and run reports again, through the service."""
 
     def __init__(
         self,
@@ -470,14 +458,18 @@ class SimulationServiceReportClient:
         send_report: Callable[
             [httpx.Client, dict[str, Any]], SimulationAnswer
         ] = post_report,
+        send_report_rerun: Callable[
+            [httpx.Client, UUID, dict[str, Any]], SimulationAnswer
+        ] = post_report_rerun,
     ) -> None:
-        """Send through ``send_simulation`` and ``send_report`` on ``http_client``.
+        """Send through ``send_simulation``, ``send_report`` and ``send_report_rerun``.
 
-        ``http_client`` has the service's base URL.
+        Each sends on ``http_client``, which has the service's base URL.
         """
         self._http_client = http_client
         self._send_simulation = send_simulation
         self._send_report = send_report
+        self._send_report_rerun = send_report_rerun
 
     @classmethod
     def from_environment(
@@ -612,6 +604,14 @@ class SimulationServiceReportClient:
             report_id=created.report_id,
             budget_window_run_id=created.budget_window_run_id,
         )
+
+    def rerun_report(self, rerun: ReportRerunInput) -> None:
+        """Have the service create and start the stored report's new run.
+
+        Raise the errors ``policyengine_api.libs.simulation_report_reruns``
+        lists for the service's answers.
+        """
+        start_report_rerun(self._http_client, rerun, send=self._send_report_rerun)
 
 
 @lru_cache(maxsize=1)

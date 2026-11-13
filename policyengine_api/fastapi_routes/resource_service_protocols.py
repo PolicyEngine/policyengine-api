@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         StoredReportRead,
+        StoredReportRunsRead,
         StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
@@ -224,6 +225,34 @@ class V2StoredReportResourceService(Protocol):
         database or its catalog cannot be read for those checks, the
         simulation service's errors, and ``CreatedReportUnreadableError`` when
         the report it created cannot be read back.
+        """
+        ...
+
+    def rerun_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> StoredReportRead:
+        """Run the country's report again; return it with its new run as its newest.
+
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report; the errors of the country check a new report of its kind makes
+        (economy calculations, or household calculations for a household
+        report) and of the policy checks of its simulations, as
+        ``create_report`` raises them (a household report's household is not
+        checked again); the simulation service's errors, among them
+        ``SimulationServiceConflictError`` when it will not run the report
+        again now, and ``RerunReportUnreadableError`` when the report cannot
+        be read back once its new run was started.
+        """
+        ...
+
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> StoredReportRunsRead:
+        """Return the runs of the country's report, newest first.
+
+        An economy or household report's are its report runs; a budget
+        window's are its budget-window runs, each with its years. Raise
+        ``StoredReportNotFoundError`` when the country has no such report.
         """
         ...
 

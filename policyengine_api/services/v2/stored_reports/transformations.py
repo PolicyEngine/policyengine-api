@@ -8,18 +8,20 @@ from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportRead,
     BudgetWindowReportSummaryRead,
     BudgetWindowRunRead,
+    BudgetWindowRunsRead,
     BudgetWindowYearRead,
     HouseholdReportRead,
     HouseholdReportSummaryRead,
     ReportDefinitionRead,
     ReportRead,
     ReportRunRead,
+    ReportRunsRead,
     ReportSimulationRead,
     ReportSummaryRead,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
     from uuid import UUID
 
     from policyengine_api.data.v2.models import (
@@ -43,6 +45,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
+        ReportRunsKind,
         ReportStatusName,
         StoredReportRows,
     )
@@ -259,3 +262,53 @@ def listed_reports(
         if stored is not None:
             listed.append(stored)
     return listed
+
+
+def report_policy_ids(rows: StoredReportRows) -> tuple[UUID | None, ...]:
+    """Return the policies of the report's simulations, baseline first.
+
+    A simulation of current law, or one that is gone, names none.
+    """
+    return tuple(
+        None if simulation is None else simulation.policy_id
+        for simulation in (rows.baseline_simulation, rows.reform_simulation)
+    )
+
+
+def report_runs_read(
+    rows: StoredReportRows,
+    runs: Iterable[ReportRun],
+    *,
+    kind: ReportRunsKind,
+    current_versions: PackageVersions,
+) -> ReportRunsRead:
+    """Return the report's runs as ``kind``'s, in the order given, with the versions."""
+    return ReportRunsRead(
+        report_id=rows.report.id,
+        kind=kind,
+        runs=tuple(report_run_read(run) for run in runs),
+        current_versions=current_versions,
+    )
+
+
+def budget_window_runs_read(
+    rows: StoredReportRows,
+    window_runs: Iterable[BudgetWindowRun],
+    years: Mapping[UUID, Sequence[ReportRun]],
+    *,
+    current_versions: PackageVersions,
+) -> BudgetWindowRunsRead:
+    """Return a budget window's runs, in the order given, and the current versions.
+
+    ``years`` holds each window run's year report runs, in year order; a run
+    with none has no years.
+    """
+    return BudgetWindowRunsRead(
+        report_id=rows.report.id,
+        kind="budget_window",
+        runs=tuple(
+            budget_window_run_read(window_run, years.get(window_run.id, ()))
+            for window_run in window_runs
+        ),
+        current_versions=current_versions,
+    )

@@ -663,6 +663,34 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
             ),
             ContractRequest(
                 method="POST",
+                path="/v2/reports/{report_id}/runs?country_id=us",
+                expected_status=201,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.item.id",
+                    "result.item.status",
+                    "result.item.run",
+                    "result.item.current_versions",
+                ),
+                route_group="report",
+            ),
+            ContractRequest(
+                method="GET",
+                path="/v2/reports/{report_id}/runs?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.report_id",
+                    "result.kind",
+                    "result.items",
+                    "result.current_versions",
+                ),
+                route_group="report",
+            ),
+            ContractRequest(
+                method="POST",
                 path="/v2/simulations?country_id=us",
                 expected_status=201,
                 stable_response_fields=(

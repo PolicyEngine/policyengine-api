@@ -1,4 +1,4 @@
-"""Database reads of v2 reports and their newest runs.
+"""Database reads of v2 reports, their newest runs and budget-window years.
 
 A report's own runs are report runs that are not a year of a budget window;
 a budget-window report's are budget-window runs, each with a report run per
@@ -114,7 +114,7 @@ def read_report_rows(
         .where(col(Report.country) == country_id, col(Report.id).in_(report_ids))
     )
     rows = session.execute(statement).all()
-    years = _budget_window_years(
+    years = read_budget_window_years(
         session,
         [window_run.id for *_, window_run in rows if window_run is not None],
     )
@@ -143,7 +143,7 @@ def read_report_rows(
     ]
 
 
-def _budget_window_years(
+def read_budget_window_years(
     session: Session, budget_window_run_ids: Sequence[UUID]
 ) -> dict[UUID, tuple[ReportRun, ...]]:
     """Return each budget-window run's year report runs, in year order."""
