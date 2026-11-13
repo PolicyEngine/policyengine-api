@@ -33,6 +33,10 @@ from policyengine_api.services.v2.households.database_session import (
     HouseholdDatabaseSession,
 )
 from policyengine_api.services.v2.households.services import V2HouseholdService
+from policyengine_api.services.v2.identity.services import (
+    resolve_principal_user_in_session,
+)
+from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
@@ -372,10 +376,10 @@ def saved_report_last_run_at(engine: Engine, saved_report_id: UUID) -> datetime 
 
 
 def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> None:
-    """Run the report again, forced so each re-run is a new run, as the browser."""
+    """Run the report again as the browser; a report with no run gets a new one."""
     response = client.post(
         f"/v2/reports/{report_id}/runs?country_id=us",
-        json={"force": True},
+        json={},
         headers=as_browser(browser_id),
     )
     assert response.status_code == 201, response.text
@@ -441,3 +445,23 @@ def window_body(policy_id: UUID, *, years: int) -> dict[str, Any]:
         "baseline": {},
         "reform": {"policy_id": str(policy_id)},
     }
+
+
+ADMIN_ISSUER = "https://users.example.test/"
+
+
+def store_signed_in_user(
+    sessions: Any, engine: Engine, *, user_type: str = "standard"
+) -> tuple[UserPrincipal, UUID]:
+    """Provision a signed-in user of ``user_type``; return its principal and ID."""
+    principal = UserPrincipal(issuer=ADMIN_ISSUER, subject=f"auth0|{uuid4()}")
+    with sessions.begin() as session:
+        user_id = resolve_principal_user_in_session(
+            session, principal, country_id="us"
+        ).user_id
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE users SET user_type = :user_type WHERE id = :id"),
+            {"user_type": user_type, "id": user_id},
+        )
+    return principal, user_id

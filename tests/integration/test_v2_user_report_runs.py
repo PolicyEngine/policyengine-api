@@ -67,6 +67,7 @@ from tests.integration.user_report_run_support import (
     saved_report_last_run_at,
     store_joined_and_newer_forced_run,
     store_saved_report,
+    store_signed_in_user,
     stored_records,
 )
 from tests.unit.v2.user_service_support import default_legacy_references
@@ -321,7 +322,7 @@ def test_a_rerun_records_a_manual_request_for_the_run_it_ended_on(
 
     response = client_for(runtime_sessions, simulation_service).post(
         f"/v2/reports/{report.report_id}/runs?country_id=us",
-        json={"force": True},
+        json={},
         headers=as_browser(browsers[0]),
     )
 
@@ -330,7 +331,7 @@ def test_a_rerun_records_a_manual_request_for_the_run_it_ended_on(
     (record,) = stored_records(owner_engine, browsers)
     assert (record.report_run_id, record.trigger) == (run_id, "manual")
     (rerun,) = simulation_service.reruns
-    assert rerun.force is True
+    assert rerun.force is False
 
 
 def test_a_request_without_a_user_credential_records_nothing(
@@ -405,7 +406,12 @@ def test_a_saved_reports_last_run_at_is_its_owners_newest_request(
     runtime_sessions: Any,
     browsers: list[UUID],
 ) -> None:
-    owner_id, other_user_id = browsers
+    # An admin, who may force a re-run, so each re-run is a new run.
+    owner, owner_id = store_signed_in_user(
+        runtime_sessions, owner_engine, user_type="admin"
+    )
+    browsers.append(owner_id)
+    other_user_id = browsers[0]
     with owner_engine.begin() as connection:
         report = store_report(connection, catalog)
     saved_report_id = store_saved_report(
@@ -415,15 +421,15 @@ def test_a_saved_reports_last_run_at_is_its_owners_newest_request(
         owner_engine, user_id=other_user_id, report_id=report.report_id
     )
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions,
+        JoiningSimulationService(owner_engine, catalog),
+        requester=owner,
     )
 
-    # Forced, so each re-run is a new run beside the others.
     for _ in range(2):
         response = client.post(
             f"/v2/reports/{report.report_id}/runs?country_id=us",
             json={"force": True},
-            headers=as_browser(owner_id),
         )
         assert response.status_code == 201, response.text
 
