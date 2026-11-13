@@ -49,6 +49,35 @@ class CreatedReportUnreadableError(RuntimeError):
         self.country_id = country_id
 
 
+class ReportRunRecordsNotConfiguredError(ReportStorageError):
+    """A request named its user, but the service records no users' runs."""
+
+
+class ReportRunNotRecordedError(RuntimeError):
+    """The simulation service started the run, but the user's request wasn't recorded.
+
+    The run exists, so the caller reads it rather than asking again; asking
+    again records it once the simulation service finds runs by key, since
+    the request then ends on the same run. ``report_id``,
+    ``report_run_id`` and ``country_id`` say where to read it; the error's
+    cause says why the record failed.
+    """
+
+    def __init__(
+        self, *, report_id: UUID, report_run_id: UUID, country_id: str
+    ) -> None:
+        """Name the report, its run and its country."""
+        super().__init__(
+            f"The simulation service started run {report_run_id} of report "
+            f"{report_id}, but the request could not be recorded for its user. "
+            f"Read it with GET /v2/reports/{report_id}?country_id={country_id}"
+            f"&run_id={report_run_id}."
+        )
+        self.report_id = report_id
+        self.report_run_id = report_run_id
+        self.country_id = country_id
+
+
 class RerunReportUnreadableError(RuntimeError):
     """The simulation service started the report's new run, but it could not be read.
 

@@ -12,9 +12,12 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    NOT_RECORDED,
+    UNAUTHENTICATED_REQUESTER,
     BudgetWindowRunItem,
     PackageVersionsItem,
     ReportRunItem,
+    ReportRunNotRecordedResponse,
     ReportSuccessResponse,
     StrictReportAPIModel,
 )
@@ -143,6 +146,7 @@ RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),
 }
 RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
+    401: error_response(UNAUTHENTICATED_REQUESTER),
     404: error_response(
         f"{NOT_FOUND} Or a policy a simulation of the report names is no longer "
         "stored in the country."
@@ -184,16 +188,19 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "gives its report_id."
         ),
     },
-    503: error_response(
-        "The simulation service started nothing that runs: it cannot be reached "
-        "or is not configured; it answered a readable 503, and the message gives "
-        "its status and code, and names the new run it failed when Modal refused "
-        "the run's call; it answered a 400 about its own state rather than a row "
-        "the report names (such as a catalog version missing while a release "
-        "deploys), and the message gives its code and reason; it answered 400, "
-        "409 or 422 in a shape the Public API cannot read; or it answered 401, "
-        "403, 404, 405, 413 or 429, which it sends before writing anything. Or "
-        "the v2 database, or the catalog the policies are checked against, "
-        "cannot be read."
-    ),
+    503: {
+        "model": V2ErrorResponse | ReportRunNotRecordedResponse,
+        "description": (
+            "The simulation service started nothing that runs: it cannot be reached "
+            "or is not configured; it answered a readable 503, and the message gives "
+            "its status and code, and names the new run it failed when Modal refused "
+            "the run's call; it answered a 400 about its own state rather than a row "
+            "the report names (such as a catalog version missing while a release "
+            "deploys), and the message gives its code and reason; it answered 400, "
+            "409 or 422 in a shape the Public API cannot read; or it answered 401, "
+            "403, 404, 405, 413 or 429, which it sends before writing anything. Or "
+            "the v2 database, or the catalog the policies are checked against, "
+            f"cannot be read. {NOT_RECORDED}"
+        ),
+    },
 }

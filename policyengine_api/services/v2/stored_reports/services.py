@@ -55,7 +55,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from policyengine_api.data.v2.models import ReportRunStatus
+from policyengine_api.data.v2.models import ReportRunStatus, ReportRunTrigger
+from policyengine_api.data.v2.models.base import utc_now
+from policyengine_api.services.v2.report_run_records.types import ReportRunRequest
 from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
     SimulationServiceUnavailableError,
@@ -106,6 +108,8 @@ from policyengine_api.services.v2.stored_reports.transformations import (
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
+    ReportRunNotRecordedError,
+    ReportRunRecordsNotConfiguredError,
     ReportStorageError,
     RerunReportUnreadableError,
     require_reform_run,
@@ -119,6 +123,10 @@ if TYPE_CHECKING:
 
     from sqlmodel import Session
 
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
+    from policyengine_api.services.v2.report_run_records.types import (
+        ReportRunRecorder,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         PackageVersions,
         ReportCreationInput,
@@ -194,6 +202,26 @@ def _with_run(
     return replace(stored, newest_run=run)
 
 
+def _record_request(
+    recorder: ReportRunRecorder,
+    requester: AccountPrincipal,
+    request: ReportRunRequest,
+) -> None:
+    """Record the requester's request for its run.
+
+    Raise ReportRunNotRecordedError, caused by the record's own error,
+    whatever fails: the run exists, so the caller reads it.
+    """
+    try:
+        recorder.record(requester, request)
+    except Exception as error:
+        raise ReportRunNotRecordedError(
+            report_id=request.report_id,
+            report_run_id=request.report_run_ids[0],
+            country_id=request.country_id,
+        ) from error
+
+
 def _summary_read(
     stored: StoredReportRows, *, current_versions: PackageVersions
 ) -> StoredReportSummaryRead:
@@ -215,7 +243,7 @@ class V2StoredReportService:
         *,
         current_versions: Callable[[str], PackageVersions],
         submissions: SimulationServiceClient | None = None,
-        run_records: object | None = None,
+        run_records: ReportRunRecorder | None = None,
     ) -> None:
         """Read through ``database_session``; create through ``submissions``.
 
@@ -223,11 +251,31 @@ class V2StoredReportService:
         versions the Public API runs for a country. ``submissions`` is the
         checking ``SimulationSubmissionService``; without it, creating a
         report or running one again raises SubmissionsNotConfiguredError.
+        ``run_records`` records each user's request for a run; without it, a
+        create or re-run naming its user raises
+        ReportRunRecordsNotConfiguredError.
         """
         self._database_session = database_session
         self._current_versions = current_versions
         self._submissions = submissions
         self._run_records = run_records
+
+    def _checked_recorder(
+        self, requester: AccountPrincipal | None
+    ) -> ReportRunRecorder | None:
+        """Return the recorder for a request naming its user, once the user is checked.
+
+        Return None for a request naming no user, whose run nobody records.
+        Raise ReportRunRecordsNotConfiguredError without a recorder, and the
+        recorder's check's errors.
+        """
+        if requester is None:
+            return None
+        if self._run_records is None:
+            msg = "Users' report runs are not recorded here"
+            raise ReportRunRecordsNotConfiguredError(msg)
+        self._run_records.check_requester(requester)
+        return self._run_records
 
     def _configured_submissions(self) -> SimulationServiceClient:
         """Return the submissions, or raise SubmissionsNotConfiguredError."""
@@ -348,19 +396,31 @@ class V2StoredReportService:
                 for stored in listed_reports(rows, report_ids=report_ids)
             )
 
-    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
+    def create_report(
+        self,
+        report_input: ReportCreationInput,
+        *,
+        requester: AccountPrincipal | None = None,
+    ) -> StoredReportRead:
         """Create the report through the simulation service and return it as stored.
 
         Each kind of report goes through its own submission, and the report
         is read back with the run the simulation service's answer names (a
-        budget window's budget-window run). Raise the
-        submission's errors (see ``SimulationSubmissionService``), and
-        CreatedReportUnreadableError, caused by the read's own error, when the
-        report the simulation service created cannot be read back in the
-        country: not stored there, the database unavailable, or any other
-        failure of the read.
+        budget window's budget-window run). With a ``requester``, it is
+        checked before the simulation service is asked, and the request is
+        recorded for its user (trigger ``initial``) once the service has
+        answered; a budget window's request is not recorded yet. Raise the
+        recorder's check's errors, the submission's errors (see
+        ``SimulationSubmissionService``), ReportRunNotRecordedError when the
+        request could not be recorded, and CreatedReportUnreadableError,
+        caused by the read's own error, when the report the simulation
+        service created cannot be read back in the country: not stored there,
+        the database unavailable, or any other failure of the read.
         """
         submissions = self._configured_submissions()
+        requested_at = utc_now()
+        recorder = self._checked_recorder(requester)
+        recorded_run_ids: tuple[UUID, ...] = ()
         if report_input.kind == "budget_window":
             window = submissions.submit_budget_window(report_input)
             report_id, run_id = window.report_id, window.budget_window_run_id
@@ -371,6 +431,19 @@ class V2StoredReportService:
                 else submissions.submit_report(report_input)
             )
             report_id, run_id = submitted.report_id, submitted.report_run_id
+            recorded_run_ids = (submitted.report_run_id,)
+        if recorder is not None and requester is not None and recorded_run_ids:
+            _record_request(
+                recorder,
+                requester,
+                ReportRunRequest(
+                    country_id=report_input.country_id,
+                    report_id=report_id,
+                    report_run_ids=recorded_run_ids,
+                    requested_at=requested_at,
+                    trigger=ReportRunTrigger.INITIAL,
+                ),
+            )
         try:
             return self.get_report(
                 country_id=report_input.country_id, report_id=report_id, run_id=run_id
@@ -382,7 +455,12 @@ class V2StoredReportService:
             ) from error
 
     def rerun_report(
-        self, *, country_id: str, report_id: UUID, force: bool
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        force: bool,
+        requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         """Run the country's report again; return it with the run the request ended on.
 
@@ -392,17 +470,23 @@ class V2StoredReportService:
         ``force``, each side reuses a run of its own simulation that succeeded
         on the current versions; with it, both are calculated again (a budget
         window's new run then recalculates each year). A household report's
-        sides are always calculated again. Raise
-        StoredReportNotFoundError when the country has no such report,
-        ReportStorageError when it cannot be read, the submission's checks'
-        and the simulation service's errors (see
-        ``SimulationSubmissionService.rerun_report``), and
+        sides are always calculated again. With a ``requester``, it is
+        checked before the simulation service is asked, and the request is
+        recorded for its user (trigger ``manual``, forced or not) once the
+        service has answered; a budget window's request is not recorded yet.
+        Raise StoredReportNotFoundError when the country has no such report,
+        ReportStorageError when it cannot be read, the recorder's check's
+        errors, the submission's checks' and the simulation service's errors
+        (see ``SimulationSubmissionService.rerun_report``),
+        ReportRunNotRecordedError when the request could not be recorded, and
         RerunReportUnreadableError, caused by the read's own error, when the
         report cannot be read back once its run was started.
         """
         submissions = self._configured_submissions()
+        requested_at = utc_now()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
+        recorder = self._checked_recorder(requester)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -412,11 +496,22 @@ class V2StoredReportService:
                 policy_ids=report_policy_ids(stored),
             )
         )
-        run_id = (
-            started.report_run_id
-            if started.budget_window_run_id is None
-            else started.budget_window_run_id
-        )
+        if started.budget_window_run_id is not None:
+            run_id = started.budget_window_run_id
+        else:
+            run_id = started.report_run_id
+            if recorder is not None and requester is not None:
+                _record_request(
+                    recorder,
+                    requester,
+                    ReportRunRequest(
+                        country_id=country_id,
+                        report_id=report_id,
+                        report_run_ids=(started.report_run_id,),
+                        requested_at=requested_at,
+                        trigger=ReportRunTrigger.MANUAL,
+                    ),
+                )
         try:
             return self.get_report(
                 country_id=country_id, report_id=report_id, run_id=run_id

@@ -389,6 +389,32 @@ class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
     report_id: UUID
 
 
+class ReportRunNotRecordedResponse(V2ErrorResponse):
+    """The 503 answer when a user's request for a run could not be recorded.
+
+    The simulation service created or joined the run ``report_run_id`` of
+    ``report_id``, so the caller reads it with ``GET
+    /v2/reports/{report_id}?run_id={report_run_id}``. Sending the request
+    again records it, once the simulation service finds runs by key, since
+    the request then ends on the same run.
+    """
+
+    report_id: UUID
+    report_run_id: UUID
+
+
+UNAUTHENTICATED_REQUESTER = (
+    "The request sent a user credential that is not valid: a bearer access "
+    "token that is invalid, or an unauthenticated-user header that is not a "
+    "canonical UUID or names a signed-in user. Nothing was started."
+)
+NOT_RECORDED = (
+    "Or the simulation service started the run, but the user's request for it "
+    "could not be recorded: the answer gives its report_id and report_run_id, "
+    "to read with GET /v2/reports/{report_id}?run_id={report_run_id}."
+)
+
+
 # Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
@@ -411,6 +437,7 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
+    401: error_response(UNAUTHENTICATED_REQUESTER),
     404: error_response(
         "A policy the report names, or a household report's household, is not "
         "stored in the country."
@@ -454,7 +481,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         ),
     },
     503: {
-        "model": V2ErrorResponse | UnavailableAfterReportCreatedResponse,
+        "model": V2ErrorResponse
+        | UnavailableAfterReportCreatedResponse
+        | ReportRunNotRecordedResponse,
         "description": (
             "The simulation service created nothing: it cannot be reached or is not "
             "configured; it answered a readable 503 naming no record, and the message "
@@ -467,7 +496,7 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "be read. Or the service created the report, then "
             "Modal refused the run's call and the service failed the run: its 503 "
             "named the report, with its status and code, and the answer gives its "
-            "report_id."
+            f"report_id. {NOT_RECORDED}"
         ),
     },
 }

@@ -1,7 +1,10 @@
 """Native FastAPI routes for v2 reports.
 
 The routes need no user credential: a user keeps a report through
-``/v2/user-reports``. Reports, their runs and results are read from the
+``/v2/user-reports``. A create or re-run may send one (a bearer access
+token, the unauthenticated-user header, or a server's forwarded user), and
+the request is then recorded for that user, naming the run it ended on.
+Reports, their runs and results are read from the
 detailed-save tables the simulation service and its Modal workers write;
 reading never calls the simulation service and never starts a run. A report
 is an economy report, a household report or a budget window, which its
@@ -12,19 +15,24 @@ new run, and reads the report back; listing its runs reads them, newest
 first.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Annotated, TypeVar
+# No postponed annotations: FastAPI resolves each route's dependency
+# annotations at runtime, and the requester's names a dependency local to the
+# router builder.
+from collections.abc import Callable
+from typing import Annotated, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2StoredReportResourceService,
     _default_v2_stored_report_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors_support import (
+    BEARER_CHALLENGE,
     V2ErrorMapping,
     v2_error_response,
 )
@@ -40,6 +48,7 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     ReportDetailResult,
     ReportListResponse,
     ReportListResult,
+    ReportRunNotRecordedResponse,
     UnavailableAfterReportCreatedResponse,
     report_item,
     report_summary_item,
@@ -69,6 +78,13 @@ from policyengine_api.query_parameters import (
     ReportDetailQuery,
     ReportRunsQuery,
 )
+from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.identity.validators import (
+    StandardUserRequiresSignInError,
+)
+from policyengine_api.services.v2.report_run_records.validators import (
+    ReportRunRecordStorageError,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceConflictError,
     SimulationServiceUnavailableError,
@@ -85,18 +101,11 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportRunNotFoundError,
+    ReportRunNotRecordedError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2StoredReportResourceService,
-    )
 
 MAXIMUM_REPORT_REQUEST_BYTES = 16 * 1024
 enforce_report_request_size = request_size_limit(
@@ -134,7 +143,11 @@ REPORT_ERROR_MAPPINGS = (
         "The report's stored result cannot be read",
     ),
     # SUBMISSION_ERROR_MAPPINGS answers a missing v2 database configuration.
-    V2ErrorMapping((ReportStorageError,), 503, "V2 report storage is unavailable"),
+    V2ErrorMapping(
+        (ReportStorageError, ReportRunRecordStorageError),
+        503,
+        "V2 report storage is unavailable",
+    ),
 )
 
 
@@ -161,18 +174,46 @@ def _report_operation(
     )
 
 
+def _requester_refused(error: StandardUserRequiresSignInError) -> JSONResponse:
+    """Answer a browser credential naming a signed-in user, as user routes do."""
+    return v2_error_response(
+        401, str(error), headers={"WWW-Authenticate": BEARER_CHALLENGE}
+    )
+
+
+def _not_recorded(error: ReportRunNotRecordedError) -> JSONResponse:
+    """Answer a run whose request could not be recorded with 503 naming the run."""
+    return unavailable_after_creation_answer(
+        "v2_report_run_not_recorded",
+        error,
+        ReportRunNotRecordedResponse(
+            message=str(error),
+            report_id=error.report_id,
+            report_run_id=error.report_run_id,
+        ),
+    )
+
+
 def _create_report(
-    service: V2StoredReportResourceService, body: ReportCreateRequest
+    service: V2StoredReportResourceService,
+    body: ReportCreateRequest,
+    requester: AccountPrincipal | None,
 ) -> ReportDetailResponse | JSONResponse:
     """Create the report and answer it as stored.
 
     A report the simulation service created answers with its ``report_id``
     when it cannot be read back (502), and when the service failed its run
-    and answered 503. Every other failure is raised, for the route's error
-    mappings to answer.
+    and answered 503; one whose request could not be recorded for its user
+    answers 503 with its ``report_id`` and ``report_run_id``. A requester's
+    unauthenticated credential naming a signed-in user answers 401. Every
+    other failure is raised, for the route's error mappings to answer.
     """
     try:
-        report = service.create_report(body)
+        report = service.create_report(body, requester=requester)
+    except StandardUserRequiresSignInError as error:
+        return _requester_refused(error)
+    except ReportRunNotRecordedError as error:
+        return _not_recorded(error)
     except CreatedReportUnreadableError as error:
         return created_record_unreadable_answer(
             "v2_created_report_unreadable",
@@ -206,18 +247,29 @@ def _rerun_report(
     country_id: str,
     report_id: UUID,
     force: bool,
+    requester: AccountPrincipal | None,
 ) -> ReportDetailResponse | JSONResponse:
-    """Run the report again and answer it with its new run.
+    """Run the report again and answer it with the run the request ended on.
 
     The simulation service's refusal to run it again now answers 409 with
-    the run it names, and a report that cannot be read back once its new run
-    started answers 502 with its ``report_id``. Every other failure is
-    raised, for the route's error mappings to answer.
+    the run it names, a report that cannot be read back once its run
+    started answers 502 with its ``report_id``, and a run whose request
+    could not be recorded for its user answers 503 with its ``report_id``
+    and ``report_run_id``. A requester's unauthenticated credential naming a
+    signed-in user answers 401. Every other failure is raised, for the
+    route's error mappings to answer.
     """
     try:
         report = service.rerun_report(
-            country_id=country_id, report_id=report_id, force=force
+            country_id=country_id,
+            report_id=report_id,
+            force=force,
+            requester=requester,
         )
+    except StandardUserRequiresSignInError as error:
+        return _requester_refused(error)
+    except ReportRunNotRecordedError as error:
+        return _not_recorded(error)
     except SimulationServiceConflictError as error:
         conflict = ReportRerunConflictResponse(message=str(error), run_id=error.run_id)
         return JSONResponse(status_code=409, content=conflict.model_dump(mode="json"))
@@ -239,7 +291,9 @@ def _rerun_report(
 
 
 def _add_report_run_routes(
-    router: APIRouter, service_factory: Callable[[], V2StoredReportResourceService]
+    router: APIRouter,
+    service_factory: Callable[[], V2StoredReportResourceService],
+    optional_user: Callable[..., AccountPrincipal | None],
 ) -> None:
     """Add the routes that run a report again and list its runs."""
 
@@ -269,7 +323,10 @@ def _add_report_run_routes(
             "budget window's budget-window run), which needn't be its newest. A "
             "simulation service that refuses because a run is pending or "
             "running answers 409 naming that run. Read the report again with "
-            "run_id to follow the run."
+            "run_id to follow the run. With a user credential (a bearer access "
+            "token, or the unauthenticated-user header of a signed-out browser), "
+            "the request is recorded for that user, naming the run it ended on "
+            "(trigger manual); without one, nothing is recorded."
         ),
     )
     def rerun_report(
@@ -277,6 +334,7 @@ def _add_report_run_routes(
         body: ReportRerunRequest,
         query: ReportRunsQueryDependency,
         _size: Annotated[None, Depends(enforce_report_request_size)],
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
         def rerun() -> ReportDetailResponse | JSONResponse:
             return _rerun_report(
@@ -284,6 +342,7 @@ def _add_report_run_routes(
                 country_id=query.country_id,
                 report_id=report_id,
                 force=body.force,
+                requester=requester,
             )
 
         return _report_operation(rerun)
@@ -320,6 +379,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     """Build the report routes without opening a connection."""
     router = APIRouter(prefix="/v2", responses=REPORT_ERROR_RESPONSES)
     service_factory = _service_factory(dependencies)
+    optional_user = dependencies.optional_user
 
     @router.post(
         "/reports",
@@ -345,7 +405,11 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "named: its new pending run, or, once the simulation service finds "
             "reports and runs by key, the existing run the request joined, which "
             "needn't be the newest. Read it again with run_id to follow the run. "
-            "A created report "
+            "With a user credential (a bearer access token, or the "
+            "unauthenticated-user header of a signed-out browser), the request is "
+            "recorded for that user, naming the run it ended on (trigger "
+            "initial); without one, nothing is recorded. A budget window's "
+            "request is not recorded yet. A created report "
             "that cannot be read back answers 502 with its report_id, and one "
             "whose run the simulation service failed before answering 503 "
             "answers 503 with its report_id."
@@ -355,12 +419,13 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         body: ReportCreateRequest,
         query: ReportCreateQueryDependency,
         _size: Annotated[None, Depends(enforce_report_request_size)],
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
 
         def create() -> ReportDetailResponse | JSONResponse:
-            return _create_report(service_factory(), body)
+            return _create_report(service_factory(), body, requester)
 
         return _report_operation(create)
 
@@ -425,5 +490,5 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
 
         return _report_operation(read)
 
-    _add_report_run_routes(router, service_factory)
+    _add_report_run_routes(router, service_factory, optional_user)
     return router
