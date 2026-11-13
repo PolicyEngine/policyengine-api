@@ -83,6 +83,16 @@ if [[ -n "${AUTH0_USER_PROFILES_DOMAIN:-}" ]]; then
   )
 fi
 
+# Optional: invitation and type-change emails go through Postmark only when
+# its settings are set. Validation requires all three values or none.
+if [[ -n "${POSTMARK_SERVER_TOKEN_SECRET_RESOURCE:-}" ]]; then
+  env_vars+=(
+    "POSTMARK_SERVER_TOKEN_SECRET_RESOURCE=${POSTMARK_SERVER_TOKEN_SECRET_RESOURCE}"
+    "POSTMARK_SENDER_ADDRESS=${POSTMARK_SENDER_ADDRESS}"
+    "POLICYENGINE_APP_URL=${POLICYENGINE_APP_URL}"
+  )
+fi
+
 if [[ -n "${OLD_SIMULATION_GATEWAY_URL:-}" ]]; then
   env_vars+=("OLD_SIMULATION_GATEWAY_URL=${OLD_SIMULATION_GATEWAY_URL}")
 fi

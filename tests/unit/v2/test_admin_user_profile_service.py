@@ -102,6 +102,12 @@ class StandInProfileReader:
             if user_id in self.profiles
         }
 
+    def read_user_profile(
+        self, user_id: str, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> Auth0UserProfile | None:
+        msg = "admins' reads read users through the search, never one by ID"
+        raise AssertionError(msg)
+
     def search_user_ids_by_email(
         self,
         text: str,

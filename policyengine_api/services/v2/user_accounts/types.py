@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
 
+    from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.identity.types import AccountConversionOutcome
     from policyengine_api.services.v2.user_households.types import UserHouseholdRead
     from policyengine_api.services.v2.user_policies.types import UserPolicyRead
@@ -54,6 +55,16 @@ class AccountUpdateInput(StrictAccountInput):
 
 
 @dataclass(frozen=True)
+class LatestTypeChangeRead:
+    """A user's most recent type change, which the app shows until dismissed."""
+
+    id: UUID
+    previous_user_type: UserType
+    user_type: UserType
+    changed_at: datetime
+
+
+@dataclass(frozen=True)
 class AccountRead:
     """A user's account as the service returns it to routes."""
 
@@ -65,6 +76,9 @@ class AccountRead:
     last_name: str | None
     email: str | None
     created_at: datetime
+    # Only reading the account fills it: the user's most recent type change,
+    # unless it was dismissed. Every other operation leaves it None.
+    latest_type_change: LatestTypeChangeRead | None = None
 
 
 @dataclass(frozen=True)

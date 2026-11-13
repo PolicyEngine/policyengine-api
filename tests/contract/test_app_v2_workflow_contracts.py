@@ -116,6 +116,25 @@ def test_user_routes_record_signed_in_and_signed_out_contracts() -> None:
     assert not any(
         "/v2/me/imports" in path for _method, path, _headers in user_requests
     )
+    # Only a signed-in user accepts an invitation or dismisses a type change.
+    for method, path in (
+        ("POST", "/v2/me/invitations/accept"),
+        ("POST", "/v2/me/type-changes/{type_change_id}/dismiss"),
+    ):
+        assert (method, path, ("Authorization",)) in user_requests
+        assert (method, path) not in signed_out
+
+
+def test_reading_the_account_reports_the_latest_type_change() -> None:
+    reads = [
+        request
+        for request in APP_V2_ROUTE_CONTRACTS
+        if request.method == "GET" and request.path.split("?", 1)[0] == "/v2/me"
+    ]
+
+    assert reads
+    for request in reads:
+        assert "result.latest_type_change" in request.stable_response_fields
 
 
 def test_shared_reports_are_read_without_a_credential() -> None:

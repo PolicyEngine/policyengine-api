@@ -353,10 +353,15 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/me",
         "/v2/me/export",
         "/v2/me/upgrade",
+        "/v2/me/invitations/accept",
+        "/v2/me/type-changes/{type_change_id}/dismiss",
         "/v2/admin/users",
         "/v2/admin/users/{user_id}",
         "/v2/admin/users/{user_id}/user-type-changes",
         "/v2/admin/users/{user_id}/saved-items",
+        "/v2/admin/invitations",
+        "/v2/admin/invitations/{invitation_id}",
+        "/v2/admin/invitations/{invitation_id}/resend",
     }
     assert set(schema["paths"]) == metadata_paths | native_paths
     assert "V2ErrorResponse" in schema["components"]["schemas"]

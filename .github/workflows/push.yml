@@ -524,6 +524,12 @@ jobs:
       AUTH0_USER_PROFILES_DOMAIN: ${{ vars.AUTH0_USER_PROFILES_DOMAIN }}
       AUTH0_USER_PROFILES_CLIENT_ID: ${{ vars.AUTH0_USER_PROFILES_CLIENT_ID }}
       AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE: ${{ secrets.AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE }}
+      # Invitation and type-change emails through the environment's Postmark
+      # server: its token's Secret Manager version, the sender address, and
+      # the app's address the emails link to. All three, or none.
+      POSTMARK_SERVER_TOKEN_SECRET_RESOURCE: ${{ secrets.POSTMARK_SERVER_TOKEN_SECRET_RESOURCE }}
+      POSTMARK_SENDER_ADDRESS: ${{ vars.POSTMARK_SENDER_ADDRESS }}
+      POLICYENGINE_APP_URL: ${{ vars.POLICYENGINE_APP_URL }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: staging
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-staging-runtime-cache-url:latest
@@ -868,6 +874,9 @@ jobs:
       AUTH0_USER_PROFILES_DOMAIN: ${{ vars.AUTH0_USER_PROFILES_DOMAIN }}
       AUTH0_USER_PROFILES_CLIENT_ID: ${{ vars.AUTH0_USER_PROFILES_CLIENT_ID }}
       AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE: ${{ secrets.AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE }}
+      POSTMARK_SERVER_TOKEN_SECRET_RESOURCE: ${{ secrets.POSTMARK_SERVER_TOKEN_SECRET_RESOURCE }}
+      POSTMARK_SENDER_ADDRESS: ${{ vars.POSTMARK_SENDER_ADDRESS }}
+      POLICYENGINE_APP_URL: ${{ vars.POLICYENGINE_APP_URL }}
       CLOUD_RUN_SERVICE: policyengine-api
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: production
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-prod-runtime-cache-url:latest

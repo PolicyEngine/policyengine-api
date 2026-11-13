@@ -17,6 +17,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     BEARER_CHALLENGE,
     V2ErrorResponse,
     V2RequestTooLargeError,
+    v2_coded_error_response,
     v2_error_response,
 )
 from policyengine_api.services.v2.associations.validators import (
@@ -36,9 +37,18 @@ from policyengine_api.services.v2.user_accounts.validators import (
     AccountEditRequiresSignInError,
     AccountIdentityDeletionError,
     AccountNotFoundError,
+    TypeChangeNotFoundError,
 )
 from policyengine_api.services.v2.user_households.validators import (
     AssociationHouseholdNotFoundError,
+)
+from policyengine_api.services.v2.user_invitations.validators import (
+    InvitationEmailMismatchError,
+    InvitationEmailNotVerifiedError,
+    InvitationEmailUnavailableError,
+    InvitationNotFoundError,
+    InvitationUnavailableError,
+    InviterNotAdminError,
 )
 from policyengine_api.services.v2.user_policies.validators import (
     AssociationPolicyNotFoundError,
@@ -187,6 +197,7 @@ class UserResourceFailure(NamedTuple):
 
     Without a ``message``, the response carries the error's own message. A
     ``logged_event`` records the failure, without its message, under that name.
+    With ``coded``, the response also carries the error's ``code`` attribute.
     """
 
     error_types: tuple[type[Exception], ...]
@@ -194,6 +205,7 @@ class UserResourceFailure(NamedTuple):
     message: str | None = None
     headers: Mapping[str, str] | None = None
     logged_event: str | None = None
+    coded: bool = False
 
 
 # Checked in order, so a subclass is listed before any base it shares a status
@@ -206,6 +218,13 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
     ),
     UserResourceFailure((AccountEditRequiresSignInError,), 403),
     UserResourceFailure((UserTypeBelowMinimumError,), 403),
+    # A refused invitation acceptance names its reason with a code.
+    UserResourceFailure((InvitationEmailMismatchError,), 403, coded=True),
+    UserResourceFailure(
+        (InviterNotAdminError, InvitationEmailNotVerifiedError), 409, coded=True
+    ),
+    UserResourceFailure((InvitationUnavailableError,), 410, coded=True),
+    UserResourceFailure((InvitationEmailUnavailableError,), 503, coded=True),
     UserResourceFailure((AssociationReferenceConflictError,), 400),
     UserResourceFailure(
         (
@@ -224,6 +243,8 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
             AssociationSimulationNotFoundError,
             AccountNotFoundError,
             SignedInUserNotFoundError,
+            InvitationNotFoundError,
+            TypeChangeNotFoundError,
         ),
         404,
     ),
@@ -260,6 +281,13 @@ def _user_failure_response(error: Exception) -> JSONResponse:
             if failure.logged_event is not None:
                 _log_failure(failure.logged_event, error)
             message = str(error) if failure.message is None else failure.message
+            if failure.coded:
+                return v2_coded_error_response(
+                    failure.status_code,
+                    message,
+                    str(getattr(error, "code", "")),
+                    headers=failure.headers,
+                )
             return v2_error_response(
                 failure.status_code, message, headers=failure.headers
             )

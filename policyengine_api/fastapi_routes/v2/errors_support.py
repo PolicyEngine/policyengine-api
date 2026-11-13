@@ -46,6 +46,16 @@ class V2ErrorResponse(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
+class V2CodedErrorResponse(V2ErrorResponse):
+    """An error that also names its reason with a stable ``code``.
+
+    Clients choose what to do from ``code``, not from ``message``, which is
+    for people and may change.
+    """
+
+    code: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+
+
 class V2MissingParametersErrorResponse(V2ErrorResponse):
     """A refused calculation whose policy sets parameters the catalog lacks.
 
@@ -66,6 +76,22 @@ def v2_error_response(
 ) -> JSONResponse:
     """Serialize one API v2 error without resource-path dispatch."""
     error = V2ErrorResponse(message=message)
+    return JSONResponse(
+        status_code=status_code,
+        content=error.model_dump(mode="json"),
+        headers=dict(headers) if headers is not None else None,
+    )
+
+
+def v2_coded_error_response(
+    status_code: int,
+    message: str,
+    code: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> JSONResponse:
+    """Serialize one API v2 error that names its reason with ``code``."""
+    error = V2CodedErrorResponse(message=message, code=code)
     return JSONResponse(
         status_code=status_code,
         content=error.model_dump(mode="json"),

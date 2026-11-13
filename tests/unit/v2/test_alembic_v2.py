@@ -54,6 +54,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+        "user_invitations",
         "user_type_changes",
     }
 )
@@ -79,6 +80,8 @@ USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision, and parent of
 # the SPM availability revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
+# The SPM availability revision, parent of the user invitations revision.
+SPM_AVAILABILITY_REVISION = "0c136a278f29"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -260,6 +263,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SPM_AVAILABILITY_REVISION,
         USER_TYPE_CHANGES_REVISION,
         USER_TYPES_REVISION,
         SAVED_ITEM_KEYS_REVISION,
@@ -1298,7 +1302,7 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         if revision.down_revision == USER_TYPE_CHANGES_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == SPM_AVAILABILITY_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1328,3 +1332,58 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         assert "op.bulk_insert(" not in body
         assert "op.create_table(" not in body
         assert "op.drop_table(" not in body
+
+
+def test_user_invitations_revision_adds_its_table_and_the_dismissal_column() -> None:
+    """The revision after SPM availability adds invitations and dismissals.
+
+    It is generated with no corrections: it adds ``user_invitations`` with
+    its two indexes, adds ``user_type_changes.dismissed_at``, and replaces
+    the source check with one that also allows ``invitation``, under a new
+    name because Alembic compares checks by name only. The downgrade undoes
+    each, and neither writes data.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert (
+        f'down_revision: Union[str, None] = "{SPM_AVAILABILITY_REVISION}"' in revision
+    )
+    assert "correction" not in revision.lower()
+    assert sorted(re.findall(r"op\.\w+", upgrade)) == [
+        "op.add_column",
+        "op.create_check_constraint",
+        "op.create_index",
+        "op.create_index",
+        "op.create_table",
+        "op.drop_constraint",
+        # Five constraint names in create_table, and the two checks'.
+        *["op.f"] * 7,
+    ]
+    assert sorted(re.findall(r"op\.\w+", downgrade)) == [
+        "op.create_check_constraint",
+        "op.drop_column",
+        "op.drop_constraint",
+        "op.drop_index",
+        "op.drop_index",
+        "op.drop_table",
+        "op.f",
+        "op.f",
+    ]
+    assert re.search(r"op\.create_table\(\s*\"user_invitations\"", upgrade)
+    assert re.search(
+        r"op\.add_column\(\s*\"user_type_changes\",\s*"
+        r"sa\.Column\(\"dismissed_at\", sa\.DateTime\(timezone=True\), "
+        r"nullable=True\)",
+        upgrade,
+    )
+    assert "ck_user_type_changes_source_allowed" in upgrade
+    assert "source IN ('admin_route', 'script', 'invitation')" in upgrade

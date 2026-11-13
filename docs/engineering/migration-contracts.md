@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 18 |
-| request count | 97 |
+| request count | 99 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -160,12 +160,14 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
-| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.user_type`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at` |
-| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.user_type`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at` |
+| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.user_type`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at`, `result.latest_type_change` |
+| `GET` | `/v2/me?country_id=us` | 200 | `user_profile` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.user_type`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name`, `result.item.email`, `result.item.created_at`, `result.latest_type_change` |
 | `PATCH` | `/v2/me?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.id`, `result.item.primary_country`, `result.item.first_name`, `result.item.last_name` |
 | `GET` | `/v2/me/export?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.user`, `result.policies`, `result.households`, `result.simulations`, `result.reports` |
 | `GET` | `/v2/me/export?country_id=us` | 200 | `user_profile` | `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.user`, `result.policies`, `result.households`, `result.simulations`, `result.reports` |
 | `POST` | `/v2/me/upgrade?country_id=us` | 200 | `user_profile` | `Authorization`, `PolicyEngine-Unauthenticated-User` | `status`, `message`, `result.item.id`, `result.item.user_type`, `result.item.primary_country`, `result.outcome` |
+| `POST` | `/v2/me/invitations/accept?country_id=us` | 200 | `user_profile` | `Authorization` | `status`, `message`, `result.item.user_type`, `result.item.previous_user_type`, `result.item.type_changed` |
+| `POST` | `/v2/me/type-changes/{type_change_id}/dismiss?country_id=us` | 204 | `user_profile` | `Authorization` |  |
 | `DELETE` | `/v2/me?country_id=us` | 204 | `user_profile` | `Authorization` |  |
 | `DELETE` | `/v2/me?country_id=us` | 204 | `user_profile` | `PolicyEngine-Unauthenticated-User` |  |
 

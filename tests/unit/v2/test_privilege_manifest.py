@@ -22,6 +22,7 @@ from policyengine_api.data.v2.privileges import (
     NO_ACCESS,
     READ,
     READ_INSERT,
+    READ_INSERT_UPDATE,
     READ_WRITE,
     ROLES_AWAITING_PROVISIONING,
     RUNTIME_ROLE,
@@ -411,7 +412,21 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
 def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:
     declared = declared_privileges(TEST_ENVIRONMENT)
 
-    assert declared[RUNTIME_ROLE]["user_type_changes"] == READ_INSERT
+    # It updates only when the user dismissed the change's notice.
+    assert declared[RUNTIME_ROLE]["user_type_changes"] == READ_INSERT | {
+        update_columns("dismissed_at")
+    }
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_type_changes"] == NO_ACCESS, role
+
+
+def test_the_public_api_revokes_and_accepts_invitations_but_never_deletes_them() -> (
+    None
+):
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_invitations"] == READ_INSERT_UPDATE
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_invitations"] == NO_ACCESS, role
