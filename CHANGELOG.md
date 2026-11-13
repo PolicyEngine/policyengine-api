@@ -1,3 +1,11 @@
+## [5.46.1] - 2026-11-13
+
+### Fixed
+
+- The economy routes now log a request they refuse with 400 or 404 (a year outside the country's years, an unknown region or other invalid setting, or a policy the country does not have) at WARNING instead of ERROR, so refused requests no longer form error groups in the telemetry error report. Every other failure is still logged at ERROR.
+- A household calculation (`POST /<country_id>/calculate` or `/calculate-full`) now answers 400, listing each problem, for a `policy` the calculation can't read, instead of a 500 after several seconds: a policy that isn't an object, a parameter not set to an object of period keys, a period key neither the US nor the UK model reads, or a value its parameter can't take, such as `null`, a list or non-numeric text for a number.
+
+
 ## [5.46.0] - 2026-11-13
 
 ### Added
