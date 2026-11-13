@@ -1399,7 +1399,8 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
     It is generated on the withheld area codes revision, with one correction:
     ``user_report_run_associations.trigger`` reuses the report runs'
     ``v2_report_run_trigger`` type. It creates only that table, writes no
-    data, and its downgrade drops what the upgrade adds.
+    data, makes three per-user columns nullable (the integration shape test
+    checks the direction), and its downgrade reverses what the upgrade does.
     """
     script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
     children = [

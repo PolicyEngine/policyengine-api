@@ -448,7 +448,8 @@ revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
 From the head, such a downgrade first runs the later revisions' downgrades:
 `94dc43079186`'s drops every user's report-run record, the simulation and
-report keys and the window runs' .py versions (see "API v2 shared reports and user report-run records"),
+report keys and the window runs' .py versions, and needs every report to have
+a label and every run a trigger (see "API v2 shared reports and user report-run records"),
 `970be5d29283`'s drops `user_type_changes` with every recorded change (see
 "API v2 user type changes"), `617f531f1506`'s needs no user to be an author
 or an admin (see "API v2 user types"), and `1356f658347d`'s needs
@@ -931,7 +932,11 @@ reuses the `v2_report_run_trigger` type (`create_type=False`) instead of
 creating it again, as `1356f658347d` does for `budget_window_runs`.
 
 The previous Public API revision maps none of the new columns or the new
-table and writes none of these tables, so it keeps working at this revision.
+table and writes none of these tables, so it keeps working at this revision
+while the simulation service still writes `reports.label` and the triggers.
+Once it stops (and writes null there), the previous revision's report reads,
+which take both as required, answer 500 on those rows, so the Public API is
+not rolled back below this revision after that.
 The upgrade fails, changing nothing, while a simulation already has two runs
 that would break its index (same year, catalog version and package versions,
 neither failed), or a report two outside budget windows. The simulation

@@ -8,8 +8,9 @@ runs. It adds nullable key columns, unique on the key and its version, to
 table that allows one unfailed, unforced run per definition and version set;
 a .py version on ``budget_window_runs``, with a partial unique index allowing
 one unfailed, unrecalculated window run per report and version set; and the
-``user_report_run_associations`` table. It changes nothing else, and
-its downgrade removes exactly those.
+``user_report_run_associations`` table; and it makes ``reports.label``,
+``report_runs.trigger`` and ``budget_window_runs.trigger`` nullable. It changes
+nothing else, and its downgrade reverses exactly those.
 """
 
 from __future__ import annotations

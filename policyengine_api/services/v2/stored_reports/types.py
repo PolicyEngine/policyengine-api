@@ -58,8 +58,10 @@ ReportRunTriggerName = Literal["initial", "manual", "system"]
 class ReportRunRead:
     """One calculation of a report, and the package versions it ran on.
 
-    ``trigger`` is ``initial`` for the run the report's creation started.
-    ``error_message`` says why a failed run failed.
+    ``trigger`` is ``initial`` for the run the report's creation started, and
+    null for a run the simulation service shares between requests. A user's
+    trigger is on their record of the run. ``error_message`` says why a failed
+    run failed.
     """
 
     id: UUID

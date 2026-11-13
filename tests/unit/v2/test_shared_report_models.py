@@ -413,8 +413,8 @@ def test_sqlite_lets_a_budget_window_name_one_report_run_per_year(
         sqlite_session.commit()
 
 
-def test_stored_rows_without_a_label_or_trigger_read_as_null() -> None:
-    """The report read and run lists pass on a missing label or trigger as null."""
+def test_stored_runs_without_a_trigger_read_as_null() -> None:
+    """The run lists pass on a missing trigger as null (the route tests a label)."""
     window_run_id = uuid4()
     run = ReportRun(
         report_id=uuid4(),
