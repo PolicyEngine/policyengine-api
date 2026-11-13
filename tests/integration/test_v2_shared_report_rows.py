@@ -565,6 +565,56 @@ def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
     )
 
 
+def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """A report without a label, and runs without a trigger, are stored as such."""
+    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
+    _act_as(connection, managed_v2_roles.simulation_service)
+    baseline_run_id = _simulation_run(connection, public_api_rows, simulation_id)
+    report_id, report_run_id, window_run_id = uuid4(), uuid4(), uuid4()
+
+    insert_row(
+        connection,
+        "reports",
+        id=report_id,
+        country="us",
+        tax_benefit_model_id=public_api_rows.model_id,
+        year=2026,
+        inputs="{}",
+    )
+    insert_row(
+        connection,
+        "report_runs",
+        id=report_run_id,
+        report_id=report_id,
+        baseline_simulation_run_id=baseline_run_id,
+        status="pending",
+        **RUN_VERSIONS,
+    )
+    insert_row(
+        connection,
+        "budget_window_runs",
+        id=window_run_id,
+        report_id=report_id,
+        tax_benefit_model_version_id=public_api_rows.version_id,
+        recalculate=False,
+        status="pending",
+    )
+
+    _act_as(connection, managed_v2_roles.runtime)
+    stored = connection.execute(
+        text(
+            "SELECT reports.label, report_runs.trigger, budget_window_runs.trigger "
+            "FROM reports JOIN report_runs ON report_runs.report_id = reports.id "
+            "JOIN budget_window_runs ON budget_window_runs.report_id = reports.id "
+            "WHERE reports.id = :report_id"
+        ),
+        {"report_id": report_id},
+    ).one()
+    assert tuple(stored) == (None, None, None)
+
+
 def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(
     connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:

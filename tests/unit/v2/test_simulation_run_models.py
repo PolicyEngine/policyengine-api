@@ -450,13 +450,18 @@ def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
     required = {
         "report_id",
         "tax_benefit_model_version_id",
-        "trigger",
         "recalculate",
         "status",
         "created_at",
         "updated_at",
     }
-    optional = {"error_message", "started_at", "completed_at", "policyengine_version"}
+    optional = {
+        "error_message",
+        "started_at",
+        "completed_at",
+        "policyengine_version",
+        "trigger",
+    }
     assert set(windows.c.keys()) == {"id"} | required | optional
     assert all(not windows.c[name].nullable for name in required)
     assert all(windows.c[name].nullable for name in optional)

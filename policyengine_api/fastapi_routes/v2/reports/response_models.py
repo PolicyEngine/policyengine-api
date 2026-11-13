@@ -56,12 +56,14 @@ class ReportRunItem(StrictReportAPIModel):
 
     ``status`` is ``pending``, ``running``, ``succeeded`` or ``failed``, and
     ``error_message`` says why a failed run failed. ``trigger`` is
-    ``initial`` for the run the report's creation started.
+    ``initial`` for the run the report's creation started, and null for a run
+    the simulation service shares between requests, which records no one
+    request's trigger.
     """
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: Literal["initial", "manual", "system"]
+    trigger: Literal["initial", "manual", "system"] | None
     country_package_version: str
     policyengine_version: str
     baseline_simulation_run_id: UUID
@@ -85,16 +87,18 @@ class ReportDefinitionItem(StrictReportAPIModel):
 
     ``current_versions`` are the versions the Public API runs now, so a
     newest run on other versions is out of date. ``options`` are the options
-    the report was created with. ``dataset_independent_key`` is the
-    simulation service's key for the report's definition without its
-    dataset, which a national report shares with its local-area report: find
-    reports by it with ``GET /v2/reports?dataset_independent_key=``. It is
-    null for a report stored before the keys.
+    the report was created with. ``label`` is null for a report the simulation
+    service shares between requests, which records no one caller's label.
+    ``dataset_independent_key`` is the simulation service's key for the
+    report's definition without its dataset, which a national report shares
+    with its local-area report: find reports by it with
+    ``GET /v2/reports?dataset_independent_key=``. It is null for a report
+    stored before the keys.
     """
 
     id: UUID
     country_id: str
-    label: str
+    label: str | None
     description: str | None
     dataset_independent_key: str | None
     year: int | None
@@ -243,16 +247,17 @@ class BudgetWindowRunItem(StrictReportAPIModel):
     ``status`` is ``pending`` until a year starts running, ``running`` while
     its years run, ``failed`` once a year has failed, with ``error_message``
     saying which, and ``succeeded`` once every year has. ``trigger`` is
-    ``initial`` for the run the report's creation started, and
-    ``recalculate`` says whether its years calculate their
-    simulations again rather than reusing successful runs.
+    ``initial`` for the run the report's creation started (null for a shared
+    run, which records no one request's trigger), and ``recalculate`` says
+    whether its years calculate their simulations again rather than reusing
+    successful runs.
     ``country_package_version`` and ``policyengine_version`` are the versions
     its years run on, null for a run with no year.
     """
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: Literal["initial", "manual", "system"]
+    trigger: Literal["initial", "manual", "system"] | None
     recalculate: bool
     country_package_version: str | None
     policyengine_version: str | None
@@ -274,13 +279,14 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     status and versions, with its years; ``current_versions`` are the
     versions the Public API runs now, so a newest run on other versions is
     out of date. ``options`` are the options the report was created with.
+    ``label`` is null for a shared report, which records no one caller's label.
     ``dataset_independent_key`` is as ``ReportDefinitionItem`` describes it.
     """
 
     id: UUID
     country_id: str
     kind: Literal["budget_window"]
-    label: str
+    label: str | None
     description: str | None
     dataset_independent_key: str | None
     year: int | None

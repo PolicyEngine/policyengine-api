@@ -117,7 +117,9 @@ class Report(TimestampedModel, table=True):
         sa.Index("ix_reports_dataset_independent_key", "dataset_independent_key"),
     )
 
-    label: str = Field(max_length=255)
+    # Per-user: nullable until a later revision drops it, since a shared report
+    # describes no one caller.
+    label: str | None = Field(default=None, max_length=255)
     description: str | None = None
     country: str = Field(max_length=16)
     type: str | None = Field(default=None, max_length=128)
@@ -245,8 +247,10 @@ class BudgetWindowRun(TimestampedModel, table=True):
         index=True,
     )
     policyengine_version: str | None = Field(default=None, max_length=128)
-    trigger: ReportRunTrigger = Field(
-        default=ReportRunTrigger.INITIAL,
+    # Per-user: nullable until a later revision drops it, since a shared run
+    # answers more than one request; each user's trigger is on their record.
+    trigger: ReportRunTrigger | None = Field(
+        default=None,
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
     recalculate: bool = False
@@ -371,8 +375,10 @@ class ReportRun(TimestampedModel, table=True):
         default=ReportRunStatus.PENDING,
         sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
     )
-    trigger: ReportRunTrigger = Field(
-        default=ReportRunTrigger.INITIAL,
+    # Per-user: nullable until a later revision drops it, since a shared run
+    # answers more than one request; each user's trigger is on their record.
+    trigger: ReportRunTrigger | None = Field(
+        default=None,
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
     idempotency_key: UUID | None = Field(default=None)
