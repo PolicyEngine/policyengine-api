@@ -117,7 +117,6 @@ def test_a_budget_window_is_posted_to_reports_and_its_window_run_returned(
         "year": 2026,
         "budget_window_size": 10,
         "region_code": "us",
-        "dataset_name": None,
         "baseline": {"policy_id": None, "dynamic_id": None},
         "reform": {"policy_id": str(POLICY_ID), "dynamic_id": None},
     }
@@ -127,14 +126,12 @@ def test_a_budget_window_sends_its_spm_settings_only_when_given() -> None:
     service = AnsweringService()
 
     service.submit(
-        dataset_name="enhanced_cps_2024",
         description="Doubles the credit",
         reform={"policy_id": str(POLICY_ID), "dynamic_id": str(DYNAMIC_ID)},
         spm={"geography_kind": "national"},
     )
 
     body = service.sent_body()
-    assert body["dataset_name"] == "enhanced_cps_2024"
     assert body["description"] == "Doubles the credit"
     assert body["reform"] == {
         "policy_id": str(POLICY_ID),

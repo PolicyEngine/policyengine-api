@@ -192,7 +192,6 @@ def test_a_report_is_posted_and_the_created_report_returned() -> None:
         "description": None,
         "year": 2026,
         "region_code": "state/ca",
-        "dataset_name": None,
         "baseline": {"policy_id": None, "dynamic_id": None},
         "reform": {"policy_id": str(POLICY_ID), "dynamic_id": None},
         "include_cliffs": False,
@@ -205,7 +204,6 @@ def test_a_report_sends_its_options_and_spm_settings_only_when_given() -> None:
     service.client().submit_report(
         report_input(
             include_cliffs=True,
-            dataset_name="enhanced_cps_2024",
             description="Doubles the credit",
             reform={"policy_id": str(POLICY_ID), "dynamic_id": str(DYNAMIC_ID)},
             spm={"geography_kind": "national"},
@@ -214,7 +212,6 @@ def test_a_report_sends_its_options_and_spm_settings_only_when_given() -> None:
 
     body = service.sent_body()
     assert body["include_cliffs"] is True
-    assert body["dataset_name"] == "enhanced_cps_2024"
     assert body["description"] == "Doubles the credit"
     assert body["reform"] == {
         "policy_id": str(POLICY_ID),
@@ -240,7 +237,6 @@ def test_a_simulation_is_posted_and_the_created_simulation_returned() -> None:
         "simulation_type": "economy",
         "year": 2027,
         "region_code": "country/wales",
-        "dataset_name": None,
         "policy_id": str(POLICY_ID),
         "dynamic_id": None,
     }
