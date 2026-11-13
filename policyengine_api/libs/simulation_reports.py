@@ -10,14 +10,16 @@ observability ID headers, transport and instrumentation as every other
 simulation call.
 
 A simulation request names the country, ``simulation_type`` (``economy``),
-the year, the region code, the dataset name (null for the region's default),
-and the stored policy and dynamic (null for current law). A report request
-names the country, ``report_type`` (``economy``), the label and description,
-the year, region and dataset its two simulations share, each simulation's
-policy and dynamic, ``include_cliffs``, and the SPM settings only when the
-caller gave them. A budget window goes to the same ``POST /reports`` as
-``report_type`` ``budget_window``, naming its first year and
-``budget_window_size`` in place of the year, and no ``include_cliffs``. A
+the year, the region code and the stored policy and dynamic (null for
+current law). A report request names the country, ``report_type``
+(``economy``), the label and description, the year and region its two
+simulations share, each simulation's policy and dynamic, ``include_cliffs``,
+and the SPM settings only when the caller gave them. No request names a
+dataset: the simulation service calculates on the dataset its catalog
+version gives the region. A budget window goes to the same
+``POST /reports`` as ``report_type`` ``budget_window``, naming its first
+year and ``budget_window_size`` in place of the year, and no
+``include_cliffs``. A
 household report goes there too, as ``report_type`` ``household``, naming
 the label and description, the stored household, each simulation's policy
 (the reform null for a report of the baseline alone), but no year: the
@@ -222,7 +224,6 @@ def simulation_request(simulation: EconomySimulationCreationInput) -> dict[str, 
         "simulation_type": simulation.kind,
         "year": simulation.year,
         "region_code": simulation.region_code,
-        "dataset_name": simulation.dataset_name,
         **_policy_choice(simulation),
     }
 
@@ -241,7 +242,6 @@ def _report_definition(
         "description": report.description,
         "year": report.year,
         "region_code": report.region_code,
-        "dataset_name": report.dataset_name,
         "baseline": _policy_choice(report.baseline),
         "reform": _policy_choice(report.reform),
     }
