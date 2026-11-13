@@ -217,3 +217,103 @@ def test_simulation_read_failures_answer_typed_errors(
 
     assert response.status_code == status_code
     assert response.json()["status"] == "error"
+
+
+DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
+
+
+def test_a_report_and_its_listing_answer_its_dataset_independent_key() -> None:
+    service = FakeReportService(
+        listed=(report_summary_read(dataset_independent_key=DATASET_INDEPENDENT_KEY),)
+    )
+    service.report = replace(
+        service.report, dataset_independent_key=DATASET_INDEPENDENT_KEY
+    )
+    client = report_route_client(reports=service)
+
+    item = client.get(f"/v2/reports/{REPORT_ID}?country_id=us").json()["result"]["item"]
+    items = client.get(f"/v2/reports?country_id=us&report_id={REPORT_ID}").json()[
+        "result"
+    ]["items"]
+
+    assert item["dataset_independent_key"] == DATASET_INDEPENDENT_KEY
+    assert [listed["dataset_independent_key"] for listed in items] == [
+        DATASET_INDEPENDENT_KEY
+    ]
+
+
+def test_searching_by_the_dataset_independent_key_answers_the_reports_found() -> None:
+    newer, older = uuid4(), uuid4()
+    service = FakeReportService(
+        found=tuple(
+            report_summary_read(
+                id=report_id, dataset_independent_key=DATASET_INDEPENDENT_KEY
+            )
+            for report_id in (newer, older)
+        )
+    )
+
+    response = report_route_client(reports=service).get(
+        f"/v2/reports?country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY}"
+    )
+
+    assert response.status_code == 200
+    items = response.json()["result"]["items"]
+    assert [item["id"] for item in items] == [str(newer), str(older)]
+    assert all("result" not in item for item in items)
+    assert service.calls == [
+        (
+            "search_reports",
+            {"country_id": "uk", "dataset_independent_key": DATASET_INDEPENDENT_KEY},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        f"country_id=uk&report_id={uuid4()}&dataset_independent_key={DATASET_INDEPENDENT_KEY}",
+        f"country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY.upper()}",
+        f"country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY[:-1]}",
+        f"country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY[:-1]}g",
+        (
+            f"country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY}"
+            f"&dataset_independent_key={DATASET_INDEPENDENT_KEY}"
+        ),
+        f"dataset_independent_key={DATASET_INDEPENDENT_KEY}",
+    ],
+    ids=[
+        "both-filters",
+        "uppercase",
+        "too-short",
+        "not-hexadecimal",
+        "repeated",
+        "no-country",
+    ],
+)
+def test_searching_refuses_a_malformed_query(query: str) -> None:
+    service = FakeReportService()
+
+    response = report_route_client(reports=service).get(f"/v2/reports?{query}")
+
+    assert response.status_code == 422
+    assert service.calls == []
+
+
+def test_the_openapi_document_gives_the_list_either_filter() -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+
+    parameters = {
+        parameter["name"]: parameter
+        for parameter in document["paths"]["/v2/reports"]["get"]["parameters"]
+    }
+
+    assert parameters["country_id"]["required"] is True
+    assert parameters["report_id"]["required"] is False
+    assert parameters["dataset_independent_key"]["required"] is False
+    key_schema = next(
+        schema
+        for schema in parameters["dataset_independent_key"]["schema"]["anyOf"]
+        if schema.get("type") == "string"
+    )
+    assert key_schema["pattern"] == "^[0-9a-f]{64}$"
