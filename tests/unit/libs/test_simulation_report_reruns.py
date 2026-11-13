@@ -71,6 +71,7 @@ def rerun_input(**changes: Any) -> ReportRerunInput:
     values: dict[str, Any] = {
         "country_id": "us",
         "report_id": REPORT_ID,
+        "kind": "economy",
         "force": False,
         "policy_ids": (None, POLICY_ID),
     }

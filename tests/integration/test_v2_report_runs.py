@@ -381,8 +381,10 @@ def test_another_countrys_report_or_an_unknown_one_is_not_found(
     assert simulation_service.reruns == []
 
 
-def store_household_report(connection: Connection, catalog: CatalogRows) -> UUID:
-    """Store a household and a report over it; return the report's ID."""
+def store_household_report(
+    connection: Connection, catalog: CatalogRows
+) -> StoredReport:
+    """Store a household and a report over it, without a run."""
     household_id = uuid4()
     insert_row(
         connection,
@@ -394,28 +396,117 @@ def store_household_report(connection: Connection, catalog: CatalogRows) -> UUID
         content_hash=uuid4().hex * 2,
     )
     catalog.household_ids.append(household_id)
-    return store_report(connection, catalog, household_id=household_id).report_id
+    return store_report(connection, catalog, household_id=household_id)
 
 
-@pytest.mark.parametrize("method", ["get", "post"])
-def test_a_household_reports_runs_are_not_listed_or_started_here_yet(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any, method: str
+@pytest.fixture
+def household_only_uk(owner_engine: Engine) -> Iterator[CatalogRows]:
+    """Make the UK household-only, store a UK catalog, and restore both after."""
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text("UPDATE countries SET society_wide_enabled = false WHERE id = 'uk'")
+        )
+        uk_catalog = store_catalog(connection, "uk")
+    try:
+        yield uk_catalog
+    finally:
+        # Each in its own transaction, so a failed cleanup still restores the UK.
+        with owner_engine.begin() as connection:
+            connection.execute(
+                text("UPDATE countries SET society_wide_enabled = true WHERE id = 'uk'")
+            )
+        with owner_engine.begin() as connection:
+            delete_catalog(connection, uk_catalog)
+
+
+def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
 ) -> None:
     with owner_engine.begin() as connection:
-        report_id = store_household_report(connection, catalog)
-    simulation_service = RerunningSimulationService(owner_engine, catalog)
+        report = store_household_report(connection, catalog)
+        first = store_report_run(
+            connection,
+            catalog,
+            report,
+            RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
+        )
+        newest = store_report_run(
+            connection,
+            catalog,
+            report,
+            RunSettings(
+                versions=CURRENT_VERSIONS,
+                status="pending",
+                created_at=STARTED_AT + timedelta(days=1),
+            ),
+        )
+        mark_manual(connection, newest.report_run_id)
+    client = client_for(
+        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+    )
+
+    response = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["report_id"] == str(report.report_id)
+    assert result["kind"] == "household"
+    assert result["current_versions"] == CURRENT_VERSIONS
+    items = result["items"]
+    assert [item["id"] for item in items] == [
+        str(newest.report_run_id),
+        str(first.report_run_id),
+    ]
+    assert [(item["status"], item["trigger"]) for item in items] == [
+        ("pending", "manual"),
+        ("succeeded", "initial"),
+    ]
+    assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
+
+
+def test_a_household_report_runs_again_where_households_are_calculated(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    # The UK here has household calculations but no economy reports, so a
+    # household report's re-run passes only the household check.
+    with owner_engine.begin() as connection:
+        report = store_household_report(connection, household_only_uk)
+        first = store_report_run(
+            connection,
+            household_only_uk,
+            report,
+            RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
+        )
+    simulation_service = RerunningSimulationService(owner_engine, household_only_uk)
     client = client_for(runtime_sessions, simulation_service)
 
-    response = client.request(
-        method, f"/v2/reports/{report_id}/runs?country_id=us", json={}
+    response = client.post(
+        f"/v2/reports/{report.report_id}/runs?country_id=uk", json={}
     )
 
-    assert response.status_code == 422
-    assert response.json()["message"] == (
-        f"Report {report_id} is a household report, whose runs these routes do "
-        "not start or list yet"
-    )
-    assert simulation_service.reruns == []
+    assert response.status_code == 201, response.text
+    assert simulation_service.reruns == [
+        ReportRerunInput(
+            country_id="uk",
+            report_id=report.report_id,
+            kind="household",
+            force=False,
+            policy_ids=(None, household_only_uk.policy_id),
+        )
+    ]
+    item = response.json()["result"]["item"]
+    (new_run_id,) = simulation_service.new_run_ids
+    assert item["kind"] == "household"
+    assert item["status"] == "pending"
+    assert item["run"]["id"] == str(new_run_id)
+    assert item["run"]["trigger"] == "manual"
+    assert item["run"]["policyengine_version"] == "4.2.0"
+    assert item["result"] is None
+    runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=uk").json()
+    assert [run["id"] for run in runs["result"]["items"]] == [
+        str(new_run_id),
+        str(first.report_run_id),
+    ]
 
 
 @pytest.mark.parametrize("force", [False, True])
@@ -442,6 +533,7 @@ def test_running_a_report_again_answers_it_with_its_new_run(
         ReportRerunInput(
             country_id="us",
             report_id=report.report_id,
+            kind="economy",
             force=force,
             policy_ids=(None, catalog.policy_id),
         )
@@ -634,6 +726,7 @@ def test_running_a_budget_window_again_answers_it_with_its_new_run(
         ReportRerunInput(
             country_id="us",
             report_id=window.report_id,
+            kind="budget_window",
             force=force,
             policy_ids=(None, catalog.policy_id),
         )

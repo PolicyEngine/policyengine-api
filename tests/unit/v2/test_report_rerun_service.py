@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
@@ -24,17 +24,8 @@ from policyengine_api.services.v2.stored_reports.services import (
 from policyengine_api.services.v2.stored_reports.transformations import (
     budget_window_runs_read,
 )
-from policyengine_api.services.v2.stored_reports.types import (
-    ReportKind,
-    RunRouteKind,
-    StoredReportRows,
-)
-from policyengine_api.services.v2.stored_reports.validators import (
-    REPORT_KIND_NAMES,
-    ReportKindUnsupportedError,
-    ReportStorageError,
-    require_run_route_kind,
-)
+from policyengine_api.services.v2.stored_reports.types import StoredReportRows
+from policyengine_api.services.v2.stored_reports.validators import ReportStorageError
 
 if TYPE_CHECKING:
     from contextlib import AbstractContextManager
@@ -142,36 +133,6 @@ def test_a_run_list_whose_report_cannot_be_read_is_storage_unavailable() -> None
         service.list_report_runs(country_id="us", report_id=REPORT_ID)
 
     assert unavailable.value.__cause__ is database_session.error
-
-
-# The report columns that make a stored report of each kind.
-KIND_COLUMNS: dict[ReportKind, dict[str, object]] = {
-    "economy": {},
-    "budget_window": {"budget_window_size": 3},
-    "household": {"household_id": UUID("00000000-0000-0000-0000-00000000f002")},
-}
-
-
-@pytest.mark.parametrize("kind", get_args(RunRouteKind))
-def test_each_run_route_kinds_runs_can_be_run_and_listed(kind: ReportKind) -> None:
-    assert require_run_route_kind(stored_rows(**KIND_COLUMNS[kind])) == kind
-
-
-def test_a_household_reports_runs_are_not_run_or_listed_yet() -> None:
-    with pytest.raises(ReportKindUnsupportedError) as unsupported:
-        require_run_route_kind(stored_rows(household_id=uuid4()))
-
-    assert str(unsupported.value) == (
-        f"Report {REPORT_ID} is a household report, whose runs these routes do not "
-        "start or list yet"
-    )
-
-
-def test_every_report_kind_has_a_name_and_the_run_routes_take_only_kinds() -> None:
-    # A kind added later is refused with its name (422), not a KeyError (500).
-    assert set(REPORT_KIND_NAMES) == set(get_args(ReportKind))
-    assert set(KIND_COLUMNS) == set(get_args(ReportKind))
-    assert set(get_args(RunRouteKind)).issubset(get_args(ReportKind))
 
 
 def test_a_window_run_with_no_year_lists_no_years_and_no_versions() -> None:

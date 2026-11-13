@@ -7,6 +7,9 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationCountryError,
+)
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
     PolicyParametersMissingError,
@@ -23,7 +26,6 @@ from policyengine_api.services.v2.simulation_service.validators import (
     SubmissionStorageError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
-    ReportKindUnsupportedError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
@@ -37,6 +39,7 @@ from tests.unit.v2.report_run_support import (
     NEW_WINDOW_RUN_ID,
     FakeReportRunService,
     budget_window_runs_read,
+    report_runs_read,
 )
 from tests.unit.v2.stored_report_support import (
     POLICY_ID,
@@ -80,6 +83,21 @@ def test_a_reports_runs_are_answered_newest_first_with_versions_and_current_ones
     assert service.calls == [
         ("list_report_runs", {"country_id": "us", "report_id": REPORT_ID})
     ]
+
+
+def test_a_household_reports_runs_are_answered_as_a_household_reports() -> None:
+    service = FakeReportRunService(runs=replace(report_runs_read(), kind="household"))
+
+    response = report_route_client(reports=service).get(RUNS_PATH)
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["kind"] == "household"
+    assert [run["id"] for run in result["items"]] == [
+        str(NEW_RUN_ID),
+        str(REPORT_RUN_ID),
+    ]
+    assert result["current_versions"]["policyengine_version"] == "4.2.0"
 
 
 def test_a_budget_windows_runs_are_answered_with_their_years() -> None:
@@ -138,18 +156,13 @@ def test_a_report_with_no_run_lists_none() -> None:
             "Report x was not found in country 'us'",
         ),
         (
-            ReportKindUnsupportedError("Report x is a budget window"),
-            422,
-            "Report x is a budget window",
-        ),
-        (
             ReportStorageError("V2 report storage is unavailable"),
             503,
             "V2 report storage is unavailable",
         ),
         (RuntimeError("unexpected"), 500, "V2 report operation failed"),
     ],
-    ids=["not-found", "other-kind", "storage", "unexpected"],
+    ids=["not-found", "storage", "unexpected"],
 )
 def test_run_list_failures_answer_typed_errors(
     error: Exception, status_code: int, message: str
@@ -321,9 +334,11 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> 
             "Policy p was not found in country 'us'",
         ),
         (
-            ReportKindUnsupportedError("Report x is a household report"),
+            HouseholdCalculationCountryError(
+                "Household calculations are not available for country us."
+            ),
             422,
-            "Report x is a household report",
+            "Household calculations are not available for country us.",
         ),
         (
             EconomyCalculationsUnsupportedError("No economy calculations for 'uk'"),
@@ -371,7 +386,7 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> 
     ids=[
         "report-not-found",
         "policy-not-found",
-        "other-kind",
+        "no-household-calculations",
         "household-only-country",
         "service-refusal",
         "service-failure",
@@ -440,4 +455,9 @@ def test_the_openapi_document_gives_each_kinds_run_list() -> None:
     assert {option["$ref"] for option in result["oneOf"]} == {
         "#/components/schemas/ReportRunListResult",
         "#/components/schemas/BudgetWindowRunListResult",
+    }
+    assert result["discriminator"]["mapping"] == {
+        "economy": "#/components/schemas/ReportRunListResult",
+        "household": "#/components/schemas/ReportRunListResult",
+        "budget_window": "#/components/schemas/BudgetWindowRunListResult",
     }

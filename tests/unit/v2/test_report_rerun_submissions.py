@@ -10,6 +10,9 @@ import pytest
 from sqlalchemy.exc import OperationalError
 
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.household_calculations.validators import (
+    HouseholdCalculationCountryError,
+)
 from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
@@ -18,7 +21,10 @@ from policyengine_api.services.v2.policies.validators import (
 from policyengine_api.services.v2.simulation_service.services import (
     SimulationSubmissionService,
 )
-from policyengine_api.services.v2.simulation_service.types import ReportRerunInput
+from policyengine_api.services.v2.simulation_service.types import (
+    ReportRerunInput,
+    ReportRerunKind,
+)
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
     SubmissionStorageError,
@@ -39,15 +45,26 @@ STORED_AT = datetime(2026, 11, 13, tzinfo=UTC)
 @dataclass
 class StoredCountries:
     society_wide_enabled: bool = True
+    household_enabled: bool = True
 
     def list_countries(self) -> list[CountryRead]:
         return [
             CountryRead(
                 id="us",
-                household_enabled=True,
+                household_enabled=self.household_enabled,
                 society_wide_enabled=self.society_wide_enabled,
             )
         ]
+
+
+@dataclass
+class UnreadableCountries:
+    """The countries, which cannot be read."""
+
+    error: Exception
+
+    def list_countries(self) -> list[CountryRead]:
+        raise self.error
 
 
 @dataclass
@@ -85,10 +102,13 @@ class RecordingSimulationService:
 
 
 class UnreadHouseholds:
-    """The stored households, which an economy re-run never reads."""
+    """The stored households, which a re-run never reads.
+
+    A household report's household is stored as long as the report names it.
+    """
 
     def get_household(self, *, country_id: str, household_id: UUID) -> object:
-        msg = "an economy re-run must not read a household"
+        msg = "a re-run must not read a household"
         raise AssertionError(msg)
 
 
@@ -97,9 +117,15 @@ def unconfigured_client() -> RecordingSimulationService:
     raise AssertionError(msg)
 
 
-def rerun_input(*policy_ids: UUID | None) -> ReportRerunInput:
+def rerun_input(
+    *policy_ids: UUID | None, kind: ReportRerunKind = "economy"
+) -> ReportRerunInput:
     return ReportRerunInput(
-        country_id="us", report_id=REPORT_ID, force=True, policy_ids=policy_ids
+        country_id="us",
+        report_id=REPORT_ID,
+        kind=kind,
+        force=True,
+        policy_ids=policy_ids,
     )
 
 
@@ -172,5 +198,85 @@ def test_a_rerun_whose_policy_check_cannot_read_storage_is_storage_unavailable()
 
     with pytest.raises(SubmissionStorageError) as unavailable:
         service.rerun_report(rerun_input(None, STORED_POLICY_ID))
+
+    assert unavailable.value.__cause__ is error
+
+
+@pytest.mark.parametrize("kind", ["economy", "budget_window"])
+def test_a_rerun_where_only_households_are_calculated_is_refused_for_economy_kinds(
+    kind: ReportRerunKind,
+) -> None:
+    service = SimulationSubmissionService(
+        countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
+        policies=StoredPolicies(),
+        client_factory=unconfigured_client,
+    )
+
+    with pytest.raises(EconomyCalculationsUnsupportedError, match="'us'"):
+        service.rerun_report(rerun_input(None, STORED_POLICY_ID, kind=kind))
+
+
+def test_a_household_reports_rerun_is_sent_where_only_households_are_calculated() -> (
+    None
+):
+    client = RecordingSimulationService()
+    policies = StoredPolicies()
+    service = SimulationSubmissionService(
+        countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
+        policies=policies,
+        client_factory=lambda: client,
+    )
+    rerun = rerun_input(None, STORED_POLICY_ID, kind="household")
+
+    service.rerun_report(rerun)
+
+    assert client.reruns == [rerun]
+    assert policies.asked == [STORED_POLICY_ID]
+
+
+def test_a_household_reports_rerun_without_household_calculations_is_refused() -> None:
+    policies = StoredPolicies()
+    service = SimulationSubmissionService(
+        countries=StoredCountries(household_enabled=False),
+        households=UnreadHouseholds(),
+        policies=policies,
+        client_factory=unconfigured_client,
+    )
+
+    with pytest.raises(HouseholdCalculationCountryError, match="country us"):
+        service.rerun_report(rerun_input(None, STORED_POLICY_ID, kind="household"))
+
+    assert policies.asked == []
+
+
+def test_a_household_reports_rerun_checks_its_policies_as_a_new_one_does() -> None:
+    service = SimulationSubmissionService(
+        countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
+        policies=StoredPolicies(),
+        client_factory=unconfigured_client,
+    )
+
+    with pytest.raises(PolicyParametersMissingError) as refusal:
+        service.rerun_report(rerun_input(None, OUTDATED_POLICY_ID, kind="household"))
+
+    assert refusal.value.missing_parameters == REMOVED_PARAMETERS
+
+
+def test_a_household_reports_rerun_whose_countries_cannot_be_read_is_unavailable() -> (
+    None
+):
+    error = OperationalError("SELECT 1", {}, Exception("connection refused"))
+    service = SimulationSubmissionService(
+        countries=UnreadableCountries(error),
+        households=UnreadHouseholds(),
+        policies=StoredPolicies(),
+        client_factory=unconfigured_client,
+    )
+
+    with pytest.raises(SubmissionStorageError) as unavailable:
+        service.rerun_report(rerun_input(None, STORED_POLICY_ID, kind="household"))
 
     assert unavailable.value.__cause__ is error
