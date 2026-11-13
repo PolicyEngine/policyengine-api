@@ -9,6 +9,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 REQUIRE_GIT_REF = ".github/scripts/require_git_ref.sh"
 CLEANUP_IMAGES = ".github/scripts/cleanup_cloud_run_images.sh"
@@ -361,3 +363,15 @@ def test_cleanup_fails_when_the_listing_fails(tmp_path: Path) -> None:
     assert calls == []
     assert "::error::Could not list images in " in result.stdout
     assert "Manifests:" not in result.stdout
+
+
+@pytest.mark.parametrize("keep", ["0", "-1", "abc", "1.5"])
+def test_cleanup_rejects_a_keep_below_one_release(tmp_path: Path, keep: str) -> None:
+    result, calls, list_calls = _cleanup(tmp_path, SINGLE_MANIFEST_RELEASES, KEEP=keep)
+
+    assert result.returncode == 1
+    assert calls == []
+    assert list_calls == []
+    assert (
+        f"::error::KEEP must be a whole number of releases, 1 or more; got '{keep}'."
+    ) in result.stdout
