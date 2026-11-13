@@ -61,6 +61,7 @@ RUN_OUTPUT_TABLES = frozenset(
         "intra_decile_impacts",
         "local_authority_impacts",
         "program_statistics",
+        "withheld_area_codes",
     }
 )
 

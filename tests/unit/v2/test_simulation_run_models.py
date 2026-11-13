@@ -55,6 +55,7 @@ COMPARISON_RESULT_TABLES = (
     "intra_decile_impacts",
     "local_authority_impacts",
     "program_statistics",
+    "withheld_area_codes",
 )
 # The tables the simulation service and its Modal workers write. The Public API
 # writes every other table.
@@ -339,6 +340,42 @@ def test_uk_area_impacts_record_disclosure_control() -> None:
                 assert column.nullable
                 assert isinstance(column.type, sa.Float)
         assert f"ck_{table_name}_disclosure_tier" in _check_names(table)
+
+
+def test_withheld_area_codes_list_each_area_a_report_run_held_back() -> None:
+    """One row per UK area that disclosure control withheld from a report run."""
+    withheld = V2_METADATA.tables["withheld_area_codes"]
+
+    assert set(withheld.c.keys()) == {
+        "id",
+        "created_at",
+        "report_run_id",
+        "baseline_simulation_run_id",
+        "reform_simulation_run_id",
+        "area_type",
+        "code",
+    }
+    area_type = withheld.c.area_type
+    assert not area_type.nullable
+    assert isinstance(area_type.type, sa.Enum)
+    assert area_type.type.name == "v2_uk_area_type"
+    assert area_type.type.enums == ["constituency", "local_authority"]
+    assert not withheld.c.code.nullable
+    assert withheld.c.code.type.length == 64
+    assert {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in withheld.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    } == {
+        "uq_withheld_area_codes_run_type_code": (
+            "report_run_id",
+            "area_type",
+            "code",
+        )
+    }
+    relationship = sa.inspect(ReportRun).relationships["withheld_area_codes"]
+    assert relationship.mapper.local_table is withheld
+    assert "delete" in relationship.cascade
 
 
 def test_congressional_district_impacts_record_winner_and_loser_shares() -> None:
