@@ -23,6 +23,7 @@ from sqlalchemy.pool import NullPool
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.privileges import (
+    CATALOG_WRITER_ROLE,
     ColumnPrivilege,
     TablePrivilege,
     declared_privileges,
@@ -327,7 +328,8 @@ def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
 ) -> None:
     """The workers insert and read the rows, the Public API only reads them.
 
-    The simulation service and the Stage 12 role can't read them.
+    The simulation service, the Stage 12 role and the catalog writer can't read
+    them.
     """
     _act_as(connection, managed_v2_roles.simulation_service)
     ids = _create_simulation_rows(connection, public_api_rows)
@@ -380,7 +382,11 @@ def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
         report_run_id=ids["report_run"],
         run_id=ids["run"],
     )
-    for role in (managed_v2_roles.simulation_service, managed_v2_roles.stage12):
+    for role in (
+        managed_v2_roles.simulation_service,
+        managed_v2_roles.stage12,
+        CATALOG_WRITER_ROLE,
+    ):
         _act_as(connection, role)
         _refused(connection, "SELECT count(*) FROM withheld_area_codes")
 
