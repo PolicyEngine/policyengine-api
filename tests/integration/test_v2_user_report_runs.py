@@ -12,8 +12,9 @@ the run the answer names, whichever run is the report's newest.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -21,6 +22,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
@@ -28,6 +30,7 @@ from sqlmodel import Session
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
@@ -44,6 +47,12 @@ from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from policyengine_api.services.v2.report_run_records.database_session import (
+    ReportRunRecordDatabaseSession,
+)
+from policyengine_api.services.v2.report_run_records.services import (
+    ReportRunRecordService,
+)
 from policyengine_api.services.v2.simulation_service.services import (
     SimulationSubmissionService,
 )
@@ -73,7 +82,7 @@ from tests.integration.stored_report_rows import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from uuid import UUID
+    from contextlib import AbstractContextManager
 
     from sqlalchemy import Engine
 
@@ -110,7 +119,7 @@ class JoiningSimulationService:
     With ``joined_run``, every create and re-run answers that run and stores
     nothing, as a request that finds an existing run does. Without it, a
     create stores a new report with a pending run, and a re-run a new pending
-    run of the report, as before.
+    run of the report, as before, marked forced for a forced re-run.
     """
 
     engine: Engine
@@ -165,6 +174,7 @@ class JoiningSimulationService:
                     versions=CURRENT_VERSIONS,
                     status="pending",
                     created_at=STARTED_AT + timedelta(days=30),
+                    forced=rerun.force,
                 ),
             )
         return StartedReportRun(report_run_id=run_ids.report_run_id)
@@ -194,10 +204,25 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
     engine.dispose()
 
 
+class UnwritableRecordSession(ReportRunRecordDatabaseSession):
+    """Read as usual, but fail every transaction, as an unavailable database does."""
+
+    def transaction(self) -> AbstractContextManager[Session]:
+        statement = "INSERT INTO user_report_run_associations"
+        raise OperationalError(statement, {}, Exception("connection refused"))
+
+
 def client_for(
-    sessions: Any, simulation_service: JoiningSimulationService
+    sessions: Any,
+    simulation_service: JoiningSimulationService,
+    *,
+    record_session: ReportRunRecordDatabaseSession | None = None,
 ) -> TestClient:
-    """Serve the report routes as the runtime role, through the stand-in."""
+    """Serve the report routes as the runtime role, through the stand-in.
+
+    Users' report runs are recorded through ``record_session``, by default
+    the runtime role's.
+    """
     submissions = SimulationSubmissionService(
         countries=V2CountryService(CountryDatabaseSession(sessions)),
         households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
@@ -214,6 +239,9 @@ def client_for(
             StoredReportDatabaseSession(sessions),
             current_versions=current_versions,
             submissions=submissions,
+            run_records=ReportRunRecordService(
+                record_session or ReportRunRecordDatabaseSession(sessions)
+            ),
         ),
     )
     settings = RouteImplementationSettings(
@@ -369,3 +397,330 @@ def test_a_budget_window_rerun_answers_the_window_run_it_joined(
     item = response.json()["result"]["item"]
     assert item["kind"] == "budget_window"
     assert item["run"]["id"] == str(window_run_ids[0])
+
+
+@dataclass(frozen=True)
+class RunRecord:
+    """A user's stored request for a report run."""
+
+    user_id: UUID
+    report_run_id: UUID
+    trigger: str
+    requested_at: datetime
+
+
+@pytest.fixture
+def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
+    """Name signed-out browsers' users, and delete them and their records after."""
+    browser_ids = [uuid4() for _ in range(2)]
+    yield browser_ids
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": browser_ids}
+        )
+
+
+def as_browser(browser_id: UUID) -> dict[str, str]:
+    return {UNAUTHENTICATED_USER_HEADER: str(browser_id)}
+
+
+def stored_records(engine: Engine, user_ids: list[UUID]) -> list[RunRecord]:
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT user_id, report_run_id, trigger, requested_at FROM "
+                "user_report_run_associations WHERE user_id = ANY(:ids) "
+                "ORDER BY requested_at, user_id"
+            ),
+            {"ids": user_ids},
+        ).all()
+    return [
+        RunRecord(
+            user_id=row.user_id,
+            report_run_id=row.report_run_id,
+            trigger=row.trigger,
+            requested_at=row.requested_at,
+        )
+        for row in rows
+    ]
+
+
+def store_saved_report(engine: Engine, *, user_id: UUID, report_id: UUID) -> UUID:
+    """Save the report for the user, with no last run time, and return its ID."""
+    saved_report_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, user_type) VALUES (:id, 'unauthenticated') "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {"id": user_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_report_associations (id, user_id, report_id, "
+                "country_id, name) VALUES (:id, :user_id, :report_id, 'us', "
+                "'My report')"
+            ),
+            {"id": saved_report_id, "user_id": user_id, "report_id": report_id},
+        )
+    return saved_report_id
+
+
+def saved_report_last_run_at(engine: Engine, saved_report_id: UUID) -> datetime | None:
+    with engine.begin() as connection:
+        return connection.execute(
+            text("SELECT last_run_at FROM user_report_associations WHERE id = :id"),
+            {"id": saved_report_id},
+        ).scalar_one()
+
+
+def test_a_create_with_a_signed_out_browsers_credential_records_its_run(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    asked_at = datetime.now(UTC)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us",
+        json=report_body(catalog.policy_id),
+        headers=as_browser(browsers[0]),
+    )
+
+    assert response.status_code == 201, response.text
+    run_id = UUID(response.json()["result"]["item"]["run"]["id"])
+    (record,) = stored_records(owner_engine, browsers)
+    assert (record.user_id, record.report_run_id, record.trigger) == (
+        browsers[0],
+        run_id,
+        "initial",
+    )
+    assert asked_at <= record.requested_at <= datetime.now(UTC)
+
+
+def test_two_users_who_join_one_run_each_record_it(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    with owner_engine.begin() as connection:
+        report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
+            connection, catalog, joined_status="pending"
+        )
+    simulation_service = JoiningSimulationService(
+        owner_engine,
+        catalog,
+        joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
+    )
+    client = client_for(runtime_sessions, simulation_service)
+
+    answers = [
+        client.post(
+            "/v2/reports?country_id=us",
+            json=report_body(catalog.policy_id),
+            headers=as_browser(browser_id),
+        )
+        for browser_id in browsers
+    ]
+
+    assert [answer.status_code for answer in answers] == [201, 201]
+    records = stored_records(owner_engine, browsers)
+    assert {(record.user_id, record.report_run_id) for record in records} == {
+        (browsers[0], joined_run_id),
+        (browsers[1], joined_run_id),
+    }
+
+
+def test_a_user_asking_again_for_a_run_they_have_keeps_their_first_record(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    with owner_engine.begin() as connection:
+        report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
+            connection, catalog, joined_status="pending"
+        )
+    simulation_service = JoiningSimulationService(
+        owner_engine,
+        catalog,
+        joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
+    )
+    client = client_for(runtime_sessions, simulation_service)
+    first = client.post(
+        "/v2/reports?country_id=us",
+        json=report_body(catalog.policy_id),
+        headers=as_browser(browsers[0]),
+    )
+    (first_record,) = stored_records(owner_engine, browsers)
+
+    again = client.post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us",
+        json={},
+        headers=as_browser(browsers[0]),
+    )
+
+    assert (first.status_code, again.status_code) == (201, 201)
+    assert stored_records(owner_engine, browsers) == [first_record]
+    assert first_record.trigger == "initial"
+
+
+def test_a_rerun_records_a_manual_request_for_the_run_it_ended_on(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us",
+        json={"force": True},
+        headers=as_browser(browsers[0]),
+    )
+
+    assert response.status_code == 201, response.text
+    run_id = UUID(response.json()["result"]["item"]["run"]["id"])
+    (record,) = stored_records(owner_engine, browsers)
+    assert (record.report_run_id, record.trigger) == (run_id, "manual")
+    (rerun,) = simulation_service.reruns
+    assert rerun.force is True
+
+
+def test_a_request_without_a_user_credential_records_nothing(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
+    )
+
+    assert response.status_code == 201, response.text
+    run_id = response.json()["result"]["item"]["run"]["id"]
+    with owner_engine.begin() as connection:
+        recorded = connection.execute(
+            text(
+                "SELECT count(*) FROM user_report_run_associations WHERE "
+                "report_run_id = :id"
+            ),
+            {"id": run_id},
+        ).scalar_one()
+    assert recorded == 0
+
+
+def test_a_browser_credential_naming_a_signed_in_user_is_refused_before_asking(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    signed_in_user_id = browsers[0]
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, user_type, primary_country) VALUES "
+                "(:id, 'standard', 'us')"
+            ),
+            {"id": signed_in_user_id},
+        )
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us",
+        json=report_body(catalog.policy_id),
+        headers=as_browser(signed_in_user_id),
+    )
+
+    assert response.status_code == 401, response.text
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert simulation_service.reports == []
+    assert stored_records(owner_engine, browsers) == []
+
+
+def test_a_malformed_browser_credential_is_refused_before_asking(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us",
+        json=report_body(catalog.policy_id),
+        headers={UNAUTHENTICATED_USER_HEADER: "not-a-uuid"},
+    )
+
+    assert response.status_code == 401, response.text
+    assert simulation_service.reports == []
+
+
+def test_a_saved_reports_last_run_at_is_its_owners_newest_request(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    owner_id, other_user_id = browsers
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    saved_report_id = store_saved_report(
+        owner_engine, user_id=owner_id, report_id=report.report_id
+    )
+    others_saved_report_id = store_saved_report(
+        owner_engine, user_id=other_user_id, report_id=report.report_id
+    )
+    client = client_for(
+        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+    )
+
+    # Forced, so each re-run is a new run beside the others.
+    for _ in range(2):
+        response = client.post(
+            f"/v2/reports/{report.report_id}/runs?country_id=us",
+            json={"force": True},
+            headers=as_browser(owner_id),
+        )
+        assert response.status_code == 201, response.text
+
+    newest_request = max(
+        record.requested_at for record in stored_records(owner_engine, [owner_id])
+    )
+    assert saved_report_last_run_at(owner_engine, saved_report_id) == newest_request
+    assert saved_report_last_run_at(owner_engine, others_saved_report_id) is None
+
+
+def test_a_run_whose_record_cannot_be_written_answers_503_naming_it(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+
+    response = client_for(
+        runtime_sessions,
+        simulation_service,
+        record_session=UnwritableRecordSession(runtime_sessions),
+    ).post(
+        "/v2/reports?country_id=us",
+        json=report_body(catalog.policy_id),
+        headers=as_browser(browsers[0]),
+    )
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    report_id = catalog.report_ids[-1]
+    with owner_engine.begin() as connection:
+        run_id = connection.execute(
+            text("SELECT id FROM report_runs WHERE report_id = :id"),
+            {"id": report_id},
+        ).scalar_one()
+    assert body["report_id"] == str(report_id)
+    assert body["report_run_id"] == str(run_id)
+    assert f"run_id={run_id}" in body["message"]
+    assert stored_records(owner_engine, browsers) == []

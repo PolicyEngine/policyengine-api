@@ -215,6 +215,7 @@ class V2StoredReportService:
         *,
         current_versions: Callable[[str], PackageVersions],
         submissions: SimulationServiceClient | None = None,
+        run_records: object | None = None,
     ) -> None:
         """Read through ``database_session``; create through ``submissions``.
 
@@ -226,6 +227,7 @@ class V2StoredReportService:
         self._database_session = database_session
         self._current_versions = current_versions
         self._submissions = submissions
+        self._run_records = run_records
 
     def _configured_submissions(self) -> SimulationServiceClient:
         """Return the submissions, or raise SubmissionsNotConfiguredError."""
