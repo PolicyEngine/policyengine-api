@@ -222,7 +222,7 @@ def _record_request(recording: _RunRecording, request: ReportRunRequest) -> None
     except Exception as error:
         raise ReportRunNotRecordedError(
             report_id=request.report_id,
-            report_run_id=request.report_run_ids[0],
+            run_id=request.run_id,
             country_id=request.country_id,
         ) from error
 
@@ -416,7 +416,8 @@ class V2StoredReportService:
         budget window's budget-window run). With a ``requester``, it is
         checked before the simulation service is asked, and the request is
         recorded for its user (trigger ``initial``) once the service has
-        answered; a budget window's request is not recorded yet. Raise the
+        answered: that run, or each year's report run of a budget window's.
+        Raise the
         recorder's check's errors, the submission's errors (see
         ``SimulationSubmissionService``), ReportRunNotRecordedError when the
         request could not be recorded, and CreatedReportUnreadableError,
@@ -427,32 +428,36 @@ class V2StoredReportService:
         submissions = self._configured_submissions()
         requested_at = utc_now()
         recording = self._run_recording(requester)
-        recorded_run_ids: tuple[UUID, ...] = ()
         if report_input.kind == "budget_window":
             window = submissions.submit_budget_window(report_input)
-            report_id, run_id = window.report_id, window.budget_window_run_id
+            request = ReportRunRequest(
+                country_id=report_input.country_id,
+                report_id=window.report_id,
+                budget_window_run_id=window.budget_window_run_id,
+                requested_at=requested_at,
+                trigger=ReportRunTrigger.INITIAL,
+            )
         else:
             submitted = (
                 submissions.submit_household_report(report_input)
                 if report_input.kind == "household"
                 else submissions.submit_report(report_input)
             )
-            report_id, run_id = submitted.report_id, submitted.report_run_id
-            recorded_run_ids = (submitted.report_run_id,)
-        if recording is not None and recorded_run_ids:
-            _record_request(
-                recording,
-                ReportRunRequest(
-                    country_id=report_input.country_id,
-                    report_id=report_id,
-                    report_run_ids=recorded_run_ids,
-                    requested_at=requested_at,
-                    trigger=ReportRunTrigger.INITIAL,
-                ),
+            request = ReportRunRequest(
+                country_id=report_input.country_id,
+                report_id=submitted.report_id,
+                report_run_id=submitted.report_run_id,
+                requested_at=requested_at,
+                trigger=ReportRunTrigger.INITIAL,
             )
+        report_id = request.report_id
+        if recording is not None:
+            _record_request(recording, request)
         try:
             return self.get_report(
-                country_id=report_input.country_id, report_id=report_id, run_id=run_id
+                country_id=report_input.country_id,
+                report_id=report_id,
+                run_id=request.run_id,
             )
         except Exception as error:
             # The report exists whatever failed, so the caller gets its ID.
@@ -479,47 +484,56 @@ class V2StoredReportService:
         sides are always calculated again. With a ``requester``, it is
         checked before the simulation service is asked, and the request is
         recorded for its user (trigger ``manual``, forced or not) once the
-        service has answered; a budget window's request is not recorded yet.
-        Raise StoredReportNotFoundError when the country has no such report,
+        service has answered: that run, or each year's report run of a budget
+        window's. Raise StoredReportNotFoundError when the country has no such
+        report,
         ReportStorageError when it cannot be read, the recorder's check's
         errors, the submission's checks' and the simulation service's errors
         (see ``SimulationSubmissionService.rerun_report``),
         ReportRunNotRecordedError when the request could not be recorded, and
         RerunReportUnreadableError, caused by the read's own error, when the
-        report cannot be read back once its run was started.
+        report cannot be read back once its run was started, or when a budget
+        window's answer names no budget-window run.
         """
         submissions = self._configured_submissions()
         requested_at = utc_now()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
+        kind = report_kind(stored.report)
         recording = self._run_recording(requester)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
                 report_id=report_id,
-                kind=report_kind(stored.report),
+                kind=kind,
                 force=force,
                 policy_ids=report_policy_ids(stored),
             )
         )
-        if started.budget_window_run_id is not None:
-            run_id = started.budget_window_run_id
+        if kind != "budget_window":
+            request = ReportRunRequest(
+                country_id=country_id,
+                report_id=report_id,
+                report_run_id=started.report_run_id,
+                requested_at=requested_at,
+                trigger=ReportRunTrigger.MANUAL,
+            )
+        elif started.budget_window_run_id is not None:
+            request = ReportRunRequest(
+                country_id=country_id,
+                report_id=report_id,
+                budget_window_run_id=started.budget_window_run_id,
+                requested_at=requested_at,
+                trigger=ReportRunTrigger.MANUAL,
+            )
         else:
-            run_id = started.report_run_id
-            if recording is not None:
-                _record_request(
-                    recording,
-                    ReportRunRequest(
-                        country_id=country_id,
-                        report_id=report_id,
-                        report_run_ids=(started.report_run_id,),
-                        requested_at=requested_at,
-                        trigger=ReportRunTrigger.MANUAL,
-                    ),
-                )
+            # The run exists, but the answer doesn't say which window run.
+            raise RerunReportUnreadableError(report_id=report_id, country_id=country_id)
+        if recording is not None:
+            _record_request(recording, request)
         try:
             return self.get_report(
-                country_id=country_id, report_id=report_id, run_id=run_id
+                country_id=country_id, report_id=report_id, run_id=request.run_id
             )
         except Exception as error:
             # The run exists whatever failed, so the caller reads it.

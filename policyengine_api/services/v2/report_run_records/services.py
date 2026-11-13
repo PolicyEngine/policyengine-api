@@ -32,6 +32,9 @@ from policyengine_api.services.v2.report_run_records.database_connectors import 
     creates as record_creates,
 )
 from policyengine_api.services.v2.report_run_records.database_connectors import (
+    reads as record_reads,
+)
+from policyengine_api.services.v2.report_run_records.database_connectors import (
     updates as record_updates,
 )
 from policyengine_api.services.v2.report_run_records.types import (
@@ -88,7 +91,9 @@ class ReportRunRecordService:
     def record(self, requester: CheckedRequester, request: ReportRunRequest) -> None:
         """Record the request for each run it ended on, in one transaction.
 
-        The record names the user the check found, held ``FOR SHARE`` so a
+        A budget window's request records each year's report run of its
+        budget-window run, read in the same transaction. The record names the
+        user the check found, held ``FOR SHARE`` so a
         sign-in merging or converting it waits, and kept as it is when it
         was converted in place meanwhile; with none found, the principal's
         user is provisioned as any user write provisions it. A run the user
@@ -124,7 +129,13 @@ class ReportRunRecordService:
                         requested_at=request.requested_at,
                         trigger=request.trigger,
                     )
-                    for report_run_id in request.report_run_ids
+                    for report_run_id in (
+                        (request.report_run_id,)
+                        if request.report_run_id is not None
+                        else record_reads.read_budget_window_year_run_ids(
+                            session, budget_window_run_id=request.run_id
+                        )
+                    )
                 ],
             )
             if recorded:

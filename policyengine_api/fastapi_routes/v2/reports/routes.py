@@ -199,7 +199,7 @@ def _not_recorded(error: ReportRunNotRecordedError) -> JSONResponse:
         ReportRunNotRecordedResponse(
             message=str(error),
             report_id=error.report_id,
-            report_run_id=error.report_run_id,
+            run_id=error.run_id,
         ),
     )
 
@@ -214,7 +214,7 @@ def _create_report(
     A report the simulation service created answers with its ``report_id``
     when it cannot be read back (502), and when the service failed its run
     and answered 503; one whose request could not be recorded for its user
-    answers 503 with its ``report_id`` and ``report_run_id``. A requester's
+    answers 503 with its ``report_id`` and ``run_id``. A requester's
     unauthenticated credential naming a signed-in user answers 401. Every
     other failure is raised, for the route's error mappings to answer.
     """
@@ -265,7 +265,7 @@ def _rerun_report(
     the run it names, a report that cannot be read back once its run
     started answers 502 with its ``report_id``, and a run whose request
     could not be recorded for its user answers 503 with its ``report_id``
-    and ``report_run_id``. A requester's unauthenticated credential naming a
+    and ``run_id``. A requester's unauthenticated credential naming a
     signed-in user answers 401. Every other failure is raised, for the
     route's error mappings to answer.
     """
@@ -337,7 +337,8 @@ def _add_report_run_routes(
             "run_id to follow the run. With a user credential (a bearer access "
             "token, or the unauthenticated-user header of a signed-out browser), "
             "the request is recorded for that user, naming the run it ended on "
-            "(trigger manual); without one, nothing is recorded."
+            "(trigger manual), or each year's report run of a budget window's "
+            "run; without one, nothing is recorded."
         ),
     )
     def rerun_report(
@@ -420,8 +421,8 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "With a user credential (a bearer access token, or the "
             "unauthenticated-user header of a signed-out browser), the request is "
             "recorded for that user, naming the run it ended on (trigger "
-            "initial); without one, nothing is recorded. A budget window's "
-            "request is not recorded yet. A created report "
+            "initial), or each year's report run of a budget window's run; "
+            "without one, nothing is recorded. A created report "
             "that cannot be read back answers 502 with its report_id, and one "
             "whose run the simulation service failed before answering 503 "
             "answers 503 with its report_id."

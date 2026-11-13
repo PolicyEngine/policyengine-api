@@ -22,18 +22,37 @@ if TYPE_CHECKING:
 class ReportRunRequest:
     """One user's request for a run of a report: what to record.
 
-    ``report_run_ids`` are the report runs the request ended on, created or
-    joined; ``requested_at`` is when the Public API received the request,
-    the time the user sees; ``trigger`` is ``initial`` for a create and
-    ``manual`` for a re-run. ``country_id`` is the report's country, the
-    primary country of a signed-in user provisioned by this request.
+    The request ended on, created or joined, either an economy or household
+    report's report run (``report_run_id``) or a budget window's
+    budget-window run (``budget_window_run_id``), whose every year's report
+    run is recorded; exactly one is set. ``requested_at`` is when the Public
+    API received the request, the time the user sees; ``trigger`` is
+    ``initial`` for a create and ``manual`` for a re-run. ``country_id`` is
+    the report's country, the primary country of a signed-in user
+    provisioned by this request.
     """
 
     country_id: str
     report_id: UUID
-    report_run_ids: tuple[UUID, ...]
     requested_at: datetime
     trigger: ReportRunTrigger
+    report_run_id: UUID | None = None
+    budget_window_run_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        """Require exactly one of the report run and the budget-window run."""
+        if (self.report_run_id is None) == (self.budget_window_run_id is None):
+            msg = "A request names a report run or a budget-window run, not both"
+            raise ValueError(msg)
+
+    @property
+    def run_id(self) -> UUID:
+        """The run a read of the report names to answer this request's run."""
+        run_id = self.report_run_id or self.budget_window_run_id
+        if run_id is None:  # pragma: no cover  # __post_init__ requires one
+            msg = "A request names a run"
+            raise ValueError(msg)
+        return run_id
 
 
 @dataclass(frozen=True)

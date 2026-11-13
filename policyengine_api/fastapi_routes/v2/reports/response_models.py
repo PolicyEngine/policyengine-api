@@ -392,15 +392,15 @@ class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
 class ReportRunNotRecordedResponse(V2ErrorResponse):
     """The 503 answer when a user's request for a run could not be recorded.
 
-    The simulation service created or joined the run ``report_run_id`` of
-    ``report_id``, so the caller reads it with ``GET
-    /v2/reports/{report_id}?run_id={report_run_id}``. Sending the request
-    again records it, once the simulation service finds runs by key, since
-    the request then ends on the same run.
+    The simulation service created or joined the run ``run_id`` of
+    ``report_id`` (a report run, or a budget window's budget-window run), so
+    the caller reads it with ``GET /v2/reports/{report_id}?run_id={run_id}``.
+    Sending the request again records it, once the simulation service finds
+    runs by key, since the request then ends on the same run.
     """
 
     report_id: UUID
-    report_run_id: UUID
+    run_id: UUID
 
 
 UNAUTHENTICATED_REQUESTER = (
@@ -414,8 +414,8 @@ MACHINE_REQUESTER = (
 )
 NOT_RECORDED = (
     "Or the simulation service started the run, but the user's request for it "
-    "could not be recorded: the answer gives its report_id and report_run_id, "
-    "to read with GET /v2/reports/{report_id}?run_id={report_run_id}."
+    "could not be recorded: the answer gives its report_id and run_id, to read "
+    "with GET /v2/reports/{report_id}?run_id={run_id}."
 )
 
 

@@ -74,3 +74,15 @@ def read_newest_report_request(
     )
     newest_request: datetime | None = session.execute(statement).scalar_one()
     return newest_request
+
+
+def read_budget_window_year_run_ids(
+    session: Session, *, budget_window_run_id: UUID
+) -> list[UUID]:
+    """Return the report run of each year of the budget-window run, in year order."""
+    statement = (
+        select(col(ReportRun.id))
+        .where(col(ReportRun.budget_window_run_id) == budget_window_run_id)
+        .order_by(col(ReportRun.year), col(ReportRun.id))
+    )
+    return list(session.scalars(statement).all())
