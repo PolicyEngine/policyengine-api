@@ -49,6 +49,7 @@ from policyengine_api.services.v2.identity.services import (
 )
 from policyengine_api.services.v2.identity.types import (
     AccountConversionOutcome,
+    UnauthenticatedPrincipal,
     UserPrincipal,
 )
 from policyengine_api.services.v2.policies.database_session import (
@@ -74,6 +75,14 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from policyengine_api.services.v2.user_reports.database_session import (
+    UserReportDatabaseSession,
+)
+from policyengine_api.services.v2.user_reports.services import V2UserReportService
+from policyengine_api.services.v2.user_reports.types import (
+    UserReportCreateFields,
+    UserReportUpdateInput,
+)
 from tests.fixtures.economy_results import us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
@@ -87,6 +96,7 @@ from tests.integration.stored_report_rows import (
     store_report_run,
     store_year_simulations,
 )
+from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -824,3 +834,83 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
         saved_report_last_run_at(owner_engine, browser_saved_report_id)
         == browser_asked_at[shared_run_id]
     )
+
+
+def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> None:
+    """Run the report again, forced so each re-run is a new run, as the browser."""
+    response = client.post(
+        f"/v2/reports/{report_id}/runs?country_id=us",
+        json={"force": True},
+        headers=as_browser(browser_id),
+    )
+    assert response.status_code == 201, response.text
+
+
+def newest_request(engine: Engine, user_id: UUID) -> datetime:
+    return max(record.requested_at for record in stored_records(engine, [user_id]))
+
+
+def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    owner_id = browsers[0]
+    owner = UnauthenticatedPrincipal(user_id=owner_id)
+    with owner_engine.begin() as connection:
+        first_report = store_report(connection, catalog)
+        second_report = store_report(connection, catalog)
+        never_run_report = store_report(connection, catalog)
+    client = client_for(
+        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+    )
+    saved_reports = V2UserReportService(
+        UserReportDatabaseSession(runtime_sessions), default_legacy_references()
+    )
+    callers_time = datetime(2020, 1, 1, tzinfo=UTC)
+    rerun_as_browser(client, first_report.report_id, owner_id)
+    first_request = newest_request(owner_engine, owner_id)
+
+    saved = saved_reports.create_user_report(
+        principal=owner,
+        association_input=UserReportCreateFields(
+            country_id="us",
+            report_id=first_report.report_id,
+            last_run_at=callers_time,
+        ),
+    )
+    never_run = saved_reports.create_user_report(
+        principal=owner,
+        association_input=UserReportCreateFields(
+            country_id="us",
+            report_id=never_run_report.report_id,
+            last_run_at=callers_time,
+        ),
+    )
+    rerun_as_browser(client, second_report.report_id, owner_id)
+    second_request = newest_request(owner_engine, owner_id)
+    repointed = saved_reports.patch_user_report(
+        principal=owner,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserReportUpdateInput(report_id=second_report.report_id),
+    )
+    given_a_time = saved_reports.patch_user_report(
+        principal=owner,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserReportUpdateInput(last_run_at=callers_time),
+    )
+    renamed = saved_reports.patch_user_report(
+        principal=owner,
+        country_id="us",
+        association_id=saved.id,
+        association_input=UserReportUpdateInput(name="Renamed"),
+    )
+
+    assert saved.last_run_at == first_request
+    assert never_run.last_run_at is None
+    assert repointed.last_run_at == second_request
+    assert given_a_time.last_run_at == second_request
+    assert renamed.last_run_at == second_request
