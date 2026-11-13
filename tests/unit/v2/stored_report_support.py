@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         V2StoredReportResourceService,
         V2StoredSimulationResourceService,
     )
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
@@ -150,6 +151,8 @@ class FakeReportService:
     listed: tuple[ReportSummaryRead, ...] = ()
     error: Exception | None = None
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    # The user each create or re-run named, None for a request naming none.
+    requesters: list[AccountPrincipal | None] = field(default_factory=list)
 
     def _answer(self, name: str, **arguments: Any) -> None:
         self.calls.append((name, arguments))
@@ -170,8 +173,14 @@ class FakeReportService:
         self._answer("list_reports", country_id=country_id, report_ids=report_ids)
         return self.listed
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(
+        self,
+        report_input: EconomyReportCreationInput,
+        *,
+        requester: AccountPrincipal | None = None,
+    ) -> ReportRead:
         self._answer("create_report", report_input=report_input)
+        self.requesters.append(requester)
         return self.report
 
 

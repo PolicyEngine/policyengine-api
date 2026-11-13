@@ -25,6 +25,7 @@ from tests.unit.v2.stored_report_support import (
 )
 
 if TYPE_CHECKING:
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.stored_reports.types import (
         StoredReportRead,
         StoredReportRunsRead,
@@ -113,11 +114,17 @@ class FakeReportRunService(FakeReportService):
     rerun: StoredReportRead | None = None
 
     def rerun_report(
-        self, *, country_id: str, report_id: UUID, force: bool
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        force: bool,
+        requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         self._answer(
             "rerun_report", country_id=country_id, report_id=report_id, force=force
         )
+        self.requesters.append(requester)
         return self.report if self.rerun is None else self.rerun
 
     def list_report_runs(
