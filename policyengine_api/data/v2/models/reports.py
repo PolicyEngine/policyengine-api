@@ -79,11 +79,12 @@ class Report(TimestampedModel, table=True):
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
-    the dataset name, region code and year both sides share, the budget
-    window's size and the options), in the format ``key_version`` names; identical
-    requests share the row. ``dataset_independent_key`` is the same without
-    the dataset and the options, which a national report shares with its
-    local-area report. Reports created before the keys have none.
+    the dataset name, region code, year and SPM selection both sides share,
+    and the budget window's size; request options such as ``include_cliffs``
+    are in no key), in the format ``key_version`` names; identical requests
+    share the row. ``dataset_independent_key`` is the same without the
+    dataset, which a national report shares with its local-area report.
+    Reports created before the keys have none.
     """
 
     __tablename__ = "reports"

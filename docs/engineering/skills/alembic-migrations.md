@@ -841,7 +841,7 @@ share simulations, reports and runs:
 - `simulations` and `reports` gain `key_version` and `definition_key`, and
   `reports` also `dataset_independent_key`: the simulation service's SHA-256
   of what the row calculates (and, for the report key shared across datasets,
-  the same without the dataset and options), in the key format
+  the same without the dataset), in the key format
   `key_version` names. They are nullable, so rows from before the keys stay
   unkeyed, and each table is unique on `(key_version, definition_key)`;
   PostgreSQL's unique constraint allows any number of unkeyed rows. Checks
