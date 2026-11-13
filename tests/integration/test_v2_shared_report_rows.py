@@ -315,10 +315,10 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
     """The app looks a local-area report up by the national report's key.
 
     The key holds its own key version, so the lookup names the key alone, and
-    an index on it serves the lookup.
+    the index on that column alone serves it.
     """
     _act_as(connection, managed_v2_roles.simulation_service)
-    for key in (NATIONAL_KEY, LOCAL_AREA_KEY):
+    stored_report_ids = {
         _inserted_id(
             connection,
             FIND_OR_CREATE_REPORT,
@@ -327,10 +327,14 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
             key=key,
             dataset_independent_key=DATASET_INDEPENDENT_KEY,
         )
+        for key in (NATIONAL_KEY, LOCAL_AREA_KEY)
+    }
     _act_as(connection, managed_v2_roles.runtime)
     lookup = "SELECT id FROM reports WHERE dataset_independent_key = :key"
 
-    found = connection.execute(text(lookup), {"key": DATASET_INDEPENDENT_KEY}).scalars()
+    found_report_ids = set(
+        connection.execute(text(lookup), {"key": DATASET_INDEPENDENT_KEY}).scalars()
+    )
     connection.execute(text("SET LOCAL enable_seqscan = off"))
     plan = "\n".join(
         connection.execute(
@@ -338,8 +342,9 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
         ).scalars()
     )
 
-    assert len(list(found)) == 2
-    assert "ix_reports_dataset_independent_key" in plan
+    assert found_report_ids == stored_report_ids
+    assert None not in stored_report_ids
+    assert "using ix_reports_dataset_independent_key on reports" in plan
 
 
 @pytest.mark.parametrize(
