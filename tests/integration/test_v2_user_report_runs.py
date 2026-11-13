@@ -43,6 +43,14 @@ from policyengine_api.services.v2.households.database_session import (
     HouseholdDatabaseSession,
 )
 from policyengine_api.services.v2.households.services import V2HouseholdService
+from policyengine_api.services.v2.identity.services import (
+    convert_unauthenticated_user_in_session,
+    resolve_principal_user_in_session,
+)
+from policyengine_api.services.v2.identity.types import (
+    AccountConversionOutcome,
+    UserPrincipal,
+)
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
@@ -724,3 +732,95 @@ def test_a_run_whose_record_cannot_be_written_answers_503_naming_it(
     assert body["report_run_id"] == str(run_id)
     assert f"run_id={run_id}" in body["message"]
     assert stored_records(owner_engine, browsers) == []
+
+
+def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    browser_id = browsers[0]
+    with owner_engine.begin() as connection:
+        alone_report, alone_run_id, _ = store_joined_and_newer_forced_run(
+            connection, catalog, joined_status="pending"
+        )
+        shared_report, shared_run_id, _ = store_joined_and_newer_forced_run(
+            connection, catalog, joined_status="pending"
+        )
+    account = UserPrincipal(issuer="https://users.example.test/", subject="auth0|merge")
+    with runtime_sessions.begin() as session:
+        account_id = resolve_principal_user_in_session(
+            session, account, country_id="us"
+        ).user_id
+    browsers.append(account_id)
+    account_asked_at = datetime(2026, 1, 1, tzinfo=UTC)
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO user_report_run_associations (id, user_id, "
+                "report_run_id, requested_at, trigger) VALUES (:id, :user_id, "
+                ":run_id, :requested_at, 'initial')"
+            ),
+            {
+                "id": uuid4(),
+                "user_id": account_id,
+                "run_id": shared_run_id,
+                "requested_at": account_asked_at,
+            },
+        )
+    account_saved_report_id = store_saved_report(
+        owner_engine, user_id=account_id, report_id=alone_report.report_id
+    )
+    browser_saved_report_id = store_saved_report(
+        owner_engine, user_id=browser_id, report_id=shared_report.report_id
+    )
+    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    client = client_for(runtime_sessions, simulation_service)
+    for report, run_id in (
+        (alone_report, alone_run_id),
+        (shared_report, shared_run_id),
+    ):
+        simulation_service.joined_run = JoinedRun(
+            report_id=report.report_id, report_run_id=run_id
+        )
+        response = client.post(
+            "/v2/reports?country_id=us",
+            json=report_body(catalog.policy_id),
+            headers=as_browser(browser_id),
+        )
+        assert response.status_code == 201, response.text
+    browser_asked_at = {
+        record.report_run_id: record.requested_at
+        for record in stored_records(owner_engine, [browser_id])
+    }
+
+    with runtime_sessions.begin() as session:
+        conversion = convert_unauthenticated_user_in_session(
+            session,
+            unauthenticated_user_id=browser_id,
+            principal=account,
+            country_id="us",
+        )
+
+    assert conversion.outcome is AccountConversionOutcome.MERGED
+    records = stored_records(owner_engine, [account_id, browser_id])
+    # A run the account had already asked for keeps the account's record.
+    assert {
+        (record.user_id, record.report_run_id, record.requested_at)
+        for record in records
+    } == {
+        (account_id, alone_run_id, browser_asked_at[alone_run_id]),
+        (account_id, shared_run_id, account_asked_at),
+    }
+    assert {record.trigger for record in records} == {"initial"}
+    # The account's saved report takes the time of the request that moved in;
+    # the browser's moved saved report keeps its own.
+    assert (
+        saved_report_last_run_at(owner_engine, account_saved_report_id)
+        == browser_asked_at[alone_run_id]
+    )
+    assert (
+        saved_report_last_run_at(owner_engine, browser_saved_report_id)
+        == browser_asked_at[shared_run_id]
+    )
