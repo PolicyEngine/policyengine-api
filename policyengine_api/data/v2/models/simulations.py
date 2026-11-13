@@ -54,10 +54,11 @@ class Simulation(TimestampedModel, table=True):
     exists.
 
     The simulation service finds a simulation by ``definition_key``, the
-    SHA-256 of what it calculates (its country, type, policy, dynamic,
-    dataset name, region code, year and filter, or its household), in the format
-    ``key_version`` names; identical requests share the row. Simulations
-    created before the keys have none and are never found by key.
+    SHA-256 of everything that changes its numbers (its country, type,
+    policy, dynamic, dataset name, region code, year, filter and SPM
+    selection, or its household), in the format ``key_version`` names;
+    identical requests share the row. Simulations created before the keys
+    have none and are never found by key.
     """
 
     __tablename__ = "simulations"

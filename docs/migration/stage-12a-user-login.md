@@ -663,7 +663,8 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   first deletes users' saved work. From the head, the later revisions'
   downgrades run first: the shared reports revision (`94dc43079186`) drops
   every user's report-run record, every simulation and report key, the runs'
-  `forced` markers and the one-unfailed-run indexes, the
+  `forced` markers, the window runs' .py versions and the one-unfailed-run
+  indexes, the
   user type changes revision (`970be5d29283`) drops every recorded change,
   the user types revision (`617f531f1506`) needs no
   author or admin, and the simulation runs revision (`1356f658347d`) needs
