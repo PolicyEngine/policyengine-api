@@ -564,10 +564,11 @@ class LocalAuthorityImpact(UKAreaImpactBase, table=True):
 class WithheldAreaCode(IdentifiedModel, table=True):
     """A UK area whose results disclosure control withheld from a report run.
 
-    One row per report run, area type and area code. Every local-area run that
-    succeeds records its list, so a succeeded run without rows withheld none.
-    The withheld area has no row in ``constituency_impacts`` or
-    ``local_authority_impacts``.
+    One row per report run, area type and area code. The withheld area has no
+    row in ``constituency_impacts`` or ``local_authority_impacts``. The table
+    doesn't record whether a run's list was written: no rows means no area was
+    withheld only for a run whose writer records the list, and runs written
+    before the Modal workers wrote this table have no rows either.
     """
 
     __tablename__ = "withheld_area_codes"

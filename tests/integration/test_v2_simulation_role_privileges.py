@@ -322,9 +322,13 @@ def test_modal_workers_write_their_run_status_and_results_only(
         _refused(connection, statement, id=ids[run_key])
 
 
-def test_modal_workers_record_withheld_area_codes_that_only_the_public_api_reads(
+def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
     connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
+    """The workers insert and read the rows, the Public API only reads them.
+
+    The simulation service and the Stage 12 role can't read them.
+    """
     _act_as(connection, managed_v2_roles.simulation_service)
     ids = _create_simulation_rows(connection, public_api_rows)
     _act_as(connection, managed_v2_roles.modal_worker)
@@ -339,6 +343,13 @@ def test_modal_workers_record_withheld_area_codes_that_only_the_public_api_reads
         reform_simulation_run_id=ids["run"],
         area_type="constituency",
         code="E14001063",
+    )
+    assert (
+        connection.execute(
+            text("SELECT count(*) FROM withheld_area_codes WHERE report_run_id = :id"),
+            {"id": ids["report_run"]},
+        ).scalar_one()
+        == 1
     )
 
     # Once written, a withheld code is never changed or removed by the workers.
@@ -369,8 +380,9 @@ def test_modal_workers_record_withheld_area_codes_that_only_the_public_api_reads
         report_run_id=ids["report_run"],
         run_id=ids["run"],
     )
-    _act_as(connection, managed_v2_roles.simulation_service)
-    _refused(connection, "SELECT count(*) FROM withheld_area_codes")
+    for role in (managed_v2_roles.simulation_service, managed_v2_roles.stage12):
+        _act_as(connection, role)
+        _refused(connection, "SELECT count(*) FROM withheld_area_codes")
 
 
 def test_the_simulation_service_fails_a_window_whose_first_calls_modal_refuses(

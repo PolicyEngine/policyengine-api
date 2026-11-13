@@ -1351,7 +1351,6 @@ def test_withheld_area_codes_revision_creates_only_the_table_and_its_type() -> N
         if revision.down_revision == SPM_AVAILABILITY_REVISION
     ]
     assert [child.revision for child in children] == [WITHHELD_AREA_CODES_REVISION]
-    assert V2_ALEMBIC_HEAD_REVISION == WITHHELD_AREA_CODES_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")

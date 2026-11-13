@@ -838,9 +838,11 @@ withheld from a report run's local-area results: the report run (`CASCADE`),
 its baseline and reform simulation runs (`RESTRICT`, as the other comparison
 result tables have), the `area_type` (the new native enum `v2_uk_area_type`,
 `constituency` or `local_authority`) and the area's `code`, unique per report
-run and area type. Every local-area run that succeeds records its list, so a
-succeeded run without rows withheld none, and a withheld area has no row in
-`constituency_impacts` or `local_authority_impacts`. The Modal worker role
+run and area type. A withheld area has no row in `constituency_impacts` or
+`local_authority_impacts`. The table doesn't record whether a run's list was
+written, so no rows means no area was withheld only for a run whose writer
+records the list; runs written before the Modal workers wrote this table have
+no rows either. The Modal worker role
 may read and insert its rows, never update or delete them, and the runtime
 role may read them; the reconcile step after each schema upgrade grants
 them.
