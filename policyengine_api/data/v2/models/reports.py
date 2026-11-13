@@ -78,9 +78,9 @@ class Report(TimestampedModel, table=True):
     deleted while a report names them.
 
     The simulation service finds a report by ``definition_key``, the SHA-256
-    of what it compares (its type, each side's policy and dynamic, the
-    dataset name, region code and year both sides share, the budget window's
-    size and the options), in the format ``key_version`` names; identical
+    of what it compares (its country, type, each side's policy and dynamic,
+    the dataset name, region code and year both sides share, the budget
+    window's size and the options), in the format ``key_version`` names; identical
     requests share the row. ``dataset_independent_key`` is the same without
     the dataset and the options, which a national report shares with its
     local-area report. Reports created before the keys have none.

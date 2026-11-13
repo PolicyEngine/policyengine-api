@@ -283,7 +283,9 @@ def test_sqlite_refuses_a_second_unfailed_unforced_run_like_postgres(
             simulation_id, catalog_version_id, status=SimulationStatus.RUNNING
         )
     )
-    with pytest.raises(IntegrityError):
+    with pytest.raises(
+        IntegrityError, match="UNIQUE constraint failed: simulation_runs"
+    ):
         sqlite_session.commit()
 
 
@@ -314,5 +316,5 @@ def test_sqlite_lets_a_budget_window_name_one_report_run_per_year(
     sqlite_session.commit()
 
     sqlite_session.add(report_run(window_year=None))
-    with pytest.raises(IntegrityError):
+    with pytest.raises(IntegrityError, match="UNIQUE constraint failed: report_runs"):
         sqlite_session.commit()

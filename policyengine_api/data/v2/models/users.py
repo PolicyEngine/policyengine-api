@@ -69,8 +69,9 @@ class User(IdentifiedModel, table=True):
     """A v2 user account, unique by email when one is given.
 
     A signed-in user, of any type but ``unauthenticated``, always has a
-    primary country. Deleting a user deletes their sign-in identities and
-    saved associations; reports they own are kept without an owner.
+    primary country. Deleting a user deletes their sign-in identities, saved
+    associations and records of the report runs they asked for; reports they
+    own are kept without an owner.
     """
 
     __tablename__ = "users"
