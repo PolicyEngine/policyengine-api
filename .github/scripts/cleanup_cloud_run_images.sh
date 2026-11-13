@@ -26,11 +26,13 @@
 #      its upload time, as the releases built on ubuntu-26.04 were.
 #   3. A deletion that Artifact Registry refuses because another manifest
 #      still references the manifest is logged and not counted as a failure.
-#      A manifest uploaded just before the kept index that references it is
-#      refused like this on each run in which that index is the oldest kept
-#      release, and deleted after the index once it is older. A manifest
-#      whose untagged index (left when a tag is pushed again) is deleted later
-#      in the same run is deleted by the next run.
+#      A manifest uploaded just before the kept index that references it gets
+#      this refusal on each run in which it is older than the oldest kept
+#      release: normally the runs in which that index is the oldest kept
+#      release. Once that index is no longer a kept release, the index is
+#      deleted, and the manifest after it. A manifest whose untagged index
+#      (left when a tag is pushed again) is deleted later in the same run is
+#      deleted by the next run.
 #
 # Note: deleting an image that an older Cloud Run *revision* still references
 # stops that revision from starting again. Cloud Run here is the non-primary

@@ -340,7 +340,7 @@ def test_cleanup_deletes_a_manifest_on_the_next_run_after_its_untagged_index(
     assert "Deleted 1/1 manifest(s)." in second_result.stdout
 
 
-def test_cleanup_tries_a_manifest_uploaded_before_its_index_only_when_it_is_oldest(
+def test_cleanup_tries_a_child_uploaded_before_its_index_when_that_index_is_oldest_kept(
     tmp_path: Path,
 ) -> None:
     # release-2's index is listed a second after the two manifests it
