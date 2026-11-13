@@ -85,7 +85,7 @@ The `spm` object accepts only these fields:
 Unknown fields and invalid selections are rejected. Only the household's
 `county_fips` input identifies a local county. Computed county, state, first county
 in state and congressional district do not identify an SPM area. The full
-canonical artifact supplies 2022–2035 measurements; no consumer CPI extrapolation
+canonical artifact supplies 2022–2036 measurements; no consumer CPI extrapolation
 or congressional-district geographic factors are introduced.
 
 `POST /us/calculate` and `/us/calculate-full` take settings beside the existing
@@ -329,7 +329,7 @@ annual requests require `time_period`, while budget-window requests require
 `start_year` and `window_size` (1–75, ending no later than 2099). Years use four
 digits. An annual `time_period`, and a budget window's `start_year`, must be
 one of the country's years in `/{country}/metadata`'s
-`economy_options.time_period` (US 2024 to 2035, UK 2024 to 2032, from
+`economy_options.time_period` (US 2024 to 2036, UK 2024 to 2032, from
 `policyengine_api/economy_years.py`). Any other year returns HTTP 400 with the
 code `DATASET_YEAR_UNAVAILABLE` in `errors`, before anything is read from the
 cache or submitted, even when a result for that year is stored. A budget

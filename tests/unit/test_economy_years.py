@@ -12,8 +12,9 @@ from policyengine_api.economy_years import (
 from tests.fixtures.v2_catalog import normalized_catalog
 
 
-def test_us_years_are_2024_to_2035_newest_first():
+def test_us_years_are_2024_to_2036_newest_first():
     assert US_ECONOMY_YEARS == (
+        2036,
         2035,
         2034,
         2033,
@@ -60,7 +61,7 @@ def test_each_extracted_catalog_version_stores_its_countrys_years(country_id):
         (
             "us",
             "2022",
-            "US results are available for 2024 to 2035. 2022 is outside the "
+            "US results are available for 2024 to 2036. 2022 is outside the "
             "years the current US model and data cover.",
         ),
         (
