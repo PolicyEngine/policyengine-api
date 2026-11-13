@@ -1,6 +1,12 @@
-"""Building the image and deploying a Cloud Run candidate revision (dry runs)."""
+"""Building the image and deploying a Cloud Run candidate revision.
+
+The tests use dry runs, or fake gcloud and docker commands first on PATH.
+"""
 
 from __future__ import annotations
+
+import os
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -24,6 +30,9 @@ from tests.unit.cloud_run_deploy_support import (
 from tests.unit.cloud_run_deploy_support import (
     script_env as _script_env,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
@@ -70,6 +79,68 @@ def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
         "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
         "policyengine-api:1234567890abcdef"
     ) in result.stdout
+
+
+def test_build_cloud_run_image_dry_run_turns_off_provenance_attestations():
+    result = _run_script(
+        ".github/scripts/build_cloud_run_image.sh",
+        _script_env(GITHUB_SHA="1234567890abcdef", GITHUB_RUN_NUMBER="42"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    build_commands = [
+        command
+        for command in result.stdout.splitlines()
+        if command.startswith("+ docker build ")
+    ]
+    assert len(build_commands) == 1
+    assert "--provenance=false" in build_commands[0].split()
+
+
+def test_build_cloud_run_image_pushes_one_manifest_without_provenance(
+    tmp_path: Path,
+):
+    """Build without a provenance attestation, so the push is one image manifest.
+
+    With Docker's default provenance attestation the push is an image index
+    that references the image manifest and an attestation manifest, and the
+    image cleanup then lists three manifests for each release.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls_log = tmp_path / "calls.log"
+    for command_name in ("gcloud", "docker"):
+        fake_command = bin_dir / command_name
+        fake_command.write_text(
+            f'#!/usr/bin/env bash\necho "{command_name} $*" >> "{calls_log}"\n'
+        )
+        fake_command.chmod(0o755)
+
+    result = _run_script(
+        ".github/scripts/build_cloud_run_image.sh",
+        _script_env(
+            CLOUD_RUN_DRY_RUN="0",
+            GITHUB_SHA="1234567890abcdef",
+            GITHUB_RUN_NUMBER="42",
+            PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    image_uri = (
+        "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
+        "policyengine-api:1234567890abcdef"
+    )
+    docker_calls = [
+        call
+        for call in calls_log.read_text().splitlines()
+        if call.startswith("docker ")
+    ]
+    assert docker_calls == [
+        "docker build --platform linux/amd64 --provenance=false"
+        f" -f gcp/cloud_run/Dockerfile -t {image_uri} .",
+        f"docker push {image_uri}",
+    ]
 
 
 def test_deploy_cloud_run_candidate_dry_run_preserves_access_and_traffic():

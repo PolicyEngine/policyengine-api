@@ -1022,8 +1022,8 @@ jobs:
       - name: Set up GCloud
         uses: "google-github-actions/setup-gcloud@v2"
       # The Cloud Run deploy pushes a new image every release and nothing prunes
-      # them, so the repo grows without bound. Keep the 15 most recent image
-      # versions (default in the script) and delete older ones.
+      # them, so the repo grows without bound. Keep the images of the 15 most
+      # recent releases (default in the script) and delete older ones.
       - name: Prune old Cloud Run images
         run: bash .github/scripts/cleanup_cloud_run_images.sh
 
