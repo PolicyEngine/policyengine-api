@@ -1,3 +1,15 @@
+## [5.45.0] - 2026-11-13
+
+### Added
+
+- Admins can delete a signed-in user's account, saved records and Auth0 users with `DELETE /v2/admin/users/{user_id}`, as `DELETE /v2/me` deletes one's own; the only admin's own deletion is refused, and each deletion is recorded with the admin's and the user's v2 IDs.
+- `/v2/reports` serves budget windows: a report comparing a baseline and a reform in each year of a window of 1 to 75 years, ending in 2200 or earlier. `POST /v2/reports` takes `kind` `budget_window` with the first `year` and `budget_window_size`, checks it as an economy report is, and has the simulation service create it. `GET /v2/reports/{report_id}` and the report listing answer a budget window with its newest budget-window run and that run's years, each a report run with its own status and versions; once the run has succeeded, the read gives today's budget-window result, each year's budget figures and their totals, rebuilt from each year's stored rows. A saved report naming a detailed-save report must give that report's own budget window as `budget_window_years` (none for a window shorter than two years), or is refused with 400.
+
+### Changed
+
+- `DELETE /v2/me` now tries to delete the Auth0 user of every one of the account's sign-in identities before it answers 502, instead of stopping at the first failure, and its `auth0_user_deletion_failed` WARNING record now also carries `auth0_user_count` and `undeleted_auth0_user_count`. A retry still deletes only the Auth0 user of the token's own identity.
+
+
 ## [5.44.0] - 2026-11-12
 
 ### Added

@@ -159,7 +159,11 @@ def test_the_openapi_document_tells_the_report_bodies_apart_by_kind() -> None:
         "application/json"
     ]["schema"]
     assert body["discriminator"]["propertyName"] == "kind"
-    assert set(body["discriminator"]["mapping"]) == {"economy", "budget_window"}
+    assert set(body["discriminator"]["mapping"]) == {
+        "economy",
+        "household",
+        "budget_window",
+    }
     window = document["components"]["schemas"]["BudgetWindowReportCreateRequest"]
     assert {"year", "budget_window_size"} <= set(window["required"])
     assert "include_cliffs" not in window["properties"]

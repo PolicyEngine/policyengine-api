@@ -7,10 +7,7 @@ from typing import TYPE_CHECKING
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
-from policyengine_api.services.v2.stored_reports.transformations import (
-    READABLE_KINDS,
-    report_kind,
-)
+from policyengine_api.services.v2.stored_reports.transformations import report_kind
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -22,7 +19,6 @@ if TYPE_CHECKING:
         StoredReportRows,
     )
 
-KIND_NAMES = {"household": "a household report"}
 # Each kind of report, as the run routes name one they refuse.
 REPORT_KIND_NAMES: dict[ReportKind, str] = {
     "economy": "an economy report",
@@ -77,11 +73,9 @@ class RerunReportUnreadableError(RuntimeError):
 
 
 class ReportKindUnsupportedError(ValueError):
-    """The report is of a kind a route does not read, or start and list runs of, yet.
+    """The report is of a kind the run routes do not start or list runs of yet.
 
-    Household reports are stored in the same tables, and each route takes
-    them once its own PR adds them; the message says which kind the report
-    is and what the route does not do with it.
+    The message says which kind the report is.
     """
 
 
@@ -93,21 +87,6 @@ def require_report(
         msg = f"Report {report_id} was not found in country {country_id!r}"
         raise StoredReportNotFoundError(msg)
     return rows
-
-
-def require_readable_report(rows: StoredReportRows) -> ReportKind:
-    """Return the report's kind: an economy report or a budget window.
-
-    Raise ReportKindUnsupportedError for a household report.
-    """
-    kind = report_kind(rows.report)
-    if kind not in READABLE_KINDS:
-        msg = (
-            f"Report {rows.report.id} is {KIND_NAMES[kind]}, which this route "
-            "cannot read yet"
-        )
-        raise ReportKindUnsupportedError(msg)
-    return kind
 
 
 def require_run_route_kind(rows: StoredReportRows) -> RunRouteKind:

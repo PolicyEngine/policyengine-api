@@ -84,6 +84,14 @@ class RecordingSimulationService:
         self.reruns.append(rerun)
 
 
+class UnreadHouseholds:
+    """The stored households, which an economy re-run never reads."""
+
+    def get_household(self, *, country_id: str, household_id: UUID) -> object:
+        msg = "an economy re-run must not read a household"
+        raise AssertionError(msg)
+
+
 def unconfigured_client() -> RecordingSimulationService:
     msg = "the simulation service must not be asked"
     raise AssertionError(msg)
@@ -99,7 +107,10 @@ def test_a_rerun_is_sent_once_its_country_and_policies_are_checked() -> None:
     client = RecordingSimulationService()
     policies = StoredPolicies()
     service = SimulationSubmissionService(
-        countries=StoredCountries(), policies=policies, client_factory=lambda: client
+        countries=StoredCountries(),
+        households=UnreadHouseholds(),
+        policies=policies,
+        client_factory=lambda: client,
     )
     rerun = rerun_input(None, STORED_POLICY_ID)
 
@@ -112,6 +123,7 @@ def test_a_rerun_is_sent_once_its_country_and_policies_are_checked() -> None:
 def test_a_rerun_in_a_household_only_country_is_refused_before_sending() -> None:
     service = SimulationSubmissionService(
         countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(),
         client_factory=unconfigured_client,
     )
@@ -124,6 +136,7 @@ def test_a_rerun_naming_a_policy_no_longer_stored_is_refused() -> None:
     missing_policy_id = uuid4()
     service = SimulationSubmissionService(
         countries=StoredCountries(),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(),
         client_factory=unconfigured_client,
     )
@@ -135,6 +148,7 @@ def test_a_rerun_naming_a_policy_no_longer_stored_is_refused() -> None:
 def test_a_rerun_whose_policy_sets_parameters_the_catalog_lacks_is_refused() -> None:
     service = SimulationSubmissionService(
         countries=StoredCountries(),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(),
         client_factory=unconfigured_client,
     )
@@ -151,6 +165,7 @@ def test_a_rerun_whose_policy_check_cannot_read_storage_is_storage_unavailable()
     error = OperationalError("SELECT 1", {}, Exception("connection refused"))
     service = SimulationSubmissionService(
         countries=StoredCountries(),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(error=error),
         client_factory=unconfigured_client,
     )

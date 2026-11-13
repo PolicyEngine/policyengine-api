@@ -1,4 +1,4 @@
-"""Create economy reports through the simulation service, and read them.
+"""Create reports through the simulation service, and read them.
 
 Reading a report reads it within its country (``reports.country``), with its
 newest run: the run created last, whatever its status and versions. That
@@ -15,15 +15,19 @@ succeeded. A budget-window report's newest run is its newest budget-window
 run, read with its years; once that run has succeeded, its result is the
 budget-window format, rebuilt from each year's budget rows. Reading a
 window's definition and runs never reads those rows, so only a read of a
-succeeded window can find them unreadable. Lists name at most 25 reports and
-read them, with their newest runs and any window's years, in two queries,
-without results.
+succeeded window can find them unreadable. A household report's result is
+instead each of its simulation runs' calculated household
+(``simulation_runs.household_result``), read once its newest report run has
+succeeded, and each side's failure once it has failed. Lists name at most 25
+reports and read them, with their newest runs and any window's years, in two
+queries, without results.
 
 Creating a report or budget window checks the country and the policies it
-names, asks the simulation service to create and start it, then reads it
-back from the tables. Once the simulation service has answered with the report's ID, the
-report exists: a failure to read it back raises CreatedReportUnreadableError,
-which names it, so the caller reads it rather than submitting it again.
+names (and a household report's household), asks the simulation service to
+create and start it, then reads it back from the tables. Once the simulation
+service has answered with the report's ID, the report exists: a failure to
+read it back raises CreatedReportUnreadableError, which names it, so the
+caller reads it rather than submitting it again.
 
 Running a report again reads it in its country, checks its country and the
 policies its simulations name as a new report's are checked, has the
@@ -56,6 +60,9 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_budget_window_results as window_result_reads,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors import (
+    reads_household_results as household_result_reads,
+)
+from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_results as result_reads,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
@@ -69,10 +76,18 @@ from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs 
 from policyengine_api.services.v2.stored_reports.economy_results import (
     transformations as result_transformations,
 )
+from policyengine_api.services.v2.stored_reports.household_results import (
+    transformations as household_result_transformations,
+)
+from policyengine_api.services.v2.stored_reports.household_results.validators import (
+    require_household_report_result,
+)
 from policyengine_api.services.v2.stored_reports.transformations import (
     budget_window_read,
     budget_window_runs_read,
     budget_window_summary_read,
+    household_report_read,
+    household_report_summary_read,
     listed_reports,
     report_kind,
     report_policy_ids,
@@ -84,7 +99,6 @@ from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     ReportStorageError,
     RerunReportUnreadableError,
-    require_readable_report,
     require_reform_run,
     require_report,
     require_run_route_kind,
@@ -106,6 +120,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         BudgetWindowReportRead,
+        HouseholdReportRead,
         StoredReportRead,
         StoredReportRows,
         StoredReportRunsRead,
@@ -140,8 +155,20 @@ def _stored_report(
     )
 
 
+def _summary_read(
+    stored: StoredReportRows, *, current_versions: PackageVersions
+) -> StoredReportSummaryRead:
+    """Return the report's definition and newest run, as its kind reads them."""
+    kind = report_kind(stored.report)
+    if kind == "household":
+        return household_report_summary_read(stored, current_versions=current_versions)
+    if kind == "budget_window":
+        return budget_window_summary_read(stored, current_versions=current_versions)
+    return report_summary_read(stored, current_versions=current_versions)
+
+
 class V2StoredReportService:
-    """Read v2 reports and results; create reports and windows; run reports again."""
+    """Read v2 reports and results, create reports of every kind, and run them again."""
 
     def __init__(
         self,
@@ -171,18 +198,22 @@ class V2StoredReportService:
     def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
         """Return the country's report, its newest run and that run's result.
 
-        The report is an economy report or a budget window. Raise
-        StoredReportNotFoundError when the country has no such report,
-        ReportKindUnsupportedError for a household report,
-        EconomyResultUnreadableError when a succeeded run's rows lack a part
-        every result has, BudgetWindowResultUnreadableError when a succeeded
-        window run's years cannot give its result, and ReportStorageError
-        when the database cannot be read.
+        The report is an economy report, a household report or a budget
+        window. Raise StoredReportNotFoundError when the country has no such
+        report, EconomyResultUnreadableError when a succeeded run's rows lack
+        a part every result has, HouseholdResultUnreadableError when a
+        succeeded household report run's calculated households cannot be
+        read, BudgetWindowResultUnreadableError when a succeeded window run's
+        years cannot give its result, and ReportStorageError when the
+        database cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            if require_readable_report(stored) == "budget_window":
+            kind = report_kind(stored.report)
+            if kind == "budget_window":
                 return self._budget_window(session, stored)
+            if kind == "household":
+                return self._household_report(session, stored)
             run = stored.newest_run
             result = None
             if run is not None and run.status is ReportRunStatus.SUCCEEDED:
@@ -220,14 +251,44 @@ class V2StoredReportService:
             result=result,
         )
 
+    def _household_report(
+        self, session: Session, stored: StoredReportRows
+    ) -> HouseholdReportRead:
+        """Return a household report with its newest run's outcome.
+
+        Its calculated households are read once that run has succeeded, and
+        each side's failure once it has failed.
+        """
+        run = stored.newest_run
+        result = failure = None
+        if run is not None and run.status in {
+            ReportRunStatus.SUCCEEDED,
+            ReportRunStatus.FAILED,
+        }:
+            rows = household_result_reads.read_household_result_rows(
+                session, report_run=run
+            )
+            if run.status is ReportRunStatus.SUCCEEDED:
+                result = require_household_report_result(run, rows)
+            else:
+                failure = household_result_transformations.household_report_failure(
+                    run, rows
+                )
+        return household_report_read(
+            stored,
+            current_versions=self._current_versions(stored.report.country),
+            result=result,
+            failure=failure,
+        )
+
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[StoredReportSummaryRead, ...]:
         """Return the country's reports among ``report_ids``, without results.
 
-        They are economy reports and budget windows, in the order named, each
-        once; unknown reports, other countries' and household reports are
-        left out. Raise ReportStorageError when the database cannot be read.
+        They are in the order named, each once; unknown reports and other
+        countries' are left out. Raise ReportStorageError when the database
+        cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
             rows = read_report_rows(
@@ -235,25 +296,25 @@ class V2StoredReportService:
             )
             current_versions = self._current_versions(country_id)
             return tuple(
-                budget_window_summary_read(stored, current_versions=current_versions)
-                if report_kind(stored.report) == "budget_window"
-                else report_summary_read(stored, current_versions=current_versions)
+                _summary_read(stored, current_versions=current_versions)
                 for stored in listed_reports(rows, report_ids=report_ids)
             )
 
     def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service and return it as stored.
 
-        An economy report and a budget window each go through their own
-        submission. Raise the submission's errors (see
-        ``SimulationSubmissionService``), and CreatedReportUnreadableError,
-        caused by the read's own error, when the report the simulation service
-        created cannot be read back in the country: not stored there, the
-        database unavailable, or any other failure of the read.
+        Each kind of report goes through its own submission. Raise the
+        submission's errors (see ``SimulationSubmissionService``), and
+        CreatedReportUnreadableError, caused by the read's own error, when the
+        report the simulation service created cannot be read back in the
+        country: not stored there, the database unavailable, or any other
+        failure of the read.
         """
         submissions = self._configured_submissions()
         if report_input.kind == "budget_window":
             report_id = submissions.submit_budget_window(report_input).report_id
+        elif report_input.kind == "household":
+            report_id = submissions.submit_household_report(report_input).report_id
         else:
             report_id = submissions.submit_report(report_input).report_id
         try:

@@ -128,6 +128,14 @@ class RecordingSimulationService:
         return SubmittedSimulation(simulation_id=uuid4(), simulation_run_id=uuid4())
 
 
+class UnreadHouseholds:
+    """The stored households, which an economy submission never reads."""
+
+    def get_household(self, *, country_id: str, household_id: UUID) -> object:
+        msg = "an economy submission must not read a household"
+        raise AssertionError(msg)
+
+
 def unconfigured_client() -> RecordingSimulationService:
     msg = "the simulation service must not be asked"
     raise AssertionError(msg)
@@ -162,6 +170,7 @@ def submissions(
 ) -> SimulationSubmissionService:
     return SimulationSubmissionService(
         countries=StoredCountries(),
+        households=UnreadHouseholds(),
         policies=policies or StoredPolicies(),
         client_factory=client_factory,
     )
@@ -197,6 +206,7 @@ def test_current_law_needs_no_stored_policy() -> None:
 def test_a_household_only_country_is_refused_before_sending() -> None:
     service = SimulationSubmissionService(
         countries=StoredCountries(countries=HOUSEHOLD_ONLY_UK),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(),
         client_factory=unconfigured_client,
     )
@@ -210,6 +220,7 @@ def test_a_household_only_country_is_refused_before_sending() -> None:
 def test_a_country_without_a_countries_row_is_refused() -> None:
     service = SimulationSubmissionService(
         countries=StoredCountries(countries=SERVED_COUNTRIES[:1]),
+        households=UnreadHouseholds(),
         policies=StoredPolicies(),
         client_factory=unconfigured_client,
     )

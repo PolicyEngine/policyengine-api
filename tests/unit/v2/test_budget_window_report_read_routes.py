@@ -153,8 +153,9 @@ def test_the_openapi_document_tells_the_report_kinds_apart_by_kind() -> None:
     schemas = document["components"]["schemas"]
     item = schemas["ReportDetailResult"]["properties"]["item"]
     assert item["discriminator"]["propertyName"] == "kind"
-    assert set(item["discriminator"]["mapping"]) == {"economy", "budget_window"}
+    every_kind = {"economy", "household", "budget_window"}
+    assert set(item["discriminator"]["mapping"]) == every_kind
     listed = schemas["ReportListResult"]["properties"]["items"]["items"]
-    assert set(listed["discriminator"]["mapping"]) == {"economy", "budget_window"}
+    assert set(listed["discriminator"]["mapping"]) == every_kind
     assert "result" in schemas["BudgetWindowReportItem"]["properties"]
     assert "years" in schemas["BudgetWindowRunItem"]["properties"]
