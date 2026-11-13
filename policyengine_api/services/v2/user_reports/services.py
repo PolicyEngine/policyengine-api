@@ -8,7 +8,11 @@ in the write's own transaction; one deleted before the write commits is
 refused by the ``RESTRICT`` foreign key, which is answered as not found too.
 A saved report naming one gives that report's own budget window as
 ``budget_window_years``, or none for a report without a window of two or
-more years.
+more years. Its ``last_run_at`` is the owner's newest request for one of
+that report's runs (``user_report_run_associations``), or null without one,
+set when it is saved or repointed and as the owner asks for runs, whatever
+a caller sends; a saved report naming only a v1 report output keeps the
+caller's ``last_run_at``.
 The owner always comes from the verified session principal (a signed-in user
 or a signed-out browser), and v1 references are checked in a short read-only
 v1 transaction before the v2 transaction opens. Reads never provision a
@@ -36,6 +40,9 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+from policyengine_api.services.v2.report_run_records.database_connectors import (
+    reads as record_reads,
+)
 from policyengine_api.services.v2.user_reports.database_connectors.creates import (
     create_user_report,
 )
@@ -283,7 +290,9 @@ class V2UserReportService:
         AssociationBudgetWindowConflictError if ``budget_window_years``
         disagrees with its budget window. Each saved-reform link must name the
         owner's saved policy in the same country, or
-        AssociationLinkNotFoundError is raised.
+        AssociationLinkNotFoundError is raised. A saved detailed-save report's
+        ``last_run_at`` is the owner's newest request for one of its runs, or
+        null, whatever the caller sends.
         """
         country_id = association_input.country_id
         require_one_reference(
@@ -321,12 +330,20 @@ class V2UserReportService:
                     country_id=association_input.country_id,
                     user_policy_id=linked_user_policy_id,
                 )
-            return user_report_read(
-                create_user_report(
-                    session,
-                    owned_user_report_input(association_input, user_id=owner.user_id),
-                )
+            creation_input = owned_user_report_input(
+                association_input, user_id=owner.user_id
             )
+            if association_input.report_id is not None:
+                creation_input = creation_input.model_copy(
+                    update={
+                        "last_run_at": record_reads.read_newest_report_request(
+                            session,
+                            user_id=owner.user_id,
+                            report_id=association_input.report_id,
+                        )
+                    }
+                )
+            return user_report_read(create_user_report(session, creation_input))
 
     def get_user_report(
         self,
@@ -434,7 +451,10 @@ class V2UserReportService:
         the saved report naming both, AssociationBudgetWindowConflictError
         when it would leave a ``budget_window_years`` that disagrees with the
         named report's budget window, and UserReportNotFoundError if the
-        principal has no such report in this country.
+        principal has no such report in this country. A saved report that
+        names a detailed-save report after the update, and whose ``report_id``
+        or ``last_run_at`` the update supplies, takes the owner's newest
+        request for one of that report's runs as ``last_run_at``, or null.
         """
         require_one_reference(
             "report",
@@ -471,13 +491,20 @@ class V2UserReportService:
                         country_id=country_id,
                         user_policy_id=getattr(association_input, link_field),
                     )
-            return user_report_read(
-                update_user_report(
-                    session,
-                    association,
-                    user_report_update_values(association_input),
+            values = user_report_update_values(association_input)
+            report_id = values.get("report_id", association.report_id)
+            if (
+                report_id is not None
+                and {
+                    "report_id",
+                    "last_run_at",
+                }
+                & association_input.model_fields_set
+            ):
+                values["last_run_at"] = record_reads.read_newest_report_request(
+                    session, user_id=owner.user_id, report_id=report_id
                 )
-            )
+            return user_report_read(update_user_report(session, association, values))
 
     def delete_user_report(
         self,

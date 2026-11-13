@@ -54,3 +54,19 @@ def read_report_run_records(
         )
         for report_run_id, requested_at, trigger in session.execute(statement).all()
     ]
+
+
+def read_newest_report_request(
+    session: Session, *, user_id: UUID, report_id: UUID
+) -> datetime | None:
+    """Return the user's newest request time among the report's runs, or None."""
+    statement = (
+        select(func.max(col(UserReportRunAssociation.requested_at)))
+        .join(ReportRun, col(ReportRun.id) == UserReportRunAssociation.report_run_id)
+        .where(
+            col(UserReportRunAssociation.user_id) == user_id,
+            col(ReportRun.report_id) == report_id,
+        )
+    )
+    newest_request: datetime | None = session.execute(statement).scalar_one()
+    return newest_request
