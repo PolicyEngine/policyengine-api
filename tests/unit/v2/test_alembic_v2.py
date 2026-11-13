@@ -1430,9 +1430,16 @@ def test_shared_reports_revision_is_generated_with_one_documented_correction() -
         "user_report_run_associations"
     ]
     assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 8
+    # The per-user columns of shared rows become nullable, and back.
     for body in (upgrade, downgrade):
+        assert sorted(
+            re.findall(r"""op\.alter_column\(\s*["'](\w+)["'],\s*["'](\w+)["']""", body)
+        ) == [
+            ("budget_window_runs", "trigger"),
+            ("report_runs", "trigger"),
+            ("reports", "label"),
+        ]
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
-        assert "op.alter_column(" not in body
     assert "op.drop_column(" not in upgrade
     assert "op.drop_table(" not in upgrade
