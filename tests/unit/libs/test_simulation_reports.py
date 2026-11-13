@@ -799,13 +799,15 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "message"),
+    ("region_code", "body", "message"),
     [
-        # The simulation service's answers, as PolicyEngine/policyengine-sim-api's
-        # C1 · 29a builds them: a code with one reason located at data_source
-        # for a release that gives local areas no dataset of their own, and
-        # one reason with no code for another country or region.
+        # The simulation service's answers to these UK requests, as
+        # PolicyEngine/policyengine-sim-api's C1 · 29a builds them: a code with
+        # one reason located at data_source for a UK-wide report on a release
+        # that gives local areas no dataset of their own, and one reason with
+        # no code for a region other than UK-wide or a nation.
         pytest.param(
+            "uk",
             {
                 "code": "no_local_area_dataset",
                 "detail": [
@@ -823,6 +825,7 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
             id="release-without-a-local-area-dataset",
         ),
         pytest.param(
+            "constituency/W07000081",
             {
                 "detail": [
                     {
@@ -830,7 +833,8 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
                         "msg": (
                             "Value error, the local-area dataset needs a UK-wide or "
                             "nation region (country/england, country/northern_ireland, "
-                            "country/scotland, country/wales, uk), not 'state/ca'"
+                            "country/scotland, country/wales, uk), not "
+                            "'constituency/W07000081'"
                         ),
                         "type": "value_error",
                     }
@@ -839,13 +843,13 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
             "The simulation service cannot run this request: data_source: Value "
             "error, the local-area dataset needs a UK-wide or nation region "
             "(country/england, country/northern_ireland, country/scotland, "
-            "country/wales, uk), not 'state/ca'",
+            "country/wales, uk), not 'constituency/W07000081'",
             id="another-region",
         ),
     ],
 )
 def test_a_data_source_the_service_refuses_is_refused_with_its_reasons(
-    body: dict[str, object], message: str
+    region_code: str, body: dict[str, object], message: str
 ) -> None:
     # The Public API checks only the field's value; the simulation service
     # checks the country, the region and the release it runs.
@@ -853,7 +857,11 @@ def test_a_data_source_the_service_refuses_is_refused_with_its_reasons(
 
     with pytest.raises(SimulationServiceInvalidRequestError) as refused:
         service.client().submit_report(
-            report_input(region_code="state/ca", data_source="local_area_dataset")
+            report_input(
+                country_id="uk",
+                region_code=region_code,
+                data_source="local_area_dataset",
+            )
         )
 
     assert _report_route_status(refused.value) == 422

@@ -115,14 +115,13 @@ class ReportSummaryItem(ReportDefinitionItem):
 
     Both simulations use the region and dataset named. ``data_source`` is
     ``local_area_dataset`` for a local-area report: a UK-wide or nation
-    report on the dataset the catalog version gives local areas, as a
-    request with that data_source creates (read from the report's region
-    and dataset, since the request's field isn't stored), whose result also
-    has each
-    constituency's and local authority's impact and the codes of those
-    withheld. It is null for every other report. ``status`` is the newest
-    run's, or ``not_run`` for a report with no run. ``run`` is the newest
-    run, whatever its status and versions.
+    report on the dataset the catalog version gives local areas, whose
+    result also has each constituency's and local authority's impact and the
+    codes of those withheld. A request with that data_source creates one,
+    but the request's field isn't stored: the read derives it from the
+    report's region and dataset. It is null for every other report.
+    ``status`` is the newest run's, or ``not_run`` for a report with no run.
+    ``run`` is the newest run, whatever its status and versions.
     """
 
     kind: Literal["economy"]
