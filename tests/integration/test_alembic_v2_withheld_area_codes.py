@@ -171,32 +171,26 @@ def test_withheld_area_codes_downgrade_removes_the_table_and_its_type(
 def _insert_report_run(connection: Connection) -> dict[str, UUID]:
     """Store a UK report run comparing two simulation runs, and a spare run."""
     public_api_rows = insert_public_api_rows(connection)
-    ids = {
-        name: uuid4()
-        for name in (
-            "simulation",
-            "baseline_run",
-            "reform_run",
-            "unrelated_run",
-            "report",
-            "report_run",
+    run_names = ("baseline_run", "reform_run", "unrelated_run")
+    ids = {name: uuid4() for name in (*run_names, "report", "report_run")}
+    # Each run is of a simulation of its own: a simulation has one unfailed
+    # run per version set.
+    for run_name in run_names:
+        simulation_id = uuid4()
+        insert_row(
+            connection,
+            "simulations",
+            id=simulation_id,
+            simulation_type="economy",
+            dataset_id=public_api_rows.dataset_id,
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            year=2026,
         )
-    }
-    insert_row(
-        connection,
-        "simulations",
-        id=ids["simulation"],
-        simulation_type="economy",
-        dataset_id=public_api_rows.dataset_id,
-        tax_benefit_model_version_id=public_api_rows.version_id,
-        year=2026,
-    )
-    for run_name in ("baseline_run", "reform_run", "unrelated_run"):
         insert_row(
             connection,
             "simulation_runs",
             id=ids[run_name],
-            simulation_id=ids["simulation"],
+            simulation_id=simulation_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
             year=2026,
             status="pending",

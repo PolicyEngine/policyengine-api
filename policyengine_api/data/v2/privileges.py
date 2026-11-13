@@ -45,11 +45,12 @@ Roles and what decides their privileges:
 
 Both simulation API roles update only the columns ``update_columns`` names, so
 the database refuses any change to what a run is (its simulation or report,
-versions, dataset, region, year, simulation runs or budget-window run) or to
-what a budget-window run is (its report, catalog version, trigger or whether
-it calculates again). It doesn't limit a worker to its own run; the workers'
-code does. Their code lives in the simulation API's repository, so the deploy
-check covers them here.
+versions, dataset, region, year, simulation runs, budget-window run or whether
+a forced re-run created it) or to what a budget-window run is (its report,
+catalog version, .py version, trigger or whether it calculates again). It
+doesn't limit a worker to its own run; the workers' code does. Their code
+lives in the simulation API's repository, so the deploy check covers them
+here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 
@@ -318,6 +319,10 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "user_identities": _access(runtime=READ_WRITE),
     "user_policies": _access(runtime=READ_WRITE),
     "user_report_associations": _access(runtime=READ_WRITE),
+    # Each user's request for a report run, which the Public API records when
+    # the user creates or re-runs a report, reads, and deletes; nothing
+    # changes one afterwards.
+    "user_report_run_associations": _access(runtime=READ_INSERT_DELETE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
     # Each change of a signed-in user's type, recorded by the admin routes and

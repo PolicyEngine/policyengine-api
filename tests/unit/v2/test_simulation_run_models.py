@@ -179,6 +179,7 @@ def test_each_simulation_run_records_its_versions_status_and_output() -> None:
         "country_package_version",
         "policyengine_version",
         "status",
+        "forced",
         "created_at",
         "updated_at",
     }
@@ -243,6 +244,15 @@ def test_run_tables_require_a_completion_time_and_index_running_runs() -> None:
         "ix_simulation_runs_status_started_at": ("status", "started_at"),
         "ix_simulation_runs_tax_benefit_model_version_id": (
             "tax_benefit_model_version_id",
+        ),
+        # One unfailed, unforced run per year and version set
+        # (test_shared_report_models.py).
+        "uq_simulation_runs_unfailed_unforced_versions": (
+            "simulation_id",
+            "year",
+            "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
         ),
     }
     assert _indexes(report_runs)["ix_report_runs_status_started_at"] == (
@@ -440,13 +450,18 @@ def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
     required = {
         "report_id",
         "tax_benefit_model_version_id",
-        "trigger",
         "recalculate",
         "status",
         "created_at",
         "updated_at",
     }
-    optional = {"error_message", "started_at", "completed_at"}
+    optional = {
+        "error_message",
+        "started_at",
+        "completed_at",
+        "policyengine_version",
+        "trigger",
+    }
     assert set(windows.c.keys()) == {"id"} | required | optional
     assert all(not windows.c[name].nullable for name in required)
     assert all(windows.c[name].nullable for name in optional)

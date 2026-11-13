@@ -155,7 +155,9 @@ class RunSettings:
     ``run_id`` is the run's ID, a new one when None; a report run's
     simulation runs always get new ones. A report run with a
     ``budget_window_year`` is that year of that budget-window run, and its
-    simulation runs are of that year.
+    simulation runs are of that year. A ``forced`` report run, and its
+    simulation runs, are a forced re-run's: extra runs beside the one unfailed
+    run per version set.
     """
 
     versions: dict[str, str]
@@ -164,6 +166,7 @@ class RunSettings:
     error_message: str | None = None
     run_id: UUID | None = None
     budget_window_year: BudgetWindowYear | None = None
+    forced: bool = False
 
     @property
     def finished(self) -> bool:
@@ -197,6 +200,7 @@ def store_simulation_run(
         status=settings.status,
         started_at=created_at,
         completed_at=created_at + timedelta(minutes=5) if settings.finished else None,
+        forced=settings.forced,
         **settings.versions,
     )
     return run_id
@@ -317,13 +321,13 @@ def store_report_run(
             "baseline_simulation_run_id, reform_simulation_run_id, "
             "budget_window_run_id, year, "
             "country_package_version, policyengine_version, status, trigger, "
-            "started_at, completed_at, error_message, spm_provenance"
+            "started_at, completed_at, error_message, spm_provenance, forced"
             + "".join(f", {column}" for column in result_columns)
             + ") VALUES (:id, :created_at, :report_id, :baseline_run, "
             ":reform_run, :budget_window_run_id, :year, "
             ":country_package_version, :policyengine_version, "
             ":status, 'initial', :started_at, :completed_at, :error_message, "
-            ":spm_provenance"
+            ":spm_provenance, :forced"
             + "".join(f", :{column}" for column in result_columns)
             + ")"
         ).bindparams(bindparam("spm_provenance", type_=JSONB)),
@@ -346,6 +350,7 @@ def store_report_run(
             ),
             "error_message": settings.error_message,
             "spm_provenance": spm_provenance,
+            "forced": settings.forced,
             **settings.versions,
             **result_columns,
         },
