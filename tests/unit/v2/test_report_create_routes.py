@@ -146,6 +146,8 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
         report_body(include_cliffs="yes"),
         report_body(policyengine_version="4.2.0"),
         report_body(reform={"policy_id": "not-a-uuid"}),
+        report_body(dataset_name="enhanced_cps_2024"),
+        report_body(dataset_name=None),
     ],
     ids=[
         "no-label",
@@ -156,6 +158,8 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
         "non-boolean-cliffs",
         "names-a-version",
         "malformed-policy",
+        "names-a-dataset",
+        "null-dataset",
     ],
 )
 def test_a_malformed_report_is_refused_before_the_service(
@@ -256,7 +260,7 @@ def test_a_simulation_is_created_and_answered_as_stored() -> None:
 
     response = report_route_client(simulations=service).post(
         "/v2/simulations?country_id=us",
-        json=simulation_body(dataset_name="enhanced_cps_2024"),
+        json=simulation_body(),
     )
 
     assert response.status_code == 201, response.text
@@ -264,7 +268,6 @@ def test_a_simulation_is_created_and_answered_as_stored() -> None:
     ((operation, arguments),) = service.calls
     assert operation == "create_simulation"
     created = arguments["simulation_input"]
-    assert created.dataset_name == "enhanced_cps_2024"
     assert created.policy_id == POLICY_ID
 
 
@@ -275,8 +278,17 @@ def test_a_simulation_is_created_and_answered_as_stored() -> None:
         ("country_id=us", simulation_body(kind="household"), 422),
         ("country_id=us", simulation_body(year=1899), 422),
         ("country_id=us", simulation_body(include_cliffs=True), 422),
+        ("country_id=us", simulation_body(dataset_name="enhanced_cps_2024"), 422),
+        ("country_id=us", simulation_body(dataset_name=None), 422),
     ],
-    ids=["other-country", "household-kind", "year-too-early", "report-option"],
+    ids=[
+        "other-country",
+        "household-kind",
+        "year-too-early",
+        "report-option",
+        "names-a-dataset",
+        "null-dataset",
+    ],
 )
 def test_a_malformed_simulation_is_refused_before_the_service(
     query: str, body: dict[str, Any], status_code: int

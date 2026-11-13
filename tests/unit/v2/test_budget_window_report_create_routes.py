@@ -81,6 +81,8 @@ def test_a_budget_window_is_created_and_answered_as_stored() -> None:
         pytest.param({"include_cliffs": False}, id="cliffs"),
         pytest.param({"spm": None}, id="null-spm"),
         pytest.param({"kind": "household"}, id="unknown-kind"),
+        pytest.param({"dataset_name": "enhanced_cps_2024"}, id="names-a-dataset"),
+        pytest.param({"dataset_name": None}, id="null-dataset"),
     ],
 )
 def test_a_budget_window_the_tables_cannot_hold_is_refused(
