@@ -236,6 +236,23 @@ def test_a_household_reports_rerun_is_sent_where_only_households_are_calculated(
     assert policies.asked == [STORED_POLICY_ID]
 
 
+def test_a_household_report_of_the_baseline_alone_checks_the_baseline_policy() -> None:
+    client = RecordingSimulationService()
+    policies = StoredPolicies()
+    service = SimulationSubmissionService(
+        countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
+        policies=policies,
+        client_factory=lambda: client,
+    )
+    rerun = rerun_input(STORED_POLICY_ID, None, kind="household")
+
+    service.rerun_report(rerun)
+
+    assert client.reruns == [rerun]
+    assert policies.asked == [STORED_POLICY_ID]
+
+
 def test_a_household_reports_rerun_without_household_calculations_is_refused() -> None:
     policies = StoredPolicies()
     service = SimulationSubmissionService(

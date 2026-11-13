@@ -100,6 +100,23 @@ def test_a_household_reports_runs_are_answered_as_a_household_reports() -> None:
     assert result["current_versions"]["policyengine_version"] == "4.2.0"
 
 
+def test_a_household_report_of_the_baseline_alone_lists_no_reform_run() -> None:
+    baseline_alone = replace(
+        report_runs_read(),
+        kind="household",
+        runs=(report_run_read(reform_simulation_run_id=None),),
+    )
+    service = FakeReportRunService(runs=baseline_alone)
+
+    response = report_route_client(reports=service).get(RUNS_PATH)
+
+    assert response.status_code == 200, response.text
+    (run,) = response.json()["result"]["items"]
+    assert run["id"] == str(REPORT_RUN_ID)
+    assert run["baseline_simulation_run_id"] is not None
+    assert run["reform_simulation_run_id"] is None
+
+
 def test_a_budget_windows_runs_are_answered_with_their_years() -> None:
     service = FakeReportRunService(runs=budget_window_runs_read())
 

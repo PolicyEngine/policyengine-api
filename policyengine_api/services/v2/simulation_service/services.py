@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from uuid import UUID
 
+    from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.household_calculations.types import (
         HouseholdSource,
     )
@@ -62,11 +63,15 @@ if TYPE_CHECKING:
         HouseholdReportCreationInput,
         PolicySource,
         ReportRerunInput,
+        ReportRerunKind,
         SimulationServiceClient,
         SubmittedBudgetWindow,
         SubmittedReport,
         SubmittedSimulation,
     )
+
+    # A check of a country's row, raising unless it allows a kind of calculation.
+    CountryCheck = Callable[[Iterable[CountryRead], str], None]
 
 
 @contextmanager
@@ -130,15 +135,23 @@ class SimulationSubmissionService:
         self._policies = policies
         self._client_factory = client_factory
 
-    def _check(self, country_id: str, policy_ids: Iterable[UUID | None]) -> None:
-        """Raise unless the country has economy calculations and the policies can run.
+    def _check(
+        self,
+        country_id: str,
+        policy_ids: Iterable[UUID | None],
+        *,
+        require_country: CountryCheck = require_economy_country,
+    ) -> None:
+        """Raise unless the country passes ``require_country`` and the policies can run.
 
-        Raise EconomyCalculationsUnsupportedError, then PolicyNotFoundError,
-        then PolicyParametersMissingError, and SubmissionStorageError when the
-        database or its catalog cannot be read.
+        By default the country must have economy calculations. Raise the
+        country check's error (EconomyCalculationsUnsupportedError by
+        default), then PolicyNotFoundError, then PolicyParametersMissingError,
+        and SubmissionStorageError when the database or its catalog cannot be
+        read.
         """
         with _storage_failures():
-            require_economy_country(self._countries.list_countries(), country_id)
+            require_country(self._countries.list_countries(), country_id)
         require_runnable_policies(
             self._policies, country_id=country_id, policy_ids=policy_ids
         )
@@ -220,16 +233,22 @@ class SimulationSubmissionService:
         errors, SubmissionStorageError when the database or its catalog
         cannot be read, then the simulation service's errors.
         """
-        if rerun.kind == "household":
-            with _storage_failures():
-                require_household_country(
-                    self._countries.list_countries(), rerun.country_id
-                )
-            require_runnable_policies(
-                self._policies,
-                country_id=rerun.country_id,
-                policy_ids=rerun.policy_ids,
-            )
-        else:
-            self._check(rerun.country_id, rerun.policy_ids)
+        self._check(
+            rerun.country_id,
+            rerun.policy_ids,
+            require_country=_country_check(rerun.kind),
+        )
         self._client_factory().rerun_report(rerun)
+
+
+def _country_check(kind: ReportRerunKind) -> CountryCheck:
+    """Return the check a new report of this kind makes of its country's row.
+
+    A kind added to ReportRerunKind later fails mypy (a missing return) until
+    it has a case here.
+    """
+    match kind:
+        case "household":
+            return require_household_country
+        case "economy" | "budget_window":
+            return require_economy_country

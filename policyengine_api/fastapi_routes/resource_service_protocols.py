@@ -234,9 +234,11 @@ class V2StoredReportResourceService(Protocol):
         """Run the country's report again; return it with its new run as its newest.
 
         Raise ``StoredReportNotFoundError`` when the country has no such
-        report, the checks' errors as ``create_report`` does for a report of
-        its kind and the policies of its simulations, the simulation
-        service's errors, among them
+        report; the errors of the country check a new report of its kind makes
+        (economy calculations, or household calculations for a household
+        report) and of the policy checks of its simulations, as
+        ``create_report`` raises them (a household report's household is not
+        checked again); the simulation service's errors, among them
         ``SimulationServiceConflictError`` when it will not run the report
         again now, and ``RerunReportUnreadableError`` when the report cannot
         be read back once its new run was started.

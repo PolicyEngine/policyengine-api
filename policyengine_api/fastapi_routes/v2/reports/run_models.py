@@ -24,6 +24,7 @@ from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
 from policyengine_api.services.v2.simulation_service.types import (
     StrictSubmissionModel,
 )
+from policyengine_api.services.v2.stored_reports.types import ReportRunsKind
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
@@ -55,7 +56,7 @@ class ReportRunListResult(StrictReportAPIModel):
     """
 
     report_id: UUID
-    kind: Literal["economy", "household"]
+    kind: ReportRunsKind
     items: list[ReportRunItem]
     current_versions: PackageVersionsItem
 

@@ -23,7 +23,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
@@ -61,8 +61,7 @@ from policyengine_api.services.v2.stored_reports.services import V2StoredReportS
 from tests.integration.simulation_rows import insert_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
-    delete_catalog,
-    store_catalog,
+    household_only_catalog,
     store_report,
 )
 
@@ -323,21 +322,8 @@ def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
 @pytest.fixture
 def household_only_uk(owner_engine: Engine) -> Iterator[CatalogRows]:
     """Make the UK household-only, store a UK catalog, and restore both after."""
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE countries SET society_wide_enabled = false WHERE id = 'uk'")
-        )
-        catalog = store_catalog(connection, "uk")
-    try:
-        yield catalog
-    finally:
-        # Each in its own transaction, so a failed cleanup still restores the UK.
-        with owner_engine.begin() as connection:
-            connection.execute(
-                text("UPDATE countries SET society_wide_enabled = true WHERE id = 'uk'")
-            )
-        with owner_engine.begin() as connection:
-            delete_catalog(connection, catalog)
+    with household_only_catalog(owner_engine, "uk") as uk_catalog:
+        yield uk_catalog
 
 
 @pytest.fixture
