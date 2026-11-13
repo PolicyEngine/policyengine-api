@@ -19,7 +19,7 @@ class EconomyCalculationsUnsupportedError(ValueError):
 
 
 class SubmissionStorageError(RuntimeError):
-    """A submission's countries, policies or catalog could not be read."""
+    """A submission's countries, households, policies or catalog could not be read."""
 
 
 def require_economy_country(countries: Iterable[CountryRead], country_id: str) -> None:

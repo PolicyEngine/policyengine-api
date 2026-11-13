@@ -617,7 +617,9 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
     WorkflowContract(
         name="detailed_save_reports_v2",
         current_contract="typed_v2_resources",
-        future_owner_pr="C1 · 8: v2 simulations and economy reports",
+        future_owner_pr=(
+            "C1 · 8: v2 simulations and economy reports; C1 · 16: household reports"
+        ),
         requests=(
             ContractRequest(
                 method="POST",
@@ -651,6 +653,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "status",
                     "message",
                     "result.item.id",
+                    "result.item.kind",
                     "result.item.status",
                     "result.item.run",
                     "result.item.current_versions",

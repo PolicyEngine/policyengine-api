@@ -4,10 +4,11 @@ A report compares a baseline and a reform simulation; each calculation of it
 is a report run. A budget-window report compares the same policies in each
 year of a window of consecutive years: each calculation of it is a
 budget-window run, and each year of that a report run naming the window run,
-its year and that year's own simulation runs. The
-simulation service creates reports and their runs, and its Modal workers
-store each run's result in the result tables; the Public API reads all of
-them directly.
+its year and that year's own simulation runs. A household report's
+simulations each calculate one stored household, and its result is each
+simulation run's calculated household. The simulation service creates
+reports and their runs, and its Modal workers store each run's result in the
+result tables; the Public API reads all of them directly.
 """
 
 from __future__ import annotations
@@ -35,6 +36,10 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
+    )
+    from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportFailure,
+        HouseholdReportResult,
     )
 
 # A report's status is its newest run's, or not_run while it has none, as a
@@ -90,8 +95,6 @@ class ReportDefinitionRead:
     label: str
     description: str | None
     year: int | None
-    region_code: str | None
-    dataset_name: str | None
     baseline_simulation: ReportSimulationRead | None
     reform_simulation: ReportSimulationRead | None
     options: dict[str, JsonValue]
@@ -101,9 +104,15 @@ class ReportDefinitionRead:
 
 @dataclass(frozen=True)
 class ReportSummaryRead(ReportDefinitionRead):
-    """An economy report's definition, its newest run and the current versions."""
+    """An economy report's definition, its newest run and the current versions.
+
+    ``region_code`` and ``dataset_name`` are the region and dataset both
+    simulations use, null when the report names none.
+    """
 
     kind: Literal["economy"]
+    region_code: str | None
+    dataset_name: str | None
     status: ReportStatusName
     run: ReportRunRead | None
 
@@ -113,6 +122,35 @@ class ReportRead(ReportSummaryRead):
     """A report with its newest run's result, once that run has succeeded."""
 
     result: EconomyResult | None
+
+
+@dataclass(frozen=True)
+class HouseholdReportSummaryRead(ReportDefinitionRead):
+    """A household report's definition, its newest run and the current versions.
+
+    Both simulations calculate the stored household ``household_id`` in its
+    default year, ``year``; ``reform_simulation`` is None for a report of the
+    baseline alone. It has no region or dataset. ``run`` is the newest report
+    run, whatever its status and versions, naming each simulation's run.
+    """
+
+    kind: Literal["household"]
+    household_id: UUID
+    status: ReportStatusName
+    run: ReportRunRead | None
+
+
+@dataclass(frozen=True)
+class HouseholdReportRead(HouseholdReportSummaryRead):
+    """A household report with its newest run's outcome.
+
+    ``result`` holds the calculated households once that run has succeeded;
+    ``failure`` says why each side failed once it has failed. Both are None
+    otherwise.
+    """
+
+    result: HouseholdReportResult | None
+    failure: HouseholdReportFailure | None
 
 
 @dataclass(frozen=True)
@@ -153,13 +191,16 @@ class BudgetWindowRunRead:
 class BudgetWindowReportSummaryRead(ReportDefinitionRead):
     """A budget-window report's definition, its newest run and the current versions.
 
-    The window is ``budget_window_size`` years from ``year``. The report's
-    two simulations are its first year's; each year's report run names that
-    year's own simulation runs. ``run`` is the newest budget-window run,
-    whatever its status and versions, with its years.
+    The window is ``budget_window_size`` years from ``year``, in the region
+    ``region_code`` and dataset ``dataset_name``, null when the report names
+    none. The report's two simulations are its first year's; each year's
+    report run names that year's own simulation runs. ``run`` is the newest
+    budget-window run, whatever its status and versions, with its years.
     """
 
     kind: Literal["budget_window"]
+    region_code: str | None
+    dataset_name: str | None
     budget_window_size: int
     status: ReportStatusName
     run: BudgetWindowRunRead | None
@@ -172,9 +213,11 @@ class BudgetWindowReportRead(BudgetWindowReportSummaryRead):
     result: window_result_types.BudgetWindowResult | None
 
 
-# A report of either kind these routes read.
-StoredReportRead = ReportRead | BudgetWindowReportRead
-StoredReportSummaryRead = ReportSummaryRead | BudgetWindowReportSummaryRead
+# A report of any kind these routes read.
+StoredReportRead = ReportRead | HouseholdReportRead | BudgetWindowReportRead
+StoredReportSummaryRead = (
+    ReportSummaryRead | HouseholdReportSummaryRead | BudgetWindowReportSummaryRead
+)
 
 
 @dataclass(frozen=True)

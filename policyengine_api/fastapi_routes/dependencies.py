@@ -229,6 +229,7 @@ def _default_simulation_submissions() -> SimulationServiceClient:
 
     return SimulationSubmissionService(
         countries=_default_v2_country_service_factory(),
+        households=_default_v2_household_service_factory(),
         policies=_default_v2_policy_service_factory(),
         client_factory=process_simulation_service_client,
     )

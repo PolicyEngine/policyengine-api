@@ -234,6 +234,39 @@ class EconomyReportCreationInput(EconomyReportFields):
     country_id: CountryId
 
 
+class HouseholdPolicyChoice(StrictSubmissionModel):
+    """A household simulation's stored policy; none means current law."""
+
+    policy_id: ResourceId | None = None
+
+
+class HouseholdReportFields(StrictSubmissionModel):
+    """A household report: one stored household under a baseline and a reform.
+
+    ``household_id`` names a household stored through ``/v2/households`` in
+    the report's country, and both simulations calculate it in its default
+    year, the year its values name, as a household calculation does.
+    ``reform`` is null, or omitted, for a report of the baseline alone. Each
+    simulation calculates every yearly, monthly and eternal variable the
+    household lacks, as ``/calculate-full`` does, so the report gives every
+    value; there is no option to fill in only the values the household asks
+    for, as ``/v2/household-calculations`` has.
+    """
+
+    kind: Literal["household"]
+    label: ReportLabel
+    description: ReportDescription | None = None
+    household_id: ResourceId
+    baseline: HouseholdPolicyChoice
+    reform: HouseholdPolicyChoice | None = None
+
+
+class HouseholdReportCreationInput(HouseholdReportFields):
+    """A household report to create in the country."""
+
+    country_id: CountryId
+
+
 class BudgetWindowReportFields(ReportDefinitionFields):
     """A budget window: a baseline and a reform simulation in each of several years.
 
@@ -263,8 +296,12 @@ class BudgetWindowReportCreationInput(BudgetWindowReportFields):
     country_id: CountryId
 
 
-# A report of either kind to create.
-ReportCreationInput = EconomyReportCreationInput | BudgetWindowReportCreationInput
+# A report of any kind to create; ``kind`` says which.
+ReportCreationInput = (
+    EconomyReportCreationInput
+    | HouseholdReportCreationInput
+    | BudgetWindowReportCreationInput
+)
 
 
 @dataclass(frozen=True)
@@ -320,7 +357,9 @@ class SimulationServiceClient(Protocol):
 
     ``SimulationSubmissionService``, which checks a submission before sending
     it through a client, also raises EconomyCalculationsUnsupportedError,
-    PolicyNotFoundError, PolicyParametersMissingError and
+    HouseholdCalculationCountryError, HouseholdNotFoundError,
+    HouseholdCalculationYearError, PolicyNotFoundError,
+    PolicyParametersMissingError and
     SubmissionStorageError from its checks.
     """
 
@@ -332,6 +371,16 @@ class SimulationServiceClient(Protocol):
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         """Create the report, its simulations and their runs, and start them."""
+        ...
+
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Create the household report, its simulations and runs; start them.
+
+        It goes to the same route as ``submit_report``, so it raises the same
+        errors.
+        """
         ...
 
     def submit_budget_window(

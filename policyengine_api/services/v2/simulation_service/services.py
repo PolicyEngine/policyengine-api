@@ -1,9 +1,9 @@
 """Check simulations and reports, then ask the simulation service to create them.
 
 Every submission to the simulation service's ``POST /simulations`` and
-``POST /reports`` (economy reports and budget windows) goes through
-``SimulationSubmissionService``, so checks that apply to all of them live in
-one place. It checks, in order, that the
+``POST /reports`` (economy reports, budget windows and household reports) goes
+through ``SimulationSubmissionService``, so checks that apply to all of them
+live in one place. It checks, in order, that the
 country's ``countries`` row allows economy calculations (a household-only
 country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
@@ -12,6 +12,13 @@ version lacks (``require_runnable_policies``, which re-runs should call too).
 Only then is the simulation service asked. The dynamics a submission names,
 its region and its dataset are checked by the simulation service, which reads
 them in the catalog version its default worker runs.
+
+A household report is checked the same way, except that its country's row
+must allow household calculations instead (a household-only country passes),
+and the household it names must be stored in the country, through the same
+service as ``/v2/households``, with a default year, which the report
+calculates; the household is checked before the policies. These are the
+checks ``/v2/household-calculations`` makes, with the same errors.
 """
 
 from __future__ import annotations
@@ -23,6 +30,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
+)
+from policyengine_api.services.v2.household_calculations.validators import (
+    require_default_year,
+    require_household_country,
 )
 from policyengine_api.services.v2.policies.validators import (
     require_policy_parameters_present,
@@ -36,11 +47,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from uuid import UUID
 
+    from policyengine_api.services.v2.household_calculations.types import (
+        HouseholdSource,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         BudgetWindowReportCreationInput,
         CountrySource,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        HouseholdReportCreationInput,
         PolicySource,
         SimulationServiceClient,
         SubmittedBudgetWindow,
@@ -94,16 +109,19 @@ class SimulationSubmissionService:
         self,
         *,
         countries: CountrySource,
+        households: HouseholdSource,
         policies: PolicySource,
         client_factory: Callable[[], SimulationServiceClient],
     ) -> None:
         """Check through these sources; send through ``client_factory``'s client.
 
-        The client is built only once a submission passes the checks, so a
-        refused submission gets its own answer even when the simulation
-        service is not configured.
+        ``households`` is read only for a household report. The client is
+        built only once a submission passes the checks, so a refused
+        submission gets its own answer even when the simulation service is
+        not configured.
         """
         self._countries = countries
+        self._households = households
         self._policies = policies
         self._client_factory = client_factory
 
@@ -141,6 +159,35 @@ class SimulationSubmissionService:
             report.country_id, (report.baseline.policy_id, report.reform.policy_id)
         )
         return self._client_factory().submit_report(report)
+
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Check the household report, then have the simulation service create it.
+
+        Raise HouseholdCalculationCountryError unless the country's row
+        allows household calculations, then HouseholdNotFoundError for a
+        household the country does not store, then
+        HouseholdCalculationYearError for one with no default year, then the
+        policy checks' errors
+        (the baseline's policy first, and only the baseline's for a report of
+        the baseline alone), SubmissionStorageError when the database or its
+        catalog cannot be read, and then the simulation service's errors.
+        """
+        country_id = report.country_id
+        with _storage_failures():
+            require_household_country(self._countries.list_countries(), country_id)
+            household = self._households.get_household(
+                country_id=country_id, household_id=report.household_id
+            )
+        require_default_year(household.default_year)
+        policy_ids = [report.baseline.policy_id]
+        if report.reform is not None:
+            policy_ids.append(report.reform.policy_id)
+        require_runnable_policies(
+            self._policies, country_id=country_id, policy_ids=policy_ids
+        )
+        return self._client_factory().submit_household_report(report)
 
     def submit_budget_window(
         self, report: BudgetWindowReportCreationInput

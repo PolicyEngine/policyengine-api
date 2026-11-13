@@ -31,6 +31,7 @@ from policyengine_api.services.v2.simulation_service.types import (
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
 )
+from tests.unit.v2.test_simulation_submissions import UnreadHouseholds
 
 STORED_POLICY_ID = UUID("00000000-0000-0000-0000-00000000c101")
 OUTDATED_POLICY_ID = UUID("00000000-0000-0000-0000-00000000c102")
@@ -107,7 +108,10 @@ def submissions(
     client: RecordingSimulationService, policies: StoredPolicies
 ) -> SimulationSubmissionService:
     return SimulationSubmissionService(
-        countries=StoredCountries(), policies=policies, client_factory=lambda: client
+        countries=StoredCountries(),
+        households=UnreadHouseholds(),
+        policies=policies,
+        client_factory=lambda: client,
     )
 
 

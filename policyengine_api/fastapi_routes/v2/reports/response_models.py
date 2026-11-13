@@ -12,6 +12,9 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
     V2MissingParametersErrorResponse,
 )
+from policyengine_api.fastapi_routes.v2.household_calculations.response_models import (
+    HouseholdCalculationOutputItem,
+)
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
@@ -26,6 +29,8 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
         BudgetWindowReportRead,
         BudgetWindowReportSummaryRead,
+        HouseholdReportRead,
+        HouseholdReportSummaryRead,
         ReportRead,
         ReportSummaryRead,
         StoredReportRead,
@@ -75,11 +80,9 @@ class ReportSimulationItem(StrictReportAPIModel):
     dynamic_id: UUID | None
 
 
-class ReportSummaryItem(StrictReportAPIModel):
-    """An economy report comparing a baseline and a reform simulation.
+class ReportDefinitionItem(StrictReportAPIModel):
+    """What every report item gives: its definition and the current versions.
 
-    ``status`` is the newest run's, or ``not_run`` for a report with no run.
-    ``run`` is the newest run, whatever its status and versions;
     ``current_versions`` are the versions the Public API runs now, so a
     newest run on other versions is out of date. ``options`` are the options
     the report was created with.
@@ -87,19 +90,29 @@ class ReportSummaryItem(StrictReportAPIModel):
 
     id: UUID
     country_id: str
-    kind: Literal["economy"]
     label: str
     description: str | None
     year: int | None
-    region_code: str | None
-    dataset_name: str | None
     baseline_simulation: ReportSimulationItem | None
     reform_simulation: ReportSimulationItem | None
     options: dict[str, JsonValue]
     created_at: datetime
+    current_versions: PackageVersionsItem
+
+
+class ReportSummaryItem(ReportDefinitionItem):
+    """An economy report comparing a baseline and a reform simulation.
+
+    Both simulations use the region and dataset named. ``status`` is the
+    newest run's, or ``not_run`` for a report with no run. ``run`` is the
+    newest run, whatever its status and versions.
+    """
+
+    kind: Literal["economy"]
+    region_code: str | None
+    dataset_name: str | None
     status: Literal["not_run", "pending", "running", "succeeded", "failed"]
     run: ReportRunItem | None
-    current_versions: PackageVersionsItem
 
     @classmethod
     def from_summary(cls, read: ReportSummaryRead) -> ReportSummaryItem:
@@ -118,6 +131,85 @@ class ReportItem(ReportSummaryItem):
 
     @classmethod
     def from_read(cls, read: ReportRead) -> ReportItem:
+        """Build the item from the service's read, with its result."""
+        return cls.model_validate(read)
+
+
+class HouseholdReportSummaryItem(ReportDefinitionItem):
+    """A household report: one stored household under a baseline and a reform.
+
+    Both simulations calculate the household ``household_id`` in its default
+    year, ``year``; ``reform_simulation`` is null for a report of the
+    baseline alone. ``status`` is the newest run's, or ``not_run`` for a
+    report with no run. ``run`` is the newest run, whatever its status and
+    versions, naming each simulation's run.
+    """
+
+    kind: Literal["household"]
+    household_id: UUID
+    status: Literal["not_run", "pending", "running", "succeeded", "failed"]
+    run: ReportRunItem | None
+
+    @classmethod
+    def from_summary(
+        cls, read: HouseholdReportSummaryRead
+    ) -> HouseholdReportSummaryItem:
+        """Build the summary from the service's read, without a result."""
+        return cls.model_validate(read)
+
+
+class HouseholdReportResultItem(StrictReportAPIModel):
+    """Each simulation's calculated household.
+
+    Each is the stored household with every value its calculation filled in,
+    as ``/v2/household-calculations`` answers one. ``reform`` is null for a
+    report of the baseline alone.
+    """
+
+    baseline: HouseholdCalculationOutputItem
+    reform: HouseholdCalculationOutputItem | None
+
+
+class HouseholdReportSideFailureItem(StrictReportAPIModel):
+    """The household function's error for one side's calculation.
+
+    ``code`` is its error code, such as ``invalid_inputs``, with
+    ``input_errors`` naming each input the country model does not recognize
+    and ``spm_error`` an SPM error.
+    """
+
+    code: str
+    message: str
+    input_errors: list[dict[str, JsonValue]]
+    spm_error: dict[str, JsonValue] | None
+
+
+class HouseholdReportFailureItem(StrictReportAPIModel):
+    """Why each side of a failed run failed, as the household function said.
+
+    A side is null when it succeeded, or failed without the household
+    function's error, as a run Modal refused does; the run's
+    ``error_message`` still says why it failed. ``reform`` is also null for
+    a report of the baseline alone.
+    """
+
+    baseline: HouseholdReportSideFailureItem | None
+    reform: HouseholdReportSideFailureItem | None
+
+
+class HouseholdReportItem(HouseholdReportSummaryItem):
+    """A household report with its newest run's outcome.
+
+    ``result`` holds the calculated households once the newest run has
+    succeeded, and ``failure`` each side's error once it has failed; each is
+    null otherwise.
+    """
+
+    result: HouseholdReportResultItem | None
+    failure: HouseholdReportFailureItem | None
+
+    @classmethod
+    def from_read(cls, read: HouseholdReportRead) -> HouseholdReportItem:
         """Build the item from the service's read, with its result."""
         return cls.model_validate(read)
 
@@ -214,8 +306,12 @@ class BudgetWindowReportItem(BudgetWindowReportSummaryItem):
         return cls.model_validate(read)
 
 
-def report_item(read: StoredReportRead) -> ReportItem | BudgetWindowReportItem:
+def report_item(
+    read: StoredReportRead,
+) -> ReportItem | HouseholdReportItem | BudgetWindowReportItem:
     """Build the item of the report's kind from the service's read."""
+    if read.kind == "household":
+        return HouseholdReportItem.from_read(read)
     if read.kind == "budget_window":
         return BudgetWindowReportItem.from_read(read)
     return ReportItem.from_read(read)
@@ -223,8 +319,10 @@ def report_item(read: StoredReportRead) -> ReportItem | BudgetWindowReportItem:
 
 def report_summary_item(
     read: StoredReportSummaryRead,
-) -> ReportSummaryItem | BudgetWindowReportSummaryItem:
+) -> ReportSummaryItem | HouseholdReportSummaryItem | BudgetWindowReportSummaryItem:
     """Build the summary of the report's kind from the service's read."""
+    if read.kind == "household":
+        return HouseholdReportSummaryItem.from_summary(read)
     if read.kind == "budget_window":
         return BudgetWindowReportSummaryItem.from_summary(read)
     return ReportSummaryItem.from_summary(read)
@@ -233,7 +331,10 @@ def report_summary_item(
 class ReportDetailResult(StrictReportAPIModel):
     """Result holding one report in ``item``; its ``kind`` says which model it is."""
 
-    item: Annotated[ReportItem | BudgetWindowReportItem, Field(discriminator="kind")]
+    item: Annotated[
+        ReportItem | HouseholdReportItem | BudgetWindowReportItem,
+        Field(discriminator="kind"),
+    ]
 
 
 class ReportListResult(StrictReportAPIModel):
@@ -241,7 +342,9 @@ class ReportListResult(StrictReportAPIModel):
 
     items: list[
         Annotated[
-            ReportSummaryItem | BudgetWindowReportSummaryItem,
+            ReportSummaryItem
+            | HouseholdReportSummaryItem
+            | BudgetWindowReportSummaryItem,
             Field(discriminator="kind"),
         ]
     ]
@@ -294,28 +397,31 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response("No report has this ID in this country."),
-    422: error_response(
-        "The request does not match the schema, or the report is a household "
-        "report, which this route does not read yet."
-    ),
+    422: error_response("The request does not match the schema."),
     500: error_response(
         "The newest run succeeded but its stored result cannot be read (for a "
+        "household report, a simulation run's calculated household; for a "
         "budget window, a year has no succeeded run or no budget figures), or "
         "the operation could not be completed."
     ),
 }
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
-    404: error_response("A policy the report names is not stored in the country."),
+    404: error_response(
+        "A policy the report names, or a household report's household, is not "
+        "stored in the country."
+    ),
     413: error_response("The request body exceeds 16 KiB."),
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
             "The request does not match the schema (such as a budget window of "
             "fewer than 1 or more than 75 years, or one ending after 2200); the "
-            "country has no economy "
-            "reports (such as a household-only country); a policy the report "
-            "names sets parameters the running catalog version does not have "
+            "country has no economy reports (such as a household-only country), "
+            "for an economy report or budget window, or no household "
+            "calculations, for a household report; a household "
+            "report's household has no default year; a policy the report names "
+            "sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "
             "checked first); or the simulation service cannot run the report: its "
             "422, or its 400 for a region, dataset or dynamic it does not have. The "

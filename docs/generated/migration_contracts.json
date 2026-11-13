@@ -1374,7 +1374,7 @@
     },
     {
       "current_contract": "typed_v2_resources",
-      "future_owner_pr": "C1 \u00b7 8: v2 simulations and economy reports",
+      "future_owner_pr": "C1 \u00b7 8: v2 simulations and economy reports; C1 \u00b7 16: household reports",
       "name": "detailed_save_reports_v2",
       "requests": [
         {
@@ -1417,6 +1417,7 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.kind",
             "result.item.status",
             "result.item.run",
             "result.item.current_versions",

@@ -17,9 +17,14 @@ the year, region and dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
 caller gave them. A budget window goes to the same ``POST /reports`` as
 ``report_type`` ``budget_window``, naming its first year and
-``budget_window_size`` in place of the year, and no ``include_cliffs``.
-None names a PolicyEngine.py version: the simulation service runs its
-default worker's. The simulation service answers:
+``budget_window_size`` in place of the year, and no ``include_cliffs``. A
+household report goes there too, as ``report_type`` ``household``, naming
+the label and description, the stored household, each simulation's policy
+(the reform null for a report of the baseline alone), but no year: the
+simulation service calculates the household's default year, adding every
+variable the household lacks. None names a PolicyEngine.py version: the
+simulation service runs its default worker's. The simulation service
+answers:
 
 - 201 or 202 with the created record's ID and its first run's ID: for a
   budget window, its budget-window run's ID (``budget_window_run_id``). One
@@ -137,8 +142,9 @@ if TYPE_CHECKING:
         BudgetWindowReportCreationInput,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        HouseholdPolicyChoice,
+        HouseholdReportCreationInput,
         PolicyChoice,
-        ReportCreationInput,
     )
 
 SIMULATIONS_PATH = "/simulations"
@@ -233,8 +239,10 @@ def simulation_request(simulation: EconomySimulationCreationInput) -> dict[str, 
     }
 
 
-def _report_definition(report: ReportCreationInput) -> dict[str, Any]:
-    """Return the request fields both kinds of report send.
+def _report_definition(
+    report: EconomyReportCreationInput | BudgetWindowReportCreationInput,
+) -> dict[str, Any]:
+    """Return the request fields economy reports and budget windows both send.
 
     ``spm`` is sent only when the caller gave it.
     """
@@ -271,6 +279,28 @@ def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, 
     return {
         **_report_definition(report),
         "budget_window_size": report.budget_window_size,
+    }
+
+
+def _household_policy_choice(choice: HouseholdPolicyChoice) -> dict[str, str | None]:
+    return {"policy_id": None if choice.policy_id is None else str(choice.policy_id)}
+
+
+def household_report_request(report: HouseholdReportCreationInput) -> dict[str, Any]:
+    """Return the simulation service's request body for the household report.
+
+    ``reform`` is null for a report of the baseline alone.
+    """
+    return {
+        "country": report.country_id,
+        "report_type": report.kind,
+        "label": report.label,
+        "description": report.description,
+        "household_id": str(report.household_id),
+        "baseline": _household_policy_choice(report.baseline),
+        "reform": (
+            None if report.reform is None else _household_policy_choice(report.reform)
+        ),
     }
 
 
@@ -536,6 +566,25 @@ class SimulationServiceReportClient:
         created = self._created(
             self._send_report,
             report_request(report),
+            _CreatedReport,
+            record="report",
+            created_name="report",
+        )
+        return SubmittedReport(
+            report_id=created.report_id, report_run_id=created.report_run_id
+        )
+
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Create the household report, its simulations and runs; return its IDs.
+
+        It is sent to the report route, so its refusals and failures are a
+        report's. Raise the errors ``SimulationServiceClient`` names.
+        """
+        created = self._created(
+            self._send_report,
+            household_report_request(report),
             _CreatedReport,
             record="report",
             created_name="report",
