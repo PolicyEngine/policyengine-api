@@ -42,3 +42,28 @@ def advance_saved_reports_last_run_at(
         )
         .execution_options(synchronize_session=False)
     )
+
+
+def update_saved_reports_last_run_at(
+    session: Session,
+    *,
+    user_id: UUID,
+    report_id: UUID,
+    last_run_at: datetime | None,
+) -> None:
+    """Set the user's saved reports of the report to ``last_run_at``, even earlier.
+
+    ``updated_at`` is unchanged, since the user changed nothing.
+    """
+    session.execute(
+        update(UserReportAssociation)
+        .where(
+            col(UserReportAssociation.user_id) == user_id,
+            col(UserReportAssociation.report_id) == report_id,
+        )
+        .values(
+            last_run_at=last_run_at,
+            updated_at=col(UserReportAssociation.updated_at),
+        )
+        .execution_options(synchronize_session=False)
+    )

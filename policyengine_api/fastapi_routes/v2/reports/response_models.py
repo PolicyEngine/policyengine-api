@@ -408,6 +408,10 @@ UNAUTHENTICATED_REQUESTER = (
     "token that is invalid, or an unauthenticated-user header that is not a "
     "canonical UUID or names a signed-in user. Nothing was started."
 )
+MACHINE_REQUESTER = (
+    "A server forwarded a machine client's token as the user's: these routes "
+    "record requests for users only. Nothing was started."
+)
 NOT_RECORDED = (
     "Or the simulation service started the run, but the user's request for it "
     "could not be recorded: the answer gives its report_id and report_run_id, "
@@ -438,6 +442,7 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
     401: error_response(UNAUTHENTICATED_REQUESTER),
+    403: error_response(MACHINE_REQUESTER),
     404: error_response(
         "A policy the report names, or a household report's household, is not "
         "stored in the country."

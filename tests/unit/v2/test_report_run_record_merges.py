@@ -1,8 +1,9 @@
-"""A sign-in merge moves report-run records in any database the unit tests use.
+"""A sign-in merge with no report-run records still completes in SQLite.
 
-PostgreSQL tests (``tests/integration/test_v2_user_report_runs.py``) check
-which records move; these check that the merge's statements run in SQLite
-too, where the user service tests merge accounts.
+The user service tests merge accounts in SQLite, where the merge's search
+for a browser's records must run too. PostgreSQL tests
+(``tests/integration/test_v2_user_report_runs.py``) check which records
+move and the saved reports' ``last_run_at``.
 """
 
 from __future__ import annotations

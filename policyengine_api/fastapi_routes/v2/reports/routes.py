@@ -19,7 +19,7 @@ first.
 # annotations at runtime, and the requester's names a dependency local to the
 # router builder.
 from collections.abc import Callable
-from typing import Annotated, TypeVar
+from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -181,11 +181,21 @@ def _requester_refused(error: StandardUserRequiresSignInError) -> JSONResponse:
     )
 
 
+# The two routes that record a request take its user's credential, but
+# optionally: FastAPI lists the schemes a credential may use, and an empty
+# requirement says a request may send none.
+OPTIONAL_USER_CREDENTIAL: dict[str, Any] = {"security": [{}]}
+
+
 def _not_recorded(error: ReportRunNotRecordedError) -> JSONResponse:
-    """Answer a run whose request could not be recorded with 503 naming the run."""
+    """Answer a run whose request could not be recorded with 503 naming the run.
+
+    The failure logged is the record's own, the error's cause.
+    """
+    cause = error.__cause__
     return unavailable_after_creation_answer(
         "v2_report_run_not_recorded",
-        error,
+        cause if isinstance(cause, Exception) else error,
         ReportRunNotRecordedResponse(
             message=str(error),
             report_id=error.report_id,
@@ -302,6 +312,7 @@ def _add_report_run_routes(
         response_model=ReportDetailResponse,
         status_code=201,
         responses=RERUN_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Run a report again",
         description=(
             "Checks the report as a new report of its kind is checked (the "
@@ -386,6 +397,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         response_model=ReportDetailResponse,
         status_code=201,
         responses=CREATE_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Create an economy report, a household report or a budget window",
         description=(
             "Checks that the country has economy reports and stores each named "

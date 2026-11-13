@@ -12,6 +12,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    MACHINE_REQUESTER,
     NOT_RECORDED,
     UNAUTHENTICATED_REQUESTER,
     BudgetWindowRunItem,
@@ -147,6 +148,7 @@ RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: error_response(UNAUTHENTICATED_REQUESTER),
+    403: error_response(MACHINE_REQUESTER),
     404: error_response(
         f"{NOT_FOUND} Or a policy a simulation of the report names is no longer "
         "stored in the country."

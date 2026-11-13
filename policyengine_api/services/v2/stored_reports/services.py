@@ -50,7 +50,7 @@ budget-window runs with their years.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -125,6 +125,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.report_run_records.types import (
+        CheckedRequester,
         ReportRunRecorder,
     )
     from policyengine_api.services.v2.simulation_service.types import (
@@ -202,18 +203,22 @@ def _with_run(
     return replace(stored, newest_run=run)
 
 
-def _record_request(
-    recorder: ReportRunRecorder,
-    requester: AccountPrincipal,
-    request: ReportRunRequest,
-) -> None:
+@dataclass(frozen=True)
+class _RunRecording:
+    """The recorder of a request naming its user, and that user as checked."""
+
+    recorder: ReportRunRecorder
+    requester: CheckedRequester
+
+
+def _record_request(recording: _RunRecording, request: ReportRunRequest) -> None:
     """Record the requester's request for its run.
 
     Raise ReportRunNotRecordedError, caused by the record's own error,
     whatever fails: the run exists, so the caller reads it.
     """
     try:
-        recorder.record(requester, request)
+        recording.recorder.record(recording.requester, request)
     except Exception as error:
         raise ReportRunNotRecordedError(
             report_id=request.report_id,
@@ -260,10 +265,10 @@ class V2StoredReportService:
         self._submissions = submissions
         self._run_records = run_records
 
-    def _checked_recorder(
+    def _run_recording(
         self, requester: AccountPrincipal | None
-    ) -> ReportRunRecorder | None:
-        """Return the recorder for a request naming its user, once the user is checked.
+    ) -> _RunRecording | None:
+        """Check a request's user before anything starts; return how to record it.
 
         Return None for a request naming no user, whose run nobody records.
         Raise ReportRunRecordsNotConfiguredError without a recorder, and the
@@ -274,8 +279,10 @@ class V2StoredReportService:
         if self._run_records is None:
             msg = "Users' report runs are not recorded here"
             raise ReportRunRecordsNotConfiguredError(msg)
-        self._run_records.check_requester(requester)
-        return self._run_records
+        return _RunRecording(
+            recorder=self._run_records,
+            requester=self._run_records.check_requester(requester),
+        )
 
     def _configured_submissions(self) -> SimulationServiceClient:
         """Return the submissions, or raise SubmissionsNotConfiguredError."""
@@ -419,7 +426,7 @@ class V2StoredReportService:
         """
         submissions = self._configured_submissions()
         requested_at = utc_now()
-        recorder = self._checked_recorder(requester)
+        recording = self._run_recording(requester)
         recorded_run_ids: tuple[UUID, ...] = ()
         if report_input.kind == "budget_window":
             window = submissions.submit_budget_window(report_input)
@@ -432,10 +439,9 @@ class V2StoredReportService:
             )
             report_id, run_id = submitted.report_id, submitted.report_run_id
             recorded_run_ids = (submitted.report_run_id,)
-        if recorder is not None and requester is not None and recorded_run_ids:
+        if recording is not None and recorded_run_ids:
             _record_request(
-                recorder,
-                requester,
+                recording,
                 ReportRunRequest(
                     country_id=report_input.country_id,
                     report_id=report_id,
@@ -486,7 +492,7 @@ class V2StoredReportService:
         requested_at = utc_now()
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-        recorder = self._checked_recorder(requester)
+        recording = self._run_recording(requester)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -500,10 +506,9 @@ class V2StoredReportService:
             run_id = started.budget_window_run_id
         else:
             run_id = started.report_run_id
-            if recorder is not None and requester is not None:
+            if recording is not None:
                 _record_request(
-                    recorder,
-                    requester,
+                    recording,
                     ReportRunRequest(
                         country_id=country_id,
                         report_id=report_id,

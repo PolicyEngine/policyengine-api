@@ -37,6 +37,19 @@ class ReportRunRequest:
 
 
 @dataclass(frozen=True)
+class CheckedRequester:
+    """A requester checked before the simulation service is asked.
+
+    ``user_id`` is the user the principal had then, or None when it had none
+    yet (a signed-out browser's first write, or a signed-in identity's first
+    request), in which case the record provisions one.
+    """
+
+    principal: AccountPrincipal
+    user_id: UUID | None
+
+
+@dataclass(frozen=True)
 class ReportRunRecordRead:
     """One stored record of a user's request: the run, when, and how."""
 
@@ -48,8 +61,8 @@ class ReportRunRecordRead:
 class ReportRunRecorder(Protocol):
     """Record the report runs users ask for."""
 
-    def check_requester(self, principal: AccountPrincipal) -> None:
-        """Refuse a principal no record can be written for, before anything starts.
+    def check_requester(self, principal: AccountPrincipal) -> CheckedRequester:
+        """Check a principal before anything starts, and name its user if it has one.
 
         Raise StandardUserRequiresSignInError for an unauthenticated
         credential that names a signed-in user, and ReportRunRecordStorageError
@@ -57,10 +70,11 @@ class ReportRunRecorder(Protocol):
         """
         ...
 
-    def record(self, principal: AccountPrincipal, request: ReportRunRequest) -> None:
-        """Record the principal's request, provisioning its user if absent.
+    def record(self, requester: CheckedRequester, request: ReportRunRequest) -> None:
+        """Record the request for the user the check found, or a new one if none.
 
         The user's saved reports naming the report get the request's time as
-        their ``last_run_at`` when it is newer.
+        their ``last_run_at`` when it is newer. Raise RequesterUserGoneError
+        when the user the check found no longer exists.
         """
         ...

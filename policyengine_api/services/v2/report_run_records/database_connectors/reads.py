@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import func, select
 from sqlmodel import col
 
-from policyengine_api.data.v2.models import ReportRun, UserReportRunAssociation
+from policyengine_api.data.v2.models import (
+    ReportRun,
+    UserReportAssociation,
+    UserReportRunAssociation,
+)
 from policyengine_api.services.v2.report_run_records.types import ReportRunRecordRead
 
 if TYPE_CHECKING:
@@ -18,25 +22,25 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 
-def read_newest_requests_by_report(
-    session: Session, *, user_id: UUID, report_run_ids: Collection[UUID]
-) -> dict[UUID, datetime]:
-    """Return the user's newest request time among these runs, by each run's report."""
+def read_report_ids_of_runs(
+    session: Session, *, report_run_ids: Collection[UUID]
+) -> set[UUID]:
+    """Return the reports these report runs belong to."""
     if not report_run_ids:
-        return {}
-    statement = (
-        select(
-            col(ReportRun.report_id),
-            func.max(col(UserReportRunAssociation.requested_at)),
-        )
-        .join(ReportRun, col(ReportRun.id) == UserReportRunAssociation.report_run_id)
-        .where(
-            col(UserReportRunAssociation.user_id) == user_id,
-            col(UserReportRunAssociation.report_run_id).in_(report_run_ids),
-        )
-        .group_by(col(ReportRun.report_id))
+        return set()
+    statement = select(col(ReportRun.report_id)).where(
+        col(ReportRun.id).in_(report_run_ids)
     )
-    return dict(session.execute(statement).tuples().all())
+    return set(session.scalars(statement).all())
+
+
+def read_saved_report_ids(session: Session, *, user_id: UUID) -> set[UUID]:
+    """Return the detailed-save reports the user's saved reports name."""
+    statement = select(col(UserReportAssociation.report_id)).where(
+        col(UserReportAssociation.user_id) == user_id,
+        col(UserReportAssociation.report_id).is_not(None),
+    )
+    return {report_id for report_id in session.scalars(statement) if report_id}
 
 
 def read_report_run_records(
