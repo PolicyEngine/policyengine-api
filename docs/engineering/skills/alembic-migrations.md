@@ -846,9 +846,10 @@ share simulations, reports and runs:
   unkeyed, and each table is unique on `(key_version, definition_key)`;
   PostgreSQL's unique constraint allows any number of unkeyed rows. Checks
   require a key of 64 lowercase hexadecimal digits, a positive `key_version`,
-  and a key with its version (on `reports`, all three columns or none). An index on
-  `(key_version, dataset_independent_key)` finds the reports that share that
-  key: a national report and its local-area report.
+  and a key with its version (on `reports`, all three columns or none). An
+  index on `dataset_independent_key` alone finds the reports that share that
+  key, a national report and its local-area report: the app looks one up by
+  the other's key, which holds its own key version.
 - `simulation_runs` and `report_runs` gain `forced` (`false` by default, for
   every existing row and every writer that doesn't name it), which marks a run
   a forced re-run created.

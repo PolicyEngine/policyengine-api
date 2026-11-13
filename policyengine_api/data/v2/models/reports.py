@@ -110,11 +110,9 @@ class Report(TimestampedModel, table=True):
             "AND (key_version IS NULL) = (dataset_independent_key IS NULL)",
             name="ck_reports_keys_complete",
         ),
-        sa.Index(
-            "ix_reports_key_version_dataset_independent_key",
-            "key_version",
-            "dataset_independent_key",
-        ),
+        # The app finds a report's local-area report by this key alone, which
+        # holds its own key version.
+        sa.Index("ix_reports_dataset_independent_key", "dataset_independent_key"),
     )
 
     label: str = Field(max_length=255)

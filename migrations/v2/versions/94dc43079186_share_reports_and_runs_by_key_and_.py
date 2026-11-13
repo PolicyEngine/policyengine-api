@@ -2,7 +2,7 @@
 
 Revision ID: 94dc43079186
 Revises: 0c136a278f29
-Create Date: 2026-11-13 23:59:04.051068
+Create Date: 2026-11-14 01:13:41.861670
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id 94dc43079186
 
 One post-generation correction, commented where it is made:
@@ -72,7 +72,7 @@ def upgrade() -> None:
     op.add_column('reports', sa.Column('key_version', sa.Integer(), nullable=True))
     op.add_column('reports', sa.Column('definition_key', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True))
     op.add_column('reports', sa.Column('dataset_independent_key', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True))
-    op.create_index('ix_reports_key_version_dataset_independent_key', 'reports', ['key_version', 'dataset_independent_key'], unique=False)
+    op.create_index('ix_reports_dataset_independent_key', 'reports', ['dataset_independent_key'], unique=False)
     op.create_unique_constraint(op.f('uq_reports_key_version_definition_key'), 'reports', ['key_version', 'definition_key'])
     op.create_check_constraint(op.f('ck_reports_dataset_independent_key'), 'reports', "length(dataset_independent_key) = 64 AND ltrim(dataset_independent_key, '0123456789abcdef') = ''")
     op.create_check_constraint(op.f('ck_reports_definition_key'), 'reports', "length(definition_key) = 64 AND ltrim(definition_key, '0123456789abcdef') = ''")
@@ -104,7 +104,7 @@ def downgrade() -> None:
     op.drop_constraint(op.f('ck_reports_definition_key'), 'reports', type_='check')
     op.drop_constraint(op.f('ck_reports_dataset_independent_key'), 'reports', type_='check')
     op.drop_constraint(op.f('uq_reports_key_version_definition_key'), 'reports', type_='unique')
-    op.drop_index('ix_reports_key_version_dataset_independent_key', table_name='reports')
+    op.drop_index('ix_reports_dataset_independent_key', table_name='reports')
     op.drop_column('reports', 'dataset_independent_key')
     op.drop_column('reports', 'definition_key')
     op.drop_column('reports', 'key_version')
