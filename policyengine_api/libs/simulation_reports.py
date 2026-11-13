@@ -19,14 +19,13 @@ dataset: the simulation service calculates on the dataset its catalog
 version gives the region. A budget window goes to the same
 ``POST /reports`` as ``report_type`` ``budget_window``, naming its first
 year and ``budget_window_size`` in place of the year, and no
-``include_cliffs``. A
-household report goes there too, as ``report_type`` ``household``, naming
-the label and description, the stored household, each simulation's policy
-(the reform null for a report of the baseline alone), but no year: the
-simulation service calculates the household's default year, adding every
-variable the household lacks. None names a PolicyEngine.py version: the
-simulation service runs its default worker's. The simulation service
-answers:
+``include_cliffs``. A household report goes there too, as ``report_type``
+``household``, naming the label and description, the stored household, each
+simulation's policy (the reform null for a report of the baseline alone),
+but no year: the simulation service calculates the household's default
+year, adding every variable the household lacks. None names a
+PolicyEngine.py version: the simulation service runs its default worker's.
+The simulation service answers:
 
 - 201 or 202 with the created record's ID and its first run's ID: for a
   budget window, its budget-window run's ID (``budget_window_run_id``). One
@@ -34,10 +33,10 @@ answers:
   record exists;
 - 422 with its reasons when it refuses the caller's data, as text or one
   per field as FastAPI writes them, and 400 with a code in
-  ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region, dataset or
-  dynamic the caller named does not exist (the Public API checks the country
-  and policies first): SimulationServiceInvalidRequestError, with the code
-  and reasons;
+  ``CALLER_ROW_REFUSAL_CODES`` and its reason when a region or dynamic the
+  caller named, or that region's dataset, does not exist (the Public API
+  checks the country and policies first):
+  SimulationServiceInvalidRequestError, with the code and reasons;
 - 400 with any other code, or none: a state of the service rather than the
   caller's error, such as ``unknown_catalog_version`` while a release
   deploys, or a row the Public API already checked. The service is

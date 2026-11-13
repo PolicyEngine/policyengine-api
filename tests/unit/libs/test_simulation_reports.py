@@ -313,8 +313,9 @@ def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
 def test_a_row_the_caller_named_that_the_service_cannot_find_is_refused(
     submit, record: str, route_status, code: str, reason: str
 ) -> None:
-    # The Public API does not check regions, datasets or dynamics: the caller
-    # named one the simulation service's catalog version does not have.
+    # The Public API does not check regions, datasets or dynamics: the
+    # simulation service's catalog version lacks a region or dynamic the caller
+    # named, or that region's dataset.
     service = RecordingService(status_code=400, body={"code": code, "detail": reason})
 
     with pytest.raises(SimulationServiceInvalidRequestError) as refused:
