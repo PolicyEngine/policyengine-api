@@ -14,9 +14,10 @@ the year, the region code and the stored policy and dynamic (null for
 current law). A report request names the country, ``report_type``
 (``economy``), the label and description, the year and region its two
 simulations share, each simulation's policy and dynamic, ``include_cliffs``,
-and the SPM settings only when the caller gave them. No request names a
-dataset: the simulation service calculates on the dataset its catalog
-version gives the region. A budget window goes to the same
+and the SPM settings and ``data_source`` only when the caller gave them. No
+request names a dataset: the simulation service calculates on the dataset
+its catalog version gives the region, or, for ``data_source``
+``local_area_dataset``, the one it gives local areas. A budget window goes to the same
 ``POST /reports`` as ``report_type`` ``budget_window``, naming its first
 year and ``budget_window_size`` in place of the year, and no
 ``include_cliffs``. A household report goes there too, as ``report_type``
@@ -252,9 +253,12 @@ def _report_definition(
 def report_request(report: EconomyReportCreationInput) -> dict[str, Any]:
     """Return the simulation service's request body for the report.
 
-    ``spm`` is sent only when the caller gave it.
+    ``spm`` and ``data_source`` are each sent only when the caller gave them.
     """
-    return {**_report_definition(report), "include_cliffs": report.include_cliffs}
+    body = {**_report_definition(report), "include_cliffs": report.include_cliffs}
+    if report.data_source is not None:
+        body["data_source"] = report.data_source
+    return body
 
 
 def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, Any]:

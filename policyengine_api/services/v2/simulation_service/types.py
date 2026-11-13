@@ -197,8 +197,9 @@ class EconomySimulationCreationInput(EconomySimulationFields):
     country_id: CountryId
 
 
-def _omit_spm_default(schema: dict[str, Any]) -> None:
-    # Omitting spm sends no SPM settings; an explicit null is not a selection.
+def _omit_null_default(schema: dict[str, Any]) -> None:
+    # Omitting the field (spm, data_source) sends nothing; an explicit null is
+    # refused, so the schema documents no null default.
     schema.pop("default", None)
 
 
@@ -221,7 +222,7 @@ class ReportDefinitionFields(StrictSubmissionModel):
     baseline: PolicyChoice
     reform: PolicyChoice
     spm: SPMSelection | SkipJsonSchema[None] = Field(
-        default=None, json_schema_extra=_omit_spm_default
+        default=None, json_schema_extra=_omit_null_default
     )
 
     @field_validator("spm", mode="before")
@@ -234,16 +235,41 @@ class ReportDefinitionFields(StrictSubmissionModel):
         return value
 
 
+# The dataset an economy report may ask for in place of its region's: the one
+# the catalog version gives local areas.
+ReportDataSource = Literal["local_area_dataset"]
+
+
 class EconomyReportFields(ReportDefinitionFields):
     """An economy report: a baseline and a reform simulation of one region's data.
 
     ``include_cliffs`` also calculates the baseline's and reform's cliff
-    impact; the other fields are as ``ReportDefinitionFields`` describes
+    impact. ``data_source`` ``local_area_dataset`` calculates both
+    simulations on the dataset the catalog version gives local areas
+    instead of the region's, so the result also has each constituency's and
+    local authority's impact and the codes of those disclosure control
+    withheld; omit it, rather than sending null, for the region's dataset.
+    The simulation service takes it only for ``uk`` and the four
+    ``country/*`` nations, on a release that gives local areas a dataset of
+    their own, and refuses it with 422 otherwise: the Public API checks only
+    its value. The other fields are as ``ReportDefinitionFields`` describes
     them.
     """
 
     kind: Literal["economy"]
     include_cliffs: StrictBool = False
+    data_source: ReportDataSource | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_null_default
+    )
+
+    @field_validator("data_source", mode="before")
+    @classmethod
+    def require_data_source_value(cls, value: object) -> object:
+        """Refuse an explicit null ``data_source``; omit the field instead."""
+        if value is None:
+            msg = "data_source must be local_area_dataset when supplied"
+            raise ValueError(msg)
+        return value
 
 
 class EconomyReportCreationInput(EconomyReportFields):
