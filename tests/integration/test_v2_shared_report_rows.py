@@ -317,6 +317,8 @@ def test_identical_keys_name_one_simulation_and_one_report(
     [
         ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY.upper()}),
         ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY[:63]}),
+        # Lowercase, 64 characters, but not hexadecimal.
+        ("simulations", {"key_version": 1, "definition_key": "g" * 64}),
         ("simulations", {"key_version": 0, "definition_key": NATIONAL_KEY}),
         ("simulations", {"key_version": None, "definition_key": NATIONAL_KEY}),
         ("simulations", {"key_version": 1, "definition_key": None}),

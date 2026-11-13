@@ -409,11 +409,12 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
             text("UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"),
             {"id": run_id},
         )
-    with refused(connection):
+    # Named, since a second unfailed run on the same versions is refused too.
+    with refused(connection, match="ck_simulation_runs_output_pair"):
         _insert_simulation_run(
             connection, simulation_id, output_uri="gs://bucket/run.parquet"
         )
-    with refused(connection):
+    with refused(connection, match="ck_simulation_runs_output_sha256_length"):
         _insert_simulation_run(
             connection,
             simulation_id,

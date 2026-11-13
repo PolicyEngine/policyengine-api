@@ -67,7 +67,7 @@ def test_simulations_and_reports_are_found_by_an_optional_unique_key(
     checks = _checks(table_name)
     assert checks[f"ck_{table_name}_key_version"] == "key_version > 0"
     assert checks[f"ck_{table_name}_definition_key"] == (
-        "length(definition_key) = 64 AND definition_key = lower(definition_key)"
+        "length(definition_key) = 64 AND ltrim(definition_key, '0123456789abcdef') = ''"
     )
 
 
@@ -86,7 +86,7 @@ def test_a_keyed_report_also_has_the_key_shared_across_datasets() -> None:
     assert reports.c.dataset_independent_key.type.length == 64
     assert checks["ck_reports_dataset_independent_key"] == (
         "length(dataset_independent_key) = 64 "
-        "AND dataset_independent_key = lower(dataset_independent_key)"
+        "AND ltrim(dataset_independent_key, '0123456789abcdef') = ''"
     )
     assert checks["ck_reports_keys_complete"] == (
         "(key_version IS NULL) = (definition_key IS NULL) "

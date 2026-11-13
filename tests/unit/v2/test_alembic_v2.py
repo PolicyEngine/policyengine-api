@@ -54,6 +54,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+        "user_report_run_associations",
         "user_type_changes",
     }
 )
@@ -262,6 +263,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        SPM_AVAILABILITY_REVISION,
         USER_TYPE_CHANGES_REVISION,
         USER_TYPES_REVISION,
         SAVED_ITEM_KEYS_REVISION,
