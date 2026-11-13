@@ -27,7 +27,8 @@
 #   3. A deletion that Artifact Registry refuses because another manifest
 #      still references the manifest is logged and not counted as a failure.
 #      A manifest uploaded just before the kept index that references it is
-#      refused like this on every run until that index is deleted. A manifest
+#      refused like this on each run in which that index is the oldest kept
+#      release, and deleted after the index once it is older. A manifest
 #      whose untagged index (left when a tag is pushed again) is deleted later
 #      in the same run is deleted by the next run.
 #

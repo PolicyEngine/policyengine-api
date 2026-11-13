@@ -178,9 +178,8 @@ def _run_cleanup(
         },
     )
 
-    def logged_lines(name: str) -> list[str]:
-        log_file = state / name
-        return log_file.read_text().splitlines() if log_file.exists() else []
+    def logged_lines(log_name: str) -> list[str]:
+        return (state / log_name).read_text().splitlines()
 
     return result, logged_lines("calls.log"), logged_lines("list_calls.log")
 
@@ -339,6 +338,52 @@ def test_cleanup_deletes_a_manifest_on_the_next_run_after_its_untagged_index(
     assert second_result.returncode == 0, second_result.stdout
     assert second_calls == [_delete_call("stale-provenance")]
     assert "Deleted 1/1 manifest(s)." in second_result.stdout
+
+
+def test_cleanup_tries_a_manifest_uploaded_before_its_index_only_when_it_is_oldest(
+    tmp_path: Path,
+) -> None:
+    # release-2's index is listed a second after the two manifests it
+    # references, so they sort after it.
+    state = _fake_registry(
+        tmp_path,
+        [
+            _manifest("2026-11-13T19:28:46Z", "release-2-index", "release-2"),
+            _manifest("2026-11-13T19:28:45Z", "release-2-image"),
+            _manifest("2026-11-13T19:28:45Z", "release-2-provenance"),
+            _manifest("2026-11-12T22:05:18Z", "release-1", "release-1"),
+        ],
+        parents=_index_children("release-2"),
+    )
+
+    def add_release(uploaded: str, name: str) -> None:
+        with (state / "listing.txt").open("a") as listing:
+            listing.write(_manifest(uploaded, name, name) + "\n")
+
+    while_newer_result, while_newer_calls, _ = _run_cleanup(state, KEEP="2")
+    add_release("2026-11-14T10:00:00Z", "release-3")
+    while_oldest_result, while_oldest_calls, _ = _run_cleanup(state, KEEP="2")
+    add_release("2026-11-14T12:00:00Z", "release-4")
+    once_older_result, once_older_calls, _ = _run_cleanup(state, KEEP="2")
+
+    assert while_newer_result.returncode == 0, while_newer_result.stdout
+    assert while_newer_calls == []
+    assert while_oldest_result.returncode == 0, while_oldest_result.stdout
+    assert while_oldest_calls == [
+        _delete_call("release-1"),
+        _delete_call("release-2-provenance"),
+        _delete_call("release-2-image"),
+    ]
+    assert (
+        "Deleted 1/3 manifest(s); kept 2 that another manifest still references."
+    ) in while_oldest_result.stdout
+    assert once_older_result.returncode == 0, once_older_result.stdout
+    assert once_older_calls == [
+        _delete_call("release-2-index"),
+        _delete_call("release-2-provenance"),
+        _delete_call("release-2-image"),
+    ]
+    assert "Deleted 3/3 manifest(s)." in once_older_result.stdout
 
 
 def test_cleanup_deletes_nothing_without_a_tagged_release(tmp_path: Path) -> None:
