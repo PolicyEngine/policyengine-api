@@ -46,7 +46,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 DEFAULT_QUERY_LIMIT = 100
-# A report list reads every named report and its newest run in one query.
+# A report list reads every named report and the run its read answers in a few
+# queries.
 MAXIMUM_LISTED_REPORTS = 25
 MAXIMUM_QUERY_LIMIT = 500
 MAXIMUM_USER_ID_LENGTH = 255
@@ -434,14 +435,17 @@ class ReportDetailQuery(CountryQuery):
 
     ``run_id`` names the run to read: a report run of an economy or household
     report, or a budget-window run of a budget window. Without it the report
-    is read with its newest run.
+    is read with the requesting user's newest recorded run, else its newest
+    succeeded run that wasn't forced, else its newest run that wasn't forced.
     """
 
     run_id: ResourceId | None = Field(
         default=None,
         description=(
             "The report's run to read: one of its report runs, or a budget "
-            "window's budget-window run. Without it, its newest run."
+            "window's budget-window run. Without it, the requesting user's "
+            "newest recorded run, else the newest succeeded run that wasn't "
+            "forced, else the newest run that wasn't forced."
         ),
     )
 

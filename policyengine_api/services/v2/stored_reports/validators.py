@@ -39,18 +39,20 @@ class CreatedReportUnreadableError(RuntimeError):
     """The simulation service created the report, but it could not be read back.
 
     The simulation service answered with the report's ID, so the report
-    exists and submitting it again would create another. ``report_id`` and
-    ``country_id`` say where to read it; the error's cause says why reading
-    it back failed.
+    exists and submitting it again would create another. ``report_id``,
+    ``run_id`` (the run the answer named, which a read names to answer it)
+    and ``country_id`` say where to read it; the error's cause says why
+    reading it back failed.
     """
 
-    def __init__(self, *, report_id: UUID, country_id: str) -> None:
-        """Name the created report and its country."""
+    def __init__(self, *, report_id: UUID, run_id: UUID, country_id: str) -> None:
+        """Name the created report, its run and its country."""
         super().__init__(
             f"The simulation service created report {report_id} in country "
             f"{country_id!r}, but it could not be read back"
         )
         self.report_id = report_id
+        self.run_id = run_id
         self.country_id = country_id
 
 
@@ -113,18 +115,22 @@ class ReportRunNotRecordedError(RuntimeError):
 class RerunReportUnreadableError(RuntimeError):
     """The simulation service started the report's new run, but it could not be read.
 
-    The new run exists, so the caller reads the report rather than running
-    it again. ``report_id`` and ``country_id`` say where to read it; the
-    error's cause says why reading it back failed.
+    The run exists, so the caller reads the report rather than running it
+    again. ``report_id``, ``run_id`` (the run the answer named, or None when
+    a budget window's answer named no window run) and ``country_id`` say
+    where to read it; the error's cause says why reading it back failed.
     """
 
-    def __init__(self, *, report_id: UUID, country_id: str) -> None:
-        """Name the report and its country."""
+    def __init__(
+        self, *, report_id: UUID, run_id: UUID | None, country_id: str
+    ) -> None:
+        """Name the report, its run and its country."""
         super().__init__(
-            f"The simulation service started a new run of report {report_id} in "
+            f"The simulation service started a run of report {report_id} in "
             f"country {country_id!r}, but the report could not be read back"
         )
         self.report_id = report_id
+        self.run_id = run_id
         self.country_id = country_id
 
 

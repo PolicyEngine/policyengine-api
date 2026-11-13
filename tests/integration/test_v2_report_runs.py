@@ -634,15 +634,17 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id(
     )
 
     assert response.status_code == 502
+    (new_run_id,) = simulation_service.new_run_ids
     assert response.json() == {
         "status": "error",
         "message": (
-            f"The simulation service started a new run of report "
+            f"The simulation service started a run of report "
             f"{report.report_id}, but the report could not be read back. Read it "
-            f"with GET /v2/reports/{report.report_id}?country_id=us rather than "
-            "running it again."
+            f"with GET /v2/reports/{report.report_id}?country_id=us"
+            f"&run_id={new_run_id} rather than running it again."
         ),
         "report_id": str(report.report_id),
+        "run_id": str(new_run_id),
     }
 
 

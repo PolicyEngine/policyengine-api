@@ -135,11 +135,14 @@ class ReportRerunConflictResponse(V2ErrorResponse):
 class RerunReportUnreadableResponse(V2ErrorResponse):
     """The 502 answer when the report cannot be read back after its new run started.
 
-    The simulation service started the run, so the caller reads the report
-    with ``GET /v2/reports/{report_id}`` rather than running it again.
+    The simulation service started the run ``run_id``, so the caller reads
+    the report with ``GET /v2/reports/{report_id}?run_id={run_id}`` rather
+    than running it again. ``run_id`` is null when a budget window's answer
+    named no window run.
     """
 
     report_id: UUID
+    run_id: UUID | None
 
 
 NOT_FOUND = "No report has this ID in this country."

@@ -178,6 +178,12 @@ def _report_operation(
     )
 
 
+def _read_path(report_id: UUID, country_id: str, run_id: UUID | None) -> str:
+    """Return the path that reads the report, with its run when one is named."""
+    path = f"/v2/reports/{report_id}?country_id={country_id}"
+    return path if run_id is None else f"{path}&run_id={run_id}"
+
+
 def _requester_refused(
     error: StandardUserRequiresSignInError | ForcedRerunRequiresSignInError,
 ) -> JSONResponse:
@@ -238,10 +244,11 @@ def _create_report(
                 message=(
                     f"The simulation service created report {error.report_id}, "
                     "but it could not be read back. Read it with GET "
-                    f"/v2/reports/{error.report_id}?country_id={error.country_id} "
+                    f"{_read_path(error.report_id, error.country_id, error.run_id)} "
                     "rather than submitting it again."
                 ),
                 report_id=error.report_id,
+                run_id=error.run_id,
             ),
         )
     except SimulationServiceUnavailableError as error:
@@ -295,12 +302,14 @@ def _rerun_report(
             error,
             RerunReportUnreadableResponse(
                 message=(
-                    "The simulation service started a new run of report "
+                    "The simulation service started a run of report "
                     f"{error.report_id}, but the report could not be read back. "
-                    f"Read it with GET /v2/reports/{error.report_id}?country_id="
-                    f"{error.country_id} rather than running it again."
+                    "Read it with GET "
+                    f"{_read_path(error.report_id, error.country_id, error.run_id)} "
+                    "rather than running it again."
                 ),
                 report_id=error.report_id,
+                run_id=error.run_id,
             ),
         )
     return ReportDetailResponse(result=ReportDetailResult(item=report_item(report)))
@@ -453,7 +462,7 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.get(
         "/reports",
         response_model=ReportListResponse,
-        responses={401: READ_RESPONSES[401]},
+        responses={401: READ_RESPONSES[401], 403: READ_RESPONSES[403]},
         summary="List chosen reports",
         description=(
             "Lists the country's reports among the report_id values (at most "

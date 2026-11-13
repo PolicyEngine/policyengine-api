@@ -141,7 +141,9 @@ def test_a_budget_window_the_service_failed_answers_503_with_its_id() -> None:
 def test_a_created_budget_window_that_cannot_be_read_back_answers_502() -> None:
     report_id = uuid4()
     service = FakeReportService(
-        error=CreatedReportUnreadableError(report_id=report_id, country_id="us")
+        error=CreatedReportUnreadableError(
+            report_id=report_id, run_id=uuid4(), country_id="us"
+        )
     )
 
     response = report_route_client(reports=service).post(

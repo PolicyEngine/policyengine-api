@@ -22,10 +22,11 @@ rebuilt from each year's budget rows. Reading a
 window's definition and runs never reads those rows, so only a read of a
 succeeded window can find them unreadable. A household report's result is
 instead each of its simulation runs' calculated household
-(``simulation_runs.household_result``), read once its newest report run has
+(``simulation_runs.household_result``), read once its report run has
 succeeded, and each side's failure once it has failed. Lists name at most 25
-reports and read them, with their newest runs and any window's years, in two
-queries, without results.
+reports and read them as a read without a run does, with any window's
+years, without results: two queries, and with a user three or four more for
+their labels and their newest recorded runs.
 
 Creating a report or budget window checks the country and the policies it
 names (and a household report's household), asks the simulation service to
@@ -55,7 +56,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -130,6 +130,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
+    from uuid import UUID
 
     from sqlmodel import Session
 
@@ -173,7 +174,7 @@ def _storage_failures() -> Iterator[None]:
 def _stored_report(
     session: Session, *, country_id: str, report_id: UUID
 ) -> StoredReportRows:
-    """Return the country's report with its newest run.
+    """Return the country's report with its default run (see ``read_report_rows``).
 
     Raise StoredReportNotFoundError when the country has no such report.
     """
@@ -186,7 +187,7 @@ def _stored_report(
 def _with_run(
     session: Session, stored: StoredReportRows, run_id: UUID
 ) -> StoredReportRows:
-    """Return the report's rows with its run ``run_id`` in place of its newest.
+    """Return the report's rows with its run ``run_id`` in place of the one read.
 
     A budget window's run is a budget-window run, read with its years; any
     other report's is one of its own report runs. Raise ReportRunNotFoundError
@@ -238,36 +239,47 @@ def _record_request(recording: _RunRecording, request: ReportRunRequest) -> UUID
 
 
 def _viewer_user_id(
-    session: Session, viewer: AccountPrincipal | UUID | None
+    session: Session,
+    *,
+    requester: AccountPrincipal | None,
+    recorded_user_id: UUID | None,
 ) -> UUID | None:
-    """Return the viewer's user ID: as given, or a principal's stored user's."""
-    if viewer is None or isinstance(viewer, UUID):
-        return viewer
-    user = find_principal_user_in_session(session, viewer)
+    """Return the ID of the user a read is for.
+
+    That is ``recorded_user_id`` when a request was just recorded for it, or
+    else the requester's stored user's, or None.
+    """
+    if recorded_user_id is not None:
+        return recorded_user_id
+    if requester is None:
+        return None
+    user = find_principal_user_in_session(session, requester)
     return None if user is None else user.user_id
 
 
 def _requesters_view(
     session: Session,
     rows: Sequence[StoredReportRows],
-    viewer: AccountPrincipal | UUID | None,
     *,
+    requester: AccountPrincipal | None,
+    recorded_user_id: UUID | None = None,
     with_requested_runs: bool,
 ) -> list[StoredReportRows]:
-    """Return the reports as the viewer sees them.
+    """Return the reports as the requester sees them.
 
-    The viewer is a requester's principal, whose stored user is looked up,
-    or the ID of the user a request was just recorded for.
-
-    Each takes its label and description from the requester's saved report
-    of it. With ``with_requested_runs``, a report the requester asked to run
+    The requester's stored user is looked up, unless ``recorded_user_id``
+    names the user a request was just recorded for. Each report takes its
+    label and description from that user's saved report of it. With
+    ``with_requested_runs``, a report the user asked to run
     is read with the run of their newest request in place of its default (a
     budget window's with that year's budget-window run and its years). A
     request naming no user, or a user not stored yet, sees each report's
     default run and no label. Raise StandardUserRequiresSignInError for an
     unauthenticated credential that names a signed-in user.
     """
-    user_id = _viewer_user_id(session, viewer)
+    user_id = _viewer_user_id(
+        session, requester=requester, recorded_user_id=recorded_user_id
+    )
     if user_id is None or not rows:
         return list(rows)
     report_ids = [stored.report.id for stored in rows]
@@ -313,7 +325,7 @@ def _requesters_view(
 def _summary_read(
     stored: StoredReportRows, *, current_versions: PackageVersions
 ) -> StoredReportSummaryRead:
-    """Return the report's definition and newest run, as its kind reads them."""
+    """Return the report's definition and the run read, as its kind reads them."""
     kind = report_kind(stored.report)
     if kind == "household":
         return household_report_summary_read(stored, current_versions=current_versions)
@@ -403,7 +415,10 @@ class V2StoredReportService:
         database cannot be read.
         """
         return self._read_report(
-            country_id=country_id, report_id=report_id, run_id=run_id, viewer=requester
+            country_id=country_id,
+            report_id=report_id,
+            run_id=run_id,
+            requester=requester,
         )
 
     def _read_report(
@@ -412,19 +427,23 @@ class V2StoredReportService:
         country_id: str,
         report_id: UUID,
         run_id: UUID | None,
-        viewer: AccountPrincipal | UUID | None,
+        requester: AccountPrincipal | None,
+        recorded_user_id: UUID | None = None,
     ) -> StoredReportRead:
-        """Read the report as ``get_report`` does, as ``viewer`` sees it.
+        """Read the report as ``get_report`` does, for a requester or a recorded user.
 
-        The viewer is a requester's principal, or the ID of the user a
-        request was just recorded for: after a sign-in converted a browser's
-        user in place, its principal names a signed-in user, so a read back
-        uses the recorded user's ID.
+        ``recorded_user_id`` names the user a request was just recorded for,
+        whom a read back is for: after a sign-in converted a browser's user
+        in place, the browser's principal names a signed-in user.
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
             (stored,) = _requesters_view(
-                session, [stored], viewer, with_requested_runs=run_id is None
+                session,
+                [stored],
+                requester=requester,
+                recorded_user_id=recorded_user_id,
+                with_requested_runs=run_id is None,
             )
             if run_id is not None:
                 stored = _with_run(session, stored, run_id)
@@ -453,7 +472,7 @@ class V2StoredReportService:
     def _budget_window(
         self, session: Session, stored: StoredReportRows
     ) -> BudgetWindowReportRead:
-        """Return a budget window, with its result once its newest run succeeded."""
+        """Return a budget window, with its result once the run read succeeded."""
         window_run = stored.budget_window_run
         result = None
         if window_run is not None and window_run.status is ReportRunStatus.SUCCEEDED:
@@ -473,7 +492,7 @@ class V2StoredReportService:
     def _household_report(
         self, session: Session, stored: StoredReportRows
     ) -> HouseholdReportRead:
-        """Return a household report with its newest run's outcome.
+        """Return a household report with the outcome of the run read.
 
         Its calculated households are read once that run has succeeded, and
         each side's failure once it has failed.
@@ -521,7 +540,7 @@ class V2StoredReportService:
             rows = _requesters_view(
                 session,
                 read_report_rows(session, country_id=country_id, report_ids=report_ids),
-                requester,
+                requester=requester,
                 with_requested_runs=True,
             )
             current_versions = self._current_versions(country_id)
@@ -578,18 +597,23 @@ class V2StoredReportService:
                 trigger=ReportRunTrigger.INITIAL,
             )
         report_id = request.report_id
-        viewer = None if recording is None else _record_request(recording, request)
+        recorded_user_id = (
+            None if recording is None else _record_request(recording, request)
+        )
         try:
             return self._read_report(
                 country_id=report_input.country_id,
                 report_id=report_id,
                 run_id=request.run_id,
-                viewer=viewer,
+                requester=None,
+                recorded_user_id=recorded_user_id,
             )
         except Exception as error:
             # The report exists whatever failed, so the caller gets its ID.
             raise CreatedReportUnreadableError(
-                report_id=report_id, country_id=report_input.country_id
+                report_id=report_id,
+                run_id=request.run_id,
+                country_id=report_input.country_id,
             ) from error
 
     def rerun_report(
@@ -660,19 +684,24 @@ class V2StoredReportService:
             )
         else:
             # The run exists, but the answer doesn't say which window run.
-            raise RerunReportUnreadableError(report_id=report_id, country_id=country_id)
-        viewer = None if recording is None else _record_request(recording, request)
+            raise RerunReportUnreadableError(
+                report_id=report_id, run_id=None, country_id=country_id
+            )
+        recorded_user_id = (
+            None if recording is None else _record_request(recording, request)
+        )
         try:
             return self._read_report(
                 country_id=country_id,
                 report_id=report_id,
                 run_id=request.run_id,
-                viewer=viewer,
+                requester=None,
+                recorded_user_id=recorded_user_id,
             )
         except Exception as error:
             # The run exists whatever failed, so the caller reads it.
             raise RerunReportUnreadableError(
-                report_id=report_id, country_id=country_id
+                report_id=report_id, run_id=request.run_id, country_id=country_id
             ) from error
 
     def list_report_runs(

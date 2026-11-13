@@ -48,6 +48,7 @@ from tests.unit.v2.stored_report_support import (
     CURRENT_VERSIONS,
     POLICY_ID,
     REPORT_ID,
+    REPORT_RUN_ID,
     FakeReportService,
     FakeSimulationService,
     report_route_client,
@@ -315,7 +316,9 @@ def test_simulation_creation_failures_answer_typed_errors(
 
 
 def test_a_created_report_that_cannot_be_read_back_answers_its_id() -> None:
-    error = CreatedReportUnreadableError(report_id=REPORT_ID, country_id="us")
+    error = CreatedReportUnreadableError(
+        report_id=REPORT_ID, run_id=REPORT_RUN_ID, country_id="us"
+    )
     client = report_route_client(reports=FakeReportService(error=error))
 
     response = client.post("/v2/reports?country_id=us", json=report_body())
@@ -326,9 +329,11 @@ def test_a_created_report_that_cannot_be_read_back_answers_its_id() -> None:
         "message": (
             f"The simulation service created report {REPORT_ID}, but it could "
             f"not be read back. Read it with GET /v2/reports/{REPORT_ID}"
-            "?country_id=us rather than submitting it again."
+            f"?country_id=us&run_id={REPORT_RUN_ID} rather than submitting it "
+            "again."
         ),
         "report_id": str(REPORT_ID),
+        "run_id": str(REPORT_RUN_ID),
     }
 
 
