@@ -11,8 +11,10 @@ calculated again on a read. A report with no run, as a report migrated from
 v1 has none, answers its definition with no result.
 
 The result is rebuilt from the newest run's result rows once it has
-succeeded. A budget-window report's newest run is its newest budget-window
-run, read with its years; once that run has succeeded, its result is the
+succeeded; a local-area report's (a UK-wide or nation report on the dataset
+its catalog version gives local areas) also lists its withheld area codes. A
+budget-window report's newest run is its newest budget-window run, read with
+its years; once that run has succeeded, its result is the
 budget-window format, rebuilt from each year's budget rows. Reading a
 window's definition and runs never reads those rows, so only a read of a
 succeeded window can find them unreadable. A household report's result is
@@ -227,6 +229,7 @@ class V2StoredReportService:
                         country_id=country_id,
                         report_run=run,
                         reform_simulation_run_id=require_reform_run(run),
+                        on_local_area_dataset=stored.on_local_area_dataset,
                     )
                 )
             return report_read(

@@ -48,6 +48,9 @@ ReportStatusName = Literal["not_run", "pending", "running", "succeeded", "failed
 # What a report compares: two economy simulations, two household simulations,
 # or two economy simulations in each year of a budget window.
 ReportKind = Literal["economy", "household", "budget_window"]
+# The dataset an economy report used in place of its region's, as its creation
+# asked for it: the one the catalog version gives local areas.
+ReportDataSourceName = Literal["local_area_dataset"]
 # The kinds whose runs are their report runs; a budget window's are its
 # budget-window runs.
 ReportRunsKind = Literal["economy", "household"]
@@ -115,12 +118,16 @@ class ReportSummaryRead(ReportDefinitionRead):
     """An economy report's definition, its newest run and the current versions.
 
     ``region_code`` and ``dataset_name`` are the region and dataset both
-    simulations use, null when the report names none.
+    simulations use, null when the report names none. ``data_source`` is
+    ``local_area_dataset`` for a local-area report, a UK-wide or nation
+    report on the dataset its catalog version gives local areas, as a
+    request with that ``data_source`` creates, and None for every other.
     """
 
     kind: Literal["economy"]
     region_code: str | None
     dataset_name: str | None
+    data_source: ReportDataSourceName | None
     status: ReportStatusName
     run: ReportRunRead | None
 
@@ -266,7 +273,9 @@ class StoredReportRows:
     """A report's row, its newest runs and the catalog and simulation rows it names.
 
     ``region_code`` and ``dataset_name`` are those of the report's region and
-    dataset, and null when it names none; a simulation is None once deleted.
+    dataset, and null when it names none; ``on_local_area_dataset`` says
+    whether it is a local-area report (see ``ReportSummaryRead``); a
+    simulation is None once deleted.
     ``newest_run`` is the report run created last that is not a year of a
     budget window, whatever its status and versions, or None.
     ``newest_budget_window_run`` is the budget-window run created last, or
@@ -276,6 +285,7 @@ class StoredReportRows:
     report: Report
     region_code: str | None
     dataset_name: str | None
+    on_local_area_dataset: bool
     baseline_simulation: Simulation | None
     reform_simulation: Simulation | None
     newest_run: ReportRun | None

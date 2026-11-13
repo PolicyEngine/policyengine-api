@@ -86,6 +86,7 @@ def report_summary_fields(**changes: Any) -> dict[str, Any]:
         "year": 2026,
         "region_code": "state/ca",
         "dataset_name": None,
+        "data_source": None,
         "baseline_simulation": ReportSimulationRead(
             id=BASELINE_SIMULATION_ID, policy_id=None, dynamic_id=None
         ),
