@@ -22,6 +22,7 @@ from policyengine_api.data.v2.privileges import (
     NO_ACCESS,
     READ,
     READ_INSERT,
+    READ_INSERT_DELETE,
     READ_WRITE,
     ROLES_AWAITING_PROVISIONING,
     RUNTIME_ROLE,
@@ -106,6 +107,7 @@ RUN_DEFINITION_COLUMNS = {
             "policyengine_version",
             "dataset_id",
             "region_id",
+            "forced",
         }
     ),
     "report_runs": frozenset(
@@ -119,6 +121,7 @@ RUN_DEFINITION_COLUMNS = {
             "policyengine_version",
             "trigger",
             "idempotency_key",
+            "forced",
         }
     ),
     "household_jobs": frozenset(
@@ -415,3 +418,19 @@ def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> N
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_type_changes"] == NO_ACCESS, role
+
+
+def test_the_public_api_records_each_users_report_run_requests() -> None:
+    """The Public API writes a user's record of each report run they asked for.
+
+    It reads, adds and deletes them, but never changes one: a later request
+    for the same run is the same record. No other role reads them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_report_run_associations"] == (
+        READ_INSERT_DELETE
+    )
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_report_run_associations"] == NO_ACCESS, role
