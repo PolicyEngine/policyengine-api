@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from policyengine_api.utils.axis_validation import InvalidAxisInput, find_invalid_axes
+from policyengine_api.utils.household_policy_validation import UnreadablePolicyInput
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class UnrecognizedInput:
 
 
 # A calculate payload problem reported in an invalid-input response.
-InvalidInput = UnrecognizedInput | InvalidAxisInput
+InvalidInput = UnrecognizedInput | InvalidAxisInput | UnreadablePolicyInput
 
 
 def find_invalid_inputs(

@@ -1,6 +1,5 @@
 """Loaded country tax-benefit systems, their metadata and household calculation."""
 
-import contextlib
 import importlib
 import inspect
 import json
@@ -48,6 +47,10 @@ from policyengine_api.spm import (
 )
 from policyengine_api.utils import get_safe_json
 from policyengine_api.utils.get_current_law import get_current_law_policy_id
+from policyengine_api.utils.household_policy_validation import (
+    conversion_type,
+    convert_reform_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -589,17 +592,13 @@ class PolicyEngineCountry:
         normalized_reform = {}
         for parameter_name, parameter_updates in reform.items():
             parameter = get_parameter(system.parameters, parameter_name)
-            normalized_reform[parameter_name] = {}
-            for time_period, value in parameter_updates.items():
-                node_type = type(parameter.values_list[-1].value)
-                if node_type is int:
-                    node_type = float
-                numeric_value = value
-                with contextlib.suppress(TypeError, ValueError, OverflowError):
-                    numeric_value = float(value)
-                normalized_reform[parameter_name][time_period] = node_type(
-                    numeric_value
-                )
+            # The conversion find_unreadable_policy_inputs tries before a
+            # calculation request is accepted.
+            value_type = conversion_type(parameter.values_list[-1].value)
+            normalized_reform[parameter_name] = {
+                time_period: convert_reform_value(value, value_type)
+                for time_period, value in parameter_updates.items()
+            }
         return normalized_reform
 
     def _apply_reform_to_system(
