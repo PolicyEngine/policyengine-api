@@ -42,8 +42,8 @@ if TYPE_CHECKING:
         HouseholdReportResult,
     )
 
-# A report's status is its newest run's, or not_run while it has none, as a
-# report migrated from v1 has none.
+# A report's status is its run's (the run a read answers), or not_run while it
+# has none, as a report migrated from v1 has none.
 ReportStatusName = Literal["not_run", "pending", "running", "succeeded", "failed"]
 # What a report compares: two economy simulations, two household simulations,
 # or two economy simulations in each year of a budget window.
@@ -91,7 +91,7 @@ class ReportDefinitionRead:
     """What every report's read gives: its definition and the current versions.
 
     ``current_versions`` are the country package and PolicyEngine.py versions
-    the Public API serves now; a newest run on other versions is out of date.
+    the Public API serves now; a run on other versions is out of date.
     ``options`` are the options the report was created with, as stored.
     """
 
@@ -109,7 +109,7 @@ class ReportDefinitionRead:
 
 @dataclass(frozen=True)
 class ReportSummaryRead(ReportDefinitionRead):
-    """An economy report's definition, its newest run and the current versions.
+    """An economy report's definition, the run read and the current versions.
 
     ``region_code`` and ``dataset_name`` are the region and dataset both
     simulations use, null when the report names none.
@@ -124,19 +124,19 @@ class ReportSummaryRead(ReportDefinitionRead):
 
 @dataclass(frozen=True)
 class ReportRead(ReportSummaryRead):
-    """A report with its newest run's result, once that run has succeeded."""
+    """A report with its run's result, once that run has succeeded."""
 
     result: EconomyResult | None
 
 
 @dataclass(frozen=True)
 class HouseholdReportSummaryRead(ReportDefinitionRead):
-    """A household report's definition, its newest run and the current versions.
+    """A household report's definition, the run read and the current versions.
 
     Both simulations calculate the stored household ``household_id`` in its
     default year, ``year``; ``reform_simulation`` is None for a report of the
-    baseline alone. It has no region or dataset. ``run`` is the newest report
-    run, whatever its status and versions, naming each simulation's run.
+    baseline alone. It has no region or dataset. ``run`` is the report run
+    the read answers (see ``StoredReportRows``), naming each simulation's run.
     """
 
     kind: Literal["household"]
@@ -147,7 +147,7 @@ class HouseholdReportSummaryRead(ReportDefinitionRead):
 
 @dataclass(frozen=True)
 class HouseholdReportRead(HouseholdReportSummaryRead):
-    """A household report with its newest run's outcome.
+    """A household report with its run's outcome.
 
     ``result`` holds the calculated households once that run has succeeded;
     ``failure`` says why each side failed once it has failed. Both are None
@@ -194,13 +194,14 @@ class BudgetWindowRunRead:
 
 @dataclass(frozen=True)
 class BudgetWindowReportSummaryRead(ReportDefinitionRead):
-    """A budget-window report's definition, its newest run and the current versions.
+    """A budget-window report's definition, the run read and the current versions.
 
     The window is ``budget_window_size`` years from ``year``, in the region
     ``region_code`` and dataset ``dataset_name``, null when the report names
     none. The report's two simulations are its first year's; each year's
-    report run names that year's own simulation runs. ``run`` is the newest
-    budget-window run, whatever its status and versions, with its years.
+    report run names that year's own simulation runs. ``run`` is the
+    budget-window run the read answers (see ``StoredReportRows``), with its
+    years.
     """
 
     kind: Literal["budget_window"]
@@ -213,7 +214,7 @@ class BudgetWindowReportSummaryRead(ReportDefinitionRead):
 
 @dataclass(frozen=True)
 class BudgetWindowReportRead(BudgetWindowReportSummaryRead):
-    """A budget-window report with its newest run's result, once that run succeeded."""
+    """A budget-window report with its run's result, once that run succeeded."""
 
     result: window_result_types.BudgetWindowResult | None
 

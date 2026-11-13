@@ -119,7 +119,7 @@ def _run_and_status(
 def report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> ReportSummaryRead:
-    """Return an economy report's definition and newest run, without a result."""
+    """Return an economy report's definition and the run read, without a result."""
     status, run = _run_and_status(rows)
     return ReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
@@ -137,7 +137,7 @@ def report_read(
     current_versions: PackageVersions,
     result: EconomyResult | None,
 ) -> ReportRead:
-    """Return an economy report with its newest run's result, if it has one."""
+    """Return an economy report with the run read's result, if it has one."""
     summary = report_summary_read(rows, current_versions=current_versions)
     return ReportRead(**vars(summary), result=result)
 
@@ -145,7 +145,7 @@ def report_read(
 def household_report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> HouseholdReportSummaryRead:
-    """Return a household report's definition and newest run, without a result.
+    """Return a household report's definition and the run read, without a result.
 
     Raise ValueError for a report naming no household, which is not a
     household report.
@@ -171,7 +171,7 @@ def household_report_read(
     result: HouseholdReportResult | None,
     failure: HouseholdReportFailure | None,
 ) -> HouseholdReportRead:
-    """Return a household report with its newest run's outcome, if it has one."""
+    """Return a household report with the run read's outcome, if it has one."""
     summary = household_report_summary_read(rows, current_versions=current_versions)
     return HouseholdReportRead(**vars(summary), result=result, failure=failure)
 
@@ -212,7 +212,7 @@ def budget_window_run_read(
 def budget_window_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> BudgetWindowReportSummaryRead:
-    """Return a budget-window report's definition and newest run, without a result.
+    """Return a budget-window report's definition and the run read, without a result.
 
     Raise ValueError for a report with no window size, which is not a budget
     window.
@@ -243,7 +243,7 @@ def budget_window_read(
     current_versions: PackageVersions,
     result: window_result_types.BudgetWindowResult | None,
 ) -> BudgetWindowReportRead:
-    """Return a budget-window report with its newest run's result, if it has one."""
+    """Return a budget-window report with the run read's result, if it has one."""
     summary = budget_window_summary_read(rows, current_versions=current_versions)
     return BudgetWindowReportRead(**vars(summary), result=result)
 

@@ -350,15 +350,16 @@ def test_the_newest_request_wins_whichever_run_was_created_last(
     asker = browsers[0]
     with owner_engine.begin() as connection:
         report = store_report(connection, catalog)
+        # Not succeeded, so neither the default run nor the newest run.
         created_first = store_run(
-            connection, catalog, report, days_later=0, status="succeeded"
+            connection, catalog, report, days_later=0, status="pending"
         )
         created_last = store_run(
             connection,
             catalog,
             report,
             days_later=1,
-            status="pending",
+            status="succeeded",
             versions=NEWER_VERSIONS,
         )
     simulation_service = JoiningSimulationService(owner_engine, catalog)

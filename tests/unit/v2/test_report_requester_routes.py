@@ -13,6 +13,7 @@ from policyengine_api.services.v2.identity.validators import (
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     ReportRunNotRecordedError,
+    RerunReportUnreadableError,
 )
 from tests.unit.v2.report_run_support import FakeReportRunService
 from tests.unit.v2.stored_report_support import (
@@ -127,3 +128,36 @@ def test_openapi_says_the_user_credential_is_optional(path: str, method: str) ->
     assert {} in security
     assert {"UserAccessToken": []} in security
     assert {"UnauthenticatedUser": []} in security
+
+
+def test_a_window_rerun_whose_answer_named_no_window_run_answers_a_null_run() -> None:
+    service = FakeReportRunService(
+        error=RerunReportUnreadableError(
+            report_id=REPORT_ID, run_id=None, country_id="us"
+        )
+    )
+
+    response = report_route_client(reports=service).post(
+        f"/v2/reports/{REPORT_ID}/runs?country_id=us", json={}
+    )
+
+    assert response.status_code == 502
+    body = response.json()
+    assert body["run_id"] is None
+    assert f"/v2/reports/{REPORT_ID}?country_id=us rather" in body["message"]
+
+
+def test_openapi_documents_the_reruns_nullable_run_and_the_reads_403() -> None:
+    document = (
+        report_route_client(reports=FakeReportRunService())
+        .get("/v2/openapi.json")
+        .json()
+    )
+
+    rerun_unreadable = document["components"]["schemas"][
+        "RerunReportUnreadableResponse"
+    ]
+    assert {"type": "null"} in rerun_unreadable["properties"]["run_id"]["anyOf"]
+    assert "run_id" in rerun_unreadable["required"]
+    for path in ("/v2/reports", "/v2/reports/{report_id}"):
+        assert "403" in document["paths"][path]["get"]["responses"], path

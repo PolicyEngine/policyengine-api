@@ -18,9 +18,8 @@ if TYPE_CHECKING:
 def read_report_runs(session: Session, *, report_id: UUID) -> list[ReportRun]:
     """Return every run of the report, newest first.
 
-    Newest is created last, ties broken by the larger ID, as for the report's
-    newest run. Runs of a budget window's years are not the report's own
-    runs, so they are left out.
+    Newest is created last, ties broken by the larger ID. Runs of a budget
+    window's years are not the report's own runs, so they are left out.
     """
     statement = (
         select(ReportRun)
@@ -38,9 +37,8 @@ def read_budget_window_runs(
 ) -> list[BudgetWindowRun]:
     """Return every budget-window run of the report, newest first.
 
-    Newest is created last, ties broken by the larger ID, as for the
-    window's newest run. Each run's years are read separately
-    (``reads.read_budget_window_years``).
+    Newest is created last, ties broken by the larger ID. Each run's years
+    are read separately (``reads.read_budget_window_years``).
     """
     statement = (
         select(BudgetWindowRun)

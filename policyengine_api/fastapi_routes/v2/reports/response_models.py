@@ -503,8 +503,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "again, which creates a second report if the first request went through. "
             "Or it created the report, but its answer cannot be read. Or it created "
             "the report, but the report cannot be read back: the answer gives its "
-            "report_id, to read with GET /v2/reports/{report_id} rather than "
-            "submitting it again."
+            "report_id and run_id, to read with GET "
+            "/v2/reports/{report_id}?run_id={run_id} rather than submitting it "
+            "again."
         ),
     },
     503: {

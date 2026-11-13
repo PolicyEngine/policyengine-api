@@ -224,9 +224,10 @@ def _create_report(
     """Create the report and answer it as stored.
 
     A report the simulation service created answers with its ``report_id``
-    when it cannot be read back (502), and when the service failed its run
-    and answered 503; one whose request could not be recorded for its user
-    answers 503 with its ``report_id`` and ``run_id``. A requester's
+    (and ``run_id``) when it cannot be read back (502), and with its
+    ``report_id`` when the service failed its run and answered 503; one
+    whose request could not be recorded for its user answers 503 with its
+    ``report_id`` and ``run_id``. A requester's
     unauthenticated credential naming a signed-in user answers 401. Every
     other failure is raised, for the route's error mappings to answer.
     """
@@ -276,7 +277,8 @@ def _rerun_report(
 
     The simulation service's refusal to run it again now answers 409 with
     the run it names, a report that cannot be read back once its run
-    started answers 502 with its ``report_id``, and a run whose request
+    started answers 502 with its ``report_id`` and ``run_id``, and a run whose
+    request
     could not be recorded for its user answers 503 with its ``report_id``
     and ``run_id``. A requester's unauthenticated credential naming a
     signed-in user answers 401. Every other failure is raised, for the
@@ -440,7 +442,8 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "recorded for that user, naming the run it ended on (trigger "
             "initial), or each year's report run of a budget window's run; "
             "without one, nothing is recorded. A created report "
-            "that cannot be read back answers 502 with its report_id, and one "
+            "that cannot be read back answers 502 with its report_id and run_id, "
+            "and one "
             "whose run the simulation service failed before answering 503 "
             "answers 503 with its report_id."
         ),

@@ -271,14 +271,17 @@ def test_a_created_report_that_cannot_be_read_back_answers_its_id(
 
     assert response.status_code == 502
     (report_id,) = simulation_service.unstored_ids
+    # The run the answer named, which the stand-in made up with the report.
+    run_id = response.json()["run_id"]
     assert response.json() == {
         "status": "error",
         "message": (
             f"The simulation service created report {report_id}, but it could "
             f"not be read back. Read it with GET /v2/reports/{report_id}"
-            "?country_id=us rather than submitting it again."
+            f"?country_id=us&run_id={run_id} rather than submitting it again."
         ),
         "report_id": str(report_id),
+        "run_id": run_id,
     }
 
 

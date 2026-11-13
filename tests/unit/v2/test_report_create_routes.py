@@ -465,40 +465,40 @@ def test_the_openapi_document_gives_the_missing_parameters_refusal(path: str) ->
 
 
 @pytest.mark.parametrize(
-    ("path", "status_code", "schema", "id_field"),
+    ("path", "status_code", "schema", "id_fields"),
     [
         pytest.param(
             "/v2/reports",
             "502",
             "CreatedReportUnreadableResponse",
-            "report_id",
+            ("report_id", "run_id"),
             id="report-502",
         ),
         pytest.param(
             "/v2/simulations",
             "502",
             "CreatedSimulationUnreadableResponse",
-            "simulation_id",
+            ("simulation_id",),
             id="simulation-502",
         ),
         pytest.param(
             "/v2/reports",
             "503",
             "UnavailableAfterReportCreatedResponse",
-            "report_id",
+            ("report_id",),
             id="report-503",
         ),
         pytest.param(
             "/v2/simulations",
             "503",
             "UnavailableAfterSimulationCreatedResponse",
-            "simulation_id",
+            ("simulation_id",),
             id="simulation-503",
         ),
     ],
 )
 def test_the_openapi_document_gives_the_created_records_id(
-    path: str, status_code: str, schema: str, id_field: str
+    path: str, status_code: str, schema: str, id_fields: tuple[str, ...]
 ) -> None:
     document = report_route_client().get("/v2/openapi.json").json()
 
@@ -508,7 +508,7 @@ def test_the_openapi_document_gives_the_created_records_id(
     ]["schema"]["anyOf"]
     assert document["components"]["schemas"][schema]["required"] == [
         "message",
-        id_field,
+        *id_fields,
     ]
 
 
