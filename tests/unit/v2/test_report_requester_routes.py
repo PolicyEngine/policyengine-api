@@ -96,7 +96,7 @@ def test_a_browser_credential_naming_a_signed_in_user_answers_401() -> None:
 
 def test_a_run_whose_request_was_not_recorded_answers_503_naming_it() -> None:
     not_recorded = ReportRunNotRecordedError(
-        report_id=REPORT_ID, report_run_id=REPORT_RUN_ID, country_id="us"
+        report_id=REPORT_ID, run_id=REPORT_RUN_ID, country_id="us"
     )
     service = FakeReportRunService(error=not_recorded)
     client = report_route_client(reports=service)
@@ -110,7 +110,7 @@ def test_a_run_whose_request_was_not_recorded_answers_503_naming_it() -> None:
             "status": "error",
             "message": str(not_recorded),
             "report_id": str(REPORT_ID),
-            "report_run_id": str(REPORT_RUN_ID),
+            "run_id": str(REPORT_RUN_ID),
         }
 
 

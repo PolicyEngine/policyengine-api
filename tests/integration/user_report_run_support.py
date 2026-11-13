@@ -50,6 +50,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     PackageVersions,
     ReportRerunInput,
     StartedReportRun,
+    SubmittedBudgetWindow,
     SubmittedReport,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
@@ -59,21 +60,25 @@ from policyengine_api.services.v2.stored_reports.services import V2StoredReportS
 from tests.fixtures.economy_results import us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
+    BudgetWindowYear,
     RunSettings,
     StoredReport,
+    store_budget_window_run,
     store_report,
     store_report_run,
+    store_year_simulations,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from contextlib import AbstractContextManager
 
-    from sqlalchemy import Engine
+    from sqlalchemy import Connection, Engine
     from sqlmodel import Session
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.simulation_service.types import (
+        BudgetWindowReportCreationInput,
         EconomyReportCreationInput,
     )
     from tests.integration.stored_report_rows import CatalogRows
@@ -138,6 +143,33 @@ class JoiningSimulationService:
             )
         return SubmittedReport(
             report_id=stored.report_id, report_run_id=run_ids.report_run_id
+        )
+
+    def submit_budget_window(
+        self, report: BudgetWindowReportCreationInput
+    ) -> SubmittedBudgetWindow:
+        if self.during_call is not None:
+            self.during_call()
+        if self.joined_run is not None:
+            if self.joined_run.budget_window_run_id is None:
+                msg = "a budget window joins a budget-window run"
+                raise AssertionError(msg)
+            return SubmittedBudgetWindow(
+                report_id=self.joined_run.report_id,
+                budget_window_run_id=self.joined_run.budget_window_run_id,
+            )
+        with self.engine.begin() as connection:
+            window = store_window(
+                connection,
+                self.catalog,
+                years=tuple(
+                    range(report.year, report.year + report.budget_window_size)
+                ),
+                settings=RunSettings(versions=CURRENT_VERSIONS, status="pending"),
+            )
+        return SubmittedBudgetWindow(
+            report_id=window.report.report_id,
+            budget_window_run_id=window.window_run_id,
         )
 
     def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
@@ -351,3 +383,61 @@ def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> N
 
 def newest_request(engine: Engine, user_id: UUID) -> datetime:
     return max(record.requested_at for record in stored_records(engine, [user_id]))
+
+
+@dataclass(frozen=True)
+class StoredWindow:
+    """A budget-window report, one of its window runs and that run's year runs."""
+
+    report: StoredReport
+    window_run_id: UUID
+    year_run_ids: tuple[UUID, ...]
+
+
+def store_window(
+    connection: Connection,
+    catalog: CatalogRows,
+    *,
+    years: tuple[int, ...],
+    settings: RunSettings,
+    report: StoredReport | None = None,
+) -> StoredWindow:
+    """Store a window run of ``report`` (a new window if None) with a run per year."""
+    window = (
+        store_report(connection, catalog, budget_window_size=len(years), year=years[0])
+        if report is None
+        else report
+    )
+    window_run_id = store_budget_window_run(connection, catalog, window, settings)
+    year_run_ids = tuple(
+        store_report_run(
+            connection,
+            catalog,
+            store_year_simulations(connection, catalog, window, year),
+            RunSettings(
+                versions=settings.versions,
+                status=settings.status,
+                created_at=settings.created_at,
+                budget_window_year=BudgetWindowYear(
+                    budget_window_run_id=window_run_id, year=year
+                ),
+            ),
+        ).report_run_id
+        for year in years
+    )
+    return StoredWindow(
+        report=window, window_run_id=window_run_id, year_run_ids=year_run_ids
+    )
+
+
+def window_body(policy_id: UUID, *, years: int) -> dict[str, Any]:
+    return {
+        "country_id": "us",
+        "kind": "budget_window",
+        "label": "Expanded child tax credit, over years",
+        "year": 2026,
+        "budget_window_size": years,
+        "region_code": "state/ca",
+        "baseline": {},
+        "reform": {"policy_id": str(policy_id)},
+    }

@@ -461,7 +461,7 @@ def test_a_run_whose_record_cannot_be_written_answers_503_naming_it(
             {"id": report_id},
         ).scalar_one()
     assert body["report_id"] == str(report_id)
-    assert body["report_run_id"] == str(run_id)
+    assert body["run_id"] == str(run_id)
     assert f"run_id={run_id}" in body["message"]
     assert stored_records(owner_engine, browsers) == []
 

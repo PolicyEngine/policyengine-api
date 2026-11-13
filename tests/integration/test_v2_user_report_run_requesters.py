@@ -171,7 +171,7 @@ def test_a_browser_merged_while_the_service_is_asked_is_not_recorded_again(
     assert response.status_code == 503, response.text
     body = response.json()
     assert body["report_id"] == str(catalog.report_ids[-1])
-    assert UUID(body["report_run_id"])
+    assert UUID(body["run_id"])
     # The browser's user stays merged away, and nobody holds the record.
     assert user_type(owner_engine, browser_id) is None
     assert stored_records(owner_engine, [browser_id, account_id]) == []
