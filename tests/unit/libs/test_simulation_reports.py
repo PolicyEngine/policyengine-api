@@ -801,13 +801,25 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
 @pytest.mark.parametrize(
     ("body", "message"),
     [
+        # The simulation service's answers, as PolicyEngine/policyengine-sim-api's
+        # C1 · 29a builds them: a code with one reason located at data_source
+        # for a release that gives local areas no dataset of their own, and
+        # one reason with no code for another country or region.
         pytest.param(
             {
                 "code": "no_local_area_dataset",
-                "detail": "This release gives local areas no dataset of their own.",
+                "detail": [
+                    {
+                        "loc": ["body", "data_source"],
+                        "msg": (
+                            "This release gives local areas no dataset of their own."
+                        ),
+                        "type": "no_local_area_dataset",
+                    }
+                ],
             },
             "The simulation service cannot run this request (no_local_area_dataset): "
-            "This release gives local areas no dataset of their own.",
+            "data_source: This release gives local areas no dataset of their own.",
             id="release-without-a-local-area-dataset",
         ),
         pytest.param(
@@ -815,13 +827,19 @@ def test_a_report_sends_its_data_source_only_when_given() -> None:
                 "detail": [
                     {
                         "loc": ["body", "data_source"],
-                        "msg": "Value error, data_source applies to uk and its nations",
+                        "msg": (
+                            "Value error, the local-area dataset needs a UK-wide or "
+                            "nation region (country/england, country/northern_ireland, "
+                            "country/scotland, country/wales, uk), not 'state/ca'"
+                        ),
                         "type": "value_error",
                     }
                 ]
             },
-            "The simulation service cannot run this request: data_source: "
-            "Value error, data_source applies to uk and its nations",
+            "The simulation service cannot run this request: data_source: Value "
+            "error, the local-area dataset needs a UK-wide or nation region "
+            "(country/england, country/northern_ireland, country/scotland, "
+            "country/wales, uk), not 'state/ca'",
             id="another-region",
         ),
     ],

@@ -18,6 +18,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
+from policyengine_api.services.v2.simulation_service.types import ReportDataSource
 from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
     BudgetWindowResult,
 )
@@ -115,7 +116,9 @@ class ReportSummaryItem(ReportDefinitionItem):
     Both simulations use the region and dataset named. ``data_source`` is
     ``local_area_dataset`` for a local-area report: a UK-wide or nation
     report on the dataset the catalog version gives local areas, as a
-    request with that data_source creates, whose result also has each
+    request with that data_source creates (read from the report's region
+    and dataset, since the request's field isn't stored), whose result also
+    has each
     constituency's and local authority's impact and the codes of those
     withheld. It is null for every other report. ``status`` is the newest
     run's, or ``not_run`` for a report with no run. ``run`` is the newest
@@ -125,7 +128,7 @@ class ReportSummaryItem(ReportDefinitionItem):
     kind: Literal["economy"]
     region_code: str | None
     dataset_name: str | None
-    data_source: Literal["local_area_dataset"] | None
+    data_source: ReportDataSource | None
     status: Literal["not_run", "pending", "running", "succeeded", "failed"]
     run: ReportRunItem | None
 
@@ -357,7 +360,11 @@ class ReportDetailResult(StrictReportAPIModel):
 
 
 class ReportListResult(StrictReportAPIModel):
-    """The listed reports in ``items``, in the order named, without results."""
+    """The listed reports in ``items``, without results.
+
+    Reports chosen by ``report_id`` are in the order named; reports found by
+    ``dataset_independent_key`` are newest created first.
+    """
 
     items: list[
         Annotated[

@@ -11,69 +11,47 @@ local-authority regions, as the simulation service decides it.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Dataset,
     Region,
     RegionType,
-    Report,
-    Simulation,
-    SimulationType,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.services.v2.simulation_service.types import PackageVersions
-from policyengine_api.services.v2.stored_reports.database_session import (
-    StoredReportDatabaseSession,
+from tests.unit.v2.sqlite_report_rows import (
+    ReportPlace,
+    ReportToStore,
+    report_service,
+    sqlite_sessions,
+    store_economy_report,
 )
-from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
-STORED_AT = datetime(2026, 11, 14, 9, tzinfo=UTC)
+    from policyengine_api.services.v2.stored_reports.services import (
+        V2StoredReportService,
+    )
+
 DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
 
 
-def current_versions(country_id: str) -> PackageVersions:
-    return PackageVersions(
-        country_package_version="2.1.0", policyengine_version="6.17.1"
-    )
-
-
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
-
-
-@pytest.fixture
-def sessions(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(engine, class_=Session, expire_on_commit=False)
+def sessions() -> Iterator[sessionmaker[Session]]:
+    yield from sqlite_sessions()
 
 
 @pytest.fixture
 def reports(sessions: sessionmaker[Session]) -> V2StoredReportService:
-    return V2StoredReportService(
-        StoredReportDatabaseSession(sessions), current_versions=current_versions
-    )
+    return report_service(sessions)
 
 
 @dataclass(frozen=True)
@@ -152,36 +130,17 @@ def store_report(
     session: Session, catalog: UKCatalog, *, region_code: str, dataset_name: str
 ) -> UUID:
     """Store a UK economy report of current law on the region and dataset named."""
-    simulations = [
-        Simulation(
-            simulation_type=SimulationType.ECONOMY,
+    return store_economy_report(
+        session,
+        ReportPlace(
+            country="uk",
+            model_id=catalog.model_id,
+            version_id=catalog.version_id,
             dataset_id=catalog.datasets[dataset_name],
             region_id=catalog.regions[region_code],
-            tax_benefit_model_version_id=catalog.version_id,
-            year=2026,
-        )
-        for _ in range(2)
-    ]
-    session.add_all(simulations)
-    session.flush()
-    report = Report(
-        label="A UK report",
-        country="uk",
-        tax_benefit_model_id=catalog.model_id,
-        baseline_simulation_id=simulations[0].id,
-        reform_simulation_id=simulations[1].id,
-        dataset_id=catalog.datasets[dataset_name],
-        region_id=catalog.regions[region_code],
-        year=2026,
-        inputs={},
-        created_at=STORED_AT,
-        key_version=1,
-        definition_key=uuid4().hex * 2,
-        dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        ),
+        ReportToStore(dataset_independent_key=DATASET_INDEPENDENT_KEY),
     )
-    session.add(report)
-    session.commit()
-    return report.id
 
 
 @pytest.mark.parametrize("region_code", ["uk", "country/wales"], ids=["uk", "nation"])
@@ -229,7 +188,8 @@ def test_a_report_on_its_regions_own_dataset_is_not_a_local_area_report(
 def test_a_local_area_regions_own_report_is_not_a_local_area_report(
     sessions: sessionmaker[Session], reports: V2StoredReportService
 ) -> None:
-    # A constituency's report calculates its one area on the national run.
+    # A constituency's own report runs on the local-area dataset filtered to
+    # that constituency, so it has no other areas to list.
     with sessions() as session:
         report_id = store_report(
             session,

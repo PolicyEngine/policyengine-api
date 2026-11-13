@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.simulation_service.types import (
         PackageVersions,
+        ReportDataSource,
     )
     from policyengine_api.services.v2.stored_reports.budget_window_results import (
         types as window_result_types,
@@ -48,9 +49,6 @@ ReportStatusName = Literal["not_run", "pending", "running", "succeeded", "failed
 # What a report compares: two economy simulations, two household simulations,
 # or two economy simulations in each year of a budget window.
 ReportKind = Literal["economy", "household", "budget_window"]
-# The dataset an economy report used in place of its region's, as its creation
-# asked for it: the one the catalog version gives local areas.
-ReportDataSourceName = Literal["local_area_dataset"]
 # The kinds whose runs are their report runs; a budget window's are its
 # budget-window runs.
 ReportRunsKind = Literal["economy", "household"]
@@ -122,14 +120,15 @@ class ReportSummaryRead(ReportDefinitionRead):
     ``region_code`` and ``dataset_name`` are the region and dataset both
     simulations use, null when the report names none. ``data_source`` is
     ``local_area_dataset`` for a local-area report, a UK-wide or nation
-    report on the dataset its catalog version gives local areas, as a
-    request with that ``data_source`` creates, and None for every other.
+    report on the dataset its catalog version gives local areas, and None
+    for every other. It is read from the report's region and dataset rows,
+    since nothing stores the creation request's ``data_source``.
     """
 
     kind: Literal["economy"]
     region_code: str | None
     dataset_name: str | None
-    data_source: ReportDataSourceName | None
+    data_source: ReportDataSource | None
     status: ReportStatusName
     run: ReportRunRead | None
 

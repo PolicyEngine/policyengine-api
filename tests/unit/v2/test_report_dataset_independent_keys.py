@@ -8,18 +8,14 @@ created before the keys have none.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Dataset,
     Household,
     Region,
@@ -31,66 +27,42 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.query_parameters import MAXIMUM_LISTED_REPORTS
-from policyengine_api.services.v2.simulation_service.types import PackageVersions
-from policyengine_api.services.v2.stored_reports.database_session import (
-    StoredReportDatabaseSession,
+from tests.unit.v2.sqlite_report_rows import (
+    STORED_AT,
+    ReportPlace,
+    ReportToStore,
+    report_service,
+    sqlite_sessions,
+    store_economy_report,
 )
-from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
-STORED_AT = datetime(2026, 11, 14, 9, tzinfo=UTC)
-CURRENT_VERSIONS = PackageVersions(
-    country_package_version="2.1.0", policyengine_version="6.17.1"
-)
+    from policyengine_api.services.v2.stored_reports.services import (
+        V2StoredReportService,
+    )
+
 # The shared key of the proposal's worked example, and another report's.
 DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
 OTHER_DATASET_INDEPENDENT_KEY = "4bb1299756cb0a89" * 4
-
-
-def current_versions(country_id: str) -> PackageVersions:
-    return CURRENT_VERSIONS
+KEYED = ReportToStore(dataset_independent_key=DATASET_INDEPENDENT_KEY)
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
-
-
-@pytest.fixture
-def sessions(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(engine, class_=Session, expire_on_commit=False)
+def sessions() -> Iterator[sessionmaker[Session]]:
+    yield from sqlite_sessions()
 
 
 @pytest.fixture
 def reports(sessions: sessionmaker[Session]) -> V2StoredReportService:
-    return V2StoredReportService(
-        StoredReportDatabaseSession(sessions), current_versions=current_versions
-    )
+    return report_service(sessions)
 
 
-@dataclass(frozen=True)
-class StoredCatalog:
-    """A country's model, a catalog version of it, its national dataset and region."""
-
-    country: str
-    model_id: UUID
-    version_id: UUID
-    dataset_id: UUID
-    region_id: UUID
-
-
-def store_catalog(session: Session, country: str) -> StoredCatalog:
+def store_catalog(session: Session, country: str) -> ReportPlace:
     """Store a catalog version of the country's model with its national region."""
     model = TaxBenefitModel(name=f"policyengine-{country}")
     version = TaxBenefitModelVersion(
@@ -115,7 +87,7 @@ def store_catalog(session: Session, country: str) -> StoredCatalog:
     )
     session.add(region)
     session.commit()
-    return StoredCatalog(
+    return ReportPlace(
         country=country,
         model_id=model.id,
         version_id=version.id,
@@ -124,61 +96,8 @@ def store_catalog(session: Session, country: str) -> StoredCatalog:
     )
 
 
-def _keys(dataset_independent_key: str | None) -> dict[str, object]:
-    """Return a report's key columns: all three, or none for an unkeyed report."""
-    if dataset_independent_key is None:
-        return {}
-    return {
-        "key_version": 1,
-        "definition_key": uuid4().hex * 2,
-        "dataset_independent_key": dataset_independent_key,
-    }
-
-
-def store_report(  # noqa: PLR0913  # the catalog, then each column a test varies
-    session: Session,
-    catalog: StoredCatalog,
-    *,
-    dataset_independent_key: str | None,
-    created_at: datetime = STORED_AT,
-    report_id: UUID | None = None,
-    budget_window_size: int | None = None,
-) -> UUID:
-    """Store an economy report or budget window of current law against itself."""
-    simulations = [
-        Simulation(
-            simulation_type=SimulationType.ECONOMY,
-            dataset_id=catalog.dataset_id,
-            region_id=catalog.region_id,
-            tax_benefit_model_version_id=catalog.version_id,
-            year=2026,
-        )
-        for _ in range(2)
-    ]
-    session.add_all(simulations)
-    session.flush()
-    report = Report(
-        id=uuid4() if report_id is None else report_id,
-        label="A stored report",
-        country=catalog.country,
-        tax_benefit_model_id=catalog.model_id,
-        baseline_simulation_id=simulations[0].id,
-        reform_simulation_id=simulations[1].id,
-        dataset_id=catalog.dataset_id,
-        region_id=catalog.region_id,
-        year=2026,
-        budget_window_size=budget_window_size,
-        inputs={},
-        created_at=created_at,
-        **_keys(dataset_independent_key),
-    )
-    session.add(report)
-    session.commit()
-    return report.id
-
-
 def store_household_report(
-    session: Session, catalog: StoredCatalog, *, dataset_independent_key: str
+    session: Session, catalog: ReportPlace, *, dataset_independent_key: str
 ) -> UUID:
     """Store a household report of current law against itself."""
     household = Household(
@@ -211,7 +130,9 @@ def store_household_report(
         year=2026,
         inputs={},
         created_at=STORED_AT,
-        **_keys(dataset_independent_key),
+        key_version=1,
+        definition_key=uuid4().hex * 2,
+        dataset_independent_key=dataset_independent_key,
     )
     session.add(report)
     session.commit()
@@ -223,14 +144,14 @@ def test_every_kind_of_report_read_answers_its_dataset_independent_key(
 ) -> None:
     with sessions() as session:
         catalog = store_catalog(session, "uk")
-        economy_id = store_report(
-            session, catalog, dataset_independent_key=DATASET_INDEPENDENT_KEY
-        )
-        window_id = store_report(
+        economy_id = store_economy_report(session, catalog, KEYED)
+        window_id = store_economy_report(
             session,
             catalog,
-            dataset_independent_key=OTHER_DATASET_INDEPENDENT_KEY,
-            budget_window_size=3,
+            ReportToStore(
+                dataset_independent_key=OTHER_DATASET_INDEPENDENT_KEY,
+                budget_window_size=3,
+            ),
         )
         household_id = store_household_report(
             session, catalog, dataset_independent_key=DATASET_INDEPENDENT_KEY
@@ -262,8 +183,10 @@ def test_a_report_created_before_the_keys_reads_no_dataset_independent_key(
     sessions: sessionmaker[Session], reports: V2StoredReportService
 ) -> None:
     with sessions() as session:
-        report_id = store_report(
-            session, store_catalog(session, "uk"), dataset_independent_key=None
+        report_id = store_economy_report(
+            session,
+            store_catalog(session, "uk"),
+            ReportToStore(dataset_independent_key=None),
         )
 
     read = reports.get_report(country_id="uk", report_id=report_id)
@@ -278,17 +201,18 @@ def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
         uk = store_catalog(session, "uk")
         us = store_catalog(session, "us")
         oldest, newest, middle = (
-            store_report(
+            store_economy_report(
                 session,
                 uk,
-                dataset_independent_key=DATASET_INDEPENDENT_KEY,
-                created_at=STORED_AT + timedelta(minutes=minutes),
+                replace(KEYED, created_at=STORED_AT + timedelta(minutes=minutes)),
             )
             for minutes in (0, 20, 10)
         )
-        store_report(session, uk, dataset_independent_key=OTHER_DATASET_INDEPENDENT_KEY)
-        store_report(session, uk, dataset_independent_key=None)
-        store_report(session, us, dataset_independent_key=DATASET_INDEPENDENT_KEY)
+        for other_key in (OTHER_DATASET_INDEPENDENT_KEY, None):
+            store_economy_report(
+                session, uk, ReportToStore(dataset_independent_key=other_key)
+            )
+        store_economy_report(session, us, KEYED)
 
     found = reports.search_reports(
         country_id="uk", dataset_independent_key=DATASET_INDEPENDENT_KEY
@@ -309,12 +233,7 @@ def test_a_search_puts_the_larger_id_first_among_reports_created_together(
     with sessions() as session:
         catalog = store_catalog(session, "uk")
         for report_id in (smaller_id, larger_id):
-            store_report(
-                session,
-                catalog,
-                dataset_independent_key=DATASET_INDEPENDENT_KEY,
-                report_id=report_id,
-            )
+            store_economy_report(session, catalog, replace(KEYED, report_id=report_id))
 
     found = reports.search_reports(
         country_id="uk", dataset_independent_key=DATASET_INDEPENDENT_KEY
@@ -329,11 +248,10 @@ def test_a_search_answers_at_most_the_newest_twenty_five_reports(
     with sessions() as session:
         catalog = store_catalog(session, "uk")
         stored = [
-            store_report(
+            store_economy_report(
                 session,
                 catalog,
-                dataset_independent_key=DATASET_INDEPENDENT_KEY,
-                created_at=STORED_AT + timedelta(minutes=minutes),
+                replace(KEYED, created_at=STORED_AT + timedelta(minutes=minutes)),
             )
             for minutes in range(MAXIMUM_LISTED_REPORTS + 1)
         ]
@@ -349,11 +267,7 @@ def test_a_search_with_a_key_no_report_has_finds_none(
     sessions: sessionmaker[Session], reports: V2StoredReportService
 ) -> None:
     with sessions() as session:
-        store_report(
-            session,
-            store_catalog(session, "uk"),
-            dataset_independent_key=DATASET_INDEPENDENT_KEY,
-        )
+        store_economy_report(session, store_catalog(session, "uk"), KEYED)
 
     found = reports.search_reports(
         country_id="uk", dataset_independent_key=OTHER_DATASET_INDEPENDENT_KEY

@@ -10,6 +10,7 @@ deleted after each test.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -549,15 +550,25 @@ def test_a_local_area_report_reads_its_areas_and_withheld_codes(
     assert item["result"] == expected
 
 
-def test_a_nation_report_on_its_own_dataset_reads_no_withheld_codes(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+@pytest.mark.parametrize("region_code", ["uk", "country/wales"], ids=["uk", "nation"])
+def test_a_uk_wide_or_nation_report_on_its_own_dataset_reads_no_withheld_codes(
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
+    region_code: str,
 ) -> None:
     with owner_engine.begin() as connection:
-        store_local_area_catalog(connection, catalogs["uk"])
-        report = store_report(connection, catalogs["uk"])
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        # UK-wide on the national dataset, or the catalog's Wales region.
+        on_national_dataset = (
+            replace(local_areas, dataset_id=catalogs["uk"].dataset_id)
+            if region_code == "uk"
+            else catalogs["uk"]
+        )
+        report = store_report(connection, on_national_dataset)
         store_report_run(
             connection,
-            catalogs["uk"],
+            on_national_dataset,
             report,
             RunSettings(versions=CURRENT_VERSIONS),
             result=uk_economy_result(),
@@ -568,6 +579,36 @@ def test_a_nation_report_on_its_own_dataset_reads_no_withheld_codes(
     assert response.status_code == 200, response.text
     item = response.json()["result"]["item"]
     assert item["data_source"] is None
-    assert item["region_code"] == "country/wales"
+    assert item["region_code"] == region_code
     assert "constituency_withheld_codes" not in item["result"]
     assert "local_authority_withheld_codes" not in item["result"]
+
+
+def test_a_local_area_report_with_every_area_of_a_level_withheld_reads_it_empty(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    output = {
+        **uk_local_area_economy_result(),
+        "constituency_impact": [],
+        "constituency_withheld_codes": ["E14001063", "W07000081"],
+        "local_authority_withheld_codes": [],
+    }
+    with owner_engine.begin() as connection:
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        report = store_report(connection, local_areas)
+        store_report_run(
+            connection,
+            local_areas,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=output,
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]["item"]["result"]
+    assert result["constituency_impact"] == []
+    assert result["constituency_withheld_codes"] == ["E14001063", "W07000081"]
+    assert result["local_authority_withheld_codes"] == []
+    assert len(result["local_authority_impact"]) == 2

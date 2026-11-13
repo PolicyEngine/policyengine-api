@@ -54,7 +54,7 @@ def _newest_first(run_model: type[ReportRun | BudgetWindowRun]) -> Label[int]:
 
 
 def _is_default_dataset_of_a(region_type: RegionType) -> ColumnElement[bool]:
-    """Return whether the report's dataset is a region of the type's default."""
+    """Return whether some region of the type has the report's dataset as default."""
     area_region = aliased(Region)
     return (
         select(col(area_region.id))

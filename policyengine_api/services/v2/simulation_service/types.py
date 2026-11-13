@@ -236,8 +236,10 @@ class ReportDefinitionFields(StrictSubmissionModel):
 
 
 # The dataset an economy report may ask for in place of its region's: the one
-# the catalog version gives local areas.
+# the catalog version gives local areas. A report read names it for a report
+# on that dataset (``stored_reports.types.ReportSummaryRead``).
 ReportDataSource = Literal["local_area_dataset"]
+LOCAL_AREA_DATASET: ReportDataSource = "local_area_dataset"
 
 
 class EconomyReportFields(ReportDefinitionFields):
