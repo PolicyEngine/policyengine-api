@@ -51,6 +51,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
     SimulationServiceConflictError,
     SimulationServiceUnavailableError,
+    StartedReportRun,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
@@ -153,7 +154,7 @@ class RerunningSimulationService:
     new_run_ids: list[UUID] = field(default_factory=list)
     open_sessions_when_asked: list[int] = field(default_factory=list)
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
         self.reruns.append(rerun)
         if self.database_session is not None:
             self.open_sessions_when_asked.append(self.database_session.open_sessions)
@@ -183,15 +184,27 @@ class RerunningSimulationService:
                 )
                 mark_window_manual(connection, window_run_id, recalculate=rerun.force)
                 self.new_run_ids.append(window_run_id)
+                started = StartedReportRun(
+                    report_run_id=connection.execute(
+                        text(
+                            "SELECT id FROM report_runs WHERE budget_window_run_id "
+                            "= :id ORDER BY year LIMIT 1"
+                        ),
+                        {"id": window_run_id},
+                    ).scalar_one(),
+                    budget_window_run_id=window_run_id,
+                )
             else:
                 run_ids = store_report_run(connection, self.catalog, report, settings)
                 mark_manual(connection, run_ids.report_run_id)
                 self.new_run_ids.append(run_ids.report_run_id)
+                started = StartedReportRun(report_run_id=run_ids.report_run_id)
             if self.delete_report:
                 connection.execute(
                     text("DELETE FROM reports WHERE id = :id"),
                     {"id": rerun.report_id},
                 )
+        return started
 
 
 @pytest.fixture

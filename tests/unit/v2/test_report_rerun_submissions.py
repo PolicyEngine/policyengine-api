@@ -24,6 +24,7 @@ from policyengine_api.services.v2.simulation_service.services import (
 from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
     ReportRerunKind,
+    StartedReportRun,
 )
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
@@ -97,8 +98,9 @@ class StoredPolicies:
 class RecordingSimulationService:
     reruns: list[ReportRerunInput] = field(default_factory=list)
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
         self.reruns.append(rerun)
+        return StartedReportRun(report_run_id=uuid4())
 
 
 class UnreadHouseholds:

@@ -351,6 +351,19 @@ class SubmittedBudgetWindow:
     budget_window_run_id: UUID
 
 
+@dataclass(frozen=True)
+class StartedReportRun:
+    """The run a re-run ended on, whether the service created it or joined it.
+
+    ``report_run_id`` is an economy or household report's report run, or a
+    budget window's first year's; ``budget_window_run_id`` is a budget
+    window's budget-window run, None for any other report.
+    """
+
+    report_run_id: UUID
+    budget_window_run_id: UUID | None = None
+
+
 # Each kind of stored report a re-run names, as the report's row records it.
 ReportRerunKind = Literal["economy", "household", "budget_window"]
 
