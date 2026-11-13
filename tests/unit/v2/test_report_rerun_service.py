@@ -87,8 +87,8 @@ def stored_rows(**report_columns: object) -> StoredReportRows:
         dataset_name=None,
         baseline_simulation=None,
         reform_simulation=None,
-        newest_run=None,
-        newest_budget_window_run=None,
+        run=None,
+        budget_window_run=None,
         budget_window_years=(),
     )
 

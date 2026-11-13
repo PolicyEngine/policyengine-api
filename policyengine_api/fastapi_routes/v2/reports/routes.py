@@ -453,21 +453,33 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.get(
         "/reports",
         response_model=ReportListResponse,
+        responses={401: READ_RESPONSES[401]},
         summary="List chosen reports",
         description=(
             "Lists the country's reports among the report_id values (at most "
-            "25), in the order named and once each, with their newest runs, and "
-            "each budget window's years, but without results, read in two "
-            "queries. Unknown reports and other countries' are left out."
+            "25), in the order named and once each, each with the run a read of "
+            "it without run_id answers, and each budget window's years, but "
+            "without results. With a user credential, each report's label and "
+            "description are that user's saved report's, and a report the user "
+            "asked to run shows the run of their newest request; without one, "
+            "the label is null. Unknown reports and other countries' are left "
+            "out."
         ),
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
     )
     def list_reports(
         query: ReportCollectionQueryDependency,
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportListResponse | JSONResponse:
-        def read() -> ReportListResponse:
-            reports = service_factory().list_reports(
-                country_id=query.country_id, report_ids=query.report_id
-            )
+        def read() -> ReportListResponse | JSONResponse:
+            try:
+                reports = service_factory().list_reports(
+                    country_id=query.country_id,
+                    report_ids=query.report_id,
+                    requester=requester,
+                )
+            except StandardUserRequiresSignInError as error:
+                return _requester_refused(error)
             return ReportListResponse(
                 result=ReportListResult(
                     items=[report_summary_item(report) for report in reports]
@@ -480,13 +492,20 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         "/reports/{report_id}",
         response_model=ReportDetailResponse,
         responses=READ_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Read a report",
         description=(
-            "Returns the report, its run named by run_id (404 when it is not "
-            "one of the report's runs), or without run_id its newest run whatever "
-            "its status and versions, the versions the Public API runs now, and, "
-            "once that run has succeeded, its result. An economy report's run is "
-            "one report "
+            "Returns the report as the requesting user sees it: its run named by "
+            "run_id (404 when it is not one of the report's runs); without "
+            "run_id, the run of the user's newest request for one, else its "
+            "newest succeeded run that wasn't forced, else its newest run that "
+            "wasn't forced, on whatever versions (a forced run is never the "
+            "default, and a newer run someone else started is listed by GET "
+            "/v2/reports/{report_id}/runs, not shown in its place); the "
+            "versions the Public API runs now; and, once that run has succeeded, "
+            "its result. Its label and description are the requesting user's "
+            "saved report's name and description, null without a user "
+            "credential or a saved report. An economy report's run is one report "
             "run and its result today's economy result. A household report's "
             "result is each simulation's calculated household, as "
             "/v2/household-calculations answers one, and a failed run gives each "
@@ -500,11 +519,18 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     def get_report(
         report_id: UUID,
         query: ReportDetailQueryDependency,
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
-        def read() -> ReportDetailResponse:
-            report = service_factory().get_report(
-                country_id=query.country_id, report_id=report_id, run_id=query.run_id
-            )
+        def read() -> ReportDetailResponse | JSONResponse:
+            try:
+                report = service_factory().get_report(
+                    country_id=query.country_id,
+                    report_id=report_id,
+                    run_id=query.run_id,
+                    requester=requester,
+                )
+            except StandardUserRequiresSignInError as error:
+                return _requester_refused(error)
             return ReportDetailResponse(
                 result=ReportDetailResult(item=report_item(report))
             )

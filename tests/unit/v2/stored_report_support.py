@@ -160,16 +160,27 @@ class FakeReportService:
             raise self.error
 
     def get_report(
-        self, *, country_id: str, report_id: UUID, run_id: UUID | None = None
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        run_id: UUID | None = None,
+        requester: AccountPrincipal | None = None,
     ) -> ReportRead:
+        self.requesters.append(requester)
         self._answer(
             "get_report", country_id=country_id, report_id=report_id, run_id=run_id
         )
         return self.report
 
     def list_reports(
-        self, *, country_id: str, report_ids: Sequence[UUID]
+        self,
+        *,
+        country_id: str,
+        report_ids: Sequence[UUID],
+        requester: AccountPrincipal | None = None,
     ) -> tuple[ReportSummaryRead, ...]:
+        self.requesters.append(requester)
         self._answer("list_reports", country_id=country_id, report_ids=report_ids)
         return self.listed
 

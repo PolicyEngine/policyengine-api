@@ -48,6 +48,7 @@ from policyengine_api.services.v2.report_run_records.validators import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from uuid import UUID
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.report_run_records.database_session import (
@@ -90,9 +91,10 @@ class ReportRunRecordService:
             principal=principal, user_id=found.user_id, user_type=found.user_type
         )
 
-    def record(self, requester: CheckedRequester, request: ReportRunRequest) -> None:
-        """Record the request for each run it ended on, in one transaction.
+    def record(self, requester: CheckedRequester, request: ReportRunRequest) -> UUID:
+        """Record the request for each run it ended on; return the user it names.
 
+        It is written in one transaction.
         A budget window's request records each year's report run of its
         budget-window run, read in the same transaction. The record names the
         user the check found, held ``FOR SHARE`` so a
@@ -147,3 +149,4 @@ class ReportRunRecordService:
                     report_id=request.report_id,
                     requested_at=request.requested_at,
                 )
+        return user_id

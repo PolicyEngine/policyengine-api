@@ -83,14 +83,16 @@ class ReportSimulationItem(StrictReportAPIModel):
 class ReportDefinitionItem(StrictReportAPIModel):
     """What every report item gives: its definition and the current versions.
 
-    ``current_versions`` are the versions the Public API runs now, so a
+    ``label`` and ``description`` are the requesting user's saved report's
+    name and description, null without one. ``current_versions`` are the
+    versions the Public API runs now, so a
     newest run on other versions is out of date. ``options`` are the options
     the report was created with.
     """
 
     id: UUID
     country_id: str
-    label: str
+    label: str | None
     description: str | None
     year: int | None
     baseline_simulation: ReportSimulationItem | None
@@ -268,7 +270,7 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     id: UUID
     country_id: str
     kind: Literal["budget_window"]
-    label: str
+    label: str | None
     description: str | None
     year: int | None
     budget_window_size: int
@@ -426,6 +428,11 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: error_response("The v2 database or the simulation service is unavailable."),
 }
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
+    401: error_response(
+        "The request sent a user credential that is not valid: a bearer access "
+        "token that is invalid, or an unauthenticated-user header that is not a "
+        "canonical UUID or names a signed-in user."
+    ),
     404: error_response(
         "No report has this ID in this country, or run_id is not one of the "
         "report's runs (a budget window's budget-window runs; any other "

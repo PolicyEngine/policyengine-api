@@ -192,14 +192,23 @@ class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
     def get_report(
-        self, *, country_id: str, report_id: UUID, run_id: UUID | None = None
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        run_id: UUID | None = None,
+        requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
-        """Return the country's report, a run and that run's result.
+        """Return the country's report, a run and that run's result, as a user sees it.
 
-        The run is ``run_id``, or the newest without it. The report is an
-        economy report, a household report or a budget window. Raise
-        ``StoredReportNotFoundError`` when the country has no such report,
-        ``ReportRunNotFoundError`` when it has no run ``run_id``, and
+        The run is ``run_id``; without it, the requester's newest recorded
+        run, else the report's newest succeeded unforced run, else its newest
+        unforced run. The label and description are the requester's saved
+        report's. The report is an economy report, a household report or a
+        budget window. Raise ``StoredReportNotFoundError`` when the country
+        has no such report, ``ReportRunNotFoundError`` when it has no run
+        ``run_id``, ``StandardUserRequiresSignInError`` for an
+        unauthenticated credential naming a signed-in user, and
         ``EconomyResultUnreadableError``, ``HouseholdResultUnreadableError`` or
         ``BudgetWindowResultUnreadableError`` when a succeeded run's result
         cannot be read.
@@ -207,9 +216,17 @@ class V2StoredReportResourceService(Protocol):
         ...
 
     def list_reports(
-        self, *, country_id: str, report_ids: Sequence[UUID]
+        self,
+        *,
+        country_id: str,
+        report_ids: Sequence[UUID],
+        requester: AccountPrincipal | None = None,
     ) -> tuple[StoredReportSummaryRead, ...]:
-        """Return the country's reports of every kind among those named, in order."""
+        """Return the country's reports of every kind among those named, in order.
+
+        Each is read as ``get_report`` reads it without a run, as the
+        requester sees it.
+        """
         ...
 
     def create_report(

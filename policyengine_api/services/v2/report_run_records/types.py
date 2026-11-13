@@ -91,8 +91,10 @@ class ReportRunRecorder(Protocol):
         """
         ...
 
-    def record(self, requester: CheckedRequester, request: ReportRunRequest) -> None:
+    def record(self, requester: CheckedRequester, request: ReportRunRequest) -> UUID:
         """Record the request for the user the check found, or a new one if none.
+
+        Return the ID of the user the request was recorded for.
 
         The user's saved reports naming the report get the request's time as
         their ``last_run_at`` when it is newer. Raise RequesterUserGoneError

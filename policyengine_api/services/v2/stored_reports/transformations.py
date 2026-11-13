@@ -95,8 +95,8 @@ def _report_definition(
     return ReportDefinitionRead(
         id=report.id,
         country_id=report.country,
-        label=report.label,
-        description=report.description,
+        label=rows.saved_report_name,
+        description=rows.saved_report_description,
         year=report.year,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),
@@ -106,11 +106,11 @@ def _report_definition(
     )
 
 
-def _newest_run(
+def _run_and_status(
     rows: StoredReportRows,
 ) -> tuple[ReportStatusName, ReportRunRead | None]:
-    """Return the report's status and newest run: ``not_run`` and None without one."""
-    run = rows.newest_run
+    """Return the report's status and the run read: ``not_run`` and None without one."""
+    run = rows.run
     if run is None:
         return "not_run", None
     return run.status.value, report_run_read(run)
@@ -120,7 +120,7 @@ def report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> ReportSummaryRead:
     """Return an economy report's definition and newest run, without a result."""
-    status, run = _newest_run(rows)
+    status, run = _run_and_status(rows)
     return ReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="economy",
@@ -154,7 +154,7 @@ def household_report_summary_read(
     if report.household_id is None:
         msg = f"Report {report.id} is not a household report"
         raise ValueError(msg)
-    status, run = _newest_run(rows)
+    status, run = _run_and_status(rows)
     return HouseholdReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="household",
@@ -221,7 +221,7 @@ def budget_window_summary_read(
     if report.budget_window_size is None:
         msg = f"Report {report.id} is not a budget window"
         raise ValueError(msg)
-    window_run = rows.newest_budget_window_run
+    window_run = rows.budget_window_run
     return BudgetWindowReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="budget_window",

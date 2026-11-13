@@ -1,15 +1,17 @@
-"""Database reads of v2 reports, their newest runs and budget-window years.
+"""Database reads of v2 reports, their default runs and budget-window years.
 
 A report's own runs are report runs that are not a year of a budget window;
 a budget-window report's are budget-window runs, each with a report run per
-year.
+year. A report's default run, the one a read answers without naming one, is
+its newest succeeded run that wasn't forced (a window's: not recalculated),
+else its newest such run of any status; a forced run is never the default.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import aliased
 from sqlmodel import col
 
@@ -19,6 +21,7 @@ from policyengine_api.data.v2.models import (
     Region,
     Report,
     ReportRun,
+    ReportRunStatus,
     Simulation,
 )
 from policyengine_api.services.v2.stored_reports.types import StoredReportRows
@@ -31,18 +34,26 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 
-def _newest_first(run_model: type[ReportRun | BudgetWindowRun]) -> Label[int]:
-    """Return a label numbering each report's runs from 1, newest first.
+def _default_first(run_model: type[ReportRun | BudgetWindowRun]) -> Label[int]:
+    """Return a label numbering each report's runs from 1, its default run first.
 
-    The newest is the run created last, ties going to the larger ID.
+    Succeeded runs come before the others, then the newest: the run created
+    last, ties going to the larger ID. The caller leaves forced runs out.
     """
+    not_succeeded = case(
+        (col(run_model.status) == ReportRunStatus.SUCCEEDED, 0), else_=1
+    )
     return (
         func.row_number()
         .over(
             partition_by=col(run_model.report_id),
-            order_by=(col(run_model.created_at).desc(), col(run_model.id).desc()),
+            order_by=(
+                not_succeeded,
+                col(run_model.created_at).desc(),
+                col(run_model.id).desc(),
+            ),
         )
-        .label("newest_first")
+        .label("default_first")
     )
 
 
@@ -52,30 +63,35 @@ def read_report_rows(
     """Return the country's reports among ``report_ids``, in two queries.
 
     Each comes with its region's code, its dataset's name, its two simulations
-    and its newest run: the run created last (ties broken by the larger ID),
-    whatever its status and versions. Runs of a budget window's years are not
-    the report's own runs, so they are left out. Each also comes with its
-    newest budget-window run, chosen the same way, and that run's years,
-    which a second query reads for every report at once. Reports of other
+    and its default run: the newest succeeded run that wasn't forced, else
+    the newest run that wasn't forced, whatever its status and versions
+    (newest is created last, ties broken by the larger ID). Runs of a budget
+    window's years are not the report's own runs, so they are left out. Each
+    also comes with its default budget-window run, chosen the same way among
+    runs that weren't recalculated, and that run's years, which a second
+    query reads for every report at once. Reports of other
     countries, and IDs no report has, are absent from the list, which has no
     set order.
     """
-    run_rank = _newest_first(ReportRun)
     ranked_runs = (
-        select(ReportRun, run_rank)
+        select(ReportRun, _default_first(ReportRun))
         .where(
             col(ReportRun.report_id).in_(report_ids),
             col(ReportRun.budget_window_run_id).is_(None),
+            col(ReportRun.forced).is_(False),
         )
         .subquery("ranked_report_runs")
     )
-    newest_run = aliased(ReportRun, ranked_runs)
+    default_run = aliased(ReportRun, ranked_runs)
     ranked_window_runs = (
-        select(BudgetWindowRun, _newest_first(BudgetWindowRun))
-        .where(col(BudgetWindowRun.report_id).in_(report_ids))
+        select(BudgetWindowRun, _default_first(BudgetWindowRun))
+        .where(
+            col(BudgetWindowRun.report_id).in_(report_ids),
+            col(BudgetWindowRun.recalculate).is_(False),
+        )
         .subquery("ranked_budget_window_runs")
     )
-    newest_window_run = aliased(BudgetWindowRun, ranked_window_runs)
+    default_window_run = aliased(BudgetWindowRun, ranked_window_runs)
     baseline_simulation = aliased(Simulation)
     reform_simulation = aliased(Simulation)
     statement = (
@@ -85,8 +101,8 @@ def read_report_rows(
             col(Dataset.name),
             baseline_simulation,
             reform_simulation,
-            newest_run,
-            newest_window_run,
+            default_run,
+            default_window_run,
         )
         .outerjoin(Region, col(Region.id) == Report.region_id)
         .outerjoin(Dataset, col(Dataset.id) == Report.dataset_id)
@@ -98,17 +114,17 @@ def read_report_rows(
             reform_simulation, col(reform_simulation.id) == Report.reform_simulation_id
         )
         .outerjoin(
-            newest_run,
+            default_run,
             and_(
-                col(newest_run.report_id) == Report.id,
-                ranked_runs.c.newest_first == 1,
+                col(default_run.report_id) == Report.id,
+                ranked_runs.c.default_first == 1,
             ),
         )
         .outerjoin(
-            newest_window_run,
+            default_window_run,
             and_(
-                col(newest_window_run.report_id) == Report.id,
-                ranked_window_runs.c.newest_first == 1,
+                col(default_window_run.report_id) == Report.id,
+                ranked_window_runs.c.default_first == 1,
             ),
         )
         .where(col(Report.country) == country_id, col(Report.id).in_(report_ids))
@@ -125,8 +141,8 @@ def read_report_rows(
             dataset_name=dataset_name,
             baseline_simulation=baseline,
             reform_simulation=reform,
-            newest_run=run,
-            newest_budget_window_run=window_run,
+            run=run,
+            budget_window_run=window_run,
             budget_window_years=(
                 () if window_run is None else years.get(window_run.id, ())
             ),

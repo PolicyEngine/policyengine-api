@@ -95,7 +95,7 @@ class ReportDefinitionRead:
 
     id: UUID
     country_id: str
-    label: str
+    label: str | None
     description: str | None
     year: int | None
     baseline_simulation: ReportSimulationRead | None
@@ -258,15 +258,19 @@ StoredReportRunsRead = ReportRunsRead | BudgetWindowRunsRead
 
 @dataclass(frozen=True)
 class StoredReportRows:
-    """A report's row, its newest runs and the catalog and simulation rows it names.
+    """A report's row, the run a read answers and the rows it names.
 
     ``region_code`` and ``dataset_name`` are those of the report's region and
     dataset, and null when it names none; a simulation is None once deleted.
-    ``newest_run`` is the report run created last that is not a year of a
-    budget window, whatever its status and versions, or None.
-    ``newest_budget_window_run`` is the budget-window run created last, or
-    None, and ``budget_window_years`` its years' report runs in year order.
-    A read of a run the caller names holds that run in place of the newest.
+    ``run`` is a report run that is not a year of a budget window, and
+    ``budget_window_run`` a budget-window run, with ``budget_window_years``
+    its years' report runs in year order, or None. Read without naming a
+    run, each is the report's default: its newest succeeded run that wasn't
+    forced (for a window, not recalculated), else its newest such run of any
+    status, or None; the service may put the requesting user's newest
+    recorded run, or a run the caller names, in its place.
+    ``saved_report_name`` and ``saved_report_description`` are the requesting
+    user's saved report's, the report's label and description, or None.
     """
 
     report: Report
@@ -274,6 +278,8 @@ class StoredReportRows:
     dataset_name: str | None
     baseline_simulation: Simulation | None
     reform_simulation: Simulation | None
-    newest_run: ReportRun | None
-    newest_budget_window_run: BudgetWindowRun | None
+    run: ReportRun | None
+    budget_window_run: BudgetWindowRun | None
     budget_window_years: tuple[ReportRun, ...]
+    saved_report_name: str | None = None
+    saved_report_description: str | None = None
