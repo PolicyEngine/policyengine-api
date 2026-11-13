@@ -1,9 +1,13 @@
 """share reports and runs by key and record each user's report runs
 
 Revision ID: 94dc43079186
-Revises: 0c136a278f29
-Create Date: 2026-11-14 01:13:41.861670
+Revises: 1e1e3f079f2c
+Create Date: 2026-11-14 02:29:22.697033
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id 94dc43079186
+
+It was generated on 0c136a278f29. When master gained the withheld area codes
+revision 1e1e3f079f2c on the same parent, down_revision moved to
+1e1e3f079f2c; generating it again from there gives the same operations.
 
 One post-generation correction, commented where it is made:
 user_report_run_associations.trigger reuses the existing
@@ -15,13 +19,17 @@ forced marker to simulation_runs and report_runs, false for every existing
 row. Two partial unique indexes allow one run that hasn't failed and wasn't
 forced per definition and version set: per simulation, year, catalog version
 and package versions, and per report and package versions outside budget
-windows. It adds user_report_run_associations, each user's record of a
-report run they asked for.
+windows. budget_window_runs gains its .py version (empty for existing window
+runs, which are never joined), and a partial unique index allows one window
+run per report, catalog version and .py version that hasn't failed and isn't
+recalculated (its forced marker). It adds user_report_run_associations, each
+user's record of a report run they asked for.
 
 The upgrade fails, changing nothing, while a simulation has two such runs on
 the same year and versions, or a report two outside budget windows, as a
 re-run on unchanged versions makes before the simulation service joins runs.
-The downgrade drops the keys, the markers and every user's run records.
+The downgrade drops the keys, the forced markers, the run indexes, the window
+runs' .py version and every user's run records.
 """
 
 from typing import Sequence, Union
@@ -33,7 +41,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = '94dc43079186'
-down_revision: Union[str, None] = '0c136a278f29'
+down_revision: Union[str, None] = '1e1e3f079f2c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -67,6 +75,8 @@ def upgrade() -> None:
     sa.UniqueConstraint('user_id', 'report_run_id', name=op.f('uq_user_report_run_associations_user_id_report_run_id'))
     )
     op.create_index(op.f('ix_user_report_run_associations_report_run_id'), 'user_report_run_associations', ['report_run_id'], unique=False)
+    op.add_column('budget_window_runs', sa.Column('policyengine_version', sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True))
+    op.create_index('uq_budget_window_runs_unfailed_unforced_versions', 'budget_window_runs', ['report_id', 'tax_benefit_model_version_id', 'policyengine_version'], unique=True, postgresql_where=sa.text("status <> 'failed' AND NOT recalculate"), sqlite_where=sa.text("status <> 'failed' AND NOT recalculate"))
     op.add_column('report_runs', sa.Column('forced', sa.Boolean(), server_default=sa.text('false'), nullable=False))
     op.create_index('uq_report_runs_unfailed_unforced_versions', 'report_runs', ['report_id', 'country_package_version', 'policyengine_version'], unique=True, postgresql_where=sa.text("budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced"), sqlite_where=sa.text("budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced"))
     op.add_column('reports', sa.Column('key_version', sa.Integer(), nullable=True))
@@ -110,6 +120,8 @@ def downgrade() -> None:
     op.drop_column('reports', 'key_version')
     op.drop_index('uq_report_runs_unfailed_unforced_versions', table_name='report_runs', postgresql_where=sa.text("budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced"), sqlite_where=sa.text("budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced"))
     op.drop_column('report_runs', 'forced')
+    op.drop_index('uq_budget_window_runs_unfailed_unforced_versions', table_name='budget_window_runs', postgresql_where=sa.text("status <> 'failed' AND NOT recalculate"), sqlite_where=sa.text("status <> 'failed' AND NOT recalculate"))
+    op.drop_column('budget_window_runs', 'policyengine_version')
     op.drop_index(op.f('ix_user_report_run_associations_report_run_id'), table_name='user_report_run_associations')
     op.drop_table('user_report_run_associations')
     # ### end Alembic commands ###

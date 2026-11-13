@@ -23,6 +23,7 @@ from sqlalchemy.pool import NullPool
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.privileges import (
+    CATALOG_WRITER_ROLE,
     ColumnPrivilege,
     TablePrivilege,
     declared_privileges,
@@ -320,6 +321,74 @@ def test_modal_workers_write_their_run_status_and_results_only(
         ),
     ):
         _refused(connection, statement, id=ids[run_key])
+
+
+def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The workers insert and read the rows, the Public API only reads them.
+
+    The simulation service, the Stage 12 role and the catalog writer can't read
+    them.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+    _act_as(connection, managed_v2_roles.modal_worker)
+    withheld_code_id = uuid4()
+
+    insert_row(
+        connection,
+        "withheld_area_codes",
+        id=withheld_code_id,
+        report_run_id=ids["report_run"],
+        baseline_simulation_run_id=ids["run"],
+        reform_simulation_run_id=ids["run"],
+        area_type="constituency",
+        code="E14001063",
+    )
+    assert (
+        connection.execute(
+            text("SELECT count(*) FROM withheld_area_codes WHERE report_run_id = :id"),
+            {"id": ids["report_run"]},
+        ).scalar_one()
+        == 1
+    )
+
+    # Once written, a withheld code is never changed or removed by the workers.
+    _refused(
+        connection,
+        "UPDATE withheld_area_codes SET code = 'E14001064' WHERE id = :id",
+        id=withheld_code_id,
+    )
+    _refused(
+        connection,
+        "DELETE FROM withheld_area_codes WHERE id = :id",
+        id=withheld_code_id,
+    )
+    _act_as(connection, managed_v2_roles.runtime)
+    assert (
+        connection.execute(
+            text("SELECT code FROM withheld_area_codes WHERE id = :id"),
+            {"id": withheld_code_id},
+        ).scalar_one()
+        == "E14001063"
+    )
+    _refused(
+        connection,
+        "INSERT INTO withheld_area_codes (id, report_run_id, "
+        "baseline_simulation_run_id, reform_simulation_run_id, area_type, code) "
+        "VALUES (:id, :report_run_id, :run_id, :run_id, 'constituency', 'E14001064')",
+        id=uuid4(),
+        report_run_id=ids["report_run"],
+        run_id=ids["run"],
+    )
+    for role in (
+        managed_v2_roles.simulation_service,
+        managed_v2_roles.stage12,
+        CATALOG_WRITER_ROLE,
+    ):
+        _act_as(connection, role)
+        _refused(connection, "SELECT count(*) FROM withheld_area_codes")
 
 
 def test_the_simulation_service_fails_a_window_whose_first_calls_modal_refuses(

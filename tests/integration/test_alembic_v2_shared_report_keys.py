@@ -6,7 +6,9 @@ runs. It adds nullable key columns, unique on the key and its version, to
 ``reports``, indexed); a ``forced`` marker, false by default, to
 ``simulation_runs`` and ``report_runs``; a partial unique index on each run
 table that allows one unfailed, unforced run per definition and version set;
-and the ``user_report_run_associations`` table. It changes nothing else, and
+a .py version on ``budget_window_runs``, with a partial unique index allowing
+one unfailed, unrecalculated window run per report and version set; and the
+``user_report_run_associations`` table. It changes nothing else, and
 its downgrade removes exactly those.
 """
 
@@ -26,7 +28,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy import Engine
 
-SHARED_REPORTS_PREVIOUS_REVISION = "0c136a278f29"
+SHARED_REPORTS_PREVIOUS_REVISION = "1e1e3f079f2c"
 SHARED_REPORTS_REVISION = "94dc43079186"
 
 KEY_FORMAT_CHECKS = {
@@ -131,7 +133,13 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         table_name
         for table_name in parent
         if revision[table_name] != parent[table_name]
-    ) == ["report_runs", "reports", "simulation_runs", "simulations"]
+    ) == [
+        "budget_window_runs",
+        "report_runs",
+        "reports",
+        "simulation_runs",
+        "simulations",
+    ]
 
     for table_name in ("simulations", "reports"):
         parent_table, revision_table = parent[table_name], revision[table_name]
@@ -203,6 +211,24 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         }
         for part in ("unique_constraints", "checks", "foreign_keys"):
             assert revision_table[part] == parent_table[part], (table_name, part)
+
+    # A window run records its .py version, and recalculate marks it forced.
+    parent_windows, revision_windows = (
+        parent["budget_window_runs"],
+        revision["budget_window_runs"],
+    )
+    assert _added(parent_windows, revision_windows, "columns") == {
+        "policyengine_version": ("VARCHAR(128)", True, None)
+    }
+    assert _added(parent_windows, revision_windows, "indexes") == {
+        "uq_budget_window_runs_unfailed_unforced_versions": (
+            ("report_id", "tax_benefit_model_version_id", "policyengine_version"),
+            True,
+            "((status <> 'failed'::v2_report_run_status) AND (NOT recalculate))",
+        )
+    }
+    for part in ("unique_constraints", "checks", "foreign_keys"):
+        assert revision_windows[part] == parent_windows[part], part
 
     records = revision["user_report_run_associations"]
     assert records["columns"] == {

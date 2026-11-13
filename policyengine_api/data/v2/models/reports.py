@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         LaborSupplyResponse,
         LocalAuthorityImpact,
         ProgramStatistics,
+        WithheldAreaCode,
     )
 
 # A budget window compares at most this many years, none after LAST_YEAR.
@@ -79,11 +80,12 @@ class Report(TimestampedModel, table=True):
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
-    the dataset name, region code and year both sides share, the budget
-    window's size and the options), in the format ``key_version`` names; identical
-    requests share the row. ``dataset_independent_key`` is the same without
-    the dataset and the options, which a national report shares with its
-    local-area report. Reports created before the keys have none.
+    the dataset name, region code, year and SPM selection both sides share,
+    and the budget window's size; request options such as ``include_cliffs``
+    are in no key), in the format ``key_version`` names; identical requests
+    share the row. ``dataset_independent_key`` is the same without the
+    dataset, which a national report shares with its local-area report.
+    Reports created before the keys have none.
     """
 
     __tablename__ = "reports"
@@ -191,12 +193,20 @@ class Report(TimestampedModel, table=True):
     )
 
 
+# A window run's forced marker is ``recalculate``.
+_UNFAILED_UNRECALCULATED_WINDOW_RUNS = "status <> 'failed' AND NOT recalculate"
+
+
 class BudgetWindowRun(TimestampedModel, table=True):
     """One calculation of a budget-window report on one catalog version.
 
     Each year of the window is a report run of the same report that names this
     row and its year. ``recalculate`` says whether those years calculate their
-    simulations again instead of reusing successful runs. The simulation
+    simulations again instead of reusing successful runs: it marks a forced
+    re-run. A report has at most one window run that hasn't failed and isn't
+    recalculated per catalog version and .py version (``policyengine_version``),
+    which identical requests join; window runs written before the version was
+    recorded have none and are never joined. The simulation
     service creates the window's year runs and starts the first five; each
     year's Modal coordinator starts the next unstarted year when its own year
     finishes, and the last year to finish marks this row succeeded. A failed
@@ -214,6 +224,15 @@ class BudgetWindowRun(TimestampedModel, table=True):
         sa.Index(
             "ix_budget_window_runs_report_id_created_at", "report_id", "created_at"
         ),
+        sa.Index(
+            "uq_budget_window_runs_unfailed_unforced_versions",
+            "report_id",
+            "tax_benefit_model_version_id",
+            "policyengine_version",
+            unique=True,
+            postgresql_where=sa.text(_UNFAILED_UNRECALCULATED_WINDOW_RUNS),
+            sqlite_where=sa.text(_UNFAILED_UNRECALCULATED_WINDOW_RUNS),
+        ),
     )
 
     report_id: UUID = Field(
@@ -225,6 +244,7 @@ class BudgetWindowRun(TimestampedModel, table=True):
         ondelete="RESTRICT",
         index=True,
     )
+    policyengine_version: str | None = Field(default=None, max_length=128)
     trigger: ReportRunTrigger = Field(
         default=ReportRunTrigger.INITIAL,
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
@@ -419,6 +439,10 @@ class ReportRun(TimestampedModel, table=True):
         cascade_delete=True,
     )
     program_statistics: list["ProgramStatistics"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
+    withheld_area_codes: list["WithheldAreaCode"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )
