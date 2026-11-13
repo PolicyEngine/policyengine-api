@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, update
+from sqlalchemy import or_, update
 from sqlmodel import col
 
 from policyengine_api.data.v2.models import UserReportAssociation
@@ -22,20 +22,22 @@ def advance_saved_reports_last_run_at(
     """Set the user's saved reports of the report to ``requested_at`` when later.
 
     A saved report whose ``last_run_at`` is already later, as one written by
-    a concurrent newer request, keeps it; one with none takes
-    ``requested_at``. ``updated_at`` is unchanged, since the user changed
-    nothing.
+    a concurrent newer request, keeps it, so the time never moves back; one
+    with none takes ``requested_at``. ``updated_at`` is unchanged, since the
+    user changed nothing.
     """
     session.execute(
         update(UserReportAssociation)
         .where(
             col(UserReportAssociation.user_id) == user_id,
             col(UserReportAssociation.report_id) == report_id,
+            or_(
+                col(UserReportAssociation.last_run_at).is_(None),
+                col(UserReportAssociation.last_run_at) < requested_at,
+            ),
         )
         .values(
-            last_run_at=func.greatest(
-                col(UserReportAssociation.last_run_at), requested_at
-            ),
+            last_run_at=requested_at,
             updated_at=col(UserReportAssociation.updated_at),
         )
         .execution_options(synchronize_session=False)

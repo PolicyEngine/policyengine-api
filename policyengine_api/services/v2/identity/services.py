@@ -76,6 +76,15 @@ from policyengine_api.services.v2.identity.validators import (
     require_provisioned_user,
     require_unauthenticated_user,
 )
+from policyengine_api.services.v2.report_run_records.database_connectors import (
+    creates as record_creates,
+)
+from policyengine_api.services.v2.report_run_records.database_connectors import (
+    reads as record_reads,
+)
+from policyengine_api.services.v2.report_run_records.database_connectors import (
+    updates as record_updates,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -301,6 +310,29 @@ def resolve_principal_user_for_read_in_session(
     )
 
 
+def _move_report_run_records(
+    session: Session, *, from_user_id: UUID, to_user_id: UUID
+) -> None:
+    """Copy one user's report-run records to another before the first is deleted.
+
+    A run the other user already has a record of keeps that record. The
+    other user's saved reports of each report a copied record names take
+    that record's ``requested_at`` as their ``last_run_at`` when it is later.
+    """
+    moved_run_ids = record_creates.create_report_run_records(
+        session,
+        user_id=to_user_id,
+        records=record_reads.read_report_run_records(session, user_id=from_user_id),
+    )
+    newest_requests = record_reads.read_newest_requests_by_report(
+        session, user_id=to_user_id, report_run_ids=moved_run_ids
+    )
+    for report_id, requested_at in newest_requests.items():
+        record_updates.advance_saved_reports_last_run_at(
+            session, user_id=to_user_id, report_id=report_id, requested_at=requested_at
+        )
+
+
 def convert_unauthenticated_user_in_session(
     session: Session,
     *,
@@ -319,8 +351,10 @@ def convert_unauthenticated_user_in_session(
     - No user with the identity yet: the unauthenticated user becomes it in
       place, keeping its ID and therefore every association it owns.
     - The identity already has a user: every association moves to that user
-      unchanged, the unauthenticated user is deleted, and the identity's user
-      keeps its stored type.
+      unchanged, the unauthenticated user's report-run records are copied to
+      it (a run it already has a record of keeps that record), the
+      unauthenticated user is deleted, and the identity's user keeps its
+      stored type.
     - No unauthenticated user, or the ID names a signed-in user (one already
       converted, or anyone else's): nothing is touched, and the identity's
       user is resolved as on any request.
@@ -376,6 +410,10 @@ def convert_unauthenticated_user_in_session(
         session,
         from_user_id=unauthenticated_user.id,
         to_user_id=owner.user_id,
+    )
+    # The deletion below takes the browser's own records with it (CASCADE).
+    _move_report_run_records(
+        session, from_user_id=unauthenticated_user.id, to_user_id=owner.user_id
     )
     delete_unauthenticated_user(session, user_id=unauthenticated_user.id)
     return AccountConversion(owner=owner, outcome=AccountConversionOutcome.MERGED)

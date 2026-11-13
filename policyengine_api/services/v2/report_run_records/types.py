@@ -36,6 +36,15 @@ class ReportRunRequest:
     trigger: ReportRunTrigger
 
 
+@dataclass(frozen=True)
+class ReportRunRecordRead:
+    """One stored record of a user's request: the run, when, and how."""
+
+    report_run_id: UUID
+    requested_at: datetime
+    trigger: ReportRunTrigger
+
+
 class ReportRunRecorder(Protocol):
     """Record the report runs users ask for."""
 

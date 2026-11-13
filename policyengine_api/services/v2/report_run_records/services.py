@@ -28,6 +28,7 @@ from policyengine_api.services.v2.report_run_records.database_connectors import 
 from policyengine_api.services.v2.report_run_records.database_connectors import (
     updates as record_updates,
 )
+from policyengine_api.services.v2.report_run_records.types import ReportRunRecordRead
 from policyengine_api.services.v2.report_run_records.validators import (
     ReportRunRecordStorageError,
 )
@@ -92,9 +93,14 @@ class ReportRunRecordService:
             recorded = record_creates.create_report_run_records(
                 session,
                 user_id=user.user_id,
-                report_run_ids=request.report_run_ids,
-                requested_at=request.requested_at,
-                trigger=request.trigger,
+                records=[
+                    ReportRunRecordRead(
+                        report_run_id=report_run_id,
+                        requested_at=request.requested_at,
+                        trigger=request.trigger,
+                    )
+                    for report_run_id in request.report_run_ids
+                ],
             )
             if recorded:
                 record_updates.advance_saved_reports_last_run_at(

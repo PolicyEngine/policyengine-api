@@ -12,28 +12,26 @@ from policyengine_api.data.v2.models import UserReportRunAssociation
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from datetime import datetime
     from uuid import UUID
 
     from sqlmodel import Session
 
-    from policyengine_api.data.v2.models import ReportRunTrigger
+    from policyengine_api.services.v2.report_run_records.types import (
+        ReportRunRecordRead,
+    )
 
 
 def create_report_run_records(
-    session: Session,
-    *,
-    user_id: UUID,
-    report_run_ids: Sequence[UUID],
-    requested_at: datetime,
-    trigger: ReportRunTrigger,
+    session: Session, *, user_id: UUID, records: Sequence[ReportRunRecordRead]
 ) -> list[UUID]:
-    """Record the user's request for each run they have no record of yet.
+    """Record each request for the user whose run they have no record of yet.
 
-    A run the user already has a record of keeps it (``ON CONFLICT (user_id,
-    report_run_id) DO NOTHING``). Return the runs this call recorded.
+    Each row takes its record's run, ``requested_at`` and ``trigger``, with a
+    new ID. A run the user already has a record of keeps that record (``ON
+    CONFLICT (user_id, report_run_id) DO NOTHING``). Return the runs this
+    call recorded.
     """
-    if not report_run_ids:
+    if not records:
         return []
     statement = (
         insert(UserReportRunAssociation)
@@ -42,11 +40,11 @@ def create_report_run_records(
                 {
                     "id": uuid4(),
                     "user_id": user_id,
-                    "report_run_id": report_run_id,
-                    "requested_at": requested_at,
-                    "trigger": trigger,
+                    "report_run_id": record.report_run_id,
+                    "requested_at": record.requested_at,
+                    "trigger": record.trigger,
                 }
-                for report_run_id in report_run_ids
+                for record in records
             ]
         )
         .on_conflict_do_nothing(index_elements=["user_id", "report_run_id"])
