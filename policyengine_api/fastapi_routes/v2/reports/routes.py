@@ -100,6 +100,8 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
+    ForcedRerunRequiresAdminError,
+    ForcedRerunRequiresSignInError,
     ReportRunNotFoundError,
     ReportRunNotRecordedError,
     ReportStorageError,
@@ -128,10 +130,12 @@ ReportRunsQueryDependency = Annotated[
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
     ReportRunNotFoundError,
+    ForcedRerunRequiresAdminError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError, ReportRunNotFoundError), 404),
+    V2ErrorMapping((ForcedRerunRequiresAdminError,), 403),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (
@@ -174,7 +178,9 @@ def _report_operation(
     )
 
 
-def _requester_refused(error: StandardUserRequiresSignInError) -> JSONResponse:
+def _requester_refused(
+    error: StandardUserRequiresSignInError | ForcedRerunRequiresSignInError,
+) -> JSONResponse:
     """Answer a browser credential naming a signed-in user, as user routes do."""
     return v2_error_response(
         401, str(error), headers={"WWW-Authenticate": BEARER_CHALLENGE}
@@ -276,7 +282,7 @@ def _rerun_report(
             force=force,
             requester=requester,
         )
-    except StandardUserRequiresSignInError as error:
+    except (StandardUserRequiresSignInError, ForcedRerunRequiresSignInError) as error:
         return _requester_refused(error)
     except ReportRunNotRecordedError as error:
         return _not_recorded(error)
@@ -323,7 +329,9 @@ def _add_report_run_routes(
             "trigger, on its default worker's PolicyEngine.py version, and start "
             "it, or join the run already pending, running or succeeded on those "
             "versions, once the simulation service finds runs by key. Every "
-            "earlier run is kept. Without force, each side reuses a "
+            "earlier run is kept. Only an admin user may send force (401 "
+            "without a user credential, 403 below admin, before anything is "
+            "asked). Without force, each side reuses a "
             "run of its own simulation that succeeded on those versions; with "
             "force, both simulations are calculated again. A household report's "
             "sides are always calculated again, so force changes nothing for it. "

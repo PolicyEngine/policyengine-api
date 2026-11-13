@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
 
-    from policyengine_api.data.v2.models import ReportRunTrigger
+    from policyengine_api.data.v2.models import ReportRunTrigger, UserType
     from policyengine_api.services.v2.identity.types import AccountPrincipal
 
 
@@ -59,13 +59,15 @@ class ReportRunRequest:
 class CheckedRequester:
     """A requester checked before the simulation service is asked.
 
-    ``user_id`` is the user the principal had then, or None when it had none
-    yet (a signed-out browser's first write, or a signed-in identity's first
-    request), in which case the record provisions one.
+    ``user_id`` and ``user_type`` are those of the user the principal had
+    then, or None when it had none yet (a signed-out browser's first write,
+    or a signed-in identity's first request), in which case the record
+    provisions one.
     """
 
     principal: AccountPrincipal
     user_id: UUID | None
+    user_type: UserType | None = None
 
 
 @dataclass(frozen=True)

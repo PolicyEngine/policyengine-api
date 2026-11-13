@@ -147,8 +147,14 @@ RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),
 }
 RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
-    401: error_response(UNAUTHENTICATED_REQUESTER),
-    403: error_response(MACHINE_REQUESTER),
+    401: error_response(
+        f"{UNAUTHENTICATED_REQUESTER} Or the request forces a re-run without a "
+        "user credential: only an admin user may force one."
+    ),
+    403: error_response(
+        f"{MACHINE_REQUESTER} Or the request forces a re-run, and its user is "
+        "not an admin: only an admin user may force one."
+    ),
     404: error_response(
         f"{NOT_FOUND} Or a policy a simulation of the report names is no longer "
         "stored in the country."

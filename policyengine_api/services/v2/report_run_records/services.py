@@ -84,8 +84,10 @@ class ReportRunRecordService:
         """
         with _storage_failures(), self._database_session.read() as session:
             found = find_principal_user_in_session(session, principal)
+        if found is None:
+            return CheckedRequester(principal=principal, user_id=None)
         return CheckedRequester(
-            principal=principal, user_id=None if found is None else found.user_id
+            principal=principal, user_id=found.user_id, user_type=found.user_type
         )
 
     def record(self, requester: CheckedRequester, request: ReportRunRequest) -> None:

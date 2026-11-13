@@ -112,6 +112,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     ReportRunRecordsNotConfiguredError,
     ReportStorageError,
     RerunReportUnreadableError,
+    require_admin_to_force,
     require_reform_run,
     require_report,
     require_report_run,
@@ -481,13 +482,16 @@ class V2StoredReportService:
         ``force``, each side reuses a run of its own simulation that succeeded
         on the current versions; with it, both are calculated again (a budget
         window's new run then recalculates each year). A household report's
-        sides are always calculated again. With a ``requester``, it is
+        sides are always calculated again. Only an admin user may force a
+        re-run. With a ``requester``, it is
         checked before the simulation service is asked, and the request is
         recorded for its user (trigger ``manual``, forced or not) once the
         service has answered: that run, or each year's report run of a budget
         window's. Raise StoredReportNotFoundError when the country has no such
-        report,
-        ReportStorageError when it cannot be read, the recorder's check's
+        report, ForcedRerunRequiresSignInError for a forced re-run naming no
+        user and ForcedRerunRequiresAdminError for one by a user below admin,
+        both before the simulation service is asked, ReportStorageError when
+        it cannot be read, the recorder's check's
         errors, the submission's checks' and the simulation service's errors
         (see ``SimulationSubmissionService.rerun_report``),
         ReportRunNotRecordedError when the request could not be recorded, and
@@ -501,6 +505,8 @@ class V2StoredReportService:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
         kind = report_kind(stored.report)
         recording = self._run_recording(requester)
+        if force:
+            require_admin_to_force(None if recording is None else recording.requester)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,

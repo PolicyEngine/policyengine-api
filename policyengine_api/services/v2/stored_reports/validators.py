@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
 
+from policyengine_api.data.v2.models import UserType
+from policyengine_api.services.v2.identity.validators import user_type_meets_minimum
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
@@ -12,6 +14,9 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.data.v2.models import ReportRun
+    from policyengine_api.services.v2.report_run_records.types import (
+        CheckedRequester,
+    )
     from policyengine_api.services.v2.stored_reports.types import StoredReportRows
 
 # A report run, or a budget window's budget-window run.
@@ -47,6 +52,35 @@ class CreatedReportUnreadableError(RuntimeError):
         )
         self.report_id = report_id
         self.country_id = country_id
+
+
+class ForcedRerunRequiresSignInError(PermissionError):
+    """A forced re-run sent no user credential; only an admin user may force one."""
+
+
+class ForcedRerunRequiresAdminError(PermissionError):
+    """A forced re-run's user is below admin; only an admin user may force one."""
+
+
+FORCED_RERUN_SIGN_IN_MESSAGE = (
+    "Only admin users may force a re-run: sign in with a bearer access token"
+)
+FORCED_RERUN_ADMIN_MESSAGE = "Only admin users may force a re-run"
+
+
+def require_admin_to_force(requester: CheckedRequester | None) -> None:
+    """Allow a forced re-run only for a requester whose stored type is admin.
+
+    Raise ForcedRerunRequiresSignInError for a request naming no user, and
+    ForcedRerunRequiresAdminError for one below admin: a signed-out
+    browser, a signed-in user not stored yet, or a standard or author user.
+    """
+    if requester is None:
+        raise ForcedRerunRequiresSignInError(FORCED_RERUN_SIGN_IN_MESSAGE)
+    if requester.user_type is None or not user_type_meets_minimum(
+        requester.user_type, UserType.ADMIN
+    ):
+        raise ForcedRerunRequiresAdminError(FORCED_RERUN_ADMIN_MESSAGE)
 
 
 class ReportRunRecordsNotConfiguredError(ReportStorageError):
