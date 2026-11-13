@@ -911,6 +911,13 @@ from there gives the same operations.
   recalculate`): `recalculate` is a window run's forced marker. Each year's
   report run belongs to its window run, outside the report-run index; each
   year's simulation runs are under the simulation-run index.
+- The per-user columns of shared rows become nullable, with no default:
+  `reports.label`, `report_runs.trigger` and `budget_window_runs.trigger`
+  (`reports.description` and `user_id` already were). A shared row describes
+  no one caller, so the simulation service stops writing them, and a later
+  revision drops them; until then the report read and run lists answer a
+  missing label or trigger as null. A user's trigger is on their
+  `user_report_run_associations` row.
 - `user_report_run_associations` records each user's request for a report
   run: the user (`CASCADE`), the run (`RESTRICT`, so a run a user asked for
   can't be deleted), `requested_at` (required, with no default: the writer
@@ -946,7 +953,8 @@ beside a succeeded run on the same versions, and also one after a failed
 report run whose other side's simulation run succeeded, until the simulation
 service joins runs instead. The downgrade drops the keys, the
 markers, the indexes, the window runs' `policyengine_version` and every
-user's run records.
+user's run records, and makes the per-user columns required again, so it
+fails while any report has no label or any run no trigger.
 `tests/integration/test_alembic_v2_shared_report_keys.py` checks that the
 revision changes nothing else and downgrades exactly, and
 `tests/integration/test_v2_shared_report_rows.py` runs the finding, joining

@@ -64,7 +64,7 @@ class ReportRunRead:
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName
+    trigger: ReportRunTriggerName | None
     country_package_version: str
     policyengine_version: str
     baseline_simulation_run_id: UUID
@@ -95,7 +95,7 @@ class ReportDefinitionRead:
 
     id: UUID
     country_id: str
-    label: str
+    label: str | None
     description: str | None
     year: int | None
     baseline_simulation: ReportSimulationRead | None
@@ -179,7 +179,7 @@ class BudgetWindowRunRead:
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName
+    trigger: ReportRunTriggerName | None
     recalculate: bool
     country_package_version: str | None
     policyengine_version: str | None
