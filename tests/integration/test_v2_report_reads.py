@@ -473,3 +473,44 @@ def test_of_two_simulation_runs_created_together_the_larger_id_is_the_newest(
     item = response.json()["result"]["item"]
     assert item["run"]["id"] == str(LARGER_RUN_ID)
     assert item["status"] == "pending"
+
+
+DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
+
+
+def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    with owner_engine.begin() as connection:
+        older, newer = (
+            store_report(
+                connection,
+                catalogs["uk"],
+                dataset_independent_key=DATASET_INDEPENDENT_KEY,
+                created_at=STARTED_AT + timedelta(hours=hours),
+            )
+            for hours in (1, 2)
+        )
+        store_report(connection, catalogs["uk"], dataset_independent_key="0" * 64)
+        store_report(connection, catalogs["uk"])
+        store_report(
+            connection, catalogs["us"], dataset_independent_key=DATASET_INDEPENDENT_KEY
+        )
+
+    response = client.get(
+        f"/v2/reports?country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY}"
+    )
+
+    assert response.status_code == 200, response.text
+    items = response.json()["result"]["items"]
+    assert [item["id"] for item in items] == [
+        str(newer.report_id),
+        str(older.report_id),
+    ]
+    assert {item["dataset_independent_key"] for item in items} == {
+        DATASET_INDEPENDENT_KEY
+    }
+    detail = client.get(f"/v2/reports/{newer.report_id}?country_id=uk").json()
+    assert detail["result"]["item"]["dataset_independent_key"] == (
+        DATASET_INDEPENDENT_KEY
+    )

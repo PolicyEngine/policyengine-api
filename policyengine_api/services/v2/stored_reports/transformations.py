@@ -97,6 +97,7 @@ def _report_definition(
         country_id=report.country,
         label=report.label,
         description=report.description,
+        dataset_independent_key=report.dataset_independent_key,
         year=report.year,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),

@@ -91,12 +91,17 @@ class ReportDefinitionRead:
     ``current_versions`` are the country package and PolicyEngine.py versions
     the Public API serves now; a newest run on other versions is out of date.
     ``options`` are the options the report was created with, as stored.
+    ``dataset_independent_key`` is the key the simulation service stored for
+    the report's definition without its dataset, which a national report
+    shares with its local-area report, or None for a report stored before
+    the keys.
     """
 
     id: UUID
     country_id: str
     label: str
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     baseline_simulation: ReportSimulationRead | None
     reform_simulation: ReportSimulationRead | None

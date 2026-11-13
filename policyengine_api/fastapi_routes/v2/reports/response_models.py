@@ -85,13 +85,18 @@ class ReportDefinitionItem(StrictReportAPIModel):
 
     ``current_versions`` are the versions the Public API runs now, so a
     newest run on other versions is out of date. ``options`` are the options
-    the report was created with.
+    the report was created with. ``dataset_independent_key`` is the
+    simulation service's key for the report's definition without its
+    dataset, which a national report shares with its local-area report: find
+    reports by it with ``GET /v2/reports?dataset_independent_key=``. It is
+    null for a report stored before the keys.
     """
 
     id: UUID
     country_id: str
     label: str
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     baseline_simulation: ReportSimulationItem | None
     reform_simulation: ReportSimulationItem | None
@@ -263,6 +268,7 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     status and versions, with its years; ``current_versions`` are the
     versions the Public API runs now, so a newest run on other versions is
     out of date. ``options`` are the options the report was created with.
+    ``dataset_independent_key`` is as ``ReportDefinitionItem`` describes it.
     """
 
     id: UUID
@@ -270,6 +276,7 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     kind: Literal["budget_window"]
     label: str
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     budget_window_size: int
     region_code: str | None

@@ -20,7 +20,10 @@ instead each of its simulation runs' calculated household
 (``simulation_runs.household_result``), read once its newest report run has
 succeeded, and each side's failure once it has failed. Lists name at most 25
 reports and read them, with their newest runs and any window's years, in two
-queries, without results.
+queries, without results. A search finds the country's reports that share a
+``dataset_independent_key``, which a national report shares with its
+local-area report: the 25 created last, newest first, read as a list reads
+them.
 
 Creating a report or budget window checks the country and the policies it
 names (and a household report's household), asks the simulation service to
@@ -49,6 +52,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import ReportRunStatus
+from policyengine_api.query_parameters import MAXIMUM_LISTED_REPORTS
 from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
     SimulationServiceUnavailableError,
@@ -68,6 +72,7 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
     read_budget_window_years,
     read_report_rows,
+    search_report_ids,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs import (
     read_budget_window_runs,
@@ -290,6 +295,33 @@ class V2StoredReportService:
         cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
+            rows = read_report_rows(
+                session, country_id=country_id, report_ids=report_ids
+            )
+            current_versions = self._current_versions(country_id)
+            return tuple(
+                _summary_read(stored, current_versions=current_versions)
+                for stored in listed_reports(rows, report_ids=report_ids)
+            )
+
+    def search_reports(
+        self, *, country_id: str, dataset_independent_key: str
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports that share a dataset-independent key.
+
+        They are read without results: the ``MAXIMUM_LISTED_REPORTS`` reports
+        created last, newest first (ties going to the larger ID), of every
+        kind. Raise ReportStorageError when the database cannot be read.
+        """
+        with _storage_failures(), self._database_session.read() as session:
+            report_ids = search_report_ids(
+                session,
+                country_id=country_id,
+                dataset_independent_key=dataset_independent_key,
+                limit=MAXIMUM_LISTED_REPORTS,
+            )
+            if not report_ids:
+                return ()
             rows = read_report_rows(
                 session, country_id=country_id, report_ids=report_ids
             )

@@ -360,21 +360,34 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     @router.get(
         "/reports",
         response_model=ReportListResponse,
-        summary="List chosen reports",
+        summary="List chosen reports, or find reports by their dataset-independent key",
         description=(
             "Lists the country's reports among the report_id values (at most "
             "25), in the order named and once each, with their newest runs, and "
             "each budget window's years, but without results, read in two "
-            "queries. Unknown reports and other countries' are left out."
+            "queries. Unknown reports and other countries' are left out. With "
+            "dataset_independent_key in place of report_id, lists the same way "
+            "the country's reports whose dataset_independent_key it is, newest "
+            "created first, at most the 25 created last: reports that differ "
+            "only in their dataset, such as a national report and its "
+            "local-area report (data_source local_area_dataset), and the same "
+            "reports on another data release. Give one of the two, never both."
         ),
     )
     def list_reports(
         query: ReportCollectionQueryDependency,
     ) -> ReportListResponse | JSONResponse:
         def read() -> ReportListResponse:
-            reports = service_factory().list_reports(
-                country_id=query.country_id, report_ids=query.report_id
-            )
+            service = service_factory()
+            if query.dataset_independent_key is None:
+                reports = service.list_reports(
+                    country_id=query.country_id, report_ids=query.report_id
+                )
+            else:
+                reports = service.search_reports(
+                    country_id=query.country_id,
+                    dataset_independent_key=query.dataset_independent_key,
+                )
             return ReportListResponse(
                 result=ReportListResult(
                     items=[report_summary_item(report) for report in reports]

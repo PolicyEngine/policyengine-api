@@ -82,6 +82,7 @@ def report_summary_fields(**changes: Any) -> dict[str, Any]:
         "kind": "economy",
         "label": "Expanded child tax credit",
         "description": None,
+        "dataset_independent_key": None,
         "year": 2026,
         "region_code": "state/ca",
         "dataset_name": None,

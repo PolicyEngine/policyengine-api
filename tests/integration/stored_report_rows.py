@@ -216,18 +216,23 @@ class StoredReport:
     year: int = STORED_REPORT_YEAR
 
 
-def store_report(
+def store_report(  # noqa: PLR0913  # the connection and catalog, then each column a test varies
     connection: Connection,
     catalog: CatalogRows,
     *,
     household_id: UUID | None = None,
     budget_window_size: int | None = None,
     year: int = STORED_REPORT_YEAR,
+    dataset_independent_key: str | None = None,
+    created_at: datetime | None = None,
 ) -> StoredReport:
     """Store a report of ``year`` comparing current law with the catalog's policy.
 
     A budget window's ``year`` is its first year, whose simulations the
-    report names.
+    report names. With ``dataset_independent_key``, the report has keys, as
+    the simulation service stores them from C1 · 27 on: that key, and a
+    definition key of its own; without it, it has none. Without
+    ``created_at``, the report is created now.
     """
     report = StoredReport(
         report_id=uuid4(),
@@ -244,10 +249,13 @@ def store_report(
             "INSERT INTO reports (id, label, description, country, type, "
             "tax_benefit_model_id, policy_id, baseline_simulation_id, "
             "reform_simulation_id, household_id, dataset_id, region_id, year, "
-            "budget_window_size, inputs) VALUES (:id, :label, :description, "
-            ":country, :type, :model_id, :policy_id, :baseline, :reform, "
-            ":household_id, :dataset_id, :region_id, :year, :budget_window_size, "
-            "CAST(:inputs AS JSON))"
+            "budget_window_size, inputs, key_version, definition_key, "
+            "dataset_independent_key, created_at) VALUES (:id, :label, "
+            ":description, :country, :type, :model_id, :policy_id, :baseline, "
+            ":reform, :household_id, :dataset_id, :region_id, :year, "
+            ":budget_window_size, CAST(:inputs AS JSON), :key_version, "
+            ":definition_key, :dataset_independent_key, "
+            "COALESCE(CAST(:created_at AS timestamptz), now()))"
         ),
         {
             "id": report.report_id,
@@ -265,6 +273,12 @@ def store_report(
             "budget_window_size": budget_window_size,
             "year": year,
             "inputs": '{"include_cliffs": true}',
+            "key_version": None if dataset_independent_key is None else 1,
+            "definition_key": (
+                None if dataset_independent_key is None else uuid4().hex * 2
+            ),
+            "dataset_independent_key": dataset_independent_key,
+            "created_at": created_at,
         },
     )
     catalog.report_ids.append(report.report_id)

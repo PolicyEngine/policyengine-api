@@ -85,6 +85,17 @@ Limit = Annotated[
     ),
 ]
 ResourceId = Annotated[UUID, Field(description="Exact resource UUID")]
+# A report's dataset-independent key, as the simulation service stores it: the
+# SHA-256 of its definition without the dataset, in lowercase hexadecimal.
+DatasetIndependentKey = Annotated[
+    str,
+    Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "A report's dataset_independent_key: 64 lowercase hexadecimal digits"
+        ),
+    ),
+]
 DefaultYear = Annotated[
     int,
     Field(
@@ -438,16 +449,37 @@ class ReportRunsQuery(CountryQuery):
 
 
 class ReportCollectionQuery(CountryQuery):
-    """Query contract for listing chosen reports of a country.
+    """Query contract for listing chosen reports of a country, or finding them.
 
-    ``report_id`` is repeated once per report, at most 25 times.
+    Give either ``report_id``, repeated once per report and at most 25
+    times, or one ``dataset_independent_key``, which finds the country's
+    reports that share it; never both.
     """
 
     report_id: list[ResourceId] = Field(
-        min_length=1,
+        default_factory=list,
         max_length=MAXIMUM_LISTED_REPORTS,
-        description="A report to list; repeat the key for each report",
+        description=(
+            "A report to list; repeat the key for each report. Not with "
+            "dataset_independent_key"
+        ),
     )
+    dataset_independent_key: DatasetIndependentKey | None = Field(
+        default=None,
+        description=(
+            "Find the country's reports with this dataset_independent_key, which "
+            "a national report shares with its local-area report. Not with "
+            "report_id"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_one_filter(self) -> ReportCollectionQuery:
+        """Refuse a query naming both report_id and a key, or neither."""
+        if bool(self.report_id) == (self.dataset_independent_key is not None):
+            msg = "Give either report_id or dataset_independent_key"
+            raise ValueError(msg)
+        return self
 
 
 class SimulationCreateQuery(CountryQuery):

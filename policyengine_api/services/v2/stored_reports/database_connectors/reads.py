@@ -143,6 +143,26 @@ def read_report_rows(
     ]
 
 
+def search_report_ids(
+    session: Session, *, country_id: str, dataset_independent_key: str, limit: int
+) -> list[UUID]:
+    """Return the IDs of the country's reports with the dataset-independent key.
+
+    They are the ``limit`` reports created last, newest first, ties going to
+    the larger ID, found through ``ix_reports_dataset_independent_key``.
+    """
+    statement = (
+        select(col(Report.id))
+        .where(
+            col(Report.country) == country_id,
+            col(Report.dataset_independent_key) == dataset_independent_key,
+        )
+        .order_by(col(Report.created_at).desc(), col(Report.id).desc())
+        .limit(limit)
+    )
+    return list(session.execute(statement).scalars())
+
+
 def read_budget_window_years(
     session: Session, budget_window_run_ids: Sequence[UUID]
 ) -> dict[UUID, tuple[ReportRun, ...]]:
