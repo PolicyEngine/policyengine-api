@@ -45,7 +45,9 @@ class ReportRerunRequest(StrictSubmissionModel):
 
 
 class ReportRunListResult(StrictReportAPIModel):
-    """An economy report's runs in ``items``, newest first, whatever their status.
+    """An economy or household report's runs in ``items``, newest first.
+
+    They are listed whatever their status, and ``kind`` is the report's.
 
     Each run names the country package and PolicyEngine.py versions it ran
     on; ``current_versions`` are those the Public API runs now, so a run on
@@ -53,7 +55,7 @@ class ReportRunListResult(StrictReportAPIModel):
     """
 
     report_id: UUID
-    kind: Literal["economy"]
+    kind: Literal["economy", "household"]
     items: list[ReportRunItem]
     current_versions: PackageVersionsItem
 
@@ -117,8 +119,8 @@ class ReportRerunConflictResponse(V2ErrorResponse):
     The message gives the service's code and reason: ``run_in_progress``,
     when the report has a run pending or running, which ``run_id`` names, or
     ``rerun_not_supported`` for a report it does not run again, such as one
-    whose simulation, region or dataset is gone. ``run_id`` is null when the
-    service named no run.
+    whose simulation, region or dataset is gone, or a kind it does not run
+    again yet. ``run_id`` is null when the service named no run.
     """
 
     run_id: UUID | None
@@ -135,13 +137,8 @@ class RerunReportUnreadableResponse(V2ErrorResponse):
 
 
 NOT_FOUND = "No report has this ID in this country."
-OTHER_KIND = (
-    "or the report is a household report, whose runs these routes do not start "
-    "or list yet"
-)
 RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),
-    422: error_response(f"The request does not match the schema, {OTHER_KIND}."),
 }
 RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(
@@ -154,15 +151,17 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "The simulation service will not run the report again now, and "
             "started nothing: the report has a run pending or running "
             "(run_in_progress), which run_id names, or it is one the service "
-            "does not run again (rerun_not_supported)."
+            "does not run again, or of a kind it does not run again yet "
+            "(rerun_not_supported)."
         ),
     },
     413: error_response("The request body exceeds 16 KiB."),
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
-            f"The request does not match the schema, {OTHER_KIND}; the country has "
-            "no economy reports; a policy of the report's simulations sets "
+            "The request does not match the schema; the country has no economy "
+            "reports, or no household calculations for a household report; a "
+            "policy of the report's simulations sets "
             "parameters the running catalog version does not have (code "
             "missing_parameters, which names them); or the simulation service "
             "cannot run the report as stored: its 422, or its 400 for a region, "

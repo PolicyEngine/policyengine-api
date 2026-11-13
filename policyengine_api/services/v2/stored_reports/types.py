@@ -48,8 +48,9 @@ ReportStatusName = Literal["not_run", "pending", "running", "succeeded", "failed
 # What a report compares: two economy simulations, two household simulations,
 # or two economy simulations in each year of a budget window.
 ReportKind = Literal["economy", "household", "budget_window"]
-# The kinds whose runs the run routes start and list.
-RunRouteKind = Literal["economy", "budget_window"]
+# The kinds whose runs are their report runs; a budget window's are its
+# budget-window runs.
+ReportRunsKind = Literal["economy", "household"]
 ReportRunTriggerName = Literal["initial", "manual", "system"]
 
 
@@ -224,14 +225,15 @@ StoredReportSummaryRead = (
 
 @dataclass(frozen=True)
 class ReportRunsRead:
-    """An economy report's runs, newest first, and the versions the Public API runs.
+    """An economy or household report's runs, newest first, and the current versions.
 
-    Each run names the country package and PolicyEngine.py versions it ran
-    on; one on other versions than ``current_versions`` is out of date.
+    ``kind`` is the report's. Each run names the country package and
+    PolicyEngine.py versions it ran on; one on other versions than
+    ``current_versions``, those the Public API runs, is out of date.
     """
 
     report_id: UUID
-    kind: Literal["economy"]
+    kind: ReportRunsKind
     runs: tuple[ReportRunRead, ...]
     current_versions: PackageVersions
 
@@ -250,7 +252,7 @@ class BudgetWindowRunsRead:
     current_versions: PackageVersions
 
 
-# The runs of a report of either kind the run routes take.
+# A report's runs: its report runs, or a budget window's budget-window runs.
 StoredReportRunsRead = ReportRunsRead | BudgetWindowRunsRead
 
 

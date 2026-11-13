@@ -231,14 +231,12 @@ class V2StoredReportResourceService(Protocol):
     def rerun_report(
         self, *, country_id: str, report_id: UUID, force: bool
     ) -> StoredReportRead:
-        """Run the country's economy report or budget window again; return it.
+        """Run the country's report again; return it with its new run as its newest.
 
-        It is returned with its new run as its newest. Raise
-        ``StoredReportNotFoundError`` when the country has no such report,
-        ``ReportKindUnsupportedError`` for a kind whose runs the run routes do
-        not start yet (household reports), the
-        checks' errors as ``create_report`` does for the policies of the
-        report's simulations, the simulation service's errors, among them
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report, the checks' errors as ``create_report`` does for a report of
+        its kind and the policies of its simulations, the simulation
+        service's errors, among them
         ``SimulationServiceConflictError`` when it will not run the report
         again now, and ``RerunReportUnreadableError`` when the report cannot
         be read back once its new run was started.
@@ -248,12 +246,11 @@ class V2StoredReportResourceService(Protocol):
     def list_report_runs(
         self, *, country_id: str, report_id: UUID
     ) -> StoredReportRunsRead:
-        """Return the runs of the country's economy report or budget window.
+        """Return the runs of the country's report, newest first.
 
-        They are newest first; a budget window's are its budget-window runs,
-        each with its years. Raise ``StoredReportNotFoundError`` when the
-        country has no such report, and ``ReportKindUnsupportedError`` for a
-        kind whose runs the run routes do not list yet (household reports).
+        An economy or household report's are its report runs; a budget
+        window's are its budget-window runs, each with its years. Raise
+        ``StoredReportNotFoundError`` when the country has no such report.
         """
         ...
 

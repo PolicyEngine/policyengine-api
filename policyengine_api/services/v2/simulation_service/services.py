@@ -20,9 +20,9 @@ service as ``/v2/households``, with a default year, which the report
 calculates; the household is checked before the policies. These are the
 checks ``/v2/household-calculations`` makes, with the same errors.
 
-Running a stored economy report or budget window again
-(``POST /reports/{report_id}/runs``) goes through the economy checks, of the
-policies its simulations name.
+Running a stored report again (``POST /reports/{report_id}/runs``) checks
+its country as a new report of its kind is checked, then the policies its
+simulations name.
 """
 
 from __future__ import annotations
@@ -211,9 +211,25 @@ class SimulationSubmissionService:
     def rerun_report(self, rerun: ReportRerunInput) -> None:
         """Check the stored report, then have the simulation service run it again.
 
-        The country is checked, then the policies of the report's
-        simulations, the baseline's first, as for a new report. Raise the
-        checks' errors, then the simulation service's.
+        The country is checked as for a new report of the report's kind, then
+        the policies of the report's simulations, the baseline's first. A
+        household report's country must allow household calculations (raise
+        HouseholdCalculationCountryError otherwise); its household is not
+        read again, since it stays stored while a report names it. Any other
+        report's country must allow economy calculations. Raise the checks'
+        errors, SubmissionStorageError when the database or its catalog
+        cannot be read, then the simulation service's errors.
         """
-        self._check(rerun.country_id, rerun.policy_ids)
+        if rerun.kind == "household":
+            with _storage_failures():
+                require_household_country(
+                    self._countries.list_countries(), rerun.country_id
+                )
+            require_runnable_policies(
+                self._policies,
+                country_id=rerun.country_id,
+                policy_ids=rerun.policy_ids,
+            )
+        else:
+            self._check(rerun.country_id, rerun.policy_ids)
         self._client_factory().rerun_report(rerun)

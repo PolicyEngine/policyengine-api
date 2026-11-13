@@ -351,6 +351,10 @@ class SubmittedBudgetWindow:
     budget_window_run_id: UUID
 
 
+# Each kind of stored report a re-run names, as the report's row records it.
+ReportRerunKind = Literal["economy", "household", "budget_window"]
+
+
 @dataclass(frozen=True)
 class ReportRerunInput:
     """A stored report of the country to calculate again as a new run.
@@ -358,13 +362,17 @@ class ReportRerunInput:
     The simulation service runs it on its default worker's versions. Without
     ``force``, each side reuses a run of its own simulation that succeeded on
     those versions; with it, both simulations are calculated again.
-    ``policy_ids`` are the policies of the report's simulations, baseline
-    first, None for current law or a simulation that is gone, for the checks
-    before the simulation service is asked.
+    ``kind`` is the report's, which picks the country check: a household
+    report's country must have household calculations, any other report's
+    economy calculations. ``policy_ids`` are the policies of the report's
+    simulations, baseline first, None for current law, a report of the
+    baseline alone or a simulation that is gone, for the checks before the
+    simulation service is asked.
     """
 
     country_id: str
     report_id: UUID
+    kind: ReportRerunKind
     force: bool
     policy_ids: tuple[UUID | None, ...]
 

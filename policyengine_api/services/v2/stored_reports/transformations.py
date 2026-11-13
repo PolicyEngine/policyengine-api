@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
+        ReportRunsKind,
         ReportStatusName,
         StoredReportRows,
     )
@@ -278,12 +279,13 @@ def report_runs_read(
     rows: StoredReportRows,
     runs: Iterable[ReportRun],
     *,
+    kind: ReportRunsKind,
     current_versions: PackageVersions,
 ) -> ReportRunsRead:
-    """Return an economy report's runs, in the order given, and the current versions."""
+    """Return the report's runs as ``kind``'s, in the order given, with the versions."""
     return ReportRunsRead(
         report_id=rows.report.id,
-        kind="economy",
+        kind=kind,
         runs=tuple(report_run_read(run) for run in runs),
         current_versions=current_versions,
     )

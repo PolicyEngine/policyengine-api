@@ -6,10 +6,10 @@ detailed-save tables the simulation service and its Modal workers write;
 reading never calls the simulation service and never starts a run. A report
 is an economy report, a household report or a budget window, which its
 ``kind`` names. Creating a report checks it, has the simulation service
-create and start it, and reads it back. Running an economy report or budget
-window again checks it as a new report is checked, has the simulation
-service start its new run, and reads the report back; listing its runs reads
-them, newest first.
+create and start it, and reads it back. Running a report again checks it as
+a new report of its kind is checked, has the simulation service start its
+new run, and reads the report back; listing its runs reads them, newest
+first.
 """
 
 from __future__ import annotations
@@ -84,7 +84,6 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
-    ReportKindUnsupportedError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
@@ -118,12 +117,10 @@ ReportRunsQueryDependency = Annotated[
 # Refusals a caller can act on carry their own message and are not logged.
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
-    ReportKindUnsupportedError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError,), 404),
-    V2ErrorMapping((ReportKindUnsupportedError,), 422),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (
@@ -249,10 +246,11 @@ def _add_report_run_routes(
         response_model=ReportDetailResponse,
         status_code=201,
         responses=RERUN_RESPONSES,
-        summary="Run an economy report or budget window again",
+        summary="Run a report again",
         description=(
-            "Checks the report as a new report is checked (the country has "
-            "economy reports, and each policy its simulations name is stored and "
+            "Checks the report as a new report of its kind is checked (the "
+            "country has economy reports, or household calculations for a "
+            "household report, and each policy its simulations name is stored and "
             "sets only parameters the running catalog version has), then has the "
             "simulation service create the report's new run, with the manual "
             "trigger, on its default worker's PolicyEngine.py version, and start "
@@ -288,15 +286,15 @@ def _add_report_run_routes(
         "/reports/{report_id}/runs",
         response_model=ReportRunListResponse,
         responses=RUN_LIST_RESPONSES,
-        summary="List an economy report's or budget window's runs",
+        summary="List a report's runs",
         description=(
             "Lists every run of the report, newest first, whatever its status "
             "and versions, each with the country package and PolicyEngine.py "
             "versions it ran on, beside the versions the Public API runs now. A "
-            "run on other versions than those is out of date. An economy "
-            "report's runs are its report runs (kind economy); a budget "
-            "window's are its budget-window runs, each with its years (kind "
-            "budget_window). Reading starts no run."
+            "run on other versions than those is out of date. An economy or "
+            "household report's runs are its report runs (kind economy or "
+            "household); a budget window's are its budget-window runs, each "
+            "with its years (kind budget_window). Reading starts no run."
         ),
     )
     def list_report_runs(
