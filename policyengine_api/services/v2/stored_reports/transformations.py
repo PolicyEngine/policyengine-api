@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.services.v2.simulation_service.types import LOCAL_AREA_DATASET
 from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportRead,
     BudgetWindowReportSummaryRead,
@@ -97,6 +98,7 @@ def _report_definition(
         country_id=report.country,
         label=report.label,
         description=report.description,
+        dataset_independent_key=report.dataset_independent_key,
         year=report.year,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),
@@ -126,6 +128,7 @@ def report_summary_read(
         kind="economy",
         region_code=rows.region_code,
         dataset_name=rows.dataset_name,
+        data_source=LOCAL_AREA_DATASET if rows.on_local_area_dataset else None,
         status=status,
         run=run,
     )

@@ -8,9 +8,12 @@ store each result as rows of the result tables
 ``EconomyResultRows`` holds the rows of one report run, and
 ``economy_results.transformations`` builds the result from them again.
 
-The UK local-area breakdown (``LocalAreaBreakdownOutput``), the result of a
-separate run that computes only constituency and local-authority impacts, is
-not part of it.
+A local-area report's result (a UK-wide or nation report on the dataset the
+catalog version gives local areas) also lists the codes of the areas
+disclosure control withheld at each level, from ``withheld_area_codes``, as
+``SingleYearMacroOutput``'s ``constituency_withheld_codes`` and
+``local_authority_withheld_codes`` do; every other result leaves the two
+lists out.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from policyengine_api.spm import SPMComparisonProvenance
 
@@ -50,6 +53,9 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import Poverty as PovertyRow
     from policyengine_api.data.v2.models import (
         ProgramStatistics as ProgramStatisticsRow,
+    )
+    from policyengine_api.data.v2.models import (
+        WithheldAreaCode as WithheldAreaCodeRow,
     )
 
 
@@ -299,6 +305,10 @@ class CongressionalDistrictImpacts(EconomyResultModel):
     districts: list[CongressionalDistrictImpact]
 
 
+def _is_none(value: object) -> bool:
+    return value is None
+
+
 class EconomyResult(EconomyResultModel):
     """A report run's single-year economy result, in the format the app reads.
 
@@ -310,8 +320,13 @@ class EconomyResult(EconomyResultModel):
     keys), or null. ``wealth_decile`` and ``intra_wealth_decile`` are UK-only;
     ``poverty_by_race`` and ``congressional_district_impact`` US-only; the
     constituency and local-authority impacts are UK-only and null when the
-    run did not compute them. ``labor_supply_response`` and ``cliff_impact``
-    are null when the run did not compute them.
+    run did not compute them; a local-area report's run computes both, so a
+    level whose every area was withheld is empty. ``constituency_withheld_codes``
+    and ``local_authority_withheld_codes`` are a local-area report's sorted
+    codes of the areas each level withheld, empty when it withheld none; for
+    every other report they are null and left out of the JSON, as the
+    simulation service leaves them out. ``labor_supply_response`` and
+    ``cliff_impact`` are null when the run did not compute them.
     """
 
     spm_provenance: SPMComparisonProvenance | None
@@ -331,6 +346,12 @@ class EconomyResult(EconomyResultModel):
     constituency_impact: list[ConstituencyImpact] | None
     local_authority_impact: list[LocalAuthorityImpact] | None
     congressional_district_impact: CongressionalDistrictImpacts | None
+    constituency_withheld_codes: list[str] | None = Field(
+        default=None, exclude_if=_is_none
+    )
+    local_authority_withheld_codes: list[str] | None = Field(
+        default=None, exclude_if=_is_none
+    )
     cliff_impact: CliffImpact | None
 
 
@@ -357,6 +378,9 @@ class EconomyResultRows:
 
     The comparison tables' rows are the report run's; the poverty and
     inequality rows are those of its baseline and reform simulation runs.
+    ``on_local_area_dataset`` says whether the run is a local-area report's,
+    whose ``withheld_area_codes`` rows are read and list every area its
+    writer withheld; for any other run they are not read.
     """
 
     country_id: str
@@ -374,3 +398,5 @@ class EconomyResultRows:
     congressional_district_impacts: tuple[CongressionalDistrictImpactRow, ...]
     constituency_impacts: tuple[ConstituencyImpactRow, ...]
     local_authority_impacts: tuple[LocalAuthorityImpactRow, ...]
+    on_local_area_dataset: bool = False
+    withheld_area_codes: tuple[WithheldAreaCodeRow, ...] = ()

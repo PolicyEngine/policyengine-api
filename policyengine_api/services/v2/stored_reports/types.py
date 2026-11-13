@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.simulation_service.types import (
         PackageVersions,
+        ReportDataSource,
     )
     from policyengine_api.services.v2.stored_reports.budget_window_results import (
         types as window_result_types,
@@ -93,12 +94,17 @@ class ReportDefinitionRead:
     ``current_versions`` are the country package and PolicyEngine.py versions
     the Public API serves now; a newest run on other versions is out of date.
     ``options`` are the options the report was created with, as stored.
+    ``dataset_independent_key`` is the key the simulation service stored for
+    the report's definition without its dataset, which a national report
+    shares with its local-area report, or None for a report stored before
+    the keys.
     """
 
     id: UUID
     country_id: str
     label: str | None
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     baseline_simulation: ReportSimulationRead | None
     reform_simulation: ReportSimulationRead | None
@@ -112,12 +118,17 @@ class ReportSummaryRead(ReportDefinitionRead):
     """An economy report's definition, its newest run and the current versions.
 
     ``region_code`` and ``dataset_name`` are the region and dataset both
-    simulations use, null when the report names none.
+    simulations use, null when the report names none. ``data_source`` is
+    ``local_area_dataset`` for a local-area report, a UK-wide or nation
+    report on the dataset its catalog version gives local areas, and None
+    for every other. It is read from the report's region and dataset rows,
+    since nothing stores the creation request's ``data_source``.
     """
 
     kind: Literal["economy"]
     region_code: str | None
     dataset_name: str | None
+    data_source: ReportDataSource | None
     status: ReportStatusName
     run: ReportRunRead | None
 
@@ -263,7 +274,9 @@ class StoredReportRows:
     """A report's row, its newest runs and the catalog and simulation rows it names.
 
     ``region_code`` and ``dataset_name`` are those of the report's region and
-    dataset, and null when it names none; a simulation is None once deleted.
+    dataset, and null when it names none; ``on_local_area_dataset`` says
+    whether it is a local-area report (see ``ReportSummaryRead``); a
+    simulation is None once deleted.
     ``newest_run`` is the report run created last that is not a year of a
     budget window, whatever its status and versions, or None.
     ``newest_budget_window_run`` is the budget-window run created last, or
@@ -273,6 +286,7 @@ class StoredReportRows:
     report: Report
     region_code: str | None
     dataset_name: str | None
+    on_local_area_dataset: bool
     baseline_simulation: Simulation | None
     reform_simulation: Simulation | None
     newest_run: ReportRun | None

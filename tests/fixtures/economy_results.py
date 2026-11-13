@@ -4,7 +4,10 @@
 ``libs/policyengine-stage12-persistence/src/policyengine_stage12_persistence/
 report_run_results.py`` in PolicyEngine/policyengine-sim-api (last changed in
 ``c02145fd``), field for field, so the Public API's rebuild of a result from
-its rows is tested against the same mapping. Each row is a dict of the
+its rows is tested against the same mapping. Its ``withheld_area_codes`` rows
+follow the writer as PolicyEngine/policyengine-sim-api#1068 changes it
+(``46c38f07``): one row per code a result's ``constituency_withheld_codes``
+and ``local_authority_withheld_codes`` list. Each row is a dict of the
 table's columns; ``id`` and ``created_at`` are left for the caller.
 """
 
@@ -339,6 +342,19 @@ def uk_economy_result() -> dict[str, Any]:
     }
 
 
+def uk_local_area_economy_result() -> dict[str, Any]:
+    """Return a UK-wide report's result on the local-area dataset.
+
+    It is a UK result with both area levels, and the sorted codes of the
+    areas disclosure control withheld at each level.
+    """
+    return {
+        **uk_economy_result(),
+        "constituency_withheld_codes": ["S14000045"],
+        "local_authority_withheld_codes": ["E06000064", "W06000015"],
+    }
+
+
 @dataclass(frozen=True)
 class StoredEconomyResult:
     """What an economy result is stored as: report run columns and table rows."""
@@ -389,6 +405,7 @@ def economy_result_rows(
             "local_authority_impacts": _area_rows(
                 output.get("local_authority_impact"), report_keys, "local_authority"
             ),
+            "withheld_area_codes": _withheld_rows(output, report_keys),
         },
     )
 
@@ -653,4 +670,19 @@ def _area_rows(
             **{field: area.get(field) for field in DISCLOSURE_FIELDS},
         }
         for area in areas
+    ]
+
+
+def _withheld_rows(
+    output: dict[str, Any], keys: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Return a row per area code each level's withheld list names."""
+    levels = (
+        ("constituency", output.get("constituency_withheld_codes")),
+        ("local_authority", output.get("local_authority_withheld_codes")),
+    )
+    return [
+        {**keys, "area_type": area_type, "code": code}
+        for area_type, codes in levels
+        for code in codes or ()
     ]

@@ -10,6 +10,7 @@ deleted after each test.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -42,13 +43,19 @@ from policyengine_api.services.v2.stored_simulations.database_session import (
 from policyengine_api.services.v2.stored_simulations.services import (
     V2StoredSimulationService,
 )
-from tests.fixtures.economy_results import uk_economy_result, us_economy_result
+from tests.fixtures.economy_results import (
+    uk_economy_result,
+    uk_local_area_economy_result,
+    us_economy_result,
+)
 from tests.integration.stored_report_rows import (
+    LOCAL_AREA_DATASET_NAME,
     REGION_CODES,
     STARTED_AT,
     RunSettings,
     delete_catalog,
     store_catalog,
+    store_local_area_catalog,
     store_report,
     store_report_run,
     store_simulation,
@@ -473,3 +480,135 @@ def test_of_two_simulation_runs_created_together_the_larger_id_is_the_newest(
     item = response.json()["result"]["item"]
     assert item["run"]["id"] == str(LARGER_RUN_ID)
     assert item["status"] == "pending"
+
+
+DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
+
+
+def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    with owner_engine.begin() as connection:
+        older, newer = (
+            store_report(
+                connection,
+                catalogs["uk"],
+                dataset_independent_key=DATASET_INDEPENDENT_KEY,
+                created_at=STARTED_AT + timedelta(hours=hours),
+            )
+            for hours in (1, 2)
+        )
+        store_report(connection, catalogs["uk"], dataset_independent_key="0" * 64)
+        store_report(connection, catalogs["uk"])
+        store_report(
+            connection, catalogs["us"], dataset_independent_key=DATASET_INDEPENDENT_KEY
+        )
+
+    response = client.get(
+        f"/v2/reports?country_id=uk&dataset_independent_key={DATASET_INDEPENDENT_KEY}"
+    )
+
+    assert response.status_code == 200, response.text
+    items = response.json()["result"]["items"]
+    assert [item["id"] for item in items] == [
+        str(newer.report_id),
+        str(older.report_id),
+    ]
+    assert {item["dataset_independent_key"] for item in items} == {
+        DATASET_INDEPENDENT_KEY
+    }
+    detail = client.get(f"/v2/reports/{newer.report_id}?country_id=uk").json()
+    assert detail["result"]["item"]["dataset_independent_key"] == (
+        DATASET_INDEPENDENT_KEY
+    )
+
+
+def test_a_local_area_report_reads_its_areas_and_withheld_codes(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    output = uk_local_area_economy_result()
+    with owner_engine.begin() as connection:
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        report = store_report(connection, local_areas)
+        store_report_run(
+            connection,
+            local_areas,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=output,
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    expected = _as_json(output)
+    expected["model_version"] = CURRENT_VERSIONS["country_package_version"]
+    assert item["data_source"] == "local_area_dataset"
+    assert item["region_code"] == "uk"
+    assert item["dataset_name"] == LOCAL_AREA_DATASET_NAME
+    assert item["result"] == expected
+
+
+@pytest.mark.parametrize("region_code", ["uk", "country/wales"], ids=["uk", "nation"])
+def test_a_uk_wide_or_nation_report_on_its_own_dataset_reads_no_withheld_codes(
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
+    region_code: str,
+) -> None:
+    with owner_engine.begin() as connection:
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        # UK-wide on the national dataset, or the catalog's Wales region.
+        on_national_dataset = (
+            replace(local_areas, dataset_id=catalogs["uk"].dataset_id)
+            if region_code == "uk"
+            else catalogs["uk"]
+        )
+        report = store_report(connection, on_national_dataset)
+        store_report_run(
+            connection,
+            on_national_dataset,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=uk_economy_result(),
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    item = response.json()["result"]["item"]
+    assert item["data_source"] is None
+    assert item["region_code"] == region_code
+    assert "constituency_withheld_codes" not in item["result"]
+    assert "local_authority_withheld_codes" not in item["result"]
+
+
+def test_a_local_area_report_with_every_area_of_a_level_withheld_reads_it_empty(
+    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+) -> None:
+    output = {
+        **uk_local_area_economy_result(),
+        "constituency_impact": [],
+        "constituency_withheld_codes": ["E14001063", "W07000081"],
+        "local_authority_withheld_codes": [],
+    }
+    with owner_engine.begin() as connection:
+        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+        report = store_report(connection, local_areas)
+        store_report_run(
+            connection,
+            local_areas,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=output,
+        )
+
+    response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
+
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]["item"]["result"]
+    assert result["constituency_impact"] == []
+    assert result["constituency_withheld_codes"] == ["E14001063", "W07000081"]
+    assert result["local_authority_withheld_codes"] == []
+    assert len(result["local_authority_impact"]) == 2

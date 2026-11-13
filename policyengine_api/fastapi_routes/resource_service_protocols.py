@@ -209,6 +209,15 @@ class V2StoredReportResourceService(Protocol):
         """Return the country's reports of every kind among those named, in order."""
         ...
 
+    def search_reports(
+        self, *, country_id: str, dataset_independent_key: str
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports with the dataset-independent key, newest first.
+
+        At most ``MAXIMUM_LISTED_REPORTS``, the ones created last.
+        """
+        ...
+
     def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 

@@ -81,6 +81,7 @@ def stored_rows(**report_columns: object) -> StoredReportRows:
         report=report,
         region_code="us",
         dataset_name=None,
+        on_local_area_dataset=False,
         baseline_simulation=None,
         reform_simulation=None,
         newest_run=None,

@@ -82,9 +82,11 @@ def report_summary_fields(**changes: Any) -> dict[str, Any]:
         "kind": "economy",
         "label": "Expanded child tax credit",
         "description": None,
+        "dataset_independent_key": None,
         "year": 2026,
         "region_code": "state/ca",
         "dataset_name": None,
+        "data_source": None,
         "baseline_simulation": ReportSimulationRead(
             id=BASELINE_SIMULATION_ID, policy_id=None, dynamic_id=None
         ),
@@ -148,6 +150,7 @@ class FakeReportService:
 
     report: ReportRead = field(default_factory=report_read)
     listed: tuple[ReportSummaryRead, ...] = ()
+    found: tuple[ReportSummaryRead, ...] = ()
     error: Exception | None = None
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
@@ -165,6 +168,16 @@ class FakeReportService:
     ) -> tuple[ReportSummaryRead, ...]:
         self._answer("list_reports", country_id=country_id, report_ids=report_ids)
         return self.listed
+
+    def search_reports(
+        self, *, country_id: str, dataset_independent_key: str
+    ) -> tuple[ReportSummaryRead, ...]:
+        self._answer(
+            "search_reports",
+            country_id=country_id,
+            dataset_independent_key=dataset_independent_key,
+        )
+        return self.found
 
     def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
         self._answer("create_report", report_input=report_input)
