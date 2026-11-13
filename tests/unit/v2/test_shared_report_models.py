@@ -93,10 +93,11 @@ def test_a_keyed_report_also_has_the_key_shared_across_datasets() -> None:
         "(key_version IS NULL) = (definition_key IS NULL) "
         "AND (key_version IS NULL) = (dataset_independent_key IS NULL)"
     )
-    index = _index("reports", "ix_reports_key_version_dataset_independent_key")
+    # The app finds a report's local-area report by this key alone, which
+    # holds its own key version.
+    index = _index("reports", "ix_reports_dataset_independent_key")
     assert not index.unique
     assert tuple(column.name for column in index.columns) == (
-        "key_version",
         "dataset_independent_key",
     )
 

@@ -155,8 +155,8 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
         )
         assert _added(parent_table, revision_table, "indexes") == (
             {
-                "ix_reports_key_version_dataset_independent_key": (
-                    ("key_version", "dataset_independent_key"),
+                "ix_reports_dataset_independent_key": (
+                    ("dataset_independent_key",),
                     False,
                     None,
                 )

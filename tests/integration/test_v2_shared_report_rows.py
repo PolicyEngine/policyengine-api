@@ -288,10 +288,7 @@ def test_identical_keys_name_one_simulation_and_one_report(
     ).scalar_one()
     assert found == simulation_id
     linked = connection.execute(
-        text(
-            "SELECT count(*) FROM reports WHERE key_version = 1 "
-            "AND dataset_independent_key = :key"
-        ),
+        text("SELECT count(*) FROM reports WHERE dataset_independent_key = :key"),
         {"key": DATASET_INDEPENDENT_KEY},
     ).scalar_one()
     assert linked == 2
@@ -310,6 +307,39 @@ def test_identical_keys_name_one_simulation_and_one_report(
         key_version=2,
         definition_key=NATIONAL_KEY,
     )
+
+
+def test_the_public_api_finds_reports_by_the_shared_key_alone(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The app looks a local-area report up by the national report's key.
+
+    The key holds its own key version, so the lookup names the key alone, and
+    an index on it serves the lookup.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    for key in (NATIONAL_KEY, LOCAL_AREA_KEY):
+        _inserted_id(
+            connection,
+            FIND_OR_CREATE_REPORT,
+            id=uuid4(),
+            model_id=public_api_rows.model_id,
+            key=key,
+            dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        )
+    _act_as(connection, managed_v2_roles.runtime)
+    lookup = "SELECT id FROM reports WHERE dataset_independent_key = :key"
+
+    found = connection.execute(text(lookup), {"key": DATASET_INDEPENDENT_KEY}).scalars()
+    connection.execute(text("SET LOCAL enable_seqscan = off"))
+    plan = "\n".join(
+        connection.execute(
+            text(f"EXPLAIN {lookup}"), {"key": DATASET_INDEPENDENT_KEY}
+        ).scalars()
+    )
+
+    assert len(list(found)) == 2
+    assert "ix_reports_dataset_independent_key" in plan
 
 
 @pytest.mark.parametrize(
