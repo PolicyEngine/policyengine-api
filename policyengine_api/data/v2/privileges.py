@@ -46,11 +46,11 @@ Roles and what decides their privileges:
 Both simulation API roles update only the columns ``update_columns`` names, so
 the database refuses any change to what a run is (its simulation or report,
 versions, dataset, region, year, simulation runs, budget-window run or whether
-a forced re-run created it) or to
-what a budget-window run is (its report, catalog version, trigger or whether
-it calculates again). It doesn't limit a worker to its own run; the workers'
-code does. Their code lives in the simulation API's repository, so the deploy
-check covers them here.
+a forced re-run created it) or to what a budget-window run is (its report,
+catalog version, .py version, trigger or whether it calculates again). It
+doesn't limit a worker to its own run; the workers' code does. Their code
+lives in the simulation API's repository, so the deploy check covers them
+here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 

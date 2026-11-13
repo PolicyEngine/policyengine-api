@@ -871,6 +871,14 @@ share simulations, reports and runs:
   for SQLite, so the unit tests' databases keep the same rule. A failed run
   can't be set back to another status while a newer unfailed run on its
   versions exists.
+- `budget_window_runs` gains `policyengine_version` (nullable: window runs
+  written before it stay unversioned, and an unversioned run is never
+  joined), and `uq_budget_window_runs_unfailed_unforced_versions` allows one
+  window run per report, catalog version and `policyengine_version` that
+  hasn't failed and isn't recalculated (`status <> 'failed' AND NOT
+  recalculate`): `recalculate` is a window run's forced marker. Each year's
+  report run belongs to its window run, outside the report-run index; each
+  year's simulation runs are under the simulation-run index.
 - `user_report_run_associations` records each user's request for a report
   run: the user (`CASCADE`), the run (`RESTRICT`, so a run a user asked for
   can't be deleted), `requested_at` (required, with no default: the writer
