@@ -447,8 +447,8 @@ it publishes that version, with nothing to restore it. Downgrading past the
 revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
 From the head, such a downgrade first runs the later revisions' downgrades:
-`94dc43079186`'s drops every user's report-run record and the simulation and
-report keys (see "API v2 shared reports and user report-run records"),
+`94dc43079186`'s drops every user's report-run record, the simulation and
+report keys and the window runs' .py versions (see "API v2 shared reports and user report-run records"),
 `970be5d29283`'s drops `user_type_changes` with every recorded change (see
 "API v2 user type changes"), `617f531f1506`'s needs no user to be an author
 or an admin (see "API v2 user types"), and `1356f658347d`'s needs
@@ -945,7 +945,8 @@ Once applied, the indexes refuse any such re-run (a unique violation): one
 beside a succeeded run on the same versions, and also one after a failed
 report run whose other side's simulation run succeeded, until the simulation
 service joins runs instead. The downgrade drops the keys, the
-markers, the indexes and every user's run records.
+markers, the indexes, the window runs' `policyengine_version` and every
+user's run records.
 `tests/integration/test_alembic_v2_shared_report_keys.py` checks that the
 revision changes nothing else and downgrades exactly, and
 `tests/integration/test_v2_shared_report_rows.py` runs the finding, joining

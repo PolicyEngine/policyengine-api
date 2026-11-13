@@ -28,7 +28,8 @@ user's record of a report run they asked for.
 The upgrade fails, changing nothing, while a simulation has two such runs on
 the same year and versions, or a report two outside budget windows, as a
 re-run on unchanged versions makes before the simulation service joins runs.
-The downgrade drops the keys, the markers and every user's run records.
+The downgrade drops the keys, the forced markers, the run indexes, the window
+runs' .py version and every user's run records.
 """
 
 from typing import Sequence, Union

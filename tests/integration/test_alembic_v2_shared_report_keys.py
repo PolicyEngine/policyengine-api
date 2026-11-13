@@ -6,7 +6,9 @@ runs. It adds nullable key columns, unique on the key and its version, to
 ``reports``, indexed); a ``forced`` marker, false by default, to
 ``simulation_runs`` and ``report_runs``; a partial unique index on each run
 table that allows one unfailed, unforced run per definition and version set;
-and the ``user_report_run_associations`` table. It changes nothing else, and
+a .py version on ``budget_window_runs``, with a partial unique index allowing
+one unfailed, unrecalculated window run per report and version set; and the
+``user_report_run_associations`` table. It changes nothing else, and
 its downgrade removes exactly those.
 """
 
