@@ -79,6 +79,8 @@ USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision, and parent of
 # the SPM availability revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
+# The SPM availability revision, parent of the shared reports revision.
+SPM_AVAILABILITY_REVISION = "0c136a278f29"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
     f"{DISPOSABLE_DATABASE_NAME}"
@@ -1298,7 +1300,7 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         if revision.down_revision == USER_TYPE_CHANGES_REVISION
     ]
     assert len(children) == 1
-    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    assert children[0].revision == SPM_AVAILABILITY_REVISION
     revision = Path(children[0].path).read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1328,3 +1330,48 @@ def test_spm_availability_revision_adds_only_one_nullable_column() -> None:
         assert "op.bulk_insert(" not in body
         assert "op.create_table(" not in body
         assert "op.drop_table(" not in body
+
+
+def test_shared_reports_revision_is_generated_with_one_documented_correction() -> None:
+    """The head revision lets identical requests share reports and runs.
+
+    It is generated on the SPM availability revision, with one correction:
+    ``user_report_run_associations.trigger`` reuses the report runs'
+    ``v2_report_run_trigger`` type. It creates only that table, writes no
+    data, and its downgrade drops what the upgrade adds.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == SPM_AVAILABILITY_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert revision.count("Dialect correction:") == 1
+    assert re.search(
+        r"""name=["']v2_report_run_trigger["'],\s*create_type=False""", upgrade
+    )
+    assert re.findall(r"""op\.create_table\(\s*["'](\w+)["']""", upgrade) == [
+        "user_report_run_associations"
+    ]
+    assert re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade) == [
+        "user_report_run_associations"
+    ]
+    assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 7
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.alter_column(" not in body
+    assert "op.drop_column(" not in upgrade
+    assert "op.drop_table(" not in upgrade

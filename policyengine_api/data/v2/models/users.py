@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         UserHouseholdAssociation,
         UserPolicy,
         UserReportAssociation,
+        UserReportRunAssociation,
         UserSimulationAssociation,
     )
     from policyengine_api.data.v2.models.reports import Report
@@ -122,6 +123,10 @@ class User(IdentifiedModel, table=True):
         cascade_delete=True,
     )
     report_associations: list["UserReportAssociation"] = Relationship(
+        back_populates="user",
+        cascade_delete=True,
+    )
+    report_run_associations: list["UserReportRunAssociation"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )

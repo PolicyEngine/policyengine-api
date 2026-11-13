@@ -316,6 +316,10 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "user_identities": _access(runtime=READ_WRITE),
     "user_policies": _access(runtime=READ_WRITE),
     "user_report_associations": _access(runtime=READ_WRITE),
+    # Each user's request for a report run, which the Public API records when
+    # the user creates or re-runs a report, reads, and deletes; nothing
+    # changes one afterwards.
+    "user_report_run_associations": _access(runtime=READ_INSERT_DELETE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
     # Each change of a signed-in user's type, recorded by the admin routes and

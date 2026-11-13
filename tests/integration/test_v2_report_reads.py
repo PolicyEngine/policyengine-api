@@ -153,12 +153,15 @@ def test_a_report_reads_its_newest_run_and_that_runs_result(
             RunSettings(versions=OLDER_VERSIONS),
             result=older_output,
         )
+        # On the same versions, the newer run is a forced re-run's.
         newest = store_report_run(
             connection,
             catalog,
             report,
             RunSettings(
-                versions=OLDER_VERSIONS, created_at=STARTED_AT + timedelta(days=1)
+                versions=OLDER_VERSIONS,
+                created_at=STARTED_AT + timedelta(days=1),
+                forced=True,
             ),
             result=output,
         )

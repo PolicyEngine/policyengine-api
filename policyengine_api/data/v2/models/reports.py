@@ -15,8 +15,10 @@ from sqlalchemy.dialects import postgresql
 from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import (
+    UNFAILED_UNFORCED_RUNS,
     TimestampedModel,
     enum_type,
+    sha256_digest_check,
 )
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.metadata import (
@@ -74,6 +76,14 @@ class Report(TimestampedModel, table=True):
     user, policy, dataset or region clears the reference, which for the user
     is found through ``user_id``'s index; the model and household can't be
     deleted while a report names them.
+
+    The simulation service finds a report by ``definition_key``, the SHA-256
+    of what it compares (its type, each side's policy and dynamic, the
+    dataset name, region code and year both sides share, the budget window's
+    size and the options), in the format ``key_version`` names; identical
+    requests share the row. ``dataset_independent_key`` is the same without
+    the dataset and the options, which a national report shares with its
+    local-area report. Reports created before the keys have none.
     """
 
     __tablename__ = "reports"
@@ -89,6 +99,22 @@ class Report(TimestampedModel, table=True):
             name="ck_reports_budget_window_size",
         ),
         sa.Index("ix_reports_country_type_created_at", "country", "type", "created_at"),
+        sa.UniqueConstraint("key_version", "definition_key"),
+        sa.CheckConstraint("key_version > 0", name="ck_reports_key_version"),
+        sha256_digest_check("definition_key", "ck_reports_definition_key"),
+        sha256_digest_check(
+            "dataset_independent_key", "ck_reports_dataset_independent_key"
+        ),
+        sa.CheckConstraint(
+            "(key_version IS NULL) = (definition_key IS NULL) "
+            "AND (key_version IS NULL) = (dataset_independent_key IS NULL)",
+            name="ck_reports_keys_complete",
+        ),
+        sa.Index(
+            "ix_reports_key_version_dataset_independent_key",
+            "key_version",
+            "dataset_independent_key",
+        ),
     )
 
     label: str = Field(max_length=255)
@@ -139,6 +165,9 @@ class Report(TimestampedModel, table=True):
     year: int | None = None
     budget_window_size: int | None = None
     inputs: dict[str, Any] = Field(default_factory=dict, sa_type=sa.JSON)
+    key_version: int | None = None
+    definition_key: str | None = Field(default=None, max_length=64)
+    dataset_independent_key: str | None = Field(default=None, max_length=64)
 
     user: User | None = Relationship(back_populates="reports")
     tax_benefit_model: TaxBenefitModel = Relationship(back_populates="reports")
@@ -231,6 +260,11 @@ class ReportRun(TimestampedModel, table=True):
     share, stored together or not at all; ``spm_provenance`` is the SPM receipt
     and ``data_version`` the data release it used. Its labour supply response
     has its own two tables.
+
+    Outside budget windows, a report has at most one run that hasn't failed
+    for each pair of package versions, which identical requests join; a
+    failed run never counts. ``forced`` marks a run a forced re-run created:
+    an extra run, outside that rule, that nothing joins.
     """
 
     __tablename__ = "report_runs"
@@ -281,6 +315,19 @@ class ReportRun(TimestampedModel, table=True):
             "id",
         ),
         sa.Index("ix_report_runs_status_started_at", "status", "started_at"),
+        sa.Index(
+            "uq_report_runs_unfailed_unforced_versions",
+            "report_id",
+            "country_package_version",
+            "policyengine_version",
+            unique=True,
+            postgresql_where=sa.text(
+                f"budget_window_run_id IS NULL AND {UNFAILED_UNFORCED_RUNS}"
+            ),
+            sqlite_where=sa.text(
+                f"budget_window_run_id IS NULL AND {UNFAILED_UNFORCED_RUNS}"
+            ),
+        ),
     )
 
     report_id: UUID = Field(
@@ -331,6 +378,7 @@ class ReportRun(TimestampedModel, table=True):
         sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
     )
     data_version: str | None = Field(default=None, max_length=128)
+    forced: bool = Field(default=False, sa_column_kwargs={"server_default": sa.false()})
 
     report: Report = Relationship(back_populates="runs")
     labor_supply_responses: list["LaborSupplyResponse"] = Relationship(

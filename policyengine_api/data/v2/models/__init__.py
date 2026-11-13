@@ -21,6 +21,7 @@ from policyengine_api.data.v2.models.associations import (  # noqa: E402
     UserHouseholdAssociation,
     UserPolicy,
     UserReportAssociation,
+    UserReportRunAssociation,
     UserSimulationAssociation,
 )
 from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
@@ -170,6 +171,7 @@ __all__ = [
     "UserIdentity",
     "UserPolicy",
     "UserReportAssociation",
+    "UserReportRunAssociation",
     "UserSimulationAssociation",
     "UserType",
     "UserTypeChange",

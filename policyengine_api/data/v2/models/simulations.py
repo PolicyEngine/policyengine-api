@@ -8,7 +8,12 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
-from policyengine_api.data.v2.models.base import TimestampedModel, enum_type
+from policyengine_api.data.v2.models.base import (
+    UNFAILED_UNFORCED_RUNS,
+    TimestampedModel,
+    enum_type,
+    sha256_digest_check,
+)
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.metadata import (
     Dataset,
@@ -47,6 +52,12 @@ class Simulation(TimestampedModel, table=True):
     stay. Deleting its policy, dynamic or region clears that reference; its
     household, input dataset and catalog version cannot be deleted while it
     exists.
+
+    The simulation service finds a simulation by ``definition_key``, the
+    SHA-256 of what it calculates (its type, policy, dynamic, dataset name,
+    region code, year and filter, or its household), in the format
+    ``key_version`` names; identical requests share the row. Simulations
+    created before the keys have none and are never found by key.
     """
 
     __tablename__ = "simulations"
@@ -65,6 +76,13 @@ class Simulation(TimestampedModel, table=True):
         sa.CheckConstraint(
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_simulations_year",
+        ),
+        sa.UniqueConstraint("key_version", "definition_key"),
+        sa.CheckConstraint("key_version > 0", name="ck_simulations_key_version"),
+        sha256_digest_check("definition_key", "ck_simulations_definition_key"),
+        sa.CheckConstraint(
+            "(key_version IS NULL) = (definition_key IS NULL)",
+            name="ck_simulations_keys_complete",
         ),
     )
 
@@ -106,6 +124,8 @@ class Simulation(TimestampedModel, table=True):
     filter_value: str | None = Field(default=None, max_length=255)
     filter_strategy: str | None = Field(default=None, max_length=64)
     year: int | None = None
+    key_version: int | None = None
+    definition_key: str | None = Field(default=None, max_length=64)
 
     dataset: Dataset | None = Relationship(
         back_populates="input_simulations",
@@ -148,6 +168,11 @@ class SimulationRun(TimestampedModel, table=True):
     clears the reference. A household simulation's run stores its household in
     ``household_result``; an economy run's output file is ``output_uri``, with
     its SHA-256. Each poverty and inequality result belongs to one run.
+
+    A simulation has at most one run that hasn't failed for each year, catalog
+    version and pair of package versions, which identical requests join; a
+    failed run never counts. ``forced`` marks a run a forced re-run created:
+    an extra run, outside that rule, that nothing joins.
     """
 
     __tablename__ = "simulation_runs"
@@ -179,6 +204,17 @@ class SimulationRun(TimestampedModel, table=True):
             "id",
         ),
         sa.Index("ix_simulation_runs_status_started_at", "status", "started_at"),
+        sa.Index(
+            "uq_simulation_runs_unfailed_unforced_versions",
+            "simulation_id",
+            "year",
+            "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
+            unique=True,
+            postgresql_where=sa.text(UNFAILED_UNFORCED_RUNS),
+            sqlite_where=sa.text(UNFAILED_UNFORCED_RUNS),
+        ),
     )
 
     simulation_id: UUID = Field(
@@ -220,6 +256,7 @@ class SimulationRun(TimestampedModel, table=True):
     household_result: dict[str, Any] | None = Field(default=None, sa_type=sa.JSON)
     output_uri: str | None = Field(default=None, max_length=2048)
     output_sha256: str | None = Field(default=None, max_length=64)
+    forced: bool = Field(default=False, sa_column_kwargs={"server_default": sa.false()})
 
     simulation: Simulation = Relationship(back_populates="runs")
     poverty_results: list["Poverty"] = Relationship(

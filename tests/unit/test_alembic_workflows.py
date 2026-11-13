@@ -211,6 +211,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2_simulation_runs.py" in lifecycle_script
     assert "test_alembic_v2_saved_item_keys.py" in lifecycle_script
     assert "test_alembic_v2_user_types.py" in lifecycle_script
+    assert "test_alembic_v2_shared_report_keys.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -220,6 +221,15 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_runtime_cache_redis.py" not in workflow
     assert "coverage run" not in workflow
     assert "codecov/codecov-action" not in workflow
+
+
+def test_reusable_v2_integration_check_runs_shared_report_rows_as_managed_roles():
+    """The shared-report tests run after the managed roles get their privileges."""
+    workflow = _workflow("v2-integration-check.yml")
+
+    assert workflow.index("reconcile_v2_privileges.py apply") < workflow.index(
+        "test_v2_shared_report_rows.py"
+    )
 
 
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():

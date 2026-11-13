@@ -473,9 +473,13 @@ def test_uk_area_impacts_store_no_map_coordinates() -> None:
         assert {"x", "y"}.isdisjoint(V2_METADATA.tables[table_name].c.keys())
 
 
-def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests() -> (
-    None
-):
+def test_report_reruns_deduplicate_requests_and_keep_failed_or_forced_runs() -> None:
+    """A report's versions are unique only among runs that neither failed nor forced.
+
+    A failed run never counts and a forced re-run is an extra run, so no plain
+    constraint covers the versions; ``test_shared_report_models.py`` checks the
+    partial unique index that does.
+    """
     report_runs = V2_METADATA.tables["report_runs"]
     unique_column_sets = {
         tuple(column.name for column in constraint.columns)
@@ -489,9 +493,10 @@ def test_report_rerun_constraints_allow_same_versions_but_deduplicate_requests()
         "country_package_version",
         "policyengine_version",
     ) not in unique_column_sets
-    assert "ix_report_runs_current_output" in {
-        index.name for index in report_runs.indexes
-    }
+    assert {
+        "ix_report_runs_current_output",
+        "uq_report_runs_unfailed_unforced_versions",
+    } <= {index.name for index in report_runs.indexes}
 
 
 def test_named_checks_and_required_indexes_cover_core_invariants() -> None:

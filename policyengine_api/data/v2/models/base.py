@@ -75,6 +75,23 @@ class TimestampedModel(IdentifiedModel):
     )
 
 
+def sha256_digest_check(column: str, name: str) -> sa.CheckConstraint:
+    """Require a set ``column`` to hold 64 lowercase characters, as a SHA-256 digest.
+
+    Lowercase only, so one digest can't be stored in two spellings that a unique
+    index would treat as different keys.
+    """
+    return sa.CheckConstraint(
+        f"length({column}) = 64 AND {column} = lower({column})", name=name
+    )
+
+
+# The runs a new request may join, of which a definition has at most one per
+# version set: a failed run never counts, and a forced re-run is an extra run
+# that nothing joins.
+UNFAILED_UNFORCED_RUNS = "status <> 'failed' AND NOT forced"
+
+
 def enum_type(enum_class: type, name: str) -> sa.Enum:
     """Build a stable lowercase-value Postgres enum for a string Enum."""
     # Native named enums and value serialization are SQLAlchemy features that

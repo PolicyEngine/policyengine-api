@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from alembic import command
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.dialects import postgresql
 
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config, disposable_v2_url
 
@@ -62,7 +63,7 @@ def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
         table_name: {
             "columns": {
                 column["name"]: (
-                    str(column["type"]),
+                    column["type"].compile(dialect=postgresql.dialect()),
                     column["nullable"],
                     column.get("default"),
                 )
@@ -88,6 +89,8 @@ def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
                     index.get("dialect_options", {}).get("postgresql_where"),
                 )
                 for index in inspector.get_indexes(table_name)
+                # A unique constraint's own index is listed with the constraints.
+                if "duplicates_constraint" not in index
             },
             "checks": {
                 check["name"]: check["sqltext"]
@@ -202,23 +205,15 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
             assert revision_table[part] == parent_table[part], (table_name, part)
 
     records = revision["user_report_run_associations"]
-    record_columns = dict(records["columns"])
-    trigger_nullable, trigger_default = record_columns.pop("trigger")[1:]
-    assert record_columns == {
+    assert records["columns"] == {
         "id": ("UUID", False, None),
         "created_at": ("TIMESTAMP WITH TIME ZONE", False, "now()"),
         "user_id": ("UUID", False, None),
         "report_run_id": ("UUID", False, None),
         "requested_at": ("TIMESTAMP WITH TIME ZONE", False, None),
+        # The report runs' type, not another one.
+        "trigger": ("v2_report_run_trigger", False, None),
     }
-    assert (trigger_nullable, trigger_default) == (False, None)
-    # The trigger reuses the report runs' type rather than creating another.
-    trigger_type = next(
-        column["type"]
-        for column in inspect(engine).get_columns("user_report_run_associations")
-        if column["name"] == "trigger"
-    )
-    assert trigger_type.name == "v2_report_run_trigger"
     assert records["foreign_keys"] == [
         (
             "fk_user_report_run_associations_report_run_id_report_runs",
@@ -244,12 +239,7 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
             ("report_run_id",),
             False,
             None,
-        ),
-        "uq_user_report_run_associations_user_id_report_run_id": (
-            ("user_id", "report_run_id"),
-            True,
-            None,
-        ),
+        )
     }
     assert set(records["checks"]) == {"ck_user_report_run_associations_trigger"}
 
