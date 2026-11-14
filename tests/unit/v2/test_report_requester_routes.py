@@ -161,3 +161,26 @@ def test_openapi_documents_the_reruns_nullable_run_and_the_reads_403() -> None:
     assert "run_id" in rerun_unreadable["required"]
     for path in ("/v2/reports", "/v2/reports/{report_id}"):
         assert "403" in document["paths"][path]["get"]["responses"], path
+
+
+@pytest.mark.parametrize(
+    "unnamed_body",
+    [
+        {key: value for key, value in REPORT_BODY.items() if key != "label"},
+        {**REPORT_BODY, "label": None, "description": None},
+    ],
+    ids=["omitted", "null"],
+)
+def test_a_report_is_created_without_a_label_or_description(
+    unnamed_body: dict[str, object],
+) -> None:
+    service = FakeReportRunService()
+
+    response = report_route_client(reports=service).post(
+        "/v2/reports?country_id=us", json=unnamed_body
+    )
+
+    assert response.status_code == 201, response.text
+    ((_, arguments),) = service.calls
+    assert arguments["report_input"].label is None
+    assert arguments["report_input"].description is None
