@@ -16,7 +16,10 @@ from policyengine_api.data.v2.models import (
     ReportRunStatus,
     ReportRunTrigger,
 )
-from policyengine_api.services.v2.simulation_service.types import PackageVersions
+from policyengine_api.services.v2.simulation_service.types import (
+    PackageVersions,
+    StartedReportRun,
+)
 from policyengine_api.services.v2.stored_reports.services import (
     SubmissionsNotConfiguredError,
     V2StoredReportService,
@@ -63,8 +66,9 @@ class FailingDatabaseSession:
 class RecordingSimulationService:
     reruns: list[ReportRerunInput] = field(default_factory=list)
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
         self.reruns.append(rerun)
+        return StartedReportRun(report_run_id=uuid4())
 
 
 def stored_rows(**report_columns: object) -> StoredReportRows:
@@ -83,8 +87,8 @@ def stored_rows(**report_columns: object) -> StoredReportRows:
         dataset_name=None,
         baseline_simulation=None,
         reform_simulation=None,
-        newest_run=None,
-        newest_budget_window_run=None,
+        run=None,
+        budget_window_run=None,
         budget_window_years=(),
     )
 

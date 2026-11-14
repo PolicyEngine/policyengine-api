@@ -233,6 +233,22 @@ def test_reusable_v2_integration_check_runs_shared_report_rows_as_managed_roles(
     )
 
 
+def test_reusable_v2_integration_check_runs_the_users_report_run_tests():
+    """Reading a report by run and users' run records run as the runtime role."""
+    workflow = _workflow("v2-integration-check.yml")
+
+    privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
+    for module in (
+        "test_v2_report_reads_by_run.py",
+        "test_v2_user_report_runs.py",
+        "test_v2_user_report_run_requesters.py",
+        "test_v2_user_budget_window_runs.py",
+        "test_v2_forced_report_reruns.py",
+        "test_v2_user_report_views.py",
+    ):
+        assert privileges_applied < workflow.index(module), module
+
+
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     workflow = _workflow("v2-integration-check.yml")
 

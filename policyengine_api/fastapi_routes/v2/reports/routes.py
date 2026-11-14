@@ -1,7 +1,10 @@
 """Native FastAPI routes for v2 reports.
 
 The routes need no user credential: a user keeps a report through
-``/v2/user-reports``. Reports, their runs and results are read from the
+``/v2/user-reports``. A create or re-run may send one (a bearer access
+token, the unauthenticated-user header, or a server's forwarded user), and
+the request is then recorded for that user, naming the run it ended on.
+Reports, their runs and results are read from the
 detailed-save tables the simulation service and its Modal workers write;
 reading never calls the simulation service and never starts a run. A report
 is an economy report, a household report or a budget window, which its
@@ -12,19 +15,24 @@ new run, and reads the report back; listing its runs reads them, newest
 first.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Annotated, TypeVar
+# No postponed annotations: FastAPI resolves each route's dependency
+# annotations at runtime, and the requester's names a dependency local to the
+# router builder.
+from collections.abc import Callable
+from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2StoredReportResourceService,
     _default_v2_stored_report_service_factory,
 )
 from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.fastapi_routes.v2.errors_support import (
+    BEARER_CHALLENGE,
     V2ErrorMapping,
     v2_error_response,
 )
@@ -40,6 +48,7 @@ from policyengine_api.fastapi_routes.v2.reports.response_models import (
     ReportDetailResult,
     ReportListResponse,
     ReportListResult,
+    ReportRunNotRecordedResponse,
     UnavailableAfterReportCreatedResponse,
     report_item,
     report_summary_item,
@@ -69,6 +78,13 @@ from policyengine_api.query_parameters import (
     ReportDetailQuery,
     ReportRunsQuery,
 )
+from policyengine_api.services.v2.identity.types import AccountPrincipal
+from policyengine_api.services.v2.identity.validators import (
+    StandardUserRequiresSignInError,
+)
+from policyengine_api.services.v2.report_run_records.validators import (
+    ReportRunRecordStorageError,
+)
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceConflictError,
     SimulationServiceUnavailableError,
@@ -84,18 +100,14 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
 )
 from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
+    ForcedRerunRequiresAdminError,
+    ForcedRerunRequiresSignInError,
+    ReportRunNotFoundError,
+    ReportRunNotRecordedError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from policyengine_api.fastapi_routes.dependencies import (
-        NativeRouteDependencies,
-        V2StoredReportResourceService,
-    )
 
 MAXIMUM_REPORT_REQUEST_BYTES = 16 * 1024
 enforce_report_request_size = request_size_limit(
@@ -117,10 +129,13 @@ ReportRunsQueryDependency = Annotated[
 # Refusals a caller can act on carry their own message and are not logged.
 REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
+    ReportRunNotFoundError,
+    ForcedRerunRequiresAdminError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
-    V2ErrorMapping((StoredReportNotFoundError,), 404),
+    V2ErrorMapping((StoredReportNotFoundError, ReportRunNotFoundError), 404),
+    V2ErrorMapping((ForcedRerunRequiresAdminError,), 403),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (
@@ -132,7 +147,11 @@ REPORT_ERROR_MAPPINGS = (
         "The report's stored result cannot be read",
     ),
     # SUBMISSION_ERROR_MAPPINGS answers a missing v2 database configuration.
-    V2ErrorMapping((ReportStorageError,), 503, "V2 report storage is unavailable"),
+    V2ErrorMapping(
+        (ReportStorageError, ReportRunRecordStorageError),
+        503,
+        "V2 report storage is unavailable",
+    ),
 )
 
 
@@ -159,18 +178,84 @@ def _report_operation(
     )
 
 
+def _read_path(report_id: UUID, country_id: str, run_id: UUID) -> str:
+    """Return the path that reads the report with its run ``run_id``."""
+    return f"/v2/reports/{report_id}?country_id={country_id}&run_id={run_id}"
+
+
+def _rerun_unreadable_message(error: RerunReportUnreadableError) -> str:
+    """Say where to read the run a re-run started, or its report's runs.
+
+    A budget window's answer that named no window run names no run to read,
+    so the message points to the report's run list.
+    """
+    started = f"The simulation service started a run of report {error.report_id}"
+    if error.run_id is None:
+        return (
+            f"{started}, but its answer named no budget-window run. Find the run "
+            f"with GET /v2/reports/{error.report_id}/runs?country_id="
+            f"{error.country_id} rather than running it again."
+        )
+    return (
+        f"{started}, but the report could not be read back. Read it with GET "
+        f"{_read_path(error.report_id, error.country_id, error.run_id)} rather "
+        "than running it again."
+    )
+
+
+def _requester_refused(
+    error: StandardUserRequiresSignInError | ForcedRerunRequiresSignInError,
+) -> JSONResponse:
+    """Answer a browser credential naming a signed-in user, as user routes do."""
+    return v2_error_response(
+        401, str(error), headers={"WWW-Authenticate": BEARER_CHALLENGE}
+    )
+
+
+# The two routes that record a request take its user's credential, but
+# optionally: FastAPI lists the schemes a credential may use, and an empty
+# requirement says a request may send none.
+OPTIONAL_USER_CREDENTIAL: dict[str, Any] = {"security": [{}]}
+
+
+def _not_recorded(error: ReportRunNotRecordedError) -> JSONResponse:
+    """Answer a run whose request could not be recorded with 503 naming the run.
+
+    The failure logged is the record's own, the error's cause.
+    """
+    cause = error.__cause__
+    return unavailable_after_creation_answer(
+        "v2_report_run_not_recorded",
+        cause if isinstance(cause, Exception) else error,
+        ReportRunNotRecordedResponse(
+            message=str(error),
+            report_id=error.report_id,
+            run_id=error.run_id,
+        ),
+    )
+
+
 def _create_report(
-    service: V2StoredReportResourceService, body: ReportCreateRequest
+    service: V2StoredReportResourceService,
+    body: ReportCreateRequest,
+    requester: AccountPrincipal | None,
 ) -> ReportDetailResponse | JSONResponse:
     """Create the report and answer it as stored.
 
-    A report the simulation service created answers with its ``report_id``
-    when it cannot be read back (502), and when the service failed its run
-    and answered 503. Every other failure is raised, for the route's error
-    mappings to answer.
+    A report the simulation service created answers 502 with its
+    ``report_id`` and ``run_id`` when it cannot be read back, and 503 with
+    its ``report_id`` when the service failed its run; one whose request
+    could not be recorded for its user answers 503 with its ``report_id``
+    and ``run_id``. A requester's unauthenticated credential naming a
+    signed-in user answers 401. Every other failure is raised, for the
+    route's error mappings to answer.
     """
     try:
-        report = service.create_report(body)
+        report = service.create_report(body, requester=requester)
+    except StandardUserRequiresSignInError as error:
+        return _requester_refused(error)
+    except ReportRunNotRecordedError as error:
+        return _not_recorded(error)
     except CreatedReportUnreadableError as error:
         return created_record_unreadable_answer(
             "v2_created_report_unreadable",
@@ -179,10 +264,11 @@ def _create_report(
                 message=(
                     f"The simulation service created report {error.report_id}, "
                     "but it could not be read back. Read it with GET "
-                    f"/v2/reports/{error.report_id}?country_id={error.country_id} "
+                    f"{_read_path(error.report_id, error.country_id, error.run_id)} "
                     "rather than submitting it again."
                 ),
                 report_id=error.report_id,
+                run_id=error.run_id,
             ),
         )
     except SimulationServiceUnavailableError as error:
@@ -204,18 +290,30 @@ def _rerun_report(
     country_id: str,
     report_id: UUID,
     force: bool,
+    requester: AccountPrincipal | None,
 ) -> ReportDetailResponse | JSONResponse:
-    """Run the report again and answer it with its new run.
+    """Run the report again and answer it with the run the request ended on.
 
     The simulation service's refusal to run it again now answers 409 with
-    the run it names, and a report that cannot be read back once its new run
-    started answers 502 with its ``report_id``. Every other failure is
+    the run it names; a report that cannot be read back once its run started
+    answers 502 with its ``report_id`` and ``run_id`` (null, pointing to the
+    report's run list, when a budget window's answer named no window run);
+    and a run whose request could not be recorded for its user answers 503
+    with its ``report_id`` and ``run_id``. A requester's unauthenticated
+    credential naming a signed-in user answers 401. Every other failure is
     raised, for the route's error mappings to answer.
     """
     try:
         report = service.rerun_report(
-            country_id=country_id, report_id=report_id, force=force
+            country_id=country_id,
+            report_id=report_id,
+            force=force,
+            requester=requester,
         )
+    except (StandardUserRequiresSignInError, ForcedRerunRequiresSignInError) as error:
+        return _requester_refused(error)
+    except ReportRunNotRecordedError as error:
+        return _not_recorded(error)
     except SimulationServiceConflictError as error:
         conflict = ReportRerunConflictResponse(message=str(error), run_id=error.run_id)
         return JSONResponse(status_code=409, content=conflict.model_dump(mode="json"))
@@ -224,20 +322,18 @@ def _rerun_report(
             "v2_rerun_report_unreadable",
             error,
             RerunReportUnreadableResponse(
-                message=(
-                    "The simulation service started a new run of report "
-                    f"{error.report_id}, but the report could not be read back. "
-                    f"Read it with GET /v2/reports/{error.report_id}?country_id="
-                    f"{error.country_id} rather than running it again."
-                ),
+                message=_rerun_unreadable_message(error),
                 report_id=error.report_id,
+                run_id=error.run_id,
             ),
         )
     return ReportDetailResponse(result=ReportDetailResult(item=report_item(report)))
 
 
 def _add_report_run_routes(
-    router: APIRouter, service_factory: Callable[[], V2StoredReportResourceService]
+    router: APIRouter,
+    service_factory: Callable[[], V2StoredReportResourceService],
+    optional_user: Callable[..., AccountPrincipal | None],
 ) -> None:
     """Add the routes that run a report again and list its runs."""
 
@@ -246,6 +342,7 @@ def _add_report_run_routes(
         response_model=ReportDetailResponse,
         status_code=201,
         responses=RERUN_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Run a report again",
         description=(
             "Checks the report as a new report of its kind is checked (the "
@@ -253,19 +350,26 @@ def _add_report_run_routes(
             "household report, and each policy its simulations name is stored and "
             "sets only parameters the running catalog version has), then has the "
             "simulation service create the report's new run on its default "
-            "worker's PolicyEngine.py version, and start it. Every earlier run "
-            "is kept. Without force, each side reuses a "
-            "run of its own simulation that succeeded on those versions; with "
-            "force, both simulations are calculated again. A household report's "
-            "sides are always calculated again, so force changes nothing for it. "
-            "A budget window's new "
-            "run is a budget-window run with a report run for each year, and "
+            "worker's PolicyEngine.py version, and start it, or join the run "
+            "already pending, running or succeeded on those versions, once the "
+            "simulation service finds runs by key. Every earlier run is kept. "
+            "Only an admin user may send force (401 without a user credential, "
+            "403 below admin, before anything is asked). Without force, each "
+            "side reuses a run of its own simulation that succeeded on those "
+            "versions; with force, both simulations are calculated again. A "
+            "household report's sides are always calculated again, so force "
+            "changes nothing for it. A budget window's new run is a "
+            "budget-window run with a report run for each year, and "
             "with force each year calculates its simulations again. Answers the "
-            "report as stored, whose newest run is then the new one, since no "
-            "other run "
-            "starts while it is pending or running: a report with a run pending "
-            "or running answers 409 naming that run. Read the report again to "
-            "follow the run."
+            "report as stored, with the run the simulation service named (a "
+            "budget window's budget-window run), which needn't be its newest. A "
+            "simulation service that refuses because a run is pending or "
+            "running answers 409 naming that run. Read the report again with "
+            "run_id to follow the run. With a user credential (a bearer access "
+            "token, or the unauthenticated-user header of a signed-out browser), "
+            "the request is recorded for that user, naming the run it ended on "
+            "(trigger manual), or each year's report run of a budget window's "
+            "run; without one, nothing is recorded."
         ),
     )
     def rerun_report(
@@ -273,6 +377,7 @@ def _add_report_run_routes(
         body: ReportRerunRequest,
         query: ReportRunsQueryDependency,
         _size: Annotated[None, Depends(enforce_report_request_size)],
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
         def rerun() -> ReportDetailResponse | JSONResponse:
             return _rerun_report(
@@ -280,6 +385,7 @@ def _add_report_run_routes(
                 country_id=query.country_id,
                 report_id=report_id,
                 force=body.force,
+                requester=requester,
             )
 
         return _report_operation(rerun)
@@ -316,12 +422,14 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     """Build the report routes without opening a connection."""
     router = APIRouter(prefix="/v2", responses=REPORT_ERROR_RESPONSES)
     service_factory = _service_factory(dependencies)
+    optional_user = dependencies.optional_user
 
     @router.post(
         "/reports",
         response_model=ReportDetailResponse,
         status_code=201,
         responses=CREATE_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Create an economy report, a household report or a budget window",
         description=(
             "Checks that the country has economy reports and stores each named "
@@ -336,45 +444,67 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "default year; its simulations each calculate that household in its "
             "default year. A budget window (kind budget_window) is checked as an "
             "economy report is; the simulation service creates a budget-window "
-            "run with a report run for each year, and starts its years. "
-            "Answers the report as stored, with its "
-            "pending run; read it again to follow the run. A created report "
-            "that cannot be read back answers 502 with its report_id, and one "
-            "whose run the simulation service failed before answering 503 "
-            "answers 503 with its report_id."
+            "run with a report run for each year, and starts its years. label "
+            "and description are optional and stored nowhere: a report's name and "
+            "description are each user's saved report's (/v2/user-reports). "
+            "Answers the report as stored, with the run the simulation service "
+            "named: its new pending run, or, once the simulation service finds "
+            "reports and runs by key, the existing run the request joined, which "
+            "needn't be the newest. Read it again with run_id to follow the run. "
+            "With a user credential (a bearer access token, or the "
+            "unauthenticated-user header of a signed-out browser), the request is "
+            "recorded for that user, naming the run it ended on (trigger "
+            "initial), or each year's report run of a budget window's run; "
+            "without one, nothing is recorded. A created report that cannot be "
+            "read back answers 502 with its report_id and run_id, and one whose "
+            "run the simulation service failed before answering 503 answers "
+            "503 with its report_id."
         ),
     )
     def create_report(
         body: ReportCreateRequest,
         query: ReportCreateQueryDependency,
         _size: Annotated[None, Depends(enforce_report_request_size)],
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
             return v2_error_response(400, "Body country_id must match query country_id")
 
         def create() -> ReportDetailResponse | JSONResponse:
-            return _create_report(service_factory(), body)
+            return _create_report(service_factory(), body, requester)
 
         return _report_operation(create)
 
     @router.get(
         "/reports",
         response_model=ReportListResponse,
+        responses={401: READ_RESPONSES[401], 403: READ_RESPONSES[403]},
         summary="List chosen reports",
         description=(
             "Lists the country's reports among the report_id values (at most "
-            "25), in the order named and once each, with their newest runs, and "
-            "each budget window's years, but without results, read in two "
-            "queries. Unknown reports and other countries' are left out."
+            "25), in the order named and once each, each with the run a read of "
+            "it without run_id answers, and each budget window's years, but "
+            "without results. With a user credential, each report's label and "
+            "description are that user's saved report's, and a report the user "
+            "asked to run shows the run of their newest request; without one, "
+            "the label is null. Unknown reports and other countries' are left "
+            "out."
         ),
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
     )
     def list_reports(
         query: ReportCollectionQueryDependency,
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportListResponse | JSONResponse:
-        def read() -> ReportListResponse:
-            reports = service_factory().list_reports(
-                country_id=query.country_id, report_ids=query.report_id
-            )
+        def read() -> ReportListResponse | JSONResponse:
+            try:
+                reports = service_factory().list_reports(
+                    country_id=query.country_id,
+                    report_ids=query.report_id,
+                    requester=requester,
+                )
+            except StandardUserRequiresSignInError as error:
+                return _requester_refused(error)
             return ReportListResponse(
                 result=ReportListResult(
                     items=[report_summary_item(report) for report in reports]
@@ -387,11 +517,20 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         "/reports/{report_id}",
         response_model=ReportDetailResponse,
         responses=READ_RESPONSES,
+        openapi_extra=OPTIONAL_USER_CREDENTIAL,
         summary="Read a report",
         description=(
-            "Returns the report, its newest run whatever its status and "
-            "versions, the versions the Public API runs now, and, once the newest "
-            "run has succeeded, its result. An economy report's run is one report "
+            "Returns the report as the requesting user sees it: its run named by "
+            "run_id (404 when it is not one of the report's runs); without "
+            "run_id, the run of the user's newest request for one, else its "
+            "newest succeeded run that wasn't forced, else its newest run that "
+            "wasn't forced, on whatever versions (a forced run is never the "
+            "default, and a newer run someone else started is listed by GET "
+            "/v2/reports/{report_id}/runs, not shown in its place); the "
+            "versions the Public API runs now; and, once that run has succeeded, "
+            "its result. Its label and description are the requesting user's "
+            "saved report's name and description, null without a user "
+            "credential or a saved report. An economy report's run is one report "
             "run and its result today's economy result. A household report's "
             "result is each simulation's calculated household, as "
             "/v2/household-calculations answers one, and a failed run gives each "
@@ -405,16 +544,23 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
     def get_report(
         report_id: UUID,
         query: ReportDetailQueryDependency,
+        requester: Annotated[AccountPrincipal | None, Depends(optional_user)],
     ) -> ReportDetailResponse | JSONResponse:
-        def read() -> ReportDetailResponse:
-            report = service_factory().get_report(
-                country_id=query.country_id, report_id=report_id
-            )
+        def read() -> ReportDetailResponse | JSONResponse:
+            try:
+                report = service_factory().get_report(
+                    country_id=query.country_id,
+                    report_id=report_id,
+                    run_id=query.run_id,
+                    requester=requester,
+                )
+            except StandardUserRequiresSignInError as error:
+                return _requester_refused(error)
             return ReportDetailResponse(
                 result=ReportDetailResult(item=report_item(report))
             )
 
         return _report_operation(read)
 
-    _add_report_run_routes(router, service_factory)
+    _add_report_run_routes(router, service_factory, optional_user)
     return router

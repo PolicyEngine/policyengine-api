@@ -12,18 +12,19 @@ simulation call.
 A simulation request names the country, ``simulation_type`` (``economy``),
 the year, the region code, the dataset name (null for the region's default),
 and the stored policy and dynamic (null for current law). A report request
-names the country, ``report_type`` (``economy``), the label and description,
-the year, region and dataset its two simulations share, each simulation's
+names the country, ``report_type`` (``economy``), the year, region and
+dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
 caller gave them. A budget window goes to the same ``POST /reports`` as
 ``report_type`` ``budget_window``, naming its first year and
 ``budget_window_size`` in place of the year, and no ``include_cliffs``. A
 household report goes there too, as ``report_type`` ``household``, naming
-the label and description, the stored household, each simulation's policy
+the stored household, each simulation's policy
 (the reform null for a report of the baseline alone), but no year: the
 simulation service calculates the household's default year, adding every
 variable the household lacks. None names a PolicyEngine.py version: the
-simulation service runs its default worker's. The simulation service
+simulation service runs its default worker's. None names a label or a
+description, which belong to users' saved reports. The simulation service
 answers:
 
 - 201 or 202 with the created record's ID and its first run's ID: for a
@@ -159,6 +160,7 @@ if TYPE_CHECKING:
         HouseholdReportCreationInput,
         PolicyChoice,
         ReportRerunInput,
+        StartedReportRun,
     )
 
 SIMULATIONS_PATH = "/simulations"
@@ -232,13 +234,13 @@ def _report_definition(
 ) -> dict[str, Any]:
     """Return the request fields economy reports and budget windows both send.
 
-    ``spm`` is sent only when the caller gave it.
+    ``spm`` is sent only when the caller gave it. A report's label and
+    description are never sent: they belong to users' saved reports, and
+    the simulation service stores neither.
     """
     body: dict[str, Any] = {
         "country": report.country_id,
         "report_type": report.kind,
-        "label": report.label,
-        "description": report.description,
         "year": report.year,
         "region_code": report.region_code,
         "dataset_name": report.dataset_name,
@@ -282,8 +284,6 @@ def household_report_request(report: HouseholdReportCreationInput) -> dict[str, 
     return {
         "country": report.country_id,
         "report_type": report.kind,
-        "label": report.label,
-        "description": report.description,
         "household_id": str(report.household_id),
         "baseline": _household_policy_choice(report.baseline),
         "reform": (
@@ -605,13 +605,15 @@ class SimulationServiceReportClient:
             budget_window_run_id=created.budget_window_run_id,
         )
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
-        """Have the service create and start the stored report's new run.
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
+        """Have the service start the stored report's run; return the run it names.
 
         Raise the errors ``policyengine_api.libs.simulation_report_reruns``
         lists for the service's answers.
         """
-        start_report_rerun(self._http_client, rerun, send=self._send_report_rerun)
+        return start_report_rerun(
+            self._http_client, rerun, send=self._send_report_rerun
+        )
 
 
 @lru_cache(maxsize=1)

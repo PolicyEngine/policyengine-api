@@ -191,29 +191,59 @@ class V2HouseholdCalculationResourceService(Protocol):
 class V2StoredReportResourceService(Protocol):
     """Route-independent report operations for one request."""
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
-        """Return the country's report, its newest run and that run's result.
+    def get_report(
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        run_id: UUID | None = None,
+        requester: AccountPrincipal | None = None,
+    ) -> StoredReportRead:
+        """Return the country's report, a run and that run's result, as a user sees it.
 
-        The report is an economy report, a household report or a budget
-        window. Raise ``StoredReportNotFoundError`` when the country has no
-        such report, and ``EconomyResultUnreadableError``,
-        ``HouseholdResultUnreadableError`` or
+        The run is ``run_id``; without it, the requester's newest recorded
+        run, else the report's newest succeeded unforced run, else its newest
+        unforced run. The label and description are the requester's saved
+        report's. The report is an economy report, a household report or a
+        budget window. Raise ``StoredReportNotFoundError`` when the country
+        has no such report, ``ReportRunNotFoundError`` when it has no run
+        ``run_id``, ``StandardUserRequiresSignInError`` for an
+        unauthenticated credential naming a signed-in user, and
+        ``EconomyResultUnreadableError``, ``HouseholdResultUnreadableError`` or
         ``BudgetWindowResultUnreadableError`` when a succeeded run's result
         cannot be read.
         """
         ...
 
     def list_reports(
-        self, *, country_id: str, report_ids: Sequence[UUID]
+        self,
+        *,
+        country_id: str,
+        report_ids: Sequence[UUID],
+        requester: AccountPrincipal | None = None,
     ) -> tuple[StoredReportSummaryRead, ...]:
-        """Return the country's reports of every kind among those named, in order."""
+        """Return the country's reports of every kind among those named, in order.
+
+        Each is read as ``get_report`` reads it without a run, as the
+        requester sees it.
+        """
         ...
 
-    def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
+    def create_report(
+        self,
+        report_input: ReportCreationInput,
+        *,
+        requester: AccountPrincipal | None = None,
+    ) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
-        Raise ``EconomyCalculationsUnsupportedError`` for an economy report in
-        a country without economy reports,
+        It is answered with the run the simulation service named, created or
+        joined. With a ``requester``, the request is recorded for its user
+        once the simulation service has answered. Raise
+        ``StandardUserRequiresSignInError`` for an unauthenticated credential
+        that names a signed-in user, before anything is asked;
+        ``EconomyCalculationsUnsupportedError`` for an economy report in a
+        country without economy reports,
         ``HouseholdCalculationCountryError`` for a household report in a
         country without household calculations, ``HouseholdNotFoundError``
         for a household the country does not store,
@@ -223,16 +253,27 @@ class V2StoredReportResourceService(Protocol):
         ``PolicyParametersMissingError`` for a policy that sets parameters the
         running catalog version lacks, ``SubmissionStorageError`` when the
         database or its catalog cannot be read for those checks, the
-        simulation service's errors, and ``CreatedReportUnreadableError`` when
-        the report it created cannot be read back.
+        simulation service's errors, ``ReportRunNotRecordedError`` when the
+        request could not be recorded, and ``CreatedReportUnreadableError``
+        when the report it created cannot be read back.
         """
         ...
 
     def rerun_report(
-        self, *, country_id: str, report_id: UUID, force: bool
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        force: bool,
+        requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
-        """Run the country's report again; return it with its new run as its newest.
+        """Run the country's report again; return it with the run the request ended on.
 
+        That is the run the simulation service named, created or joined.
+        With a ``requester``, the request is recorded for its user once the
+        simulation service has answered, and
+        ``StandardUserRequiresSignInError`` is raised, before anything is
+        asked, for an unauthenticated credential that names a signed-in user.
         Raise ``StoredReportNotFoundError`` when the country has no such
         report; the errors of the country check a new report of its kind makes
         (economy calculations, or household calculations for a household
@@ -240,8 +281,11 @@ class V2StoredReportResourceService(Protocol):
         ``create_report`` raises them (a household report's household is not
         checked again); the simulation service's errors, among them
         ``SimulationServiceConflictError`` when it will not run the report
-        again now, and ``RerunReportUnreadableError`` when the report cannot
-        be read back once its new run was started.
+        again now, ``ReportRunNotRecordedError`` when the request could not be
+        recorded, and ``RerunReportUnreadableError`` when the report cannot
+        be read back once its run was started, or when a budget window's
+        answer names no window run (its ``run_id`` is then None, and nothing
+        is recorded).
         """
         ...
 

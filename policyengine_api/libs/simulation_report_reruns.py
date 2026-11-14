@@ -11,9 +11,11 @@ side reuses a run of its own simulation that succeeded on those versions.
 The Public API reads the report in its country before asking, so it never
 asks about a report it does not have. The simulation service answers:
 
-- 201 or 202 naming the report: the new run exists. One whose body cannot
-  be read, or that names another report, is
-  SimulationServiceAnswerUnreadableError;
+- 201 or 202 naming the report and the run the request ended on
+  (``report_run_id``, and a budget window's ``budget_window_run_id``): a
+  new run, or, once the service finds runs by key, an existing one the
+  request joined. One whose body cannot be read, that names no run, or that
+  names another report, is SimulationServiceAnswerUnreadableError;
 - 409 with ``code`` and ``detail`` when it will not run the report again
   now: ``run_in_progress``, naming the run pending or running in
   ``run_id``, or ``rerun_not_supported`` for a report it does not run again.
@@ -83,6 +85,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
+    StartedReportRun,
 )
 
 if TYPE_CHECKING:
@@ -105,6 +108,8 @@ UNREADABLE_START = (
 
 class _RerunStarted(AnswerModel):
     report_id: UUID
+    report_run_id: UUID
+    budget_window_run_id: UUID | None = None
 
 
 class _RerunRefusal(Refusal):
@@ -256,14 +261,22 @@ def _raise_for_refusal(answer: SimulationAnswer, report_id: UUID) -> NoReturn:
     raise SimulationServiceAnswerUnreadableError(_possibly_started(answer))
 
 
-def _require_started(answer: SimulationAnswer, report_id: UUID) -> None:
-    """Raise unless the started answer can be read and names the report."""
+def _require_started(answer: SimulationAnswer, report_id: UUID) -> StartedReportRun:
+    """Return the run the started answer names, once it names the report.
+
+    Raise SimulationServiceAnswerUnreadableError for an answer that cannot
+    be read, names no run, or names another report.
+    """
     try:
         started = _RerunStarted.model_validate_json(answer.content)
     except ValidationError as error:
         raise SimulationServiceAnswerUnreadableError(UNREADABLE_START) from error
     if started.report_id != report_id:
         raise SimulationServiceAnswerUnreadableError(UNREADABLE_START)
+    return StartedReportRun(
+        report_run_id=started.report_run_id,
+        budget_window_run_id=started.budget_window_run_id,
+    )
 
 
 def start_report_rerun(
@@ -271,13 +284,13 @@ def start_report_rerun(
     rerun: ReportRerunInput,
     *,
     send: Callable[[httpx.Client, UUID, dict[str, Any]], SimulationAnswer],
-) -> None:
-    """Have the simulation service create and start the report's new run.
+) -> StartedReportRun:
+    """Have the simulation service start the report's run; return the run it names.
 
-    Send through ``send`` on ``http_client``, and raise the errors the module
-    docstring lists for the service's answers. A connection never made, or a
-    gateway token that cannot be fetched, is
-    SimulationServiceUnavailableError.
+    The run is a new one, or one the request joined. Send through ``send``
+    on ``http_client``, and raise the errors the module docstring lists for
+    the service's answers. A connection never made, or a gateway token that
+    cannot be fetched, is SimulationServiceUnavailableError.
     """
     answer = send_to_simulation_service(
         lambda client, body: send(client, rerun.report_id, body),
@@ -286,6 +299,5 @@ def start_report_rerun(
         submit_again_sentence=READ_BEFORE_RUNNING_AGAIN,
     )
     if answer.status_code in CREATED_STATUSES:
-        _require_started(answer, rerun.report_id)
-        return
+        return _require_started(answer, rerun.report_id)
     _raise_for_refusal(answer, rerun.report_id)

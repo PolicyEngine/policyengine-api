@@ -140,8 +140,11 @@ def test_a_budget_window_the_service_failed_answers_503_with_its_id() -> None:
 
 def test_a_created_budget_window_that_cannot_be_read_back_answers_502() -> None:
     report_id = uuid4()
+    window_run_id = uuid4()
     service = FakeReportService(
-        error=CreatedReportUnreadableError(report_id=report_id, country_id="us")
+        error=CreatedReportUnreadableError(
+            report_id=report_id, run_id=window_run_id, country_id="us"
+        )
     )
 
     response = report_route_client(reports=service).post(
@@ -150,6 +153,7 @@ def test_a_created_budget_window_that_cannot_be_read_back_answers_502() -> None:
 
     assert response.status_code == 502
     assert response.json()["report_id"] == str(report_id)
+    assert response.json()["run_id"] == str(window_run_id)
 
 
 def test_the_openapi_document_tells_the_report_bodies_apart_by_kind() -> None:

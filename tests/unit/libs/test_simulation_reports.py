@@ -185,11 +185,11 @@ def test_a_report_is_posted_and_the_created_report_returned() -> None:
     (request,) = service.requests
     assert request.method == "POST"
     assert str(request.url) == f"{SIMULATION_URL}{REPORTS_PATH}"
+    # A report's name and description belong to users' saved reports, so
+    # neither is sent: the simulation service stores none.
     assert service.sent_body() == {
         "country": "us",
         "report_type": "economy",
-        "label": "Expanded child tax credit",
-        "description": None,
         "year": 2026,
         "region_code": "state/ca",
         "dataset_name": None,
@@ -215,7 +215,7 @@ def test_a_report_sends_its_options_and_spm_settings_only_when_given() -> None:
     body = service.sent_body()
     assert body["include_cliffs"] is True
     assert body["dataset_name"] == "enhanced_cps_2024"
-    assert body["description"] == "Doubles the credit"
+    assert "description" not in body
     assert body["reform"] == {
         "policy_id": str(POLICY_ID),
         "dynamic_id": str(DYNAMIC_ID),

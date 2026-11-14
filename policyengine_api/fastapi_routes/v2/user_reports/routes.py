@@ -145,7 +145,10 @@ def build_v2_user_report_router(
             "budget window as budget_window_years, or null for a report without "
             "a window of two or more years; otherwise it is refused with 400. An "
             "optional user_policy_id must name the same user's saved policy in "
-            "the same country."
+            "the same country. A saved report naming a detailed-save report "
+            "answers last_run_at as the owner's newest request for one of that "
+            "report's runs through /v2/reports, or null, whatever the request "
+            "sends; one naming only a v1 report output keeps the value sent."
         ),
     )
     def create_user_report(
@@ -203,6 +206,12 @@ def build_v2_user_report_router(
         response_model=UserReportDetailResponse,
         responses=SAVED_REPORT_WRITE_RESPONSES,
         summary="Update or repoint one of the current user's saved reports",
+        description=(
+            "Updates the fields sent. A saved report that names a detailed-save "
+            "report after the update, and whose report_id or last_run_at the "
+            "request sends, answers last_run_at as the owner's newest request for "
+            "one of that report's runs through /v2/reports, or null."
+        ),
     )
     def patch_user_report_route(
         association_id: UUID,

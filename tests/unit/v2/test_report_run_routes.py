@@ -323,7 +323,9 @@ def test_a_report_the_service_will_not_run_again_now_answers_409(
 
 def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> None:
     service = FakeReportRunService(
-        error=RerunReportUnreadableError(report_id=REPORT_ID, country_id="us")
+        error=RerunReportUnreadableError(
+            report_id=REPORT_ID, run_id=NEW_RUN_ID, country_id="us"
+        )
     )
 
     response = report_route_client(reports=service).post(RUNS_PATH, json={})
@@ -332,11 +334,13 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> 
     assert response.json() == {
         "status": "error",
         "message": (
-            f"The simulation service started a new run of report {REPORT_ID}, "
+            f"The simulation service started a run of report {REPORT_ID}, "
             "but the report could not be read back. Read it with GET "
-            f"/v2/reports/{REPORT_ID}?country_id=us rather than running it again."
+            f"/v2/reports/{REPORT_ID}?country_id=us&run_id={NEW_RUN_ID} "
+            "rather than running it again."
         ),
         "report_id": str(REPORT_ID),
+        "run_id": str(NEW_RUN_ID),
     }
 
 

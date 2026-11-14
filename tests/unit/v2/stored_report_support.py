@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         V2StoredReportResourceService,
         V2StoredSimulationResourceService,
     )
+    from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
@@ -150,24 +151,47 @@ class FakeReportService:
     listed: tuple[ReportSummaryRead, ...] = ()
     error: Exception | None = None
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    # The user each create or re-run named, None for a request naming none.
+    requesters: list[AccountPrincipal | None] = field(default_factory=list)
 
     def _answer(self, name: str, **arguments: Any) -> None:
         self.calls.append((name, arguments))
         if self.error is not None:
             raise self.error
 
-    def get_report(self, *, country_id: str, report_id: UUID) -> ReportRead:
-        self._answer("get_report", country_id=country_id, report_id=report_id)
+    def get_report(
+        self,
+        *,
+        country_id: str,
+        report_id: UUID,
+        run_id: UUID | None = None,
+        requester: AccountPrincipal | None = None,
+    ) -> ReportRead:
+        self.requesters.append(requester)
+        self._answer(
+            "get_report", country_id=country_id, report_id=report_id, run_id=run_id
+        )
         return self.report
 
     def list_reports(
-        self, *, country_id: str, report_ids: Sequence[UUID]
+        self,
+        *,
+        country_id: str,
+        report_ids: Sequence[UUID],
+        requester: AccountPrincipal | None = None,
     ) -> tuple[ReportSummaryRead, ...]:
+        self.requesters.append(requester)
         self._answer("list_reports", country_id=country_id, report_ids=report_ids)
         return self.listed
 
-    def create_report(self, report_input: EconomyReportCreationInput) -> ReportRead:
+    def create_report(
+        self,
+        report_input: EconomyReportCreationInput,
+        *,
+        requester: AccountPrincipal | None = None,
+    ) -> ReportRead:
         self._answer("create_report", report_input=report_input)
+        self.requesters.append(requester)
         return self.report
 
 

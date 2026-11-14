@@ -20,6 +20,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceInternalError,
     SimulationServiceInvalidRequestError,
     SimulationServiceUnavailableError,
+    StartedReportRun,
 )
 
 SIMULATION_URL = "https://simulation.example.test"
@@ -40,6 +41,7 @@ NEW_RUN_ID = UUID("00000000-0000-0000-0000-00000000d003")
 RUNNING_RUN_ID = UUID("00000000-0000-0000-0000-00000000d004")
 POLICY_ID = UUID("00000000-0000-0000-0000-00000000d005")
 SIMULATION_ID = UUID("00000000-0000-0000-0000-00000000d006")
+WINDOW_RUN_ID = UUID("00000000-0000-0000-0000-00000000d00b")
 # What the simulation service answers once it has started the report's new run.
 RERUN_STARTED = {
     "report_id": str(REPORT_ID),
@@ -101,11 +103,11 @@ class ScriptedService:
             return httpx.Response(self.status_code, content=self.body)
         return httpx.Response(self.status_code, json=self.body)
 
-    def rerun(self, **changes: Any) -> None:
+    def rerun(self, **changes: Any) -> StartedReportRun:
         client = SimulationServiceReportClient.from_environment(
             transport=httpx.MockTransport(self.answer)
         )
-        client.rerun_report(rerun_input(**changes))
+        return client.rerun_report(rerun_input(**changes))
 
 
 def possibly_started_message(status_and_code: str) -> str:
@@ -133,7 +135,8 @@ def test_a_rerun_posts_force_to_the_reports_runs_route(
 @pytest.mark.parametrize("status_code", [201, 202])
 def test_a_started_rerun_naming_the_report_is_accepted(status_code: int) -> None:
     service = ScriptedService(
-        status_code=status_code, body={"report_id": str(REPORT_ID)}
+        status_code=status_code,
+        body={"report_id": str(REPORT_ID), "report_run_id": str(NEW_RUN_ID)},
     )
 
     service.rerun()
@@ -141,14 +144,37 @@ def test_a_started_rerun_naming_the_report_is_accepted(status_code: int) -> None
     assert len(service.requests) == 1
 
 
+def test_a_started_rerun_answers_the_run_it_names_created_or_joined() -> None:
+    started = ScriptedService(body={**RERUN_STARTED, "status": "succeeded"}).rerun()
+
+    assert started == StartedReportRun(report_run_id=NEW_RUN_ID)
+
+
+def test_a_started_budget_window_rerun_answers_its_window_run() -> None:
+    window_started = {
+        "report_id": str(REPORT_ID),
+        "report_run_id": str(NEW_RUN_ID),
+        "budget_window_run_id": str(WINDOW_RUN_ID),
+        "status": "pending",
+        "years": [],
+    }
+
+    started = ScriptedService(body=window_started).rerun(kind="budget_window")
+
+    assert started == StartedReportRun(
+        report_run_id=NEW_RUN_ID, budget_window_run_id=WINDOW_RUN_ID
+    )
+
+
 @pytest.mark.parametrize(
     "body",
     [
         {**RERUN_STARTED, "report_id": str(OTHER_REPORT_ID)},
         {"report_run_id": str(NEW_RUN_ID)},
+        {"report_id": str(REPORT_ID)},
         b"not json",
     ],
-    ids=["another-report", "no-report", "not-json"],
+    ids=["another-report", "no-report", "no-run", "not-json"],
 )
 def test_a_started_answer_that_cannot_be_read_may_have_started_a_run(
     body: object,

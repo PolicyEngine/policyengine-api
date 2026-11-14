@@ -327,11 +327,8 @@ def test_a_succeeded_household_report_reads_both_calculated_households(
     # A household report has no region or dataset.
     assert not hasattr(report, "region_code")
     assert not hasattr(report, "dataset_name")
-    assert (report.label, report.description, report.year) == (
-        "My household under the reform",
-        "Doubles the credit",
-        2026,
-    )
+    # A label is the requesting user's saved report's; this read names no user.
+    assert (report.label, report.description, report.year) == (None, None, 2026)
     assert report.options == {}
     assert report.baseline_simulation is not None
     assert report.baseline_simulation.id == stored.baseline_simulation_id
