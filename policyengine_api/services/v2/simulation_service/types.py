@@ -49,11 +49,10 @@ SimulationYear = Annotated[int, Field(ge=1900, le=2200, description="The year")]
 CatalogKey = Annotated[str, Field(min_length=1, max_length=255, pattern=r"^\S+$")]
 ReportLabel = Annotated[str, Field(min_length=1, max_length=255)]
 ReportDescription = Annotated[str, Field(max_length=10_000)]
-# A report's name and description are each user's saved report's, so a
-# create's are checked when sent but stored nowhere.
-UNSTORED_NAME = (
-    "Optional and stored nowhere: a report's name and description are each "
-    "user's saved report's (/v2/user-reports)."
+# A create's label and description are checked when sent, then dropped.
+UNSTORED_FIELD_DESCRIPTION = (
+    "Optional, and stored nowhere: a report's label and description are the "
+    "name and description of each user's saved report (/v2/user-reports)."
 )
 WindowFirstYear = Annotated[
     int, Field(ge=1900, le=LAST_YEAR, description="The window's first year")
@@ -211,8 +210,8 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
 class ReportDefinitionFields(StrictSubmissionModel):
     """What every report names: a baseline and a reform simulation.
 
-    ``label`` and ``description`` are optional and unused: a report's name
-    and description are each user's saved report's, so nothing stores them.
+    ``label`` and ``description`` are optional and stored nowhere (see
+    ``UNSTORED_FIELD_DESCRIPTION``).
 
     Both simulations use the report's year (a budget window's first year;
     each later year gets simulations of its own), region and dataset, as
@@ -223,9 +222,11 @@ class ReportDefinitionFields(StrictSubmissionModel):
     """
 
     kind: Literal["economy", "budget_window"]
-    label: ReportLabel | None = Field(default=None, description=UNSTORED_NAME)
+    label: ReportLabel | None = Field(
+        default=None, description=UNSTORED_FIELD_DESCRIPTION
+    )
     description: ReportDescription | None = Field(
-        default=None, description=UNSTORED_NAME
+        default=None, description=UNSTORED_FIELD_DESCRIPTION
     )
     year: SimulationYear
     region_code: CatalogKey
@@ -286,9 +287,11 @@ class HouseholdReportFields(StrictSubmissionModel):
     """
 
     kind: Literal["household"]
-    label: ReportLabel | None = Field(default=None, description=UNSTORED_NAME)
+    label: ReportLabel | None = Field(
+        default=None, description=UNSTORED_FIELD_DESCRIPTION
+    )
     description: ReportDescription | None = Field(
-        default=None, description=UNSTORED_NAME
+        default=None, description=UNSTORED_FIELD_DESCRIPTION
     )
     household_id: ResourceId
     baseline: HouseholdPolicyChoice

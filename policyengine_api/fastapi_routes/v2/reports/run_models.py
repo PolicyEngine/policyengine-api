@@ -133,13 +133,14 @@ class ReportRerunConflictResponse(V2ErrorResponse):
 
 
 class RerunReportUnreadableResponse(V2ErrorResponse):
-    """The 502 answer when the report cannot be read back after its run started.
+    """The 502 answer when the run a re-run started cannot be answered.
 
-    The simulation service started the run ``run_id``, so the caller reads
-    the report with ``GET /v2/reports/{report_id}?run_id={run_id}`` rather
-    than running it again. ``run_id`` is null when a budget window's answer
-    named no window run; the caller then finds the run in ``GET
-    /v2/reports/{report_id}/runs``.
+    Either the report cannot be read back with the run ``run_id``, which the
+    caller then reads with ``GET /v2/reports/{report_id}?run_id={run_id}``,
+    or a budget window's answer named no budget-window run, when ``run_id``
+    is null and the caller finds the run in ``GET
+    /v2/reports/{report_id}/runs``. Either way the run exists, so the caller
+    doesn't run the report again.
     """
 
     report_id: UUID
@@ -198,9 +199,10 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "run is pending or running, running it again answers 409. Or it "
             "started the run, but the report cannot be read back: the answer "
             "gives its report_id and run_id, to read with GET "
-            "/v2/reports/{report_id}?run_id={run_id}; run_id is null when a "
-            "budget window's answer named no window run, and the message then "
-            "points to GET /v2/reports/{report_id}/runs."
+            "/v2/reports/{report_id}?run_id={run_id}. Or it started a budget "
+            "window's run, but its answer named no budget-window run: run_id "
+            "is null, and the message points to GET "
+            "/v2/reports/{report_id}/runs."
         ),
     },
     503: {

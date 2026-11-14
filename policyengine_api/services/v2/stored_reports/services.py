@@ -646,8 +646,8 @@ class V2StoredReportService:
         (see ``SimulationSubmissionService.rerun_report``),
         ReportRunNotRecordedError when the request could not be recorded, and
         RerunReportUnreadableError, caused by the read's own error, when the
-        report cannot be read back once its run was started, or when a budget
-        window's answer names no budget-window run.
+        report cannot be read back once its run was started, or without a
+        cause when a budget window's answer names no budget-window run.
         """
         submissions = self._configured_submissions()
         requested_at = utc_now()

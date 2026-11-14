@@ -113,12 +113,13 @@ class ReportRunNotRecordedError(RuntimeError):
 
 
 class RerunReportUnreadableError(RuntimeError):
-    """The simulation service started the report's new run, but it could not be read.
+    """The simulation service started the report's run, but it can't be answered.
 
-    The run exists, so the caller reads the report rather than running it
-    again. ``report_id``, ``run_id`` (the run the answer named, or None when
-    a budget window's answer named no window run) and ``country_id`` say
-    where to read it; the error's cause says why reading it back failed.
+    Either the report could not be read back with the run the answer named
+    (``run_id``), and the error's cause says why, or a budget window's answer
+    named no budget-window run (``run_id`` None, and no cause). The run
+    exists, so the caller reads the report rather than running it again;
+    ``report_id`` and ``country_id`` say where.
     """
 
     def __init__(
