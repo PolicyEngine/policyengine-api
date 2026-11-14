@@ -144,7 +144,7 @@ def test_a_window_rerun_whose_answer_named_no_window_run_answers_a_null_run() ->
     assert response.status_code == 502
     body = response.json()
     assert body["run_id"] is None
-    assert f"/v2/reports/{REPORT_ID}?country_id=us rather" in body["message"]
+    assert f"/v2/reports/{REPORT_ID}/runs?country_id=us" in body["message"]
 
 
 def test_openapi_documents_the_reruns_nullable_run_and_the_reads_403() -> None:

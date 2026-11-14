@@ -165,3 +165,40 @@ def test_a_budget_window_rerun_records_each_year_of_the_window_run_it_joined(
     assert {record.report_run_id for record in records} == set(joined.year_run_ids)
     assert not {record.report_run_id for record in records} & set(newer.year_run_ids)
     assert {record.trigger for record in records} == {"manual"}
+
+
+def test_a_window_rerun_whose_answer_names_no_window_run_points_to_the_run_list(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browser_id: UUID,
+) -> None:
+    with owner_engine.begin() as connection:
+        window = store_window(
+            connection,
+            catalog,
+            years=WINDOW_YEARS,
+            settings=RunSettings(versions=CURRENT_VERSIONS, status="pending"),
+        )
+    # An answer naming the first year's report run but no budget-window run.
+    simulation_service = JoiningSimulationService(
+        owner_engine,
+        catalog,
+        joined_run=JoinedRun(
+            report_id=window.report.report_id, report_run_id=window.year_run_ids[0]
+        ),
+    )
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{window.report.report_id}/runs?country_id=us",
+        json={},
+        headers=as_browser(browser_id),
+    )
+
+    assert response.status_code == 502, response.text
+    body = response.json()
+    assert body["run_id"] is None
+    assert (
+        f"/v2/reports/{window.report.report_id}/runs?country_id=us" in body["message"]
+    )
+    assert stored_records(owner_engine, [browser_id]) == []
