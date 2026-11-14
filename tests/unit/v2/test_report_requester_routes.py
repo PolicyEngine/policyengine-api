@@ -145,6 +145,8 @@ def test_a_window_rerun_whose_answer_named_no_window_run_answers_a_null_run() ->
     body = response.json()
     assert body["run_id"] is None
     assert f"/v2/reports/{REPORT_ID}/runs?country_id=us" in body["message"]
+    # Nothing was read back: the answer named no window run to read.
+    assert "named no budget-window run" in body["message"]
 
 
 def test_openapi_documents_the_reruns_nullable_run_and_the_reads_403() -> None:
@@ -163,13 +165,25 @@ def test_openapi_documents_the_reruns_nullable_run_and_the_reads_403() -> None:
         assert "403" in document["paths"][path]["get"]["responses"], path
 
 
+HOUSEHOLD_REPORT_BODY = {
+    "country_id": "us",
+    "kind": "household",
+    "household_id": str(uuid4()),
+    "baseline": {},
+    "reform": None,
+}
+BUDGET_WINDOW_BODY = {**REPORT_BODY, "kind": "budget_window", "budget_window_size": 3}
+
+
 @pytest.mark.parametrize(
     "unnamed_body",
     [
         {key: value for key, value in REPORT_BODY.items() if key != "label"},
         {**REPORT_BODY, "label": None, "description": None},
+        HOUSEHOLD_REPORT_BODY,
+        {key: value for key, value in BUDGET_WINDOW_BODY.items() if key != "label"},
     ],
-    ids=["omitted", "null"],
+    ids=["economy-omitted", "economy-null", "household-omitted", "window-omitted"],
 )
 def test_a_report_is_created_without_a_label_or_description(
     unnamed_body: dict[str, object],
@@ -184,3 +198,25 @@ def test_a_report_is_created_without_a_label_or_description(
     ((_, arguments),) = service.calls
     assert arguments["report_input"].label is None
     assert arguments["report_input"].description is None
+
+
+@pytest.mark.parametrize(
+    "schema_name",
+    [
+        "EconomyReportCreateRequest",
+        "HouseholdReportCreateRequest",
+        "BudgetWindowReportCreateRequest",
+    ],
+)
+def test_openapi_says_a_creates_label_and_description_are_stored_nowhere(
+    schema_name: str,
+) -> None:
+    schemas = (
+        report_route_client(reports=FakeReportRunService())
+        .get("/v2/openapi.json")
+        .json()["components"]["schemas"]
+    )
+
+    properties = schemas[schema_name]["properties"]
+    for field_name in ("label", "description"):
+        assert "stored nowhere" in properties[field_name]["description"], field_name
