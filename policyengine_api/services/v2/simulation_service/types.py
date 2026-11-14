@@ -49,6 +49,12 @@ SimulationYear = Annotated[int, Field(ge=1900, le=2200, description="The year")]
 CatalogKey = Annotated[str, Field(min_length=1, max_length=255, pattern=r"^\S+$")]
 ReportLabel = Annotated[str, Field(min_length=1, max_length=255)]
 ReportDescription = Annotated[str, Field(max_length=10_000)]
+# A report's name and description are each user's saved report's, so a
+# create's are checked when sent but stored nowhere.
+UNSTORED_NAME = (
+    "Optional and stored nowhere: a report's name and description are each "
+    "user's saved report's (/v2/user-reports)."
+)
 WindowFirstYear = Annotated[
     int, Field(ge=1900, le=LAST_YEAR, description="The window's first year")
 ]
@@ -217,8 +223,10 @@ class ReportDefinitionFields(StrictSubmissionModel):
     """
 
     kind: Literal["economy", "budget_window"]
-    label: ReportLabel | None = None
-    description: ReportDescription | None = None
+    label: ReportLabel | None = Field(default=None, description=UNSTORED_NAME)
+    description: ReportDescription | None = Field(
+        default=None, description=UNSTORED_NAME
+    )
     year: SimulationYear
     region_code: CatalogKey
     dataset_name: CatalogKey | None = None
@@ -272,13 +280,16 @@ class HouseholdReportFields(StrictSubmissionModel):
     simulation calculates every yearly, monthly and eternal variable the
     household lacks, as ``/calculate-full`` does, so the report gives every
     value; there is no option to fill in only the values the household asks
-    for, as ``/v2/household-calculations`` has.
+    for, as ``/v2/household-calculations`` has. ``label`` and
+    ``description`` are optional and stored nowhere, as for an economy
+    report.
     """
 
     kind: Literal["household"]
-    # Optional and unused, as for an economy report.
-    label: ReportLabel | None = None
-    description: ReportDescription | None = None
+    label: ReportLabel | None = Field(default=None, description=UNSTORED_NAME)
+    description: ReportDescription | None = Field(
+        default=None, description=UNSTORED_NAME
+    )
     household_id: ResourceId
     baseline: HouseholdPolicyChoice
     reform: HouseholdPolicyChoice | None = None

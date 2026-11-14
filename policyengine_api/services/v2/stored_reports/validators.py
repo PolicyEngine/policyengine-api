@@ -125,9 +125,14 @@ class RerunReportUnreadableError(RuntimeError):
         self, *, report_id: UUID, run_id: UUID | None, country_id: str
     ) -> None:
         """Name the report, its run and its country."""
+        failure = (
+            "its answer named no budget-window run"
+            if run_id is None
+            else "the report could not be read back"
+        )
         super().__init__(
             f"The simulation service started a run of report {report_id} in "
-            f"country {country_id!r}, but the report could not be read back"
+            f"country {country_id!r}, but {failure}"
         )
         self.report_id = report_id
         self.run_id = run_id

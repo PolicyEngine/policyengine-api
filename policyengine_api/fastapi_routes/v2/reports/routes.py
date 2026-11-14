@@ -189,17 +189,15 @@ def _rerun_unreadable_message(error: RerunReportUnreadableError) -> str:
     A budget window's answer that named no window run names no run to read,
     so the message points to the report's run list.
     """
-    started = (
-        f"The simulation service started a run of report {error.report_id}, "
-        "but the report could not be read back."
-    )
+    started = f"The simulation service started a run of report {error.report_id}"
     if error.run_id is None:
         return (
-            f"{started} Find the run with GET /v2/reports/{error.report_id}/runs"
-            f"?country_id={error.country_id} rather than running it again."
+            f"{started}, but its answer named no budget-window run. Find the run "
+            f"with GET /v2/reports/{error.report_id}/runs?country_id="
+            f"{error.country_id} rather than running it again."
         )
     return (
-        f"{started} Read it with GET "
+        f"{started}, but the report could not be read back. Read it with GET "
         f"{_read_path(error.report_id, error.country_id, error.run_id)} rather "
         "than running it again."
     )
@@ -248,9 +246,9 @@ def _create_report(
     ``report_id`` and ``run_id`` when it cannot be read back, and 503 with
     its ``report_id`` when the service failed its run; one whose request
     could not be recorded for its user answers 503 with its ``report_id``
-    and ``run_id``. A requester's
-    unauthenticated credential naming a signed-in user answers 401. Every
-    other failure is raised, for the route's error mappings to answer.
+    and ``run_id``. A requester's unauthenticated credential naming a
+    signed-in user answers 401. Every other failure is raised, for the
+    route's error mappings to answer.
     """
     try:
         report = service.create_report(body, requester=requester)
@@ -357,8 +355,8 @@ def _add_report_run_routes(
             "simulation service finds runs by key. Every earlier run is kept. "
             "Only an admin user may send force (401 without a user credential, "
             "403 below admin, before anything is asked). Without force, each "
-            "side reuses a "
-            "run of its own simulation that succeeded on those versions; with "
+            "side reuses a run of its own simulation that succeeded on those "
+            "versions; with "
             "force, both simulations are calculated again. A household report's "
             "sides are always calculated again, so force changes nothing for it. "
             "A budget window's new "
