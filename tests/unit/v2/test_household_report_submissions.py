@@ -338,8 +338,8 @@ def test_a_household_report_outside_its_schema_is_refused(
         household_report_input(**changes)
 
 
-@pytest.mark.parametrize("missing", ["label", "household_id", "baseline"])
-def test_a_household_report_needs_its_label_household_and_baseline(
+@pytest.mark.parametrize("missing", ["household_id", "baseline"])
+def test_a_household_report_needs_its_household_and_baseline(
     missing: str,
 ) -> None:
     values: dict[str, Any] = {

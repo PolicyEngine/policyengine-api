@@ -139,7 +139,8 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
 @pytest.mark.parametrize(
     "body",
     [
-        {key: value for key, value in report_body().items() if key != "label"},
+        # A label is optional and unused, but one that is sent is checked.
+        report_body(label=""),
         report_body(kind="household"),
         report_body(year=2201),
         report_body(region_code="two words"),
@@ -149,7 +150,7 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
         report_body(reform={"policy_id": "not-a-uuid"}),
     ],
     ids=[
-        "no-label",
+        "empty-label",
         "household-kind",
         "year-too-late",
         "region-with-space",

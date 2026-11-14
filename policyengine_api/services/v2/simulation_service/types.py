@@ -203,7 +203,10 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
 
 
 class ReportDefinitionFields(StrictSubmissionModel):
-    """What every report names: a label, and a baseline and a reform simulation.
+    """What every report names: a baseline and a reform simulation.
+
+    ``label`` and ``description`` are optional and unused: a report's name
+    and description are each user's saved report's, so nothing stores them.
 
     Both simulations use the report's year (a budget window's first year;
     each later year gets simulations of its own), region and dataset, as
@@ -214,7 +217,7 @@ class ReportDefinitionFields(StrictSubmissionModel):
     """
 
     kind: Literal["economy", "budget_window"]
-    label: ReportLabel
+    label: ReportLabel | None = None
     description: ReportDescription | None = None
     year: SimulationYear
     region_code: CatalogKey
@@ -273,7 +276,8 @@ class HouseholdReportFields(StrictSubmissionModel):
     """
 
     kind: Literal["household"]
-    label: ReportLabel
+    # Optional and unused, as for an economy report.
+    label: ReportLabel | None = None
     description: ReportDescription | None = None
     household_id: ResourceId
     baseline: HouseholdPolicyChoice
