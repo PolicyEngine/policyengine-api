@@ -138,7 +138,8 @@ class RerunReportUnreadableResponse(V2ErrorResponse):
     The simulation service started the run ``run_id``, so the caller reads
     the report with ``GET /v2/reports/{report_id}?run_id={run_id}`` rather
     than running it again. ``run_id`` is null when a budget window's answer
-    named no window run.
+    named no window run; the caller then finds the run in ``GET
+    /v2/reports/{report_id}/runs``.
     """
 
     report_id: UUID
@@ -196,9 +197,10 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "see whether it has a new run before running it again; while that "
             "run is pending or running, running it again answers 409. Or it "
             "started the run, but the report cannot be read back: the answer "
-            "gives its report_id and run_id (null when a budget window's "
-            "answer named no window run), to read with GET "
-            "/v2/reports/{report_id}?run_id={run_id}."
+            "gives its report_id and run_id, to read with GET "
+            "/v2/reports/{report_id}?run_id={run_id}; run_id is null when a "
+            "budget window's answer named no window run, and the message then "
+            "points to GET /v2/reports/{report_id}/runs."
         ),
     },
     503: {

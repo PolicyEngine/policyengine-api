@@ -178,10 +178,31 @@ def _report_operation(
     )
 
 
-def _read_path(report_id: UUID, country_id: str, run_id: UUID | None) -> str:
-    """Return the path that reads the report, with its run when one is named."""
-    path = f"/v2/reports/{report_id}?country_id={country_id}"
-    return path if run_id is None else f"{path}&run_id={run_id}"
+def _read_path(report_id: UUID, country_id: str, run_id: UUID) -> str:
+    """Return the path that reads the report with its run ``run_id``."""
+    return f"/v2/reports/{report_id}?country_id={country_id}&run_id={run_id}"
+
+
+def _rerun_unreadable_message(error: RerunReportUnreadableError) -> str:
+    """Say where to read the run a re-run started, or its report's runs.
+
+    A budget window's answer that named no window run names no run to read,
+    so the message points to the report's run list.
+    """
+    started = (
+        f"The simulation service started a run of report {error.report_id}, "
+        "but the report could not be read back."
+    )
+    if error.run_id is None:
+        return (
+            f"{started} Find the run with GET /v2/reports/{error.report_id}/runs"
+            f"?country_id={error.country_id} rather than running it again."
+        )
+    return (
+        f"{started} Read it with GET "
+        f"{_read_path(error.report_id, error.country_id, error.run_id)} rather "
+        "than running it again."
+    )
 
 
 def _requester_refused(
@@ -223,11 +244,11 @@ def _create_report(
 ) -> ReportDetailResponse | JSONResponse:
     """Create the report and answer it as stored.
 
-    A report the simulation service created answers with its ``report_id``
-    (and ``run_id``) when it cannot be read back (502), and with its
-    ``report_id`` when the service failed its run and answered 503; one
-    whose request could not be recorded for its user answers 503 with its
-    ``report_id`` and ``run_id``. A requester's
+    A report the simulation service created answers 502 with its
+    ``report_id`` and ``run_id`` when it cannot be read back, and 503 with
+    its ``report_id`` when the service failed its run; one whose request
+    could not be recorded for its user answers 503 with its ``report_id``
+    and ``run_id``. A requester's
     unauthenticated credential naming a signed-in user answers 401. Every
     other failure is raised, for the route's error mappings to answer.
     """
@@ -276,13 +297,13 @@ def _rerun_report(
     """Run the report again and answer it with the run the request ended on.
 
     The simulation service's refusal to run it again now answers 409 with
-    the run it names, a report that cannot be read back once its run
-    started answers 502 with its ``report_id`` and ``run_id``, and a run whose
-    request
-    could not be recorded for its user answers 503 with its ``report_id``
-    and ``run_id``. A requester's unauthenticated credential naming a
-    signed-in user answers 401. Every other failure is raised, for the
-    route's error mappings to answer.
+    the run it names; a report that cannot be read back once its run started
+    answers 502 with its ``report_id`` and ``run_id`` (null, pointing to the
+    report's run list, when a budget window's answer named no window run);
+    and a run whose request could not be recorded for its user answers 503
+    with its ``report_id`` and ``run_id``. A requester's unauthenticated
+    credential naming a signed-in user answers 401. Every other failure is
+    raised, for the route's error mappings to answer.
     """
     try:
         report = service.rerun_report(
@@ -303,13 +324,7 @@ def _rerun_report(
             "v2_rerun_report_unreadable",
             error,
             RerunReportUnreadableResponse(
-                message=(
-                    "The simulation service started a run of report "
-                    f"{error.report_id}, but the report could not be read back. "
-                    "Read it with GET "
-                    f"{_read_path(error.report_id, error.country_id, error.run_id)} "
-                    "rather than running it again."
-                ),
+                message=_rerun_unreadable_message(error),
                 report_id=error.report_id,
                 run_id=error.run_id,
             ),
@@ -441,11 +456,10 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "unauthenticated-user header of a signed-out browser), the request is "
             "recorded for that user, naming the run it ended on (trigger "
             "initial), or each year's report run of a budget window's run; "
-            "without one, nothing is recorded. A created report "
-            "that cannot be read back answers 502 with its report_id and run_id, "
-            "and one "
-            "whose run the simulation service failed before answering 503 "
-            "answers 503 with its report_id."
+            "without one, nothing is recorded. A created report that cannot be "
+            "read back answers 502 with its report_id and run_id, and one whose "
+            "run the simulation service failed before answering 503 answers "
+            "503 with its report_id."
         ),
     )
     def create_report(

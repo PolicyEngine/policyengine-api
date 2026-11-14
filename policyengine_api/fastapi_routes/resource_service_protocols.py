@@ -283,7 +283,9 @@ class V2StoredReportResourceService(Protocol):
         ``SimulationServiceConflictError`` when it will not run the report
         again now, ``ReportRunNotRecordedError`` when the request could not be
         recorded, and ``RerunReportUnreadableError`` when the report cannot
-        be read back once its run was started.
+        be read back once its run was started, or when a budget window's
+        answer names no window run (its ``run_id`` is then None, and nothing
+        is recorded).
         """
         ...
 
