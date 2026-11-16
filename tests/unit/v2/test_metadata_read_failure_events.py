@@ -6,25 +6,41 @@ from the request it is serving, then the response status, the caught error's
 class, the class of each error in its ``__cause__`` chain, the driver's
 SQLSTATE and whether SQLAlchemy found the connection lost. It never records an
 error's message, which can carry the SQL statement, its parameters, host
-names, addresses or credentials. These tests read the event the process's real
-runtime writes to standard output.
+names, addresses or credentials. These tests serve the request through a runtime
+configured as the process's is, but writing its records to a list, so they see
+the event exactly as the runtime writes it, request context included.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import pytest
+from policyengine_observability import (
+    CustomLogDestination,
+    LoggingConfig,
+    ObservabilityConfig,
+    configure,
+)
 from sqlalchemy.exc import OperationalError
 
 from policyengine_api import observability
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
+from policyengine_api.observability_identity import (
+    deployment_identity,
+    service_identity,
+)
 from policyengine_api.services.v2.metadata.validators import (
     CatalogValuesPrunedError,
 )
 from tests.fixtures.v2_metadata_routes import ResourceReader, metadata_route_client
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from policyengine_observability import ObservabilityRuntime
 
 ROUTE = "/v2/parameter-values"
 PATH = f"{ROUTE}?country_id=us&limit=1"
@@ -47,10 +63,58 @@ class DriverAdminShutdownError(Exception):
     sqlstate = "57P01"
 
 
+class RecordList:
+    """A runtime destination that keeps every record it is given."""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = []
+
+    def write(self, record: dict[str, Any]) -> None:
+        self.records.append(record)
+
+    def failures(self) -> list[dict[str, Any]]:
+        return [
+            record
+            for record in self.records
+            if record.get("event.name") == FAILURE_EVENT
+        ]
+
+
 class FailingRuntime:
     def event(self, *_arguments: object, **_details: object) -> None:
         msg = "the observability runtime is down"
         raise RuntimeError(msg)
+
+
+@pytest.fixture
+def recorded(monkeypatch) -> Iterator[tuple[RecordList, ObservabilityRuntime]]:
+    """Serve requests through a runtime whose records the test can read."""
+    record_list = RecordList()
+    runtime = configure(
+        ObservabilityConfig.from_env(
+            service=service_identity(),
+            deployment=deployment_identity(),
+            logging=LoggingConfig(
+                destinations=(
+                    CustomLogDestination(
+                        name="test-records",
+                        writer_factory=lambda: record_list,
+                        delivery="inline",
+                    ),
+                ),
+            ),
+        )
+    )
+    monkeypatch.setattr(observability, "get_runtime", lambda: runtime)
+    try:
+        yield record_list, runtime
+    finally:
+        runtime.shutdown()
+
+
+def _get(reader: ResourceReader, runtime: ObservabilityRuntime):
+    client = metadata_route_client(lambda: reader, observability_runtime=runtime)
+    return client.get(PATH)
 
 
 def _qualified_name(error_class: type[BaseException]) -> str:
@@ -79,27 +143,14 @@ def _caused_by(error: BaseException, cause: BaseException) -> BaseException:
     return error
 
 
-def _failure_records(standard_output: str) -> list[dict[str, Any]]:
-    """Return the failure events among the runtime's JSON records."""
-    records = []
-    for printed_line in standard_output.splitlines():
-        try:
-            record = json.loads(printed_line)
-        except ValueError:
-            continue
-        if isinstance(record, dict) and record.get("event.name") == FAILURE_EVENT:
-            records.append(record)
-    return records
-
-
 def _assert_nothing_sensitive(record: dict[str, Any]) -> None:
-    recorded = json.dumps(record)
+    written = repr(record)
     for text in SENSITIVE_TEXT:
-        assert text not in recorded
+        assert text not in written
 
 
 def test_a_lost_connection_answers_the_same_503_and_records_its_cause(
-    capsys,
+    recorded,
 ) -> None:
     error = _caused_by(
         MetadataCatalogUnavailableError(f"catalog read failed: {STATEMENT}"),
@@ -107,8 +158,10 @@ def test_a_lost_connection_answers_the_same_503_and_records_its_cause(
     )
     reader = ResourceReader({"list_parameter_values": None}, error=error)
 
-    response = metadata_route_client(lambda: reader).get(PATH)
-    [record] = _failure_records(capsys.readouterr().out)
+    record_list, runtime = recorded
+
+    response = _get(reader, runtime)
+    [record] = record_list.failures()
 
     assert response.status_code == 503
     assert response.json() == {
@@ -132,13 +185,15 @@ def test_a_lost_connection_answers_the_same_503_and_records_its_cause(
 
 
 def test_an_unexpected_failure_answers_the_same_500_and_records_its_cause(
-    capsys,
+    recorded,
 ) -> None:
     error = _caused_by(RuntimeError(f"failed on {STATEMENT}"), _lost_connection())
     reader = ResourceReader({"list_parameter_values": None}, error=error)
 
-    response = metadata_route_client(lambda: reader).get(PATH)
-    [record] = _failure_records(capsys.readouterr().out)
+    record_list, runtime = recorded
+
+    response = _get(reader, runtime)
+    [record] = record_list.failures()
 
     assert response.status_code == 500
     assert response.json() == {"status": "error", "message": "V2 metadata query failed"}
@@ -156,14 +211,18 @@ def test_an_unexpected_failure_answers_the_same_500_and_records_its_cause(
     _assert_nothing_sensitive(record)
 
 
-def test_a_failure_without_a_database_cause_records_only_its_class(capsys) -> None:
+def test_a_failure_without_a_database_cause_records_only_its_class(
+    recorded,
+) -> None:
     reader = ResourceReader(
         {"list_parameter_values": None},
         error=MetadataCatalogUnavailableError("catalog connection refused"),
     )
 
-    response = metadata_route_client(lambda: reader).get(PATH)
-    [record] = _failure_records(capsys.readouterr().out)
+    record_list, runtime = recorded
+
+    response = _get(reader, runtime)
+    [record] = record_list.failures()
 
     assert response.status_code == 503
     assert record["attributes"] == {
@@ -172,16 +231,18 @@ def test_a_failure_without_a_database_cause_records_only_its_class(capsys) -> No
     }
 
 
-def test_a_pruned_version_answer_records_no_failure(capsys) -> None:
+def test_a_pruned_version_answer_records_no_failure(recorded) -> None:
     reader = ResourceReader(
         {"list_parameter_values": None},
         error=CatalogValuesPrunedError("pruned", running_version=True),
     )
 
-    response = metadata_route_client(lambda: reader).get(PATH)
+    record_list, runtime = recorded
+
+    response = _get(reader, runtime)
 
     assert response.status_code == 503
-    assert _failure_records(capsys.readouterr().out) == []
+    assert record_list.failures() == []
 
 
 def test_a_failing_runtime_leaves_the_503_unchanged(monkeypatch) -> None:

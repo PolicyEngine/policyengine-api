@@ -287,7 +287,9 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
     )
 
 
-def metadata_route_client(factory, *, response_cache=None) -> TestClient:
+def metadata_route_client(
+    factory, *, response_cache=None, observability_runtime=None
+) -> TestClient:
     flask_app = Flask(__name__)
 
     @flask_app.get("/<country_id>/metadata")
@@ -317,6 +319,7 @@ def metadata_route_client(factory, *, response_cache=None) -> TestClient:
             flask_app,
             dependencies=dependencies,
             route_settings=settings,
+            observability_runtime=observability_runtime,
         ),
         raise_server_exceptions=False,
     )
