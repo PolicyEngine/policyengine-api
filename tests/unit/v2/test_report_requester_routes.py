@@ -95,6 +95,30 @@ def test_a_browser_credential_naming_a_signed_in_user_answers_401() -> None:
     assert response.json()["message"] == "Sign in to act on this account"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/v2/reports/{REPORT_ID}?country_id=us",
+        f"/v2/reports?country_id=us&report_id={REPORT_ID}",
+    ],
+    ids=["one report", "report list"],
+)
+def test_a_read_with_a_browser_credential_naming_a_signed_in_user_answers_401(
+    path: str,
+) -> None:
+    service = FakeReportRunService(
+        error=StandardUserRequiresSignInError("Sign in to act on this account")
+    )
+
+    response = report_route_client(reports=service).get(
+        path, headers={UNAUTHENTICATED_USER_HEADER: str(uuid4())}
+    )
+
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert response.json()["message"] == "Sign in to act on this account"
+
+
 def test_a_run_whose_request_was_not_recorded_answers_503_naming_it() -> None:
     not_recorded = ReportRunNotRecordedError(
         report_id=REPORT_ID, run_id=REPORT_RUN_ID, country_id="us"
