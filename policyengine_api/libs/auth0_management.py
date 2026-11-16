@@ -10,9 +10,10 @@ client, and both use the same client code, token cache and secret handling:
   account deletion removes only Public API data and logs that the Auth0
   deletion was skipped. Deployments allow it in production only.
 - ``AUTH0_USER_PROFILES_*``: the admin user routes read users' emails and
-  names from Auth0 only when a client with the ``read:users`` permission is
-  configured; nothing they read is stored. Deployments allow it in staging
-  and production.
+  names from Auth0, invitations are accepted against the invitee's verified
+  email, and type-change emails find the user's address, only when a client
+  with the ``read:users`` permission is configured; nothing they read is
+  stored. Deployments allow it in staging and production.
 
 Each group is all-or-none: a domain, a client ID, and exactly one
 client-secret source (a direct value or a Secret Manager resource, matching
@@ -25,12 +26,10 @@ an error message, an email, a subject, a token or a secret.
 from __future__ import annotations
 
 import math
-import os
-import re
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Protocol
@@ -38,27 +37,55 @@ from urllib.parse import quote
 
 import httpx
 
+from policyengine_api.libs.auth0_management_settings import (
+    AUTH0_MANAGEMENT_CLIENT_ID_ENV,
+    AUTH0_MANAGEMENT_CLIENT_SECRET_ENV,
+    AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV,
+    AUTH0_MANAGEMENT_DOMAIN_ENV,
+    AUTH0_MANAGEMENT_ENV_VARS,
+    AUTH0_MANAGEMENT_SETTING_NAMES,
+    AUTH0_USER_PROFILE_SETTING_NAMES,
+    DOMAIN_PATTERN,
+    SECRET_RESOURCE_PATTERN,
+    Auth0ClientSettingNames,
+    Auth0ManagementConfigurationError,
+    Auth0ManagementSettings,
+    load_auth0_management_settings,
+    load_auth0_user_profile_settings,
+)
 from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
-from policyengine_api.libs.user_auth import PUBLIC_API_AUTH_ISSUER_ENV
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Mapping
 
-AUTH0_MANAGEMENT_DOMAIN_ENV = "AUTH0_MANAGEMENT_DOMAIN"
-AUTH0_MANAGEMENT_CLIENT_ID_ENV = "AUTH0_MANAGEMENT_CLIENT_ID"
-AUTH0_MANAGEMENT_CLIENT_SECRET_ENV = "AUTH0_MANAGEMENT_CLIENT_SECRET"  # noqa: S105  # an environment variable name, not a secret
-AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV = "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE"  # noqa: S105  # an environment variable name, not a secret
-AUTH0_MANAGEMENT_ENV_VARS = (
-    AUTH0_MANAGEMENT_DOMAIN_ENV,
-    AUTH0_MANAGEMENT_CLIENT_ID_ENV,
-    AUTH0_MANAGEMENT_CLIENT_SECRET_ENV,
-    AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV,
-)
-DOMAIN_PATTERN = re.compile(
-    r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
-)
-SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
+# The settings moved to auth0_management_settings; they are still imported
+# from here.
+__all__ = [
+    "AUTH0_MANAGEMENT_CLIENT_ID_ENV",
+    "AUTH0_MANAGEMENT_CLIENT_SECRET_ENV",
+    "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE_ENV",
+    "AUTH0_MANAGEMENT_DOMAIN_ENV",
+    "AUTH0_MANAGEMENT_ENV_VARS",
+    "AUTH0_MANAGEMENT_SETTING_NAMES",
+    "AUTH0_USER_PROFILE_SETTING_NAMES",
+    "DOMAIN_PATTERN",
+    "SECRET_RESOURCE_PATTERN",
+    "Auth0ClientSettingNames",
+    "Auth0ManagementClient",
+    "Auth0ManagementConfigurationError",
+    "Auth0ManagementError",
+    "Auth0ManagementSettings",
+    "Auth0UserIdSearch",
+    "Auth0UserProfile",
+    "Auth0UserProfilesUnavailableError",
+    "UserProfileReader",
+    "build_auth0_user_deleter",
+    "build_auth0_user_profile_reader",
+    "email_search_query",
+    "load_auth0_management_settings",
+    "load_auth0_user_profile_settings",
+]
+
 HTTP_TIMEOUT_SECONDS = 10.0
 TOKEN_REFRESH_MARGIN_SECONDS = 60
 # Every search page is sorted by user ID, so pages don't shift between requests.
@@ -77,49 +104,6 @@ LEADING_WILDCARD_MINIMUM_CHARACTERS = 3
 LUCENE_SPECIAL_CHARACTERS = frozenset('+-&|!(){}[]^"~*?:\\/')
 MAXIMUM_EMAIL_LENGTH = 320
 MAXIMUM_NAME_LENGTH = 255
-
-
-@dataclass(frozen=True)
-class Auth0ClientSettingNames:
-    """The environment variables that configure one Management API client."""
-
-    prefix: str
-    # The configuration error's opening words when the group is incomplete.
-    incomplete_message: str
-
-    @property
-    def domain(self) -> str:
-        """Name the variable that holds the tenant's canonical domain."""
-        return f"{self.prefix}_DOMAIN"
-
-    @property
-    def client_id(self) -> str:
-        """Name the variable that holds the machine-to-machine client's ID."""
-        return f"{self.prefix}_CLIENT_ID"
-
-    @property
-    def client_secret(self) -> str:
-        """Name the variable that holds the client secret itself, for local use."""
-        return f"{self.prefix}_CLIENT_SECRET"
-
-    @property
-    def client_secret_resource(self) -> str:
-        """Name the variable that holds the client secret's Secret Manager version."""
-        return f"{self.prefix}_CLIENT_SECRET_RESOURCE"
-
-
-AUTH0_MANAGEMENT_SETTING_NAMES = Auth0ClientSettingNames(
-    prefix="AUTH0_MANAGEMENT",
-    incomplete_message="Auth0 Management API deletion is partially configured",
-)
-AUTH0_USER_PROFILE_SETTING_NAMES = Auth0ClientSettingNames(
-    prefix="AUTH0_USER_PROFILES",
-    incomplete_message="Auth0 user profile reads are partially configured",
-)
-
-
-class Auth0ManagementConfigurationError(RuntimeError):
-    """Raised when the optional Management API settings are incomplete."""
 
 
 class Auth0ManagementError(RuntimeError):
@@ -143,8 +127,9 @@ class Auth0UserProfilesUnavailableError(Auth0ManagementError):
     Timeouts, connection errors, a refused or failed token request, a missing
     ``read:users`` permission (``http_403``), rate limiting (``http_429``,
     after at most one short wait), server errors (``http_500`` and so on)
-    and an answer that isn't a list of users all raise it, each with its
-    ``cause``. The message names at most that cause.
+    and an answer that isn't a list of users, or for a read by ID isn't that
+    user, all raise it, each with its ``cause``. The message names at most
+    that cause.
     """
 
 
@@ -167,23 +152,8 @@ def _seconds(value: str | None) -> float | None:
 
 
 @dataclass(frozen=True)
-class Auth0ManagementSettings:
-    """Validated Management API settings for one Auth0 tenant.
-
-    Exactly one of ``client_secret`` and ``client_secret_resource`` (a Secret
-    Manager version name) is set. The secret is kept out of ``repr``, and equal
-    settings share one client, so its token is reused.
-    """
-
-    domain: str
-    client_id: str
-    client_secret: str = field(default="", repr=False)
-    client_secret_resource: str = ""
-
-
-@dataclass(frozen=True)
 class Auth0UserProfile:
-    """What the admin routes read about one Auth0 user; never stored.
+    """What the Public API reads about one Auth0 user; never stored.
 
     Each text is stripped, and absent when Auth0 sent none, sent an empty one
     or sent something other than text. ``email_verified`` is true only when
@@ -245,70 +215,16 @@ class UserProfileReader(Protocol):
         """
         ...
 
+    def read_user_profile(
+        self, user_id: str, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> Auth0UserProfile | None:
+        """Return one user's profile as Auth0 has it now, or None if unknown.
 
-def _load_client_settings(
-    names: Auth0ClientSettingNames, environ: Mapping[str, str] | None
-) -> Auth0ManagementSettings | None:
-    """Return one group's complete settings, or ``None`` when it is absent."""
-    values = os.environ if environ is None else environ
-    domain = values.get(names.domain, "").strip()
-    client_id = values.get(names.client_id, "").strip()
-    client_secret = values.get(names.client_secret, "").strip()
-    secret_resource = values.get(names.client_secret_resource, "").strip()
-    if not any((domain, client_id, client_secret, secret_resource)):
-        return None
-    if client_secret and secret_resource:
-        msg = (
-            f"Set exactly one of {names.client_secret} or "
-            f"{names.client_secret_resource}"
-        )
-        raise Auth0ManagementConfigurationError(msg)
-    if not domain or not client_id or not (client_secret or secret_resource):
-        msg = (
-            f"{names.incomplete_message}: set {names.domain}, "
-            f"{names.client_id}, and exactly one client-secret source"
-        )
-        raise Auth0ManagementConfigurationError(msg)
-    if DOMAIN_PATTERN.fullmatch(domain) is None:
-        msg = f"{names.domain} must be a bare host name"
-        raise Auth0ManagementConfigurationError(msg)
-    if secret_resource and SECRET_RESOURCE_PATTERN.fullmatch(secret_resource) is None:
-        msg = f"{names.client_secret_resource} is invalid"
-        raise Auth0ManagementConfigurationError(msg)
-    return Auth0ManagementSettings(
-        domain=domain,
-        client_id=client_id,
-        client_secret=client_secret,
-        client_secret_resource=secret_resource,
-    )
-
-
-def load_auth0_management_settings(
-    environ: Mapping[str, str] | None = None,
-) -> Auth0ManagementSettings | None:
-    """Return complete account-deletion settings, or ``None`` when absent."""
-    return _load_client_settings(AUTH0_MANAGEMENT_SETTING_NAMES, environ)
-
-
-def load_auth0_user_profile_settings(
-    environ: Mapping[str, str] | None = None,
-) -> Auth0ManagementSettings | None:
-    """Return complete user-profile settings, or ``None`` when absent.
-
-    Raise when they are set without ``PUBLIC_API_AUTH_ISSUER``: only
-    identities from the users' issuer are users of the tenant, so without it
-    profiles would be read for nobody.
-    """
-    values = os.environ if environ is None else environ
-    settings = _load_client_settings(AUTH0_USER_PROFILE_SETTING_NAMES, values)
-    if settings is not None and not values.get(PUBLIC_API_AUTH_ISSUER_ENV, "").strip():
-        msg = (
-            f"{AUTH0_USER_PROFILE_SETTING_NAMES.prefix}_* settings need "
-            f"{PUBLIC_API_AUTH_ISSUER_ENV}: only identities from the users' "
-            "issuer are looked up"
-        )
-        raise Auth0ManagementConfigurationError(msg)
-    return settings
+        Unlike the search the other reads use, it sees a user created or
+        changed moments ago. Rate-limit waits are spent from ``wait_budget``,
+        else from a budget of this call's own.
+        """
+        ...
 
 
 def _quoted_user_id(user_id: str) -> str:
@@ -355,7 +271,7 @@ def _profile_text(value: object, maximum_length: int) -> str | None:
 
 
 def _user_profile(payload: object) -> Auth0UserProfile | None:
-    """Read one user of a search answer, or ``None`` when it has no user ID."""
+    """Read one user of an answer, or ``None`` when it has no user ID."""
     if not isinstance(payload, dict):
         return None
     user_id = payload.get("user_id")
@@ -397,7 +313,7 @@ class Auth0ManagementClient:
         ``http_client`` replaces the per-request and per-operation clients
         (tests pass a mock transport), and ``secret_loader`` reads
         ``client_secret_resource`` when no direct secret is set. ``sleep``
-        waits before a rate-limited search's retry, and ``clock`` gives the
+        waits before a rate-limited read's retry, and ``clock`` gives the
         current Unix time for Auth0's rate-limit reset.
         """
         self._settings = settings
@@ -587,6 +503,26 @@ class Auth0ManagementClient:
             return max(0.0, reset_at - self._clock())
         return None
 
+    def _profile_read(
+        self, send: Callable[[], httpx.Response], wait_budget: RateLimitWaitBudget
+    ) -> httpx.Response:
+        """Send one profile read; raise Auth0UserProfilesUnavailableError on failure.
+
+        A rate-limited read (429) is retried once, after the wait Auth0 gives,
+        when that wait fits in what is left of ``wait_budget``.
+        """
+        try:
+            response = send()
+            if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+                wait = self._rate_limit_wait(response)
+                if wait is not None and wait_budget.take(wait):
+                    self._sleep(wait)
+                    response = send()
+        except Auth0ManagementError as error:
+            msg = f"Auth0 user profiles are unavailable: {error.cause}"
+            raise Auth0UserProfilesUnavailableError(msg, cause=error.cause) from error
+        return response
+
     def _search_users(
         self,
         http_client: httpx.Client,
@@ -598,16 +534,9 @@ class Auth0ManagementClient:
         A rate-limited search (429) is retried once, after the wait Auth0
         gives, when that wait fits in what is left of ``wait_budget``.
         """
-        try:
-            response = self._authorized_search(http_client, parameters)
-            if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
-                wait = self._rate_limit_wait(response)
-                if wait is not None and wait_budget.take(wait):
-                    self._sleep(wait)
-                    response = self._authorized_search(http_client, parameters)
-        except Auth0ManagementError as error:
-            msg = f"Auth0 user profiles are unavailable: {error.cause}"
-            raise Auth0UserProfilesUnavailableError(msg, cause=error.cause) from error
+        response = self._profile_read(
+            lambda: self._authorized_search(http_client, parameters), wait_budget
+        )
         if response.status_code != HTTPStatus.OK:
             msg = f"Auth0 user profiles are unavailable: HTTP {response.status_code}"
             raise Auth0UserProfilesUnavailableError(
@@ -664,6 +593,67 @@ class Auth0ManagementClient:
                     if profile is not None and profile.user_id in wanted:
                         profiles[profile.user_id] = profile
         return profiles
+
+    def _user_request(
+        self, http_client: httpx.Client, user_id: str, token: str
+    ) -> httpx.Response:
+        return self._send(
+            http_client,
+            http_client.build_request(
+                "GET",
+                f"{self._base_url}/api/v2/users/{quote(user_id, safe='')}",
+                params={"fields": USER_PROFILE_FIELDS, "include_fields": "true"},
+                headers={"Authorization": f"Bearer {token}"},
+            ),
+        )
+
+    def _authorized_user_request(
+        self, http_client: httpx.Client, user_id: str
+    ) -> httpx.Response:
+        """Read one user with the cached token; after a 401, with a new one."""
+        token = self._access_token(http_client)
+        response = self._user_request(http_client, user_id, token)
+        if response.status_code == HTTPStatus.UNAUTHORIZED:
+            self._discard_token(token)
+            response = self._user_request(
+                http_client, user_id, self._access_token(http_client)
+            )
+        return response
+
+    def read_user_profile(
+        self, user_id: str, *, wait_budget: RateLimitWaitBudget | None = None
+    ) -> Auth0UserProfile | None:
+        """Return one user's profile, read by ID, or None when Auth0 has no such user.
+
+        ``GET /api/v2/users/{id}`` is immediately consistent, so it sees a user
+        who signed up or verified their email moments ago, which the search
+        may not. A rate-limited read is retried once within ``wait_budget``,
+        else a budget of this call's own. Raise Auth0UserProfilesUnavailableError
+        when Auth0 can't answer, or answers with another user or no user.
+        """
+        budget = RateLimitWaitBudget() if wait_budget is None else wait_budget
+        with self._operation_http_client() as http_client:
+            response = self._profile_read(
+                lambda: self._authorized_user_request(http_client, user_id), budget
+            )
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            return None
+        if response.status_code != HTTPStatus.OK:
+            msg = f"Auth0 user profiles are unavailable: HTTP {response.status_code}"
+            raise Auth0UserProfilesUnavailableError(
+                msg, cause=f"http_{response.status_code}"
+            )
+        try:
+            profile = _user_profile(response.json())
+        except ValueError as error:
+            msg = "Auth0 user profiles are unavailable: the answer is not JSON"
+            raise Auth0UserProfilesUnavailableError(
+                msg, cause="unreadable_answer"
+            ) from error
+        if profile is None or profile.user_id != user_id:
+            msg = "Auth0 user profiles are unavailable: the answer is not the user"
+            raise Auth0UserProfilesUnavailableError(msg, cause="unreadable_answer")
+        return profile
 
     def search_user_ids_by_email(
         self,

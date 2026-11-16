@@ -206,6 +206,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "alembic-v2.ini" in workflow
     assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
     assert "test_alembic_v2.py" in lifecycle_script
+    assert "test_alembic_v2_revisions.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
     assert "test_alembic_v2_catalog_tables.py" in lifecycle_script
     assert "test_alembic_v2_simulation_runs.py" in lifecycle_script

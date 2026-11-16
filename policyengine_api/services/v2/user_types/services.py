@@ -18,10 +18,12 @@ would leave no admin is refused. An admin's read of a user's saved items
 returns what the user's own export returns, and is recorded with the admin's
 and the user's IDs.
 
-Every change, and every signed-in account deletion, an admin's included,
-first takes one transaction-scoped advisory lock, then reads the admins and
-checks the caller and the deleted user against them, so they run one at a time
-and none can leave no admin.
+Every change, every invitation created, resent, revoked or accepted, and
+every signed-in account deletion, an admin's included, first takes one
+transaction-scoped advisory lock, then reads the admins and checks the caller
+and the deleted user against them, so they run one at a time and none can
+leave no admin. After a change commits, the user is emailed about it when an
+email service is configured.
 
 With a user profile source, admins see each user's email and names as Auth0
 has them (a read of a user's saved items takes only the email), read after
@@ -45,6 +47,10 @@ from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
 from policyengine_api.libs.rate_limit_wait_budget import RateLimitWaitBudget
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
+)
+from policyengine_api.services.v2.user_emails.types import (
+    SignInIdentity,
+    UserTypeChangeEmail,
 )
 from policyengine_api.services.v2.user_types.database_connectors.creates import (
     create_user_type_change,
@@ -110,6 +116,7 @@ if TYPE_CHECKING:
     from policyengine_api.libs.auth0_management import Auth0UserProfile
     from policyengine_api.services.v2.identity.types import AccountPrincipal
     from policyengine_api.services.v2.user_accounts.types import AccountExport
+    from policyengine_api.services.v2.user_emails.services import V2UserEmailService
     from policyengine_api.services.v2.user_types.database_session import (
         UserTypeDatabaseSession,
     )
@@ -118,6 +125,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PROFILES_UNAVAILABLE_EVENT = "admin_user_profiles_unavailable"
+# Why a change's email wasn't sent when the service was built without emails.
+NO_EMAIL_SERVICE = "not_configured"
 # The runtime event recorded for each admin's read of a user's saved items.
 ADMIN_SAVED_ITEMS_READ_EVENT = "admin_read_v2_user_saved_items"
 EMAIL_SEARCH_UNAVAILABLE_MESSAGE = (
@@ -172,15 +181,30 @@ class V2UserTypeService:
         user_profile_source_factory: (
             Callable[[], UserProfileSource | None] | None
         ) = None,
+        user_email_service: V2UserEmailService | None = None,
     ) -> None:
         """Open every session through ``database_session``.
 
         ``user_profile_source_factory`` is called once by each admin read or
         change; without it, or when it returns None, admins see stored emails
         and names only, and an email search reads only stored emails.
+        ``user_email_service`` emails each user whose type changed, after the
+        commit; without it nobody is emailed.
         """
         self._database_session = database_session
         self._user_profile_source_factory = user_profile_source_factory
+        self._user_email_service = user_email_service
+
+    def _email_type_change(self, change: UserTypeChangeEmail | None) -> str | None:
+        """Email the user about a committed change; never raise for a failure.
+
+        Return why it wasn't sent, or None when it was or none was needed.
+        """
+        if change is None:
+            return None
+        if self._user_email_service is None:
+            return NO_EMAIL_SERVICE
+        return self._user_email_service.send_type_change(change)
 
     def _profile_source(self) -> UserProfileSource | None:
         """Return the configured profile source, or None when there is none.
@@ -384,7 +408,7 @@ class V2UserTypeService:
             user = require_signed_in_user(
                 read_signed_in_user(session, user_id, for_update=True)
             )
-            _change_type_in_session(
+            change = _change_type_in_session(
                 session,
                 user,
                 requested=RequestedUserType(
@@ -397,6 +421,7 @@ class V2UserTypeService:
                 ),
             )
             stored = _stored_admin_users(session, [user], issuer)
+        self._email_type_change(change)
         (read,) = self._with_profiles(source, stored, RateLimitWaitBudget())
         return read
 
@@ -504,7 +529,7 @@ class V2UserTypeService:
                 read_signed_in_user(session, matched.id, for_update=True)
             )
             previous_user_type = UserType(user.user_type)
-            _change_type_in_session(
+            change = _change_type_in_session(
                 session,
                 user,
                 requested=RequestedUserType(
@@ -516,9 +541,26 @@ class V2UserTypeService:
                 ),
             )
             (read,) = _admin_user_reads(session, [user])
-            return ScriptedUserTypeChange(
-                user=read, previous_user_type=previous_user_type
-            )
+        return ScriptedUserTypeChange(
+            user=read,
+            previous_user_type=previous_user_type,
+            email_failure=self._email_type_change(change),
+        )
+
+
+def lock_and_require_admin_in_session(
+    session: Session, principal: AccountPrincipal
+) -> UUID:
+    """Take the user-type change lock, then return the caller's ID if an admin.
+
+    The caller is checked against the admins read after the lock, as a type
+    change checks it. Raise UserTypeBelowMinimumError otherwise.
+    """
+    caller = find_principal_user_in_session(session, principal)
+    acquire_user_type_change_lock(session)
+    return require_listed_admin(
+        None if caller is None else caller.user_id, read_admin_user_ids(session)
+    )
 
 
 def require_admin_remains_after_deletion_in_session(
@@ -618,16 +660,17 @@ def _change_type_in_session(
     requested: RequestedUserType,
     admin_user_ids: list[UUID],
     origin: UserTypeChangeOrigin,
-) -> None:
+) -> UserTypeChangeEmail | None:
     """Change the type, unless the user already has it, and record the change.
 
     When ``requested`` names the type its requester last read, the user's
-    stored type must still be that one.
+    stored type must still be that one. Return the email to send the user
+    once the change commits, or None when nothing changed.
     """
     previous_user_type = UserType(user.user_type)
     user_type = requested.user_type
     if previous_user_type is user_type:
-        return
+        return None
     if requested.expected_user_type is not None:
         require_expected_user_type(
             current_user_type=previous_user_type,
@@ -645,4 +688,13 @@ def _change_type_in_session(
         previous_user_type=previous_user_type,
         new_user_type=user_type,
         origin=origin,
+    )
+    return UserTypeChangeEmail(
+        user_id=user.id,
+        previous_user_type=previous_user_type,
+        user_type=user_type,
+        identities=tuple(
+            SignInIdentity(issuer=identity.issuer, subject=identity.subject)
+            for identity in read_identities_newest_first(session, [user.id])
+        ),
     )
