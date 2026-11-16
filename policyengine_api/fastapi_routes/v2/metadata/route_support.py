@@ -22,6 +22,9 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2ErrorResponse,
     v2_error_response,
 )
+from policyengine_api.fastapi_routes.v2.metadata.read_failure_support import (
+    record_metadata_read_failure,
+)
 from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
     BuiltResponse,
     KeptResponse,
@@ -424,7 +427,8 @@ def run_metadata_read(
     """Run one metadata read and return its result unchanged.
 
     Failures become the typed v2 error responses described by read_resource,
-    and the reader is closed whatever happens.
+    and the reader is closed whatever happens. A generic 503 or a 500 also
+    records why, without the error's message (``read_failure_support``).
     """
     reader = None
     try:
@@ -447,14 +451,34 @@ def run_metadata_read(
     ) as error:
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        return _catalog_unavailable_response(error)
-    except Exception:  # noqa: BLE001  # preview must return typed errors
+        response = _catalog_unavailable_response(error)
+        if _is_generic_unavailable_answer(error):
+            record_metadata_read_failure(error, response.status_code)
+        return response
+    except Exception as error:  # noqa: BLE001  # preview must return typed errors
+        record_metadata_read_failure(error, 500)
         return v2_error_response(500, "V2 metadata query failed")
     finally:
         if reader is not None:
             # Best-effort close must not replace the typed response.
             with contextlib.suppress(Exception):
                 reader.close()
+
+
+def _is_generic_unavailable_answer(
+    error: V2ConfigurationError | MetadataCatalogUnavailableError,
+) -> bool:
+    """Whether ``_catalog_unavailable_response`` answers with no message of its own.
+
+    A pruned version, or a missing parameter tree or search file, is a known
+    state whose message names the catalog version; only the others hide why.
+    """
+    return not isinstance(
+        error,
+        CatalogValuesPrunedError
+        | ParameterTreeUnavailableError
+        | ParameterSearchFileUnavailableError,
+    )
 
 
 def _catalog_unavailable_response(
