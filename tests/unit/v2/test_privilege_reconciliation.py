@@ -411,6 +411,9 @@ def test_a_whole_table_privilege_declared_for_columns_is_revoked() -> None:
     )
 
     assert plan.revocations == (PrivilegeEntry(WORKER, "simulation_runs", "UPDATE"),)
+    assert plan.revoked_columns == (
+        PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="simulation_id"),
+    )
     assert plan.grants == (
         PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="completed_at"),
         PrivilegeEntry(WORKER, "simulation_runs", "UPDATE", column="status"),
@@ -418,18 +421,21 @@ def test_a_whole_table_privilege_declared_for_columns_is_revoked() -> None:
     assert plan.undeclared == (PrivilegeEntry(WORKER, "simulation_runs", "DELETE"),)
 
 
-def test_nothing_is_revoked_while_a_declared_role_or_table_is_missing() -> None:
+def test_a_revoke_is_only_planned_while_a_declared_table_is_missing() -> None:
+    """Like a grant, a revoke waits until every declared table exists."""
+    declared = {WORKER: {**WORKER_DECLARED[WORKER], "household_jobs": READ}}
     plan = plan_reconciliation(
-        WORKER_DECLARED,
+        declared,
         granted=GrantedPrivileges(
             tables={WORKER: {"simulation_runs": {"SELECT", "UPDATE"}}}
         ),
         existing_roles={WORKER},
-        existing_tables=set(),
+        existing_tables={"simulation_runs"},
     )
 
-    assert plan.missing_tables == ("simulation_runs",)
-    assert plan.revocations == ()
+    assert plan.missing_tables == ("household_jobs",)
+    assert not plan.can_apply
+    assert plan.revocations == (PrivilegeEntry(WORKER, "simulation_runs", "UPDATE"),)
 
 
 def test_revoke_statements_revoke_each_role_and_tables_privileges() -> None:
@@ -476,6 +482,9 @@ def test_summary_lists_revoked_whole_table_privileges_only_when_there_are_some()
         missing_roles=(),
         missing_tables=(),
         revocations=(PrivilegeEntry(RUNTIME, "user_type_changes", "UPDATE"),),
+        revoked_columns=(
+            PrivilegeEntry(RUNTIME, "user_type_changes", "UPDATE", "user_id"),
+        ),
     )
     plain_plan = ReconciliationPlan(
         grants=(), undeclared=(), missing_roles=(), missing_tables=()
@@ -491,7 +500,9 @@ def test_summary_lists_revoked_whole_table_privileges_only_when_there_are_some()
         plain_plan, (), deployment_environment="staging", applied=True
     )
 
-    revoked_row = "| `policyengine_v2_runtime` | `user_type_changes` | UPDATE |"
+    revoked_row = (
+        "| `policyengine_v2_runtime` | `user_type_changes` | UPDATE, UPDATE (user_id) |"
+    )
     assert "### Revoked: whole-table privileges declared for named columns" in applied
     assert revoked_row in applied
     assert "### Would revoke: whole-table privileges declared for named columns" in (

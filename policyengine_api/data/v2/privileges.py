@@ -57,9 +57,13 @@ The Public API reads the simulation tables it serves, and writes none of them.
 The migration role (``policyengine_v2_migrator``) owns every table, and
 Supabase's ``postgres`` role administers the project; neither is managed here.
 
-Extra privileges a database holds beyond this manifest are reported, never
-revoked. The v2 schema has no sequences (every key is a UUID); a test fails if
-one appears, so the manifest can be extended to cover it.
+Extra privileges a database holds beyond this manifest are reported, not
+revoked, with one exception: a privilege a role holds on a whole table that
+this manifest declares for named columns only is revoked, with the role's
+column grants of it, and the declared columns are granted again.
+
+The v2 schema has no sequences (every key is a UUID); a test fails if one
+appears, so the manifest can be extended to cover it.
 """
 
 from __future__ import annotations

@@ -156,9 +156,12 @@ def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
 ) -> None:
     """A new table's default privileges give UPDATE on the whole table.
 
-    ``apply`` revokes it and grants the declared column again in the same
-    transaction, so ``verify`` passes. The extra ``INSERT`` and ``DELETE``
-    stay, reported but not revoked.
+    The role starts as staging's runtime role did on ``user_type_changes``:
+    the whole-table privileges, the declared column grant an earlier ``apply``
+    made, and an undeclared column grant. ``apply`` revokes the whole-table
+    ``UPDATE``, which removes both column grants, and grants the declared one
+    again in the same transaction, so ``verify`` passes. The extra ``INSERT``
+    and ``DELETE`` stay, reported but not revoked.
     """
     role = temporary_role()
     declared = {role: {"regions": READ | {update_columns("label")}}}
@@ -175,6 +178,9 @@ def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
                 f'TO "{role}"'
             )
         )
+        connection.execute(
+            text(f'GRANT UPDATE (label, code) ON TABLE public.regions TO "{role}"')
+        )
     summary_path = tmp_path / "summary.md"
     environ = {
         V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
@@ -190,7 +196,9 @@ def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
         second_plan, _defaults = apply_declared_privileges(connection, declared)
 
     assert (apply_status, verify_status) == (0, 0)
-    assert f"| `{role}` | `regions` | UPDATE |" in summary
+    assert f"| `{role}` | `regions` | UPDATE, UPDATE (code) |" in summary
+    assert f"| `{role}` | `regions` | UPDATE (label) |" in summary
+    assert f"| `{role}` | `regions` | DELETE, INSERT |" in summary
     assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
     assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
     assert not _has_column_privilege(

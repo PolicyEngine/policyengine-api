@@ -81,7 +81,9 @@ class ReconciliationPlan:
     ``skipped_roles`` are missing roles awaiting creation by an operator; they
     don't block the plan, and nothing is granted to them. ``revocations`` are
     whole-table privileges a role holds directly that the manifest declares
-    for named columns only; ``apply`` revokes them before it grants.
+    for named columns only; ``apply`` revokes them before it grants. Revoking
+    one also removes the role's column grants of it: ``revoked_columns`` are
+    the undeclared ones among them, and the declared ones are in ``grants``.
     """
 
     grants: tuple[PrivilegeEntry, ...]
@@ -90,6 +92,7 @@ class ReconciliationPlan:
     missing_tables: tuple[str, ...]
     skipped_roles: tuple[str, ...] = ()
     revocations: tuple[PrivilegeEntry, ...] = ()
+    revoked_columns: tuple[PrivilegeEntry, ...] = ()
 
     @property
     def can_apply(self) -> bool:
@@ -127,8 +130,9 @@ def plan_reconciliation(
     A whole-table privilege the manifest declares for named columns only, such
     as the ``UPDATE`` a new table's default privileges give, is revoked.
     PostgreSQL's ``REVOKE`` on a table also removes the role's column grants of
-    that privilege, so the plan grants the declared columns again and reports
-    none of the removed grants as undeclared.
+    that privilege, so the plan grants the declared columns again and lists the
+    undeclared ones it removes in ``revoked_columns``. The owner's ``REVOKE``
+    leaves a grant another role made; ``verify`` then still fails.
     """
     absent_roles = set(declared) - set(existing_roles)
     skipped_roles = tuple(sorted(absent_roles & set(roles_awaiting_creation)))
@@ -169,6 +173,11 @@ def plan_reconciliation(
         for entry in granted_entries
         if (entry.role, entry.table, entry.privilege) not in revoked
     }
+    revoked_columns = sorted(
+        entry
+        for entry in granted_entries - declared_entries
+        if entry.column and (entry.role, entry.table, entry.privilege) in revoked
+    )
     grants = sorted(
         entry
         for entry in declared_entries - held_entries
@@ -182,6 +191,7 @@ def plan_reconciliation(
         missing_tables=missing_tables,
         skipped_roles=skipped_roles,
         revocations=tuple(revocations),
+        revoked_columns=tuple(revoked_columns),
     )
 
 
@@ -359,11 +369,12 @@ def render_summary(
             "columns only",
             "",
             "Revoking one also removes the role's column grants of it; the "
-            "declared columns are granted again below.",
+            "undeclared ones are listed with it, and the declared ones are in "
+            "the grants below.",
             "",
             "| Role | Table | Privileges |",
             "| --- | --- | --- |",
-            *_privilege_rows(plan.revocations),
+            *_privilege_rows((*plan.revocations, *plan.revoked_columns)),
             "",
         ]
     grant_heading = "Granted" if applied else "Would grant"

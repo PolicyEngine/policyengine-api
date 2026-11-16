@@ -8,9 +8,10 @@ it. Two modes:
   columns, grants every declared privilege a role lacks, and reports privileges
   the manifest doesn't declare. It revokes only a whole-table privilege the
   manifest declares for named columns only, such as the ``UPDATE`` a new
-  table's default privileges give, and then grants those columns again, in the
-  same transaction. It changes nothing when a declared role or table is
-  missing. Running it again changes nothing more.
+  table's default privileges give, which also removes the role's column grants
+  of it, and then grants the declared columns again, in the same transaction.
+  It changes nothing when a declared role or table is missing. Running it
+  again changes nothing more.
 - ``verify`` checks every declared privilege with ``has_table_privilege``, or
   ``has_column_privilege`` for each column of a column privilege (rule
   ``api.v2.deployed-privileges-match``), and fails on any that is missing. It
