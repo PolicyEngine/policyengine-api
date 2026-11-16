@@ -22,7 +22,6 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from psycopg import errors as psycopg_errors
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
+UNDEFINED_TABLE_FAILURE = "psycopg.errors.UndefinedTable (SQLSTATE 42P01)"
 ANALYZED_TABLES = (
     "datasets",
     "parameter_nodes",
@@ -156,12 +156,22 @@ def test_republishing_an_unchanged_catalog_analyzes_it_again(
 def test_a_failed_analyze_is_recorded_and_the_publication_kept(
     superuser_engine, writer_engine
 ) -> None:
-    def cancel_analyze(_connection, _cursor, statement, *_arguments) -> None:
-        if statement.startswith("ANALYZE"):
-            msg = "canceling statement due to statement timeout"
-            raise psycopg_errors.QueryCanceled(msg)
+    """The database refuses the ``ANALYZE``, and SQLAlchemy wraps its error.
 
-    event.listen(writer_engine, "before_cursor_execute", cancel_analyze)
+    The evidence names the driver's error and SQLSTATE, as a failed pruning's
+    does, not SQLAlchemy's wrapper, which is the same for any database error.
+    """
+
+    def analyze_a_missing_table(
+        _connection, _cursor, statement, parameters, *_arguments
+    ):
+        if statement.startswith("ANALYZE"):
+            return "ANALYZE public.no_such_catalog_table", parameters
+        return statement, parameters
+
+    event.listen(
+        writer_engine, "before_cursor_execute", analyze_a_missing_table, retval=True
+    )
 
     evidence = publish_catalog(writer_engine, normalized_catalog())
     with superuser_engine.connect() as connection:
@@ -171,10 +181,8 @@ def test_a_failed_analyze_is_recorded_and_the_publication_kept(
 
     assert stored_versions > 0
     assert evidence.catalog_tables_analyzed == ()
-    assert evidence.catalog_statistics_failure == "psycopg.errors.QueryCanceled"
-    assert evidence.as_dict()["catalog_statistics_failure"] == (
-        "psycopg.errors.QueryCanceled"
-    )
+    assert evidence.catalog_statistics_failure == UNDEFINED_TABLE_FAILURE
+    assert evidence.as_dict()["catalog_statistics_failure"] == UNDEFINED_TABLE_FAILURE
 
 
 @pytest.fixture
