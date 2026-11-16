@@ -151,6 +151,55 @@ def test_verify_fails_when_a_role_can_update_the_whole_table(
     ) in summary
 
 
+def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
+    disposable_v2_database_url, superuser_engine, temporary_role, monkeypatch, tmp_path
+) -> None:
+    """A new table's default privileges give UPDATE on the whole table.
+
+    ``apply`` revokes it and grants the declared column again in the same
+    transaction, so ``verify`` passes. The extra ``INSERT`` and ``DELETE``
+    stay, reported but not revoked.
+    """
+    role = temporary_role()
+    declared = {role: {"regions": READ | {update_columns("label")}}}
+    monkeypatch.setattr(
+        privilege_reconciliation, "declared_privileges", lambda _environment: declared
+    )
+    monkeypatch.setattr(
+        privilege_reconciliation, "ROLES_AWAITING_PROVISIONING", frozenset()
+    )
+    with superuser_engine.begin() as connection:
+        connection.execute(
+            text(
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.regions "
+                f'TO "{role}"'
+            )
+        )
+    summary_path = tmp_path / "summary.md"
+    environ = {
+        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: "test",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+    }
+
+    apply_status = run("apply", environ=environ)
+    verify_status = run("verify", environ=environ)
+    summary = summary_path.read_text(encoding="utf-8")
+    with superuser_engine.begin() as connection:
+        second_plan, _defaults = apply_declared_privileges(connection, declared)
+
+    assert (apply_status, verify_status) == (0, 0)
+    assert f"| `{role}` | `regions` | UPDATE |" in summary
+    assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
+    assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
+    assert not _has_column_privilege(
+        superuser_engine, role, "regions", "code", "UPDATE"
+    )
+    assert _has_privilege(superuser_engine, role, "regions", "DELETE")
+    assert (second_plan.revocations, second_plan.grants) == ((), ())
+
+
 def test_apply_grants_nothing_the_second_time_and_verify_passes(
     disposable_v2_database_url, managed_v2_roles, capsys
 ) -> None:
