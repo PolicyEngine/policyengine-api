@@ -4,7 +4,7 @@ Revision 617f531f1506 replaces the users type check with one that also allows
 author and admin, and changes nothing else; its downgrade restores the check
 that allows only unauthenticated and standard, so it fails while any user is
 an author or an admin. Revision 970be5d29283, on it, adds user_type_changes and
-changes nothing else. Revision f519a77ba122, on the withheld area codes
+changes nothing else. Revision f519a77ba122, on the shared reports
 revision, adds user_invitations and user_type_changes.dismissed_at, and lets
 a change's source be invitation; its downgrade fails while any change's
 source is invitation.
@@ -30,8 +30,8 @@ USER_TYPES_PREVIOUS_REVISION = "81b728a088e7"
 USER_TYPES_REVISION = "617f531f1506"
 # The user type changes revision, on the user types revision.
 USER_TYPE_CHANGES_REVISION = "970be5d29283"
-# The withheld area codes revision, and the user invitations revision on it.
-WITHHELD_AREA_CODES_REVISION = "1e1e3f079f2c"
+# The shared reports revision, and the user invitations revision on it.
+SHARED_REPORTS_REVISION = "94dc43079186"
 USER_INVITATIONS_REVISION = "f519a77ba122"
 
 
@@ -210,7 +210,7 @@ def test_user_invitations_revision_adds_invitations_and_dismissals_only() -> Non
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, WITHHELD_AREA_CODES_REVISION)
+        command.downgrade(config, SHARED_REPORTS_REVISION)
         parent = _schema_shape(engine)
         command.upgrade(config, USER_INVITATIONS_REVISION)
         revision = _schema_shape(engine)
@@ -287,7 +287,7 @@ def test_user_invitations_revision_records_invitation_changes_until_downgraded()
             )
 
     try:
-        command.downgrade(config, WITHHELD_AREA_CODES_REVISION)
+        command.downgrade(config, SHARED_REPORTS_REVISION)
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -302,7 +302,7 @@ def test_user_invitations_revision_records_invitation_changes_until_downgraded()
         command.upgrade(config, USER_INVITATIONS_REVISION)
         insert_change()
         with pytest.raises(sa.exc.IntegrityError):
-            command.downgrade(config, WITHHELD_AREA_CODES_REVISION)
+            command.downgrade(config, SHARED_REPORTS_REVISION)
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
             assert context.get_current_revision() == USER_INVITATIONS_REVISION
@@ -312,6 +312,6 @@ def test_user_invitations_revision_records_invitation_changes_until_downgraded()
             connection.execute(
                 text("DELETE FROM users WHERE id = :user_id"), {"user_id": user_id}
             )
-        command.downgrade(config, WITHHELD_AREA_CODES_REVISION)
+        command.downgrade(config, SHARED_REPORTS_REVISION)
         command.upgrade(config, "head")
         engine.dispose()
