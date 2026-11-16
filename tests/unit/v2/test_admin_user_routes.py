@@ -696,3 +696,32 @@ def test_refused_email_searches_answer_422(message: str) -> None:
 
     assert response.status_code == 422
     assert response.json() == {"status": "error", "message": message}
+
+
+def test_the_type_history_names_a_change_made_through_an_invitation() -> None:
+    def result(name: str, kwargs: dict):
+        if name == "list_user_type_changes":
+            return (
+                UserTypeChangeRead(
+                    id=CHANGE_ID,
+                    user_id=TARGET_ID,
+                    previous_user_type=UserType.STANDARD,
+                    new_user_type=UserType.AUTHOR,
+                    changed_by_user_id=OWNER_ID,
+                    changed_by_email="alice@example.test",
+                    source=UserTypeChangeSource.INVITATION,
+                    created_at=LAST_SEEN_AT,
+                ),
+            )
+        return _result(name, kwargs)
+
+    client, _service = _client(RecordingService(result))
+
+    history = client.get(f"/v2/admin/users/{TARGET_ID}/user-type-changes")
+
+    assert history.status_code == 200
+    (item,) = history.json()["result"]["items"]
+    assert (item["source"], item["changed_by_user_id"]) == (
+        "invitation",
+        str(OWNER_ID),
+    )

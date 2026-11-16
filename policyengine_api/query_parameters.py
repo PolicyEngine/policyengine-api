@@ -387,6 +387,10 @@ class AdminUserCollectionQuery(PaginationQuery):
     email: EmailSearch | None = None
 
 
+class AdminInvitationCollectionQuery(PaginationQuery):
+    """Query contract for admins' list of open email invitations."""
+
+
 class HouseholdCreateQuery(CountryQuery):
     """Query contract for native immutable household creation."""
 

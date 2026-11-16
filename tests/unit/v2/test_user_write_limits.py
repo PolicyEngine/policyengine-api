@@ -66,7 +66,12 @@ def _user_write_operations() -> list[tuple[str, str]]:
     client, _flask_calls = user_route_client(**factories)
     paths = client.get("/v2/openapi.json").json()["paths"]
     operations = [
-        (method.upper(), path.replace("{association_id}", UUID_PATH_VALUE))
+        (
+            method.upper(),
+            path.replace("{association_id}", UUID_PATH_VALUE).replace(
+                "{type_change_id}", UUID_PATH_VALUE
+            ),
+        )
         for path, methods in paths.items()
         if path.startswith(("/v2/me", "/v2/user-"))
         for method in methods
