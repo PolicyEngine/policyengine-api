@@ -391,7 +391,8 @@ def test_a_whole_table_privilege_declared_for_columns_is_revoked() -> None:
     """A new table's default privileges give UPDATE on the whole table.
 
     Revoking it also removes the role's column grants of UPDATE, so the plan
-    grants the declared columns again and reports none of the removed ones.
+    grants the declared columns again and lists the removed undeclared ones
+    with the revoke rather than as undeclared.
     """
     plan = plan_reconciliation(
         WORKER_DECLARED,
