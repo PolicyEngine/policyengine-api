@@ -54,6 +54,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
         "user_identities",
+        "user_report_run_associations",
         "user_type_changes",
         "withheld_area_codes",
     }
@@ -83,7 +84,8 @@ USER_TYPE_CHANGES_REVISION = "970be5d29283"
 # The SPM availability revision, on the user type changes revision, and parent
 # of the withheld area codes revision.
 SPM_AVAILABILITY_REVISION = "0c136a278f29"
-# The withheld area codes revision, on the SPM availability revision.
+# The withheld area codes revision, on the SPM availability revision, and
+# parent of the shared reports revision.
 WITHHELD_AREA_CODES_REVISION = "1e1e3f079f2c"
 DISPOSABLE_URL = (
     "postgresql+psycopg://postgres:test-password@127.0.0.1:5432/"
@@ -266,6 +268,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        WITHHELD_AREA_CODES_REVISION,
         SPM_AVAILABILITY_REVISION,
         USER_TYPE_CHANGES_REVISION,
         USER_TYPES_REVISION,
@@ -1388,3 +1391,56 @@ def test_withheld_area_codes_revision_creates_only_the_table_and_its_type() -> N
     for body in (upgrade, downgrade):
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
+
+
+def test_shared_reports_revision_is_generated_with_one_documented_correction() -> None:
+    """The head revision lets identical requests share reports and runs.
+
+    It is generated on the withheld area codes revision, with one correction:
+    ``user_report_run_associations.trigger`` reuses the report runs'
+    ``v2_report_run_trigger`` type. It creates only that table, writes no
+    data, makes three per-user columns nullable (the integration shape test
+    checks the direction), and its downgrade reverses what the upgrade does.
+    """
+    script = ScriptDirectory.from_config(Config(str(REPO / "alembic-v2.ini")))
+    children = [
+        revision
+        for revision in script.walk_revisions()
+        if revision.down_revision == WITHHELD_AREA_CODES_REVISION
+    ]
+    assert len(children) == 1
+    assert children[0].revision == V2_ALEMBIC_HEAD_REVISION
+    revision = Path(children[0].path).read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert revision.count("Dialect correction:") == 1
+    assert re.search(
+        r"""name=["']v2_report_run_trigger["'],\s*create_type=False""", upgrade
+    )
+    assert re.findall(r"""op\.create_table\(\s*["'](\w+)["']""", upgrade) == [
+        "user_report_run_associations"
+    ]
+    assert re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade) == [
+        "user_report_run_associations"
+    ]
+    assert upgrade.count("op.add_column(") == downgrade.count("op.drop_column(") == 8
+    # The per-user columns of shared rows become nullable, and back.
+    for body in (upgrade, downgrade):
+        assert sorted(
+            re.findall(r"""op\.alter_column\(\s*["'](\w+)["'],\s*["'](\w+)["']""", body)
+        ) == [
+            ("budget_window_runs", "trigger"),
+            ("report_runs", "trigger"),
+            ("reports", "label"),
+        ]
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+    assert "op.drop_column(" not in upgrade
+    assert "op.drop_table(" not in upgrade

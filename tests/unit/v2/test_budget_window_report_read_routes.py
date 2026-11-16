@@ -15,6 +15,7 @@ from tests.unit.v2.budget_window_report_support import (
     budget_window_report_read,
     budget_window_run_read,
     budget_window_summary_read,
+    budget_window_year_read,
 )
 from tests.unit.v2.stored_report_support import (
     REPORT_ID,
@@ -75,6 +76,22 @@ def test_a_budget_window_answers_its_window_newest_run_years_and_result() -> Non
     assert service.calls == [
         ("get_report", {"country_id": "us", "report_id": BUDGET_WINDOW_REPORT_ID})
     ]
+
+
+def test_a_window_run_and_its_years_without_a_trigger_answer_it_as_null() -> None:
+    run = budget_window_run_read(
+        trigger=None,
+        years=tuple(
+            budget_window_year_read(year, trigger=None) for year in YEAR_RUN_IDS
+        ),
+    )
+    service = FakeReportService(report=budget_window_report_read(run=run, label=None))
+
+    item = read_item(service)
+
+    assert item["label"] is None
+    assert item["run"]["trigger"] is None
+    assert {year["trigger"] for year in item["run"]["years"]} == {None}
 
 
 def test_a_budget_window_without_a_run_answers_no_run_and_no_result() -> None:

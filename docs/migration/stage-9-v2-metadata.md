@@ -799,8 +799,12 @@ pruning").
 
 A schema downgrade past revision `334859ef4fec` drops
 `catalog_last_published_at` and `catalog_values_pruned_at`. From the head,
-it first runs the later revisions' downgrades: `970be5d29283`'s drops
-`user_type_changes` with every recorded change, `617f531f1506`'s needs no
+it first runs the later revisions' downgrades: `94dc43079186`'s drops
+`user_report_run_associations` with every user's report-run record, the
+simulation and report keys, the runs' `forced` markers, the window runs' .py
+versions and the one-unfailed-run indexes, and needs every report to have a
+label and every run a trigger, `970be5d29283`'s drops `user_type_changes` with
+every recorded change, `617f531f1506`'s needs no
 user to be an author or an admin, and `1356f658347d`'s needs `simulations`
 empty. A pruned version
 then looks complete, but holds

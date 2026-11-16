@@ -411,30 +411,32 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
             text("UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"),
             {"id": run_id},
         )
-    with refused(connection):
+    # Named, since a second unfailed run on the same versions is refused too.
+    with refused(connection, match="ck_simulation_runs_output_pair"):
         _insert_simulation_run(
             connection, simulation_id, output_uri="gs://bucket/run.parquet"
         )
-    with refused(connection):
+    with refused(connection, match="ck_simulation_runs_output_sha256_length"):
         _insert_simulation_run(
             connection,
             simulation_id,
             output_uri="gs://bucket/run.parquet",
             output_sha256="short",
         )
-    finished_run_id = _insert_simulation_run(
-        connection,
-        simulation_id,
-        status="succeeded",
-        completed_at=COMPLETED_AT,
-        output_uri="gs://bucket/run.parquet",
-        output_sha256=SHA256_HEX,
+    # A simulation has one unfailed run per version set, so the run finishes.
+    connection.execute(
+        text(
+            "UPDATE simulation_runs SET status = 'succeeded', "
+            "completed_at = :completed_at, output_uri = 'gs://bucket/run.parquet', "
+            "output_sha256 = :output_sha256 WHERE id = :id"
+        ),
+        {"id": run_id, "completed_at": COMPLETED_AT, "output_sha256": SHA256_HEX},
     )
     insert_row(
         connection,
         "poverty",
         id=uuid4(),
-        simulation_run_id=finished_run_id,
+        simulation_run_id=run_id,
         poverty_type="spm",
         entity="person",
     )
@@ -443,15 +445,18 @@ def test_simulation_runs_need_a_completion_time_and_a_whole_output(
         text("DELETE FROM simulations WHERE id = :id"), {"id": simulation_id}
     )
     assert _count(connection, "simulation_runs", "simulation_id", simulation_id) == 0
-    assert _count(connection, "poverty", "simulation_run_id", finished_run_id) == 0
+    assert _count(connection, "poverty", "simulation_run_id", run_id) == 0
 
 
 def test_report_runs_name_a_baseline_run_and_keep_their_simulation_runs(
     connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection, public_api_rows)
-    baseline_run_id = _insert_simulation_run(connection, simulation_id)
-    reform_run_id = _insert_simulation_run(connection, simulation_id)
+    baseline_run_id = _insert_simulation_run(
+        connection, _insert_simulation(connection, public_api_rows)
+    )
+    reform_run_id = _insert_simulation_run(
+        connection, _insert_simulation(connection, public_api_rows)
+    )
 
     with refused(connection, match="baseline_simulation_run_id"):
         _insert_report_run(connection, public_api_rows, None)
@@ -476,9 +481,12 @@ def test_report_runs_name_a_baseline_run_and_keep_their_simulation_runs(
 def test_results_are_unique_per_run_and_name_runs_that_exist(
     connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection, public_api_rows)
-    baseline_run_id = _insert_simulation_run(connection, simulation_id)
-    reform_run_id = _insert_simulation_run(connection, simulation_id)
+    baseline_run_id = _insert_simulation_run(
+        connection, _insert_simulation(connection, public_api_rows)
+    )
+    reform_run_id = _insert_simulation_run(
+        connection, _insert_simulation(connection, public_api_rows)
+    )
     comparison_runs = {
         "report_run_id": _insert_report_run(
             connection, public_api_rows, baseline_run_id, reform_run_id
@@ -585,12 +593,15 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
 def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
     connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection, public_api_rows)
     report_run_id = _insert_report_run(
         connection,
         public_api_rows,
-        _insert_simulation_run(connection, simulation_id),
-        _insert_simulation_run(connection, simulation_id),
+        _insert_simulation_run(
+            connection, _insert_simulation(connection, public_api_rows)
+        ),
+        _insert_simulation_run(
+            connection, _insert_simulation(connection, public_api_rows)
+        ),
     )
     response = dict.fromkeys(LABOR_SUPPLY_RESPONSE_COLUMNS, 1.0)
 
@@ -729,8 +740,12 @@ def test_budget_windows_hold_one_report_run_per_year(
             report_id=of_report,
             budget_window_run_id=window_run_id,
             year=year,
+            # Each year of a window has simulations of its own, as the
+            # simulation service gives it.
             baseline_simulation_run_id=_insert_simulation_run(
-                connection, simulation_id, year=year or 2026
+                connection,
+                _insert_simulation(connection, public_api_rows),
+                year=year or 2026,
             ),
             status="pending",
             trigger="initial",

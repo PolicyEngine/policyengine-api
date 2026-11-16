@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
@@ -100,6 +101,27 @@ def _create_run(
     )
 
 
+def _create_forced_run(session: Session, report: Report) -> ReportRun:
+    """Store a forced re-run on the deployed versions: an extra run nothing joins.
+
+    Only a forced re-run may run beside another run on the same versions that
+    hasn't failed; ``create_report_run`` creates unforced runs only.
+    """
+    run = ReportRun(
+        report_id=report.id,
+        baseline_simulation_run_id=SIMULATION_RUNS.baseline_simulation_run_id,
+        reform_simulation_run_id=SIMULATION_RUNS.reform_simulation_run_id,
+        country_package_version="1.2.3",
+        policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
+        trigger=ReportRunTrigger.MANUAL,
+        idempotency_key=uuid4(),
+        forced=True,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
 def test_untyped_and_typed_report_definitions_store_no_execution_versions(
     engine,
 ) -> None:
@@ -137,10 +159,18 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
             )
 
 
-def test_new_manual_keys_create_distinct_same_version_runs(engine) -> None:
+def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
+    engine,
+) -> None:
     with Session(engine) as session:
         report = _create_report(session)
         first = _create_run(session, report)
+        # A report has one unfailed, unforced run per version set.
+        with pytest.raises(IntegrityError):
+            _create_run(session, report)
+        fail_report_run(
+            session, report_run_id=first.id, error_message="failed", completed_at=NOW
+        )
         second = _create_run(session, report)
 
         assert first.id != second.id
@@ -291,7 +321,7 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
         session.add(simulation)
         session.flush()
         first = _create_run(session, report)
-        second = _create_run(session, report)
+        second = _create_forced_run(session, report)
         session.add_all(
             [
                 AggregateOutput(
@@ -322,6 +352,7 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
 def test_selector_uses_versions_success_completion_time_and_stable_id(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
+        # Runs 1 and 4 share run 2's versions, so each is a forced re-run.
         candidates = [
             ReportRun(
                 id=UUID(int=1),
@@ -331,6 +362,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.SUCCEEDED,
                 completed_at=NOW,
+                forced=True,
             ),
             ReportRun(
                 id=UUID(int=2),
@@ -357,6 +389,7 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 status=ReportRunStatus.RUNNING,
+                forced=True,
             ),
         ]
         session.add_all(candidates)
@@ -378,8 +411,8 @@ def test_pending_and_failed_reruns_do_not_displace_success(engine) -> None:
         report = _create_report(session)
         successful = _create_run(session, report)
         complete_report_run(session, report_run_id=successful.id, completed_at=NOW)
-        pending = _create_run(session, report)
-        failed = _create_run(session, report)
+        pending = _create_forced_run(session, report)
+        failed = _create_forced_run(session, report)
         fail_report_run(
             session,
             report_run_id=failed.id,
@@ -404,7 +437,7 @@ def test_new_successful_rerun_becomes_current_without_cache_state(engine) -> Non
         report = _create_report(session)
         first = _create_run(session, report)
         complete_report_run(session, report_run_id=first.id, completed_at=NOW)
-        rerun = _create_run(session, report)
+        rerun = _create_forced_run(session, report)
         complete_report_run(
             session,
             report_run_id=rerun.id,

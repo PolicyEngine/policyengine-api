@@ -661,8 +661,12 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the user type changes revision (`970be5d29283`) drops
-  every recorded change, the user types revision (`617f531f1506`) needs no
+  downgrades run first: the shared reports revision (`94dc43079186`) drops
+  every user's report-run record, every simulation and report key, the runs'
+  `forced` markers, the window runs' .py versions and the one-unfailed-run
+  indexes, and needs every report to have a label and every run a trigger, the
+  user type changes revision (`970be5d29283`) drops every recorded change,
+  the user types revision (`617f531f1506`) needs no
   author or admin, and the simulation runs revision (`1356f658347d`) needs
   `simulations` empty.
 
