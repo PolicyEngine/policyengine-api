@@ -8,16 +8,20 @@ from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportRead,
     BudgetWindowReportSummaryRead,
     BudgetWindowRunRead,
+    BudgetWindowRunsRead,
     BudgetWindowYearRead,
+    HouseholdReportRead,
+    HouseholdReportSummaryRead,
     ReportDefinitionRead,
     ReportRead,
     ReportRunRead,
+    ReportRunsRead,
     ReportSimulationRead,
     ReportSummaryRead,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
     from uuid import UUID
 
     from policyengine_api.data.v2.models import (
@@ -35,14 +39,16 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
     )
+    from policyengine_api.services.v2.stored_reports.household_results.types import (
+        HouseholdReportFailure,
+        HouseholdReportResult,
+    )
     from policyengine_api.services.v2.stored_reports.types import (
         ReportKind,
+        ReportRunsKind,
+        ReportStatusName,
         StoredReportRows,
     )
-
-# The kinds of report the report routes read; household reports are read
-# once their own routes exist.
-READABLE_KINDS: frozenset[ReportKind] = frozenset({"economy", "budget_window"})
 
 
 def report_kind(report: Report) -> ReportKind:
@@ -92,8 +98,6 @@ def _report_definition(
         label=report.label,
         description=report.description,
         year=report.year,
-        region_code=rows.region_code,
-        dataset_name=rows.dataset_name,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),
         options=dict(report.inputs),
@@ -102,16 +106,28 @@ def _report_definition(
     )
 
 
+def _newest_run(
+    rows: StoredReportRows,
+) -> tuple[ReportStatusName, ReportRunRead | None]:
+    """Return the report's status and newest run: ``not_run`` and None without one."""
+    run = rows.newest_run
+    if run is None:
+        return "not_run", None
+    return run.status.value, report_run_read(run)
+
+
 def report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> ReportSummaryRead:
     """Return an economy report's definition and newest run, without a result."""
-    run = rows.newest_run
+    status, run = _newest_run(rows)
     return ReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="economy",
-        status="not_run" if run is None else run.status.value,
-        run=None if run is None else report_run_read(run),
+        region_code=rows.region_code,
+        dataset_name=rows.dataset_name,
+        status=status,
+        run=run,
     )
 
 
@@ -124,6 +140,40 @@ def report_read(
     """Return an economy report with its newest run's result, if it has one."""
     summary = report_summary_read(rows, current_versions=current_versions)
     return ReportRead(**vars(summary), result=result)
+
+
+def household_report_summary_read(
+    rows: StoredReportRows, *, current_versions: PackageVersions
+) -> HouseholdReportSummaryRead:
+    """Return a household report's definition and newest run, without a result.
+
+    Raise ValueError for a report naming no household, which is not a
+    household report.
+    """
+    report = rows.report
+    if report.household_id is None:
+        msg = f"Report {report.id} is not a household report"
+        raise ValueError(msg)
+    status, run = _newest_run(rows)
+    return HouseholdReportSummaryRead(
+        **vars(_report_definition(rows, current_versions=current_versions)),
+        kind="household",
+        household_id=report.household_id,
+        status=status,
+        run=run,
+    )
+
+
+def household_report_read(
+    rows: StoredReportRows,
+    *,
+    current_versions: PackageVersions,
+    result: HouseholdReportResult | None,
+    failure: HouseholdReportFailure | None,
+) -> HouseholdReportRead:
+    """Return a household report with its newest run's outcome, if it has one."""
+    summary = household_report_summary_read(rows, current_versions=current_versions)
+    return HouseholdReportRead(**vars(summary), result=result, failure=failure)
 
 
 def budget_window_run_read(
@@ -175,6 +225,8 @@ def budget_window_summary_read(
     return BudgetWindowReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="budget_window",
+        region_code=rows.region_code,
+        dataset_name=rows.dataset_name,
         budget_window_size=report.budget_window_size,
         status="not_run" if window_run is None else window_run.status.value,
         run=(
@@ -199,19 +251,64 @@ def budget_window_read(
 def listed_reports(
     rows: Iterable[StoredReportRows], *, report_ids: Sequence[UUID]
 ) -> list[StoredReportRows]:
-    """Return the economy and budget-window reports among ``rows``, as named.
+    """Return the reports among ``rows`` in the order of ``report_ids``.
 
-    They are in the order of ``report_ids``. A report named twice is listed
-    once, where it is first named; household reports are left out.
+    A report named twice is listed once, where it is first named.
     """
-    by_id = {
-        stored.report.id: stored
-        for stored in rows
-        if report_kind(stored.report) in READABLE_KINDS
-    }
+    by_id = {stored.report.id: stored for stored in rows}
     listed: list[StoredReportRows] = []
     for report_id in dict.fromkeys(report_ids):
         stored = by_id.get(report_id)
         if stored is not None:
             listed.append(stored)
     return listed
+
+
+def report_policy_ids(rows: StoredReportRows) -> tuple[UUID | None, ...]:
+    """Return the policies of the report's simulations, baseline first.
+
+    A simulation of current law, or one that is gone, names none.
+    """
+    return tuple(
+        None if simulation is None else simulation.policy_id
+        for simulation in (rows.baseline_simulation, rows.reform_simulation)
+    )
+
+
+def report_runs_read(
+    rows: StoredReportRows,
+    runs: Iterable[ReportRun],
+    *,
+    kind: ReportRunsKind,
+    current_versions: PackageVersions,
+) -> ReportRunsRead:
+    """Return the report's runs as ``kind``'s, in the order given, with the versions."""
+    return ReportRunsRead(
+        report_id=rows.report.id,
+        kind=kind,
+        runs=tuple(report_run_read(run) for run in runs),
+        current_versions=current_versions,
+    )
+
+
+def budget_window_runs_read(
+    rows: StoredReportRows,
+    window_runs: Iterable[BudgetWindowRun],
+    years: Mapping[UUID, Sequence[ReportRun]],
+    *,
+    current_versions: PackageVersions,
+) -> BudgetWindowRunsRead:
+    """Return a budget window's runs, in the order given, and the current versions.
+
+    ``years`` holds each window run's year report runs, in year order; a run
+    with none has no years.
+    """
+    return BudgetWindowRunsRead(
+        report_id=rows.report.id,
+        kind="budget_window",
+        runs=tuple(
+            budget_window_run_read(window_run, years.get(window_run.id, ()))
+            for window_run in window_runs
+        ),
+        current_versions=current_versions,
+    )

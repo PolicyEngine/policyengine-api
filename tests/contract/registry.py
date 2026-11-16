@@ -640,7 +640,9 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
     WorkflowContract(
         name="detailed_save_reports_v2",
         current_contract="typed_v2_resources",
-        future_owner_pr="C1 · 8: v2 simulations and economy reports",
+        future_owner_pr=(
+            "C1 · 8: v2 simulations and economy reports; C1 · 16: household reports"
+        ),
         requests=(
             ContractRequest(
                 method="POST",
@@ -674,10 +676,39 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "status",
                     "message",
                     "result.item.id",
+                    "result.item.kind",
                     "result.item.status",
                     "result.item.run",
                     "result.item.current_versions",
                     "result.item.result",
+                ),
+                route_group="report",
+            ),
+            ContractRequest(
+                method="POST",
+                path="/v2/reports/{report_id}/runs?country_id=us",
+                expected_status=201,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.item.id",
+                    "result.item.status",
+                    "result.item.run",
+                    "result.item.current_versions",
+                ),
+                route_group="report",
+            ),
+            ContractRequest(
+                method="GET",
+                path="/v2/reports/{report_id}/runs?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.report_id",
+                    "result.kind",
+                    "result.items",
+                    "result.current_versions",
                 ),
                 route_group="report",
             ),

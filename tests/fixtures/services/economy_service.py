@@ -53,6 +53,7 @@ ECONOMY_SERVICE_LOGGER_MODULES = (
     "policyengine_api.services.economy_budget_window_submission",
     "policyengine_api.services.economy_impact_execution",
     "policyengine_api.services.economy_impact_types",
+    "policyengine_api.services.economy_request_failures",
     "policyengine_api.services.economy_stored_impacts",
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"

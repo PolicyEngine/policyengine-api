@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         LaborSupplyResponse,
         LocalAuthorityImpact,
         ProgramStatistics,
+        WithheldAreaCode,
     )
 
 # A budget window compares at most this many years, none after LAST_YEAR.
@@ -373,6 +374,10 @@ class ReportRun(TimestampedModel, table=True):
         cascade_delete=True,
     )
     program_statistics: list["ProgramStatistics"] = Relationship(
+        back_populates="report_run",
+        cascade_delete=True,
+    )
+    withheld_area_codes: list["WithheldAreaCode"] = Relationship(
         back_populates="report_run",
         cascade_delete=True,
     )

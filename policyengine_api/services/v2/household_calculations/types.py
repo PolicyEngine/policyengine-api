@@ -202,9 +202,12 @@ class HouseholdCalculationRead:
     error: HouseholdCalculationFailure | None
 
 
-# The result documents the household functions store in household_jobs.result.
-# The simulation service's household contract owns their shape; these models
-# and their two conversions are the only code that names its fields.
+# The result documents the household functions store in household_jobs.result,
+# and in simulation_runs.household_result for a household report's simulations.
+# The simulation service's household contract owns their shape; these models,
+# their two conversions and the household report failure read
+# (stored_reports.household_results.transformations) are the only code that
+# names its fields.
 
 
 class StoredDocumentModel(BaseModel):

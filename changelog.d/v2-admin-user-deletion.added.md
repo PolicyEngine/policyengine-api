@@ -1,1 +1,0 @@
-Admins can delete a signed-in user's account, saved records and Auth0 users with `DELETE /v2/admin/users/{user_id}`, as `DELETE /v2/me` deletes one's own; the only admin's own deletion is refused, and each deletion is recorded with the admin's and the user's v2 IDs.

@@ -9,6 +9,7 @@ Results are stored through the port of the simulation service's writer in
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -22,7 +23,9 @@ from tests.fixtures.economy_results import RunIds, economy_result_rows
 from tests.integration.simulation_rows import insert_row
 
 if TYPE_CHECKING:
-    from sqlalchemy import Connection
+    from collections.abc import Iterator
+
+    from sqlalchemy import Connection, Engine
 
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}
@@ -412,6 +415,32 @@ def delete_catalog(connection: Connection, catalog: CatalogRows) -> None:
             text("DELETE FROM tax_benefit_models WHERE id = :id"),
             {"id": catalog.model_id},
         )
+
+
+@contextmanager
+def household_only_catalog(engine: Engine, country: str) -> Iterator[CatalogRows]:
+    """Make the country household-only, store its catalog, and restore both after.
+
+    The country keeps household calculations but loses economy reports.
+    """
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE countries SET society_wide_enabled = false WHERE id = :id"),
+            {"id": country},
+        )
+        catalog = store_catalog(connection, country)
+    try:
+        yield catalog
+    finally:
+        # Each in its own transaction, so a failed cleanup still restores the
+        # country.
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE countries SET society_wide_enabled = true WHERE id = :id"),
+                {"id": country},
+            )
+        with engine.begin() as connection:
+            delete_catalog(connection, catalog)
 
 
 def store_year_simulations(

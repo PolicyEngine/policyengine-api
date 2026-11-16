@@ -1,9 +1,12 @@
 """invite users and dismiss type changes
 
 Revision ID: f519a77ba122
-Revises: 0c136a278f29
+Revises: 1e1e3f079f2c
 Create Date: 2026-11-13 00:29:54.681740
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
+
+Generated on 0c136a278f29; its down_revision moved to 1e1e3f079f2c when the
+withheld area codes revision reached master first.
 
 Adds user_invitations, one row per admin's invitation for an email address to
 become an author or admin: the address, the type, the SHA-256 digest of its
@@ -33,7 +36,7 @@ import sqlmodel
 
 
 revision: str = "f519a77ba122"
-down_revision: Union[str, None] = "0c136a278f29"
+down_revision: Union[str, None] = "1e1e3f079f2c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

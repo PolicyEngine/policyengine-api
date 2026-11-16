@@ -31,6 +31,10 @@ from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
+from policyengine_api.services.v2.households.database_session import (
+    HouseholdDatabaseSession,
+)
+from policyengine_api.services.v2.households.services import V2HouseholdService
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
@@ -189,6 +193,7 @@ def submissions(
     sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
     return SimulationSubmissionService(
         countries=V2CountryService(CountryDatabaseSession(sessions)),
+        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
         policies=V2PolicyService(
             PolicyDatabaseSession(sessions),
             running_policyengine_version=RUNNING_VERSION,

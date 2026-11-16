@@ -17,9 +17,14 @@ the year, region and dataset its two simulations share, each simulation's
 policy and dynamic, ``include_cliffs``, and the SPM settings only when the
 caller gave them. A budget window goes to the same ``POST /reports`` as
 ``report_type`` ``budget_window``, naming its first year and
-``budget_window_size`` in place of the year, and no ``include_cliffs``.
-None names a PolicyEngine.py version: the simulation service runs its
-default worker's. The simulation service answers:
+``budget_window_size`` in place of the year, and no ``include_cliffs``. A
+household report goes there too, as ``report_type`` ``household``, naming
+the label and description, the stored household, each simulation's policy
+(the reform null for a report of the baseline alone), but no year: the
+simulation service calculates the household's default year, adding every
+variable the household lacks. None names a PolicyEngine.py version: the
+simulation service runs its default worker's. The simulation service
+answers:
 
 - 201 or 202 with the created record's ID and its first run's ID: for a
   budget window, its budget-window run's ID (``budget_window_run_id``). One
@@ -86,11 +91,16 @@ status and code a message gives, and the lost-answer and failure messages
 come from ``policyengine_api.libs.simulation_service_answers``, which the
 household calculation client shares.
 
-Wiring the generated simulation client: ``post_simulation`` and
-``post_report`` are the only code that sends a request, and each returns the
-status and body, which the rest of this module reads. Once a
-``policyengine-api-simulation-client`` release has the two routes, depend on
-that release and make each function call the generated operation, as its
+``rerun_report`` runs a stored report again through the service's
+``POST /reports/{report_id}/runs``; how it reads that route's answers is in
+``policyengine_api.libs.simulation_report_reruns``.
+
+Wiring the generated simulation client: ``post_simulation``,
+``post_report`` and ``post_report_rerun`` are the only code that sends a
+request, and each returns the status and body, which the rest of these
+modules read. Once a
+``policyengine-api-simulation-client`` release has the three routes, depend
+on that release and make each function call the generated operation, as its
 docstring says.
 """
 
@@ -103,8 +113,16 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from policyengine_api.libs.simulation_report_reruns import (
+    post_report_rerun,
+    start_report_rerun,
+)
 from policyengine_api.libs.simulation_service_answers import (
+    CALLER_ROW_REFUSAL_CODES,
+    CREATED_STATUSES,
     PROXY_STAND_IN_STATUSES,
+    REFUSAL_STATUSES,
+    SENT_BEFORE_ROUTE_STATUSES,
     AnswerModel,
     Refusal,
     SimulationAnswer,
@@ -137,38 +155,14 @@ if TYPE_CHECKING:
         BudgetWindowReportCreationInput,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
+        HouseholdPolicyChoice,
+        HouseholdReportCreationInput,
         PolicyChoice,
-        ReportCreationInput,
+        ReportRerunInput,
     )
 
 SIMULATIONS_PATH = "/simulations"
 REPORTS_PATH = "/reports"
-CREATED_STATUSES = frozenset({HTTPStatus.CREATED, HTTPStatus.ACCEPTED})
-REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY})
-# The codes of the simulation service's 400 that name a row the caller chose
-# and the Public API does not check: the region, the dataset, or a dynamic
-# the catalog version its default worker runs does not have. Each is the
-# caller's error and answers 422. Any other 400 is a state of the service,
-# such as a catalog version missing while a release deploys, or a row the
-# Public API already checked, and answers 503.
-CALLER_ROW_REFUSAL_CODES = frozenset(
-    {"unknown_region", "unknown_dataset", "unknown_dynamic"}
-)
-# Statuses the gateway, Cloud Run or the service's framework answers before
-# the service's route runs, so the service has created nothing: a call not
-# authenticated or not allowed, a route or method the service does not have,
-# a body over the size limit, and too many requests. The route may have
-# written rows before answering any other status the client does not expect.
-SENT_BEFORE_ROUTE_STATUSES = frozenset(
-    {
-        HTTPStatus.UNAUTHORIZED,
-        HTTPStatus.FORBIDDEN,
-        HTTPStatus.NOT_FOUND,
-        HTTPStatus.METHOD_NOT_ALLOWED,
-        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-        HTTPStatus.TOO_MANY_REQUESTS,
-    }
-)
 
 
 # What a submission creates.
@@ -233,8 +227,10 @@ def simulation_request(simulation: EconomySimulationCreationInput) -> dict[str, 
     }
 
 
-def _report_definition(report: ReportCreationInput) -> dict[str, Any]:
-    """Return the request fields both kinds of report send.
+def _report_definition(
+    report: EconomyReportCreationInput | BudgetWindowReportCreationInput,
+) -> dict[str, Any]:
+    """Return the request fields economy reports and budget windows both send.
 
     ``spm`` is sent only when the caller gave it.
     """
@@ -271,6 +267,28 @@ def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, 
     return {
         **_report_definition(report),
         "budget_window_size": report.budget_window_size,
+    }
+
+
+def _household_policy_choice(choice: HouseholdPolicyChoice) -> dict[str, str | None]:
+    return {"policy_id": None if choice.policy_id is None else str(choice.policy_id)}
+
+
+def household_report_request(report: HouseholdReportCreationInput) -> dict[str, Any]:
+    """Return the simulation service's request body for the household report.
+
+    ``reform`` is null for a report of the baseline alone.
+    """
+    return {
+        "country": report.country_id,
+        "report_type": report.kind,
+        "label": report.label,
+        "description": report.description,
+        "household_id": str(report.household_id),
+        "baseline": _household_policy_choice(report.baseline),
+        "reform": (
+            None if report.reform is None else _household_policy_choice(report.reform)
+        ),
     }
 
 
@@ -428,7 +446,7 @@ def _raise_for_refusal(answer: SimulationAnswer, record: RecordName) -> NoReturn
 
 
 class SimulationServiceReportClient:
-    """Create simulations and reports through the simulation service."""
+    """Create simulations and reports, and run reports again, through the service."""
 
     def __init__(
         self,
@@ -440,14 +458,18 @@ class SimulationServiceReportClient:
         send_report: Callable[
             [httpx.Client, dict[str, Any]], SimulationAnswer
         ] = post_report,
+        send_report_rerun: Callable[
+            [httpx.Client, UUID, dict[str, Any]], SimulationAnswer
+        ] = post_report_rerun,
     ) -> None:
-        """Send through ``send_simulation`` and ``send_report`` on ``http_client``.
+        """Send through ``send_simulation``, ``send_report`` and ``send_report_rerun``.
 
-        ``http_client`` has the service's base URL.
+        Each sends on ``http_client``, which has the service's base URL.
         """
         self._http_client = http_client
         self._send_simulation = send_simulation
         self._send_report = send_report
+        self._send_report_rerun = send_report_rerun
 
     @classmethod
     def from_environment(
@@ -544,6 +566,25 @@ class SimulationServiceReportClient:
             report_id=created.report_id, report_run_id=created.report_run_id
         )
 
+    def submit_household_report(
+        self, report: HouseholdReportCreationInput
+    ) -> SubmittedReport:
+        """Create the household report, its simulations and runs; return its IDs.
+
+        It is sent to the report route, so its refusals and failures are a
+        report's. Raise the errors ``SimulationServiceClient`` names.
+        """
+        created = self._created(
+            self._send_report,
+            household_report_request(report),
+            _CreatedReport,
+            record="report",
+            created_name="report",
+        )
+        return SubmittedReport(
+            report_id=created.report_id, report_run_id=created.report_run_id
+        )
+
     def submit_budget_window(
         self, report: BudgetWindowReportCreationInput
     ) -> SubmittedBudgetWindow:
@@ -563,6 +604,14 @@ class SimulationServiceReportClient:
             report_id=created.report_id,
             budget_window_run_id=created.budget_window_run_id,
         )
+
+    def rerun_report(self, rerun: ReportRerunInput) -> None:
+        """Have the service create and start the stored report's new run.
+
+        Raise the errors ``policyengine_api.libs.simulation_report_reruns``
+        lists for the service's answers.
+        """
+        start_report_rerun(self._http_client, rerun, send=self._send_report_rerun)
 
 
 @lru_cache(maxsize=1)

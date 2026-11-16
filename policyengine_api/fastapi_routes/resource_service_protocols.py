@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.types import (
         StoredReportRead,
+        StoredReportRunsRead,
         StoredReportSummaryRead,
     )
     from policyengine_api.services.v2.stored_simulations.types import SimulationRead
@@ -199,10 +200,10 @@ class V2StoredReportResourceService(Protocol):
     def get_report(self, *, country_id: str, report_id: UUID) -> StoredReportRead:
         """Return the country's report, its newest run and that run's result.
 
-        The report is an economy report or a budget window. Raise
-        ``StoredReportNotFoundError`` when the country has no such report,
-        ``ReportKindUnsupportedError`` for a household report, and
-        ``EconomyResultUnreadableError`` or
+        The report is an economy report, a household report or a budget
+        window. Raise ``StoredReportNotFoundError`` when the country has no
+        such report, and ``EconomyResultUnreadableError``,
+        ``HouseholdResultUnreadableError`` or
         ``BudgetWindowResultUnreadableError`` when a succeeded run's result
         cannot be read.
         """
@@ -211,20 +212,53 @@ class V2StoredReportResourceService(Protocol):
     def list_reports(
         self, *, country_id: str, report_ids: Sequence[UUID]
     ) -> tuple[StoredReportSummaryRead, ...]:
-        """Return the country's economy reports and budget windows, as named."""
+        """Return the country's reports of every kind among those named, in order."""
         ...
 
     def create_report(self, report_input: ReportCreationInput) -> StoredReportRead:
         """Create the report through the simulation service; return it as stored.
 
-        Raise ``EconomyCalculationsUnsupportedError`` for a country without
-        economy reports, ``PolicyNotFoundError`` for a policy the country
-        does not store, ``PolicyParametersMissingError`` for a policy that
-        sets parameters the running catalog version lacks,
-        ``SubmissionStorageError`` when the database or its catalog cannot be
-        read for those checks, the simulation service's errors, and
-        ``CreatedReportUnreadableError`` when the report it created cannot be
-        read back.
+        Raise ``EconomyCalculationsUnsupportedError`` for an economy report in
+        a country without economy reports,
+        ``HouseholdCalculationCountryError`` for a household report in a
+        country without household calculations, ``HouseholdNotFoundError``
+        for a household the country does not store,
+        ``HouseholdCalculationYearError`` for one with no default year,
+        ``PolicyNotFoundError``
+        for a policy the country does not store,
+        ``PolicyParametersMissingError`` for a policy that sets parameters the
+        running catalog version lacks, ``SubmissionStorageError`` when the
+        database or its catalog cannot be read for those checks, the
+        simulation service's errors, and ``CreatedReportUnreadableError`` when
+        the report it created cannot be read back.
+        """
+        ...
+
+    def rerun_report(
+        self, *, country_id: str, report_id: UUID, force: bool
+    ) -> StoredReportRead:
+        """Run the country's report again; return it with its new run as its newest.
+
+        Raise ``StoredReportNotFoundError`` when the country has no such
+        report; the errors of the country check a new report of its kind makes
+        (economy calculations, or household calculations for a household
+        report) and of the policy checks of its simulations, as
+        ``create_report`` raises them (a household report's household is not
+        checked again); the simulation service's errors, among them
+        ``SimulationServiceConflictError`` when it will not run the report
+        again now, and ``RerunReportUnreadableError`` when the report cannot
+        be read back once its new run was started.
+        """
+        ...
+
+    def list_report_runs(
+        self, *, country_id: str, report_id: UUID
+    ) -> StoredReportRunsRead:
+        """Return the runs of the country's report, newest first.
+
+        An economy or household report's are its report runs; a budget
+        window's are its budget-window runs, each with its years. Raise
+        ``StoredReportNotFoundError`` when the country has no such report.
         """
         ...
 

@@ -67,6 +67,9 @@ from policyengine_api.services.economy_impact_types import (
     RuntimeBundleIdentity,
     SimulationOptions,
 )
+from policyengine_api.services.economy_request_failures import (
+    log_economy_request_failure,
+)
 from policyengine_api.services.economy_simulation_requests import (
     SimulationRequestMixin,
 )
@@ -173,7 +176,9 @@ class EconomyService(
         "computing" while the calculation runs, or "error" with a ``message``.
         A year outside the country's ``ECONOMY_YEARS`` raises
         SPMValidationError (``DATASET_YEAR_UNAVAILABLE``) before any stored
-        result is read. Unexpected failures are logged and re-raised.
+        result is read. Every exception is logged and re-raised: a refused
+        request at WARNING, any other failure at ERROR (see
+        ``log_economy_request_failure``).
         """
         set_runtime_context(
             country_id=impact_request.country_id,
@@ -197,13 +202,12 @@ class EconomyService(
                 setup_options=economic_impact_setup_options,
             )
 
-        except Exception as e:
-            logger.log_struct(
-                {
-                    "message": "Error getting economic impact",
-                    "error_type": type(e).__name__,
-                },
-                severity="ERROR",
+        except Exception as error:
+            log_economy_request_failure(
+                error,
+                request_validated=economic_impact_setup_options is not None,
+                failure_message="Error getting economic impact",
+                refusal_message="Refused economic impact request",
             )
             raise
         finally:

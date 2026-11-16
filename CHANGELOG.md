@@ -1,3 +1,44 @@
+## [5.48.0] - 2026-11-13
+
+### Added
+
+- The v2 database gains a `withheld_area_codes` table: one row per UK constituency or local authority that disclosure control withheld from a report run's local-area results, keyed by the report run and its two simulation runs. The simulation service's Modal workers may insert its rows and the Public API may read them; no route reads it yet.
+
+
+## [5.47.0] - 2026-11-13
+
+### Added
+
+- `/v2/reports` runs a report again and lists its runs, for economy reports, household reports and budget windows. `POST /v2/reports/{report_id}/runs?country_id=` (body `{"force": false}`) checks the report's country and the policies its simulations name, as a new report of its kind is checked, then has the simulation service create and start the report's new run on its default worker's versions, reusing each side's successful simulation run on those versions unless `force` is true (a household report's sides are always calculated again); it answers 201 with the report and its new run, 409 naming the run when one is pending or running, and keeps every earlier run. `GET /v2/reports/{report_id}/runs?country_id=` lists the report's runs, newest first (a budget window's budget-window runs, each with its years), each with its `country_package_version` and `policyengine_version`, beside the versions the Public API runs now, so a caller can mark a report whose newest run is on older versions as out of date. The simulation service's 409 `rerun_not_supported`, for a report it does not run again, is passed on.
+
+
+## [5.46.1] - 2026-11-13
+
+### Fixed
+
+- The economy routes now log a request they refuse with 400 or 404 (a year outside the country's years, an unknown region or other invalid setting, or a policy the country does not have) at WARNING instead of ERROR, so refused requests no longer form error groups in the telemetry error report. Every other failure is still logged at ERROR.
+- A household calculation (`POST /<country_id>/calculate` or `/calculate-full`) now answers 400, listing each problem, for a `policy` the calculation can't read, instead of a 500 after several seconds: a policy that isn't an object, a parameter not set to an object of period keys, a period key neither the US nor the UK model reads, or a value its parameter can't take, such as `null`, a list or non-numeric text for a number.
+
+
+## [5.46.0] - 2026-11-13
+
+### Added
+
+- `/v2/reports` serves household reports: `POST /v2/reports` with `kind` `household` takes a stored household, a baseline policy and an optional reform policy (null for a report of the baseline alone), and has the simulation service create the report and its household simulations (one for each policy), which calculate the household's default year with every variable the household lacks added. It answers 422 for a country without household calculations (a household-only country has them) and for a household with no default year, and 404 for a household the country does not store, before asking the simulation service. Reading or listing a household report answers it with its newest run; a read adds each simulation's calculated household once that run has succeeded, and each side's calculation error once it has failed.
+
+
+## [5.45.0] - 2026-11-13
+
+### Added
+
+- Admins can delete a signed-in user's account, saved records and Auth0 users with `DELETE /v2/admin/users/{user_id}`, as `DELETE /v2/me` deletes one's own; the only admin's own deletion is refused, and each deletion is recorded with the admin's and the user's v2 IDs.
+- `/v2/reports` serves budget windows: a report comparing a baseline and a reform in each year of a window of 1 to 75 years, ending in 2200 or earlier. `POST /v2/reports` takes `kind` `budget_window` with the first `year` and `budget_window_size`, checks it as an economy report is, and has the simulation service create it. `GET /v2/reports/{report_id}` and the report listing answer a budget window with its newest budget-window run and that run's years, each a report run with its own status and versions; once the run has succeeded, the read gives today's budget-window result, each year's budget figures and their totals, rebuilt from each year's stored rows. A saved report naming a detailed-save report must give that report's own budget window as `budget_window_years` (none for a window shorter than two years), or is refused with 400.
+
+### Changed
+
+- `DELETE /v2/me` now tries to delete the Auth0 user of every one of the account's sign-in identities before it answers 502, instead of stopping at the first failure, and its `auth0_user_deletion_failed` WARNING record now also carries `auth0_user_count` and `undeleted_auth0_user_count`. A retry still deletes only the Auth0 user of the token's own identity.
+
+
 ## [5.44.0] - 2026-11-12
 
 ### Added

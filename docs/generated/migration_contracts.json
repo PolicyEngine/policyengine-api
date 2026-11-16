@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 99,
+    "request_count": 101,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 18
@@ -1402,7 +1402,7 @@
     },
     {
       "current_contract": "typed_v2_resources",
-      "future_owner_pr": "C1 \u00b7 8: v2 simulations and economy reports",
+      "future_owner_pr": "C1 \u00b7 8: v2 simulations and economy reports; C1 \u00b7 16: household reports",
       "name": "detailed_save_reports_v2",
       "requests": [
         {
@@ -1445,10 +1445,41 @@
             "status",
             "message",
             "result.item.id",
+            "result.item.kind",
             "result.item.status",
             "result.item.run",
             "result.item.current_versions",
             "result.item.result"
+          ]
+        },
+        {
+          "expected_status": 201,
+          "headers": [],
+          "method": "POST",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.status",
+            "result.item.run",
+            "result.item.current_versions"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/reports/{report_id}/runs?country_id=us",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.report_id",
+            "result.kind",
+            "result.items",
+            "result.current_versions"
           ]
         },
         {

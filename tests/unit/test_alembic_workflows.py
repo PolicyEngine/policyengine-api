@@ -211,6 +211,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2_simulation_runs.py" in lifecycle_script
     assert "test_alembic_v2_saved_item_keys.py" in lifecycle_script
     assert "test_alembic_v2_user_types.py" in lifecycle_script
+    assert "test_alembic_v2_withheld_area_codes.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -247,6 +248,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v2_report_creation.py" in workflow
     assert "test_v2_budget_window_report_reads.py" in workflow
     assert "test_v2_budget_window_report_creation.py" in workflow
+    assert "test_v2_report_runs.py" in workflow
     assert "test_v2_saved_detailed_save_records.py" in workflow
     assert "test_v2_saved_budget_window_reports.py" in workflow
     assert "test_v2_policy_persistence.py" in workflow
@@ -263,6 +265,7 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v1_household_dual_write.py" in workflow
     assert "test_mysql_household_spm_dual_write.py" in workflow
     assert "test_v2_household_calculation_reads.py" in workflow
+    assert "test_v2_household_reports.py" in workflow
     assert "test_mysql_update_row_counts.py" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     # The steps run coverage and pytest, which only the dev extra declares;
