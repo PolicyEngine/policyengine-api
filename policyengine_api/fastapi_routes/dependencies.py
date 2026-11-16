@@ -24,6 +24,7 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2StoredReportResourceService,
     V2StoredSimulationResourceService,
     V2UserHouseholdResourceService,
+    V2UserInvitationResourceService,
     V2UserPolicyResourceService,
     V2UserReportResourceService,
     V2UserSimulationResourceService,
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_service.types import (
         SimulationServiceClient,
     )
+    from policyengine_api.services.v2.user_emails.services import V2UserEmailService
 
 __all__ = [
     "MetadataReader",
@@ -76,6 +78,7 @@ __all__ = [
     "V2StoredReportResourceService",
     "V2StoredSimulationResourceService",
     "V2UserHouseholdResourceService",
+    "V2UserInvitationResourceService",
     "V2UserPolicyResourceService",
     "V2UserReportResourceService",
     "V2UserSimulationResourceService",
@@ -441,6 +444,23 @@ def _default_user_profile_source() -> UserProfileSource | None:
     return UserProfileSource(issuer=load_user_auth_settings().issuer, reader=reader)
 
 
+def _default_user_email_service() -> V2UserEmailService:
+    """Return the email service: Postmark, and the users' Auth0 tenant.
+
+    Without the POSTMARK_* settings it sends nothing and records a WARNING
+    for each email; settings are read when an email is sent.
+    """
+    from policyengine_api.libs.postmark_email import build_postmark_email_sender
+    from policyengine_api.services.v2.user_emails.services import (
+        V2UserEmailService,
+    )
+
+    return V2UserEmailService(
+        email_sender_factory=build_postmark_email_sender,
+        user_profile_source_factory=_default_user_profile_source,
+    )
+
+
 def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -452,6 +472,25 @@ def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
 
     return V2UserTypeService(
         UserTypeDatabaseSession(get_v2_session_factory()),
+        user_profile_source_factory=_default_user_profile_source,
+        user_email_service=_default_user_email_service(),
+    )
+
+
+def _default_v2_user_invitation_service_factory() -> V2UserInvitationResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_invitations.database_session import (
+        UserInvitationDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_invitations.services import (
+        V2UserInvitationService,
+    )
+
+    return V2UserInvitationService(
+        UserInvitationDatabaseSession(get_v2_session_factory()),
+        user_email_service=_default_user_email_service(),
         user_profile_source_factory=_default_user_profile_source,
     )
 
@@ -490,6 +529,9 @@ class NativeRouteDependencies:
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
     v2_user_type_service_factory: Callable[[], V2UserTypeResourceService] | None = None
+    v2_user_invitation_service_factory: (
+        Callable[[], V2UserInvitationResourceService] | None
+    ) = None
     # Whole catalog-version responses (/v2/model-catalog and its variables) are
     # kept here once built; None reads them on every request.
     v2_metadata_response_cache: MetadataResponseCache | None = None
@@ -528,5 +570,8 @@ class NativeRouteDependencies:
             v2_user_report_service_factory=_default_v2_user_report_service_factory,
             v2_account_service_factory=_default_v2_account_service_factory,
             v2_user_type_service_factory=_default_v2_user_type_service_factory,
+            v2_user_invitation_service_factory=(
+                _default_v2_user_invitation_service_factory
+            ),
             require_user=_default_require_user,
         )

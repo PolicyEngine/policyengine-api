@@ -1,0 +1,1 @@
+Admins invite an email address to become an author or admin, and a signed-in user with that verified Auth0 email accepts the invitation; every type change emails the user through Postmark, and `GET /v2/me` reports the latest type change until the user dismisses it.
