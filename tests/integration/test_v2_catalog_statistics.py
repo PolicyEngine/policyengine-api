@@ -5,8 +5,9 @@ of its rows change. ``parameters`` keeps every published version, so on staging
 one release's rows stayed under that share: after 6.17.1 was published on
 2026-11-10, the planner estimated 1 parameter row for US 6.17.1 instead of
 102,530 and served ``GET /v2/parameter-values?country_id=us&limit=1`` in 43-47
-seconds. Publication now runs ``ANALYZE`` on the catalog tables after a run that
-adds, restores or prunes a version. ``ANALYZE`` skips, with only a warning, a
+seconds. Every publication now runs ``ANALYZE`` on the catalog tables once it
+has committed and pruned; a failed ``ANALYZE`` is recorded in the evidence and
+the next publication runs it again. ``ANALYZE`` skips, with only a warning, a
 table the role neither owns nor holds ``MAINTAIN`` on, so publication checks
 that privilege first and fails before writing anything without it.
 """
@@ -21,7 +22,8 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from psycopg import errors as psycopg_errors
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
@@ -132,18 +134,47 @@ def test_publishing_a_new_version_as_the_catalog_writer_analyzes_the_catalog(
     ), last_analyze
 
 
-def test_republishing_an_unchanged_catalog_analyzes_nothing(
+def test_republishing_an_unchanged_catalog_analyzes_it_again(
     superuser_engine, writer_engine
 ) -> None:
+    """Every run analyzes, so a run after a failed ``ANALYZE`` repeats it."""
     catalog = normalized_catalog()
     publish_catalog(writer_engine, catalog)
-    after_first = _last_manual_analyze(superuser_engine)
+    second_started = _database_time(superuser_engine)
 
     second = publish_catalog(writer_engine, catalog)
+    last_analyze = _last_manual_analyze(superuser_engine)
 
-    assert second.catalog_tables_analyzed == ()
-    assert second.as_dict()["catalog_tables_analyzed"] == []
-    assert _last_manual_analyze(superuser_engine) == after_first
+    assert second.catalog_tables_analyzed == ANALYZED_TABLES
+    assert second.catalog_statistics_failure is None
+    assert all(
+        analyzed_at is not None and analyzed_at >= second_started
+        for analyzed_at in last_analyze.values()
+    ), last_analyze
+
+
+def test_a_failed_analyze_is_recorded_and_the_publication_kept(
+    superuser_engine, writer_engine
+) -> None:
+    def cancel_analyze(_connection, _cursor, statement, *_arguments) -> None:
+        if statement.startswith("ANALYZE"):
+            msg = "canceling statement due to statement timeout"
+            raise psycopg_errors.QueryCanceled(msg)
+
+    event.listen(writer_engine, "before_cursor_execute", cancel_analyze)
+
+    evidence = publish_catalog(writer_engine, normalized_catalog())
+    with superuser_engine.connect() as connection:
+        stored_versions = connection.execute(
+            text("SELECT count(*) FROM tax_benefit_model_versions")
+        ).scalar_one()
+
+    assert stored_versions > 0
+    assert evidence.catalog_tables_analyzed == ()
+    assert evidence.catalog_statistics_failure == "psycopg.errors.QueryCanceled"
+    assert evidence.as_dict()["catalog_statistics_failure"] == (
+        "psycopg.errors.QueryCanceled"
+    )
 
 
 @pytest.fixture
