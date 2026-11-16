@@ -2954,7 +2954,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.17.1"
+version = "6.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2966,9 +2966,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/45/483142f35ce0dfa02db01e541f730843b9108ae4b60a8bdae92ac223f3b2/policyengine-6.17.1.tar.gz", hash = "sha256:07a2617c738a77d2f1fd8ff2c5f4d89b040a54f44e9f931331a7ae34fdbbfc9f", size = 1629731, upload-time = "2026-11-10T16:26:24.672Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/d3/3840c38b21d61ea6bc5e3fde1e8efdf4e2ee785bbb075a6414faa4bb0197/policyengine-6.19.0.tar.gz", hash = "sha256:e0bed171f3960ee02dffde698e60db2c019c42f56ac35363ed32d0cdfa855cd5", size = 1663227, upload-time = "2026-11-13T02:33:26.896Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/d5/e8b6181f512e5c3b14bbd0638a4c179515a9f479a68a6eaba640005b0fad/policyengine-6.17.1-py3-none-any.whl", hash = "sha256:7fa63f9f6524d911ff7a490448a2b202341487dc09d5c945fc0e0c816893df1e", size = 562776, upload-time = "2026-11-10T16:26:22.717Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/47/dfc019e4981cdc1b336306dc3523a4008ac03dd02329c1d15d0e0d0a0425/policyengine-6.19.0-py3-none-any.whl", hash = "sha256:03748947dcf6b98d17598343605388437a443fba283bff6229d8adf13c10281b", size = 579425, upload-time = "2026-11-13T02:33:25.15Z" },
 ]
 
 [package.optional-dependencies]
@@ -3072,7 +3072,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15,<2" },
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
-    { name = "policyengine", extras = ["models"], specifier = "==6.17.1" },
+    { name = "policyengine", extras = ["models"], specifier = "==6.19.0" },
     { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.3,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
