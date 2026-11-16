@@ -1,4 +1,8 @@
-"""Checks on what a report's run request must name, without a database."""
+"""Checks before a user's report run is recorded, without a database.
+
+A run request must name exactly one run, and a service built without a
+run recorder refuses a create naming a user before it does anything.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +41,7 @@ REQUESTED_AT = datetime(2026, 11, 16, 9, tzinfo=UTC)
 @pytest.mark.parametrize(
     "run_ids",
     [{}, {"report_run_id": uuid4(), "budget_window_run_id": uuid4()}],
-    ids=["neither run", "both runs"],
+    ids=["neither-run", "both-runs"],
 )
 def test_a_run_request_must_name_exactly_one_run(run_ids: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="report run or a budget-window run"):

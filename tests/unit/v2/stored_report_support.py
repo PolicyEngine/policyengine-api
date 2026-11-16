@@ -151,7 +151,8 @@ class FakeReportService:
     listed: tuple[ReportSummaryRead, ...] = ()
     error: Exception | None = None
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
-    # The user each create or re-run named, None for a request naming none.
+    # The user each read, create or re-run named, None for a request naming
+    # none; recorded before ``error`` is raised.
     requesters: list[AccountPrincipal | None] = field(default_factory=list)
 
     def _answer(self, name: str, **arguments: Any) -> None:
@@ -190,8 +191,8 @@ class FakeReportService:
         *,
         requester: AccountPrincipal | None = None,
     ) -> ReportRead:
-        self._answer("create_report", report_input=report_input)
         self.requesters.append(requester)
+        self._answer("create_report", report_input=report_input)
         return self.report
 
 

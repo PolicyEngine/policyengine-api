@@ -121,10 +121,10 @@ class FakeReportRunService(FakeReportService):
         force: bool,
         requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
+        self.requesters.append(requester)
         self._answer(
             "rerun_report", country_id=country_id, report_id=report_id, force=force
         )
-        self.requesters.append(requester)
         return self.report if self.rerun is None else self.rerun
 
     def list_report_runs(

@@ -79,44 +79,34 @@ def test_a_malformed_browser_credential_is_refused_before_the_service() -> None:
     assert service.calls == []
 
 
-def test_a_browser_credential_naming_a_signed_in_user_answers_401() -> None:
-    service = FakeReportRunService(
-        error=StandardUserRequiresSignInError("Sign in to act on this account")
-    )
-
-    response = report_route_client(reports=service).post(
-        f"/v2/reports/{REPORT_ID}/runs?country_id=us",
-        json={},
-        headers={UNAUTHENTICATED_USER_HEADER: str(uuid4())},
-    )
-
-    assert response.status_code == 401
-    assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json()["message"] == "Sign in to act on this account"
-
-
 @pytest.mark.parametrize(
-    "path",
+    ("method", "path"),
     [
-        f"/v2/reports/{REPORT_ID}?country_id=us",
-        f"/v2/reports?country_id=us&report_id={REPORT_ID}",
+        ("POST", f"/v2/reports/{REPORT_ID}/runs?country_id=us"),
+        ("GET", f"/v2/reports/{REPORT_ID}?country_id=us"),
+        ("GET", f"/v2/reports?country_id=us&report_id={REPORT_ID}"),
     ],
-    ids=["one report", "report list"],
+    ids=["rerun", "one-report", "report-list"],
 )
-def test_a_read_with_a_browser_credential_naming_a_signed_in_user_answers_401(
-    path: str,
+def test_a_browser_credential_naming_a_signed_in_user_answers_401(
+    method: str, path: str
 ) -> None:
+    browser_id = uuid4()
     service = FakeReportRunService(
         error=StandardUserRequiresSignInError("Sign in to act on this account")
     )
 
-    response = report_route_client(reports=service).get(
-        path, headers={UNAUTHENTICATED_USER_HEADER: str(uuid4())}
+    response = report_route_client(reports=service).request(
+        method,
+        path,
+        json={} if method == "POST" else None,
+        headers={UNAUTHENTICATED_USER_HEADER: str(browser_id)},
     )
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
     assert response.json()["message"] == "Sign in to act on this account"
+    assert service.requesters == [UnauthenticatedPrincipal(user_id=browser_id)]
 
 
 def test_a_run_whose_request_was_not_recorded_answers_503_naming_it() -> None:
