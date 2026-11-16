@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 import sqlalchemy as sa
+from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
@@ -79,8 +80,10 @@ def require_analyze_privilege(connection: Connection) -> None:
 class CatalogStatisticsRefresh:
     """What the ``ANALYZE`` after a publication did.
 
-    ``analyzed`` names the tables, empty when it failed; ``failure_type`` is the
-    failure's class as ``module.QualifiedName``, never its message.
+    ``analyzed`` names the tables, empty when it failed. ``failure_type`` then
+    names the failure without its message: for a database error, the class of
+    the error the driver raised and its SQLSTATE, as a failed pruning reports
+    it, since SQLAlchemy's own class is the same for every database error.
     """
 
     analyzed: tuple[str, ...]
@@ -98,9 +101,21 @@ def analyze_catalog_tables(engine: Engine) -> CatalogStatisticsRefresh:
         with engine.begin() as connection:
             connection.execute(sa.text(f"ANALYZE {tables}"))
     except Exception as error:  # noqa: BLE001  # the publication has committed; the next one analyzes again
-        error_class = type(error)
-        return CatalogStatisticsRefresh(
-            analyzed=(),
-            failure_type=f"{error_class.__module__}.{error_class.__qualname__}",
-        )
+        return CatalogStatisticsRefresh(analyzed=(), failure_type=_failure(error))
     return CatalogStatisticsRefresh(analyzed=CATALOG_STATISTICS_TABLES)
+
+
+def _failure(error: Exception) -> str:
+    """Name a failure by its class and a database error's SQLSTATE, not its message."""
+    driver_error = getattr(error, "orig", None)
+    reported = (
+        driver_error
+        if isinstance(error, SQLAlchemyError) and isinstance(driver_error, Exception)
+        else error
+    )
+    reported_class = type(reported)
+    name = f"{reported_class.__module__}.{reported_class.__qualname__}"
+    sqlstate = getattr(reported, "sqlstate", None)
+    if isinstance(sqlstate, str) and sqlstate:
+        return f"{name} (SQLSTATE {sqlstate})"
+    return name

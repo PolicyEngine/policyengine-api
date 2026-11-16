@@ -282,7 +282,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # The UK areas disclosure control withheld from a local-area run's results.
     "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
-    # The writer also analyzes the tables publication grows (_ANALYZE).
+    # The writer also analyzes seven of them after every publication (_ANALYZE).
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS

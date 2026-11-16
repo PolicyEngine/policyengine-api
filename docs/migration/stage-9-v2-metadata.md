@@ -644,8 +644,10 @@ Every publication therefore runs one `ANALYZE` over `datasets`,
 `parameters`, `regions` and `variables` once it has committed and pruned, and
 lists them in the evidence's `catalog_tables_analyzed`. It takes a few seconds
 and blocks no reads. A failed `ANALYZE` doesn't undo the publication: the
-evidence lists no tables and names the failure's class in
-`catalog_statistics_failure`, and the next publication analyzes again.
+evidence lists no tables and names the failure in `catalog_statistics_failure`
+(the database driver's error class and SQLSTATE, never its message), the
+command prints it to stderr and still succeeds, and the next publication
+analyzes again.
 
 `ANALYZE` needs the table's owner or the `MAINTAIN` privilege (PostgreSQL 17),
 and PostgreSQL skips any other table with only a warning. The migration role
