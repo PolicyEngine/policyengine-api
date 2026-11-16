@@ -283,14 +283,21 @@ check the declarations:
   then `verify`, before the catalog is seeded.
 
 `apply` grants each declared privilege a role lacks, as one `GRANT` per role
-and table and one per column privilege. It never revokes: it reports
-privileges the file doesn't declare, on whole tables or on columns, and the
-projects' default privileges, in the job summary. It grants nothing when a
-declared role or table is missing. `verify` checks each column of a column
-privilege with `has_column_privilege`, and fails when a role holds the same
-privilege on the whole table. The roles themselves are provisioned outside
-the repository; `--create-missing-roles` is accepted only for the disposable
-test database.
+and table and one per column privilege. It revokes one kind of privilege
+only: one a role holds directly on a whole table that the file declares for
+named columns only. The projects' default privileges give the runtime role
+`UPDATE` on every new table, so `user_type_changes`, where it may update only
+`dismissed_at`, starts with one. PostgreSQL's `REVOKE` on a table also removes
+the role's column grants of that privilege, so `apply` grants the declared
+columns again, in the same transaction, and the job summary lists the revoke.
+It reports every other privilege the file doesn't declare, on whole tables or
+on columns, and the projects' default privileges, without revoking them. It
+changes nothing when a declared role or table is missing. `verify` checks each
+column of a column privilege with `has_column_privilege`, and fails when a role
+still holds the same privilege on the whole table, for instance through a role
+it belongs to. The roles themselves are provisioned outside the repository;
+`--create-missing-roles` is accepted only for the disposable test database,
+which has no default privileges.
 
 A pull request may declare a role before an operator creates it by listing it
 in `ROLES_AWAITING_PROVISIONING` in `privileges.py`. While a listed role is

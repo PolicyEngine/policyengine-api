@@ -1,9 +1,10 @@
 """Plan, state and report the table privileges the v2 manifest declares.
 
 The pure half of ``privilege_reconciliation``: it compares the declared
-privileges with what a database grants, writes the GRANT statements, finds the
-privileges a role lacks or holds too widely, and renders the reports. It runs
-no SQL; ``privilege_reconciliation`` reads the database and runs the result.
+privileges with what a database grants, writes the REVOKE and GRANT statements,
+finds the privileges a role lacks or holds too widely, and renders the reports.
+It runs no SQL; ``privilege_reconciliation`` reads the database and runs the
+result.
 """
 
 from __future__ import annotations
@@ -75,10 +76,12 @@ class DefaultPrivilege:
 
 @dataclass(frozen=True)
 class ReconciliationPlan:
-    """What ``apply`` grants and reports for one database.
+    """What ``apply`` revokes, grants and reports for one database.
 
     ``skipped_roles`` are missing roles awaiting creation by an operator; they
-    don't block the plan, and nothing is granted to them.
+    don't block the plan, and nothing is granted to them. ``revocations`` are
+    whole-table privileges a role holds directly that the manifest declares
+    for named columns only; ``apply`` revokes them before it grants.
     """
 
     grants: tuple[PrivilegeEntry, ...]
@@ -86,6 +89,7 @@ class ReconciliationPlan:
     missing_roles: tuple[str, ...]
     missing_tables: tuple[str, ...]
     skipped_roles: tuple[str, ...] = ()
+    revocations: tuple[PrivilegeEntry, ...] = ()
 
     @property
     def can_apply(self) -> bool:
@@ -120,6 +124,11 @@ def plan_reconciliation(
     """Compare declared privileges with what the database grants.
 
     A missing role in ``roles_awaiting_creation`` is skipped instead of missing.
+    A whole-table privilege the manifest declares for named columns only, such
+    as the ``UPDATE`` a new table's default privileges give, is revoked.
+    PostgreSQL's ``REVOKE`` on a table also removes the role's column grants of
+    that privilege, so the plan grants the declared columns again and reports
+    none of the removed grants as undeclared.
     """
     absent_roles = set(declared) - set(existing_roles)
     skipped_roles = tuple(sorted(absent_roles & set(roles_awaiting_creation)))
@@ -144,18 +153,35 @@ def plan_reconciliation(
         for column, privileges in columns.items()
         for privilege in privileges
     }
+    revocations = sorted(
+        PrivilegeEntry(role, table, privilege.privilege.value)
+        for role, tables in declared.items()
+        for table, privileges in tables.items()
+        for privilege in privileges
+        if isinstance(privilege, ColumnPrivilege)
+        and role not in absent_roles
+        and table not in missing_tables
+        and privilege.privilege.value in granted.tables.get(role, {}).get(table, ())
+    )
+    revoked = {(entry.role, entry.table, entry.privilege) for entry in revocations}
+    held_entries = {
+        entry
+        for entry in granted_entries
+        if (entry.role, entry.table, entry.privilege) not in revoked
+    }
     grants = sorted(
         entry
-        for entry in declared_entries - granted_entries
+        for entry in declared_entries - held_entries
         if entry.role not in absent_roles and entry.table not in missing_tables
     )
-    undeclared = sorted(granted_entries - declared_entries)
+    undeclared = sorted(held_entries - declared_entries)
     return ReconciliationPlan(
         grants=tuple(grants),
         undeclared=tuple(undeclared),
         missing_roles=missing_roles,
         missing_tables=missing_tables,
         skipped_roles=skipped_roles,
+        revocations=tuple(revocations),
     )
 
 
@@ -165,6 +191,22 @@ def safe_identifier(identifier: str) -> str:
         msg = f"refusing to use {identifier!r} as a role, table or column name"
         raise UnsafeIdentifierError(msg)
     return identifier
+
+
+def revoke_statements(
+    plan: ReconciliationPlan, quote_identifier: Callable[[str], str]
+) -> list[str]:
+    """Return the REVOKEs for a plan: one per role and table, in that order."""
+    privileges_by_target: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for entry in plan.revocations:
+        target = (safe_identifier(entry.role), safe_identifier(entry.table))
+        privileges_by_target[target].add(TablePrivilege(entry.privilege).value)
+    return [
+        f"REVOKE {', '.join(sorted(privileges))} ON TABLE "
+        f"{quote_identifier(SCHEMA)}.{quote_identifier(table)} "
+        f"FROM {quote_identifier(role)}"
+        for (role, table), privileges in sorted(privileges_by_target.items())
+    ]
 
 
 def grant_statements(
@@ -308,6 +350,20 @@ def render_summary(
         lines += [
             "Declared tables missing from the database (nothing was granted): "
             + ", ".join(f"`{table}`" for table in plan.missing_tables),
+            "",
+        ]
+    if plan.revocations:
+        revoke_heading = "Revoked" if applied else "Would revoke"
+        lines += [
+            f"### {revoke_heading}: whole-table privileges declared for named "
+            "columns only",
+            "",
+            "Revoking one also removes the role's column grants of it; the "
+            "declared columns are granted again below.",
+            "",
+            "| Role | Table | Privileges |",
+            "| --- | --- | --- |",
+            *_privilege_rows(plan.revocations),
             "",
         ]
     grant_heading = "Granted" if applied else "Would grant"
