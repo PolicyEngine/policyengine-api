@@ -1,0 +1,1 @@
+A v2 metadata read that answers the generic 503 or the 500 now records one runtime event, `v2_metadata_read_failed`, naming the route, the error classes in its cause chain, the database's SQLSTATE and whether the connection was lost, without any error message.
