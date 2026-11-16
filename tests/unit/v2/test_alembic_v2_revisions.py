@@ -66,6 +66,8 @@ WITHHELD_AREA_CODES_REVISION = "1e1e3f079f2c"
 # The shared reports revision, on the withheld area codes revision, and parent
 # of the user invitations revision.
 SHARED_REPORTS_REVISION = "94dc43079186"
+# The user invitations revision, on the shared reports revision.
+USER_INVITATIONS_REVISION = "f519a77ba122"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
@@ -1086,7 +1088,9 @@ def test_user_invitations_revision_adds_its_table_and_the_dismissal_column() -> 
     name because Alembic compares checks by name only. The downgrade undoes
     each, and neither writes data.
     """
-    (path,) = (REPO / "migrations/v2/versions").glob(f"{V2_ALEMBIC_HEAD_REVISION}_*.py")
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{USER_INVITATIONS_REVISION}_*.py"
+    )
     revision = path.read_text(encoding="utf-8")
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")

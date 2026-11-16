@@ -7,7 +7,8 @@ Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 
 Generated on 0c136a278f29; its down_revision moved to 1e1e3f079f2c when the
 withheld area codes revision reached master first, and to 94dc43079186 when
-the shared reports revision did.
+the shared reports revision did. Generating it again from 94dc43079186 gives
+the same operations.
 
 Adds user_invitations, one row per admin's invitation for an email address to
 become an author or admin: the address, the type, the SHA-256 digest of its
