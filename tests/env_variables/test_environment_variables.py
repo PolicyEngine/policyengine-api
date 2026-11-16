@@ -1,21 +1,50 @@
 import os
+from urllib.parse import quote
 
 import pytest
 import requests
+
+from policyengine_api.constants import get_bundle_data_release
 
 HUGGING_FACE_API_URL = "https://huggingface.co/api/whoami-v2"
 HUGGING_FACE_UK_DATA_MODEL_URL = (
     "https://huggingface.co/api/models/policyengine/policyengine-uk-data-private"
 )
-HUGGING_FACE_UK_POPULATION_DATASET_URL = (
-    "https://huggingface.co/api/datasets/policyengine/populace-uk-private"
-)
+HUGGING_FACE_REPOSITORY_API_URL = "https://huggingface.co/api"
+HUGGING_FACE_REPOSITORY_TYPE_PATHS = {"model": "models", "dataset": "datasets"}
 EXPECTED_HUGGING_FACE_TOKEN_NAME = "pe-uk-private-hf-read-token"
 GITHUB_API_URL = "https://api.github.com/user"
 
 
 def do_not_run_in_debug():
     return os.getenv("FLASK_DEBUG") == "1"
+
+
+def uk_default_dataset_location() -> tuple[str, str, str, str]:
+    """Locate the bundle's default UK dataset: repository type and ID, path, revision.
+
+    The default dataset is the national file UK simulations load when no
+    region-specific dataset applies. The location is resolved as the
+    ``policyengine`` package resolves it: a dataset entry without its own
+    repository, repository type or revision takes the data package's. The
+    bundled manifest is read without importing that package, whose import builds
+    both country models and contacts Hugging Face.
+    """
+    release = get_bundle_data_release("uk")
+    default_dataset = release.get("default_dataset")
+    dataset_entry = release.get("datasets", {}).get(default_dataset)
+    assert dataset_entry is not None, (
+        f"The bundle has no location for its default UK dataset {default_dataset}"
+    )
+    data_package = release["data_package"]
+    return (
+        dataset_entry.get("repo_type") or data_package.get("repo_type") or "model",
+        dataset_entry.get("repo_id") or data_package["repo_id"],
+        dataset_entry["path"],
+        dataset_entry.get("revision")
+        or data_package.get("release_manifest_revision")
+        or data_package["version"],
+    )
 
 
 class TestEnvironmentVariables:
@@ -68,19 +97,30 @@ class TestEnvironmentVariables:
         }
         assert "local_authority_weights.h5" in uk_data_files
 
-        populace_response = requests.get(
-            HUGGING_FACE_UK_POPULATION_DATASET_URL,
+        # Hugging Face read permission covers a whole repository, so listing the
+        # files at the pinned revision checks the credential's access and that
+        # the pinned file exists at that revision.
+        repository_type, repository_id, dataset_path, dataset_revision = (
+            uk_default_dataset_location()
+        )
+        dataset_response = requests.get(
+            f"{HUGGING_FACE_REPOSITORY_API_URL}"
+            f"/{HUGGING_FACE_REPOSITORY_TYPE_PATHS[repository_type]}/{repository_id}"
+            f"/revision/{quote(dataset_revision, safe='')}",
             headers=headers,
             timeout=10,
         )
-        assert populace_response.status_code == 200, (
+        assert dataset_response.status_code == 200, (
             "The shared API and simulation runtime token cannot read "
-            f"policyengine/populace-uk-private: {populace_response.text}"
+            f"{repository_type} repository {repository_id} "
+            f"at revision {dataset_revision}: {dataset_response.text}"
         )
-        populace_files = {
-            sibling["rfilename"] for sibling in populace_response.json()["siblings"]
+        dataset_files = {
+            sibling["rfilename"] for sibling in dataset_response.json()["siblings"]
         }
-        assert "populace_uk_2023.h5" in populace_files
+        assert dataset_path in dataset_files, (
+            f"{repository_id} at revision {dataset_revision} has no {dataset_path}"
+        )
 
     @pytest.mark.skipif(
         do_not_run_in_debug(),
