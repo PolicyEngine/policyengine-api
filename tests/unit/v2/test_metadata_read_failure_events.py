@@ -289,6 +289,19 @@ def test_a_cause_chain_that_loops_back_names_each_error_once() -> None:
     assert attributes["error.cause_types"] == "builtins.ValueError"
 
 
+def test_a_cause_chain_that_loops_back_partway_names_each_error_once() -> None:
+    error = RuntimeError("outermost")
+    middle = ValueError("middle")
+    inner = KeyError("inner")
+    error.__cause__ = middle
+    middle.__cause__ = inner
+    inner.__cause__ = middle
+
+    attributes = read_failure_attributes(error, 500, "v2_metadata_query_failed")
+
+    assert attributes["error.cause_types"] == "builtins.ValueError, builtins.KeyError"
+
+
 def test_a_long_cause_chain_names_its_first_errors_only() -> None:
     error = RuntimeError("outermost")
     current = error
