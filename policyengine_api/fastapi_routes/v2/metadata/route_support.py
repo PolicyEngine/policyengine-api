@@ -500,5 +500,7 @@ def _catalog_unavailable_response(
     if isinstance(error, CatalogValuesPrunedError):
         status = 503 if error.running_version else 404
         return v2_error_response(status, str(error), headers=NO_STORE_HEADERS)
-    message = _caller_message(error) or "V2 metadata catalog is unavailable"
+    message = _caller_message(error)
+    if message is None:
+        message = "V2 metadata catalog is unavailable"
     return v2_error_response(503, message)
