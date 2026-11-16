@@ -110,9 +110,11 @@ class PublicationEvidence:
     catalog_pruning_failures: tuple[CatalogPruningFailure, ...] = ()
     # Chosen versions beyond the run's limit, which the next publications prune.
     catalog_versions_left_to_prune: int = 0
-    # The catalog tables analyzed after a run that published, restored or
-    # pruned a version (``publication_statistics``); empty when it changed none.
+    # The catalog tables analyzed once the publication committed and pruned
+    # (``publication_statistics``), empty when ANALYZE failed; then
+    # ``catalog_statistics_failure`` names the failure's class, never its message.
     catalog_tables_analyzed: tuple[str, ...] = ()
+    catalog_statistics_failure: str | None = None
     # The SPM availability recorded after the publication committed; None
     # until initialization records it.
     spm_availability: SPMAvailabilityRecording | None = None
@@ -206,6 +208,7 @@ class PublicationEvidence:
             ],
             "catalog_versions_left_to_prune": self.catalog_versions_left_to_prune,
             "catalog_tables_analyzed": list(self.catalog_tables_analyzed),
+            "catalog_statistics_failure": self.catalog_statistics_failure,
             "spm_availability": (
                 None
                 if self.spm_availability is None

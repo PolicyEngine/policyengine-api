@@ -192,7 +192,7 @@ Use three separately managed database credentials:
 | Operation | Configuration | Required database access |
 | --- | --- | --- |
 | Alembic schema upgrade | `V2_MIGRATION_DATABASE_URL` | Reviewed v2 schema changes; no application-runtime use |
-| Catalog publication | `V2_DATA_WRITE_DATABASE_URL` | Row insertion, update, selection, deletion from `parameter_values`, `parameter_tree_children` and `parameter_search_files` (catalog pruning), `ANALYZE` of the catalog tables (`MAINTAIN`), temporary tables, and transaction-scoped advisory locks; no persistent schema changes |
+| Catalog publication | `V2_DATA_WRITE_DATABASE_URL` | Row insertion, update, selection, deletion from `parameter_values`, `parameter_tree_children` and `parameter_search_files` (catalog pruning), `ANALYZE` of the catalog tables (`MAINTAIN`, which also allows `VACUUM`, `CLUSTER`, `REINDEX` and `LOCK TABLE` on them), temporary tables, and transaction-scoped advisory locks; no persistent schema changes |
 | Preview GET requests | `V2_RUNTIME_DATABASE_URL` or `V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE` | Catalog selection only during Stage 9; no migration access |
 
 Do not place more than one database URL in the environment of either the
@@ -639,16 +639,22 @@ that version, and `GET /v2/parameter-values?country_id=us&limit=1` took 43 to
 parameters` it walks `uq_parameters_model_version_name` and takes 4.1 ms
 (UK: 4.9 ms).
 
-A publication that publishes, restores or prunes a version therefore runs one
-`ANALYZE` over `datasets`, `parameter_nodes`, `parameter_tree_children`,
-`parameter_values`, `parameters`, `regions` and `variables` once it has
-committed and pruned, and lists them in the evidence's
-`catalog_tables_analyzed`; a run that changed none lists none. `ANALYZE` needs
-the table's owner or the `MAINTAIN` privilege (PostgreSQL 17), and PostgreSQL
-skips any other table with only a warning. The migration role owns the tables,
-so the manifest grants the catalog writer `MAINTAIN` on these seven, the
-deploy's `apply` step grants it before publication runs, and publication
-fails before writing anything if its role lacks it. The code is
+Every publication therefore runs one `ANALYZE` over `datasets`,
+`parameter_nodes`, `parameter_tree_children`, `parameter_values`,
+`parameters`, `regions` and `variables` once it has committed and pruned, and
+lists them in the evidence's `catalog_tables_analyzed`. It takes a few seconds
+and blocks no reads. A failed `ANALYZE` doesn't undo the publication: the
+evidence lists no tables and names the failure's class in
+`catalog_statistics_failure`, and the next publication analyzes again.
+
+`ANALYZE` needs the table's owner or the `MAINTAIN` privilege (PostgreSQL 17),
+and PostgreSQL skips any other table with only a warning. The migration role
+owns the tables, so the manifest grants the catalog writer `MAINTAIN` on these
+seven, the deploy's `apply` step grants it before publication runs, and
+publication fails before writing anything if its role lacks it. PostgreSQL 17
+has no narrower privilege: `MAINTAIN` also allows `VACUUM` (`FULL` included),
+`CLUSTER`, `REINDEX`, `REFRESH MATERIALIZED VIEW` and `LOCK TABLE` on those
+tables, though publication runs only `ANALYZE`. The code is
 `policyengine_api/data/v2/catalog/publication_statistics.py`.
 
 ## Validation evidence and retry
@@ -675,6 +681,9 @@ Successful JSON evidence contains:
   (`catalog_pruning_failures`; see "Catalog pruning");
 - the number of chosen versions left for later publications
   (`catalog_versions_left_to_prune`);
+- the catalog tables analyzed after the publication
+  (`catalog_tables_analyzed`), and the class of a failed `ANALYZE`
+  (`catalog_statistics_failure`; see "Catalog table statistics");
 - elapsed publication time; and
 - a success outcome.
 

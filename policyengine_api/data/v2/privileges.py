@@ -138,7 +138,10 @@ READ_WRITE: Final = frozenset(
 )
 # ANALYZE after publication (``catalog.publication_statistics``): the migration
 # role owns the catalog tables, and PostgreSQL skips a table the role neither
-# owns nor holds MAINTAIN on, with only a warning.
+# owns nor holds MAINTAIN on, with only a warning. PostgreSQL 17 has no narrower
+# privilege: MAINTAIN also allows VACUUM (FULL included), CLUSTER, REINDEX,
+# REFRESH MATERIALIZED VIEW and LOCK TABLE on them, of which publication runs
+# only ANALYZE.
 _ANALYZE: Final = frozenset({TablePrivilege.MAINTAIN})
 
 
