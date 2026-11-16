@@ -25,8 +25,9 @@ Roles and what decides their privileges:
   temporary Stage 12 tables (``docs/migration/stage-12-worker-contract.md``).
 - ``policyengine_v2_catalog_writer``: the metadata catalog publication
   (``scripts/publish_v2_metadata_catalog.py``). Its privileges follow what
-  publication writes and reads; its code isn't organized as connector modules,
-  so the deploy check, not the connector analysis, covers it.
+  publication writes and reads, plus ``MAINTAIN`` on the catalog tables it
+  analyzes afterwards; its code isn't organized as connector modules, so the
+  deploy check, not the connector analysis, covers it.
 - ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
   creates simulations, reports, their runs, budget-window runs and household
   jobs, and reads the policy, dynamic, household and catalog rows a run needs.
@@ -95,6 +96,8 @@ class TablePrivilege(StrEnum):
     INSERT = "INSERT"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    # PostgreSQL 17: lets a role that doesn't own the table run ANALYZE on it.
+    MAINTAIN = "MAINTAIN"
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,10 @@ READ_WRITE: Final = frozenset(
         TablePrivilege.DELETE,
     }
 )
+# ANALYZE after publication (``catalog.publication_statistics``): the migration
+# role owns the catalog tables, and PostgreSQL skips a table the role neither
+# owns nor holds MAINTAIN on, with only a warning.
+_ANALYZE: Final = frozenset({TablePrivilege.MAINTAIN})
 
 
 @dataclass(frozen=True)
@@ -272,29 +279,34 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # The UK areas disclosure control withheld from a local-area run's results.
     "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
+    # The writer also analyzes the tables publication grows (_ANALYZE).
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
-    "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "parameter_nodes": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE
+    ),
     # Written by catalog publication for each version it publishes, from the
     # installed packages' catalog; never rewritten. Catalog pruning deletes an
     # older version's file, which publishing that version again writes back.
     "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
     # Written with each catalog version that publication publishes; catalog
     # pruning deletes an older version's rows.
-    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
+    "parameter_tree_children": _access(
+        runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
+    ),
     # The Public API also inserts a v2 policy's own parameter values. Catalog
     # pruning deletes an older version's current-law values (those with no
     # policy or dynamic), never a policy's or a dynamic's.
     "parameter_values": _access(
-        runtime=READ_INSERT, catalog_writer=READ_WRITE, **_RUN_INPUT_READS
+        runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "parameters": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "regions": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
     # Catalog publication updates a version's time periods,
     # catalog_last_published_at and spm_availability, and catalog pruning its
@@ -305,7 +317,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "tax_benefit_models": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
-    "variables": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "variables": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE),
     # v2 policies and households, created by the native routes and by Stage 10
     # dual-write. A copy locks its mapping row (FOR UPDATE), which needs UPDATE.
     "households": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),

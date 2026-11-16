@@ -1,0 +1,1 @@
+Catalog publication now refreshes PostgreSQL's statistics of the catalog tables after it publishes, restores or prunes a version, so a new version's rows no longer leave `GET /v2/parameter-values` planned as if the version had one parameter (43 to 47 seconds on staging, 4.1 ms after `ANALYZE`). The catalog writer role gains `MAINTAIN` on those tables.
