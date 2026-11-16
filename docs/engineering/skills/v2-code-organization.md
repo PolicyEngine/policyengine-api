@@ -72,6 +72,7 @@ user_policies/
 metadata/
   response_models.py
   route_support.py
+  read_failure_support.py
   query_support.py
   response_cache_support.py
   search_file_support.py
@@ -80,7 +81,9 @@ metadata/
 
 `route_support.py` runs the metadata reads for the route modules, maps their
 failures to HTTP, and holds the route class that gives metadata responses
-their caching headers. `query_support.py` defines the typed FastAPI
+their caching headers. `read_failure_support.py` records why a read answered
+the generic 503 or a 500, without the error's message. `query_support.py`
+defines the typed FastAPI
 dependencies for the shared query models once, for every metadata route
 module to import. `response_cache_support.py` keeps serialized whole-version
 responses (bodies and ETags) for the process; it is HTTP-level, so it lives

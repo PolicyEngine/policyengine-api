@@ -23,6 +23,8 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     v2_error_response,
 )
 from policyengine_api.fastapi_routes.v2.metadata.read_failure_support import (
+    CATALOG_UNAVAILABLE_FAILURE,
+    QUERY_FAILED_FAILURE,
     record_metadata_read_failure,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_cache_support import (
@@ -451,12 +453,11 @@ def run_metadata_read(
     ) as error:
         return v2_error_response(404, str(error))
     except (V2ConfigurationError, MetadataCatalogUnavailableError) as error:
-        response = _catalog_unavailable_response(error)
-        if _is_generic_unavailable_answer(error):
-            record_metadata_read_failure(error, response.status_code)
-        return response
+        if _caller_message(error) is None:
+            record_metadata_read_failure(error, 503, CATALOG_UNAVAILABLE_FAILURE)
+        return _catalog_unavailable_response(error)
     except Exception as error:  # noqa: BLE001  # preview must return typed errors
-        record_metadata_read_failure(error, 500)
+        record_metadata_read_failure(error, 500, QUERY_FAILED_FAILURE)
         return v2_error_response(500, "V2 metadata query failed")
     finally:
         if reader is not None:
@@ -465,20 +466,23 @@ def run_metadata_read(
                 reader.close()
 
 
-def _is_generic_unavailable_answer(
+def _caller_message(
     error: V2ConfigurationError | MetadataCatalogUnavailableError,
-) -> bool:
-    """Whether ``_catalog_unavailable_response`` answers with no message of its own.
+) -> str | None:
+    """Return the message written for callers, or None for the generic 503.
 
     A pruned version, or a missing parameter tree or search file, is a known
-    state whose message names the catalog version; only the others hide why.
+    state whose message names the catalog version. Any other error answers the
+    generic 503, which records why (``read_failure_support``).
     """
-    return not isinstance(
+    if isinstance(
         error,
         CatalogValuesPrunedError
         | ParameterTreeUnavailableError
         | ParameterSearchFileUnavailableError,
-    )
+    ):
+        return str(error)
+    return None
 
 
 def _catalog_unavailable_response(
@@ -496,12 +500,5 @@ def _catalog_unavailable_response(
     if isinstance(error, CatalogValuesPrunedError):
         status = 503 if error.running_version else 404
         return v2_error_response(status, str(error), headers=NO_STORE_HEADERS)
-    message = (
-        str(error)
-        if isinstance(
-            error,
-            ParameterTreeUnavailableError | ParameterSearchFileUnavailableError,
-        )
-        else "V2 metadata catalog is unavailable"
-    )
+    message = _caller_message(error) or "V2 metadata catalog is unavailable"
     return v2_error_response(503, message)

@@ -7,7 +7,11 @@ event, ``v2_metadata_read_failed``, at ERROR. The runtime adds the request it
 is serving: its ID, method and matched route. The event adds:
 
 - ``http.response.status_code``: 503 or 500;
-- ``error.type``: the caught error's class, as ``module.QualifiedName``;
+- ``error_type``: the caught error's class, as ``module.QualifiedName``;
+- ``failure_category``: ``v2_metadata_catalog_unavailable`` for the 503 or
+  ``v2_metadata_query_failed`` for the 500. The scheduled error-issue job
+  groups such an event by its route, ``error_type`` and ``failure_category``,
+  the keys the API's other events use;
 - ``error.cause_types``: the class of each error in its ``__cause__`` chain,
   outermost first and joined by ", ", or absent when it has no cause;
 - ``database.sqlstate``: the first SQLSTATE an error in the chain carries, as
@@ -27,11 +31,15 @@ from __future__ import annotations
 import contextlib
 
 METADATA_READ_FAILURE_EVENT = "v2_metadata_read_failed"
+CATALOG_UNAVAILABLE_FAILURE = "v2_metadata_catalog_unavailable"
+QUERY_FAILED_FAILURE = "v2_metadata_query_failed"
 MAX_NAMED_CAUSES = 10
 """How many errors of a ``__cause__`` chain the event names at most."""
 
 
-def record_metadata_read_failure(error: BaseException, status_code: int) -> None:
+def record_metadata_read_failure(
+    error: BaseException, status_code: int, failure_category: str
+) -> None:
     """Record why one metadata read failed; recording never fails the request."""
     # Telemetry must never change a metadata response.
     with contextlib.suppress(Exception):
@@ -42,18 +50,19 @@ def record_metadata_read_failure(error: BaseException, status_code: int) -> None
         observability.get_runtime().event(
             METADATA_READ_FAILURE_EVENT,
             severity="ERROR",
-            attributes=read_failure_attributes(error, status_code),
+            attributes=read_failure_attributes(error, status_code, failure_category),
         )
 
 
 def read_failure_attributes(
-    error: BaseException, status_code: int
+    error: BaseException, status_code: int, failure_category: str
 ) -> dict[str, str | int | bool]:
     """Return the event's attributes: class names, SQLSTATE and lost-connection flag."""
     causes = _cause_chain(error)
     attributes: dict[str, str | int | bool] = {
         "http.response.status_code": status_code,
-        "error.type": _class_name(error),
+        "error_type": _class_name(error),
+        "failure_category": failure_category,
     }
     if causes:
         attributes["error.cause_types"] = ", ".join(
