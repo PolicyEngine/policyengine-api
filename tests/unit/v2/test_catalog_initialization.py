@@ -315,6 +315,36 @@ def test_main_succeeds_and_prints_each_pruning_failure_to_stderr(
     ]
 
 
+def test_main_succeeds_and_prints_a_failed_analyze_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A failed ANALYZE leaves the committed publication's command successful.
+
+    The failure is in the evidence on stdout and on one stderr line, which says
+    the next publication analyzes again.
+    """
+    failure = "psycopg.errors.QueryCanceled (SQLSTATE 57014)"
+    evidence = PublicationEvidence(
+        policyengine_version=POLICYENGINE_VERSION,
+        dependency_versions=(),
+        entity_counts={"models": 2},
+        fallback_summaries=(),
+        elapsed_seconds=1.0,
+        catalog_statistics_failure=failure,
+    )
+    monkeypatch.setattr(initialization, "initialize_catalog", lambda: evidence)
+
+    assert initialization.main() == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["catalog_statistics_failure"] == failure
+    assert output.err.splitlines() == [
+        f"catalog table statistics were not refreshed: {failure}; the next "
+        "publication analyzes the catalog tables again"
+    ]
+
+
 def test_main_prints_a_pruning_failure_that_chose_no_version_to_stderr(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

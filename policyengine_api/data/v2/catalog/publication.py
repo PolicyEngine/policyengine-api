@@ -41,6 +41,10 @@ from policyengine_api.data.v2.catalog.publication_staging import (
     create_staging_tables,
     stage_catalog,
 )
+from policyengine_api.data.v2.catalog.publication_statistics import (
+    analyze_catalog_tables,
+    require_analyze_privilege,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPruningFailure,
     CatalogPublicationError,
@@ -163,12 +167,17 @@ def publish_catalog(
     After the transaction commits, it prunes the older stored versions of the
     catalog's models (``publication_pruning``), at most two per run, one
     transaction each; a failure of any kind rolls back only that version and
-    is reported in the evidence.
+    is reported in the evidence. Then it analyzes the catalog tables, whose
+    planner statistics PostgreSQL would otherwise leave out of date
+    (``publication_statistics``); a failure is reported in the evidence too,
+    and the next publication analyzes again. Before it writes anything it
+    checks that its role may analyze them.
     """
     started = time.monotonic()
     with engine.begin() as connection:
         _verify_expected_revision(connection)
         _acquire_publication_lock(connection)
+        require_analyze_privilege(connection)
         before = _protected_row_counts(connection)
         create_staging_tables(connection)
         stage_catalog(connection, catalog, checkpoint=checkpoint)
@@ -208,6 +217,7 @@ def publish_catalog(
             checkpoint("after_validation", connection)
 
     pruning = _prune_older_versions(engine, catalog)
+    statistics = analyze_catalog_tables(engine)
     return replace(
         _evidence(
             catalog,
@@ -220,6 +230,8 @@ def publish_catalog(
         pruned_catalog_versions=pruning.pruned,
         catalog_pruning_failures=pruning.failures,
         catalog_versions_left_to_prune=pruning.left_to_prune,
+        catalog_tables_analyzed=statistics.analyzed,
+        catalog_statistics_failure=statistics.failure_type,
     )
 
 
