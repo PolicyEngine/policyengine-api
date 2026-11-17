@@ -291,3 +291,57 @@ def test_enforcement_with_allowed_server_clients_passes_readiness(
     ):
         readiness.mark_ready()
         assert readiness.is_ready() is True
+
+
+POSTMARK_SETTING_NAMES = (
+    "POSTMARK_SERVER_TOKEN",
+    "POSTMARK_SERVER_TOKEN_SECRET_RESOURCE",
+    "POSTMARK_SENDER_ADDRESS",
+    "POLICYENGINE_APP_URL",
+)
+COMPLETE_POSTMARK_SETTINGS = {
+    "POSTMARK_SERVER_TOKEN_SECRET_RESOURCE": (
+        "projects/p/secrets/postmark-server-token/versions/latest"
+    ),
+    "POSTMARK_SENDER_ADDRESS": "PolicyEngine <no-reply@policyengine.org>",
+    "POLICYENGINE_APP_URL": "https://app.policyengine.org",
+}
+
+
+def _ready_with_postmark(monkeypatch, environment: dict[str, str]) -> bool:
+    for name in POSTMARK_SETTING_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        readiness.mark_ready()
+        return readiness.is_ready()
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        # All or none, so a half-configured deploy never runs without email.
+        {"POSTMARK_SENDER_ADDRESS": "no-reply@policyengine.org"},
+        {
+            name: value
+            for name, value in COMPLETE_POSTMARK_SETTINGS.items()
+            if name != "POLICYENGINE_APP_URL"
+        },
+        # The emails' links must be https.
+        COMPLETE_POSTMARK_SETTINGS
+        | {"POLICYENGINE_APP_URL": "http://app.policyengine.org"},
+    ],
+)
+def test_unusable_postmark_settings_fail_readiness(monkeypatch, environment) -> None:
+    assert _ready_with_postmark(monkeypatch, environment) is False
+
+
+@pytest.mark.parametrize("environment", [{}, COMPLETE_POSTMARK_SETTINGS])
+def test_absent_or_complete_postmark_settings_pass_readiness(
+    monkeypatch, environment
+) -> None:
+    assert _ready_with_postmark(monkeypatch, environment) is True

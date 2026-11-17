@@ -15,11 +15,13 @@ from policyengine_api.data.v2.models import (
     UserTypeChange,
     UserTypeChangeSource,
 )
+from policyengine_api.libs.postmark_email import EmailSendError
 from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.user_accounts.database_session import (
     AccountDatabaseSession,
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
+from policyengine_api.services.v2.user_emails.services import V2UserEmailService
 from policyengine_api.services.v2.user_policies.database_session import (
     UserPolicyDatabaseSession,
 )
@@ -37,6 +39,13 @@ from policyengine_api.services.v2.user_types.validators import (
     UserEmailMatchError,
     UserTypeBelowMinimumError,
     UserTypeChangedError,
+)
+from tests.unit.v2.user_email_support import (
+    APP_URL,
+    RecordingEmailSender,
+    StandInProfileReader,
+    auth0_profile,
+    profile_source,
 )
 from tests.unit.v2.user_service_support import (
     ALICE,
@@ -504,3 +513,130 @@ def test_a_change_is_refused_once_the_type_differs_from_the_expected_one(
         (change.changed_by_user_id, change.new_user_type)
         for change in _history_rows(store)
     ] == [(alice_id, "author")]
+
+
+def _emailing_user_types(
+    store: V2Store, sender: RecordingEmailSender, reader: StandInProfileReader
+) -> V2UserTypeService:
+    return V2UserTypeService(
+        UserTypeDatabaseSession(store.sessions),
+        user_email_service=V2UserEmailService(
+            email_sender_factory=lambda: sender,
+            user_profile_source_factory=lambda: profile_source(ISSUER, reader),
+        ),
+    )
+
+
+def test_an_admins_change_emails_the_user_at_their_auth0_email(
+    store: V2Store,
+) -> None:
+    _signed_in_admin(store, ALICE)
+    bob_id = _sign_in(store, BOB)
+    sender = RecordingEmailSender()
+    reader = StandInProfileReader([auth0_profile(BOB.subject, "bob@auth0.test")])
+    user_types = _emailing_user_types(store, sender, reader)
+
+    user_types.change_user_type(
+        principal=ALICE,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+    user_types.change_user_type(
+        principal=ALICE,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.AUTHOR,
+    )
+
+    # Setting the type the user already has emails nobody.
+    assert sender.sent == [
+        {
+            "to": "bob@auth0.test",
+            "template_alias": "user-type-changed",
+            "template_model": {
+                "previous_user_type": "standard",
+                "user_type": "author",
+                "promoted": True,
+                "app_url": APP_URL,
+            },
+        }
+    ]
+
+
+def test_a_refused_change_emails_nobody(store: V2Store) -> None:
+    alice_id = _signed_in_admin(store, ALICE)
+    sender = RecordingEmailSender()
+    reader = StandInProfileReader([auth0_profile(ALICE.subject, "alice@auth0.test")])
+    user_types = _emailing_user_types(store, sender, reader)
+
+    with pytest.raises(LastAdminDemotionError):
+        user_types.change_user_type(
+            principal=ALICE,
+            user_id=alice_id,
+            user_type=UserType.AUTHOR,
+            expected_user_type=UserType.ADMIN,
+        )
+
+    assert sender.sent == []
+
+
+def test_the_scripts_change_emails_the_user(store: V2Store) -> None:
+    _signed_in_admin(store, ALICE)
+    _sign_in(store, BOB_WITH_EMAIL)
+    sender = RecordingEmailSender()
+    reader = StandInProfileReader([auth0_profile(BOB.subject, "bob@auth0.test")])
+    user_types = _emailing_user_types(store, sender, reader)
+
+    scripted = user_types.set_user_type_by_email(
+        email="bob@example.test", user_type=UserType.ADMIN
+    )
+    unchanged = user_types.set_user_type_by_email(
+        email="bob@example.test", user_type=UserType.ADMIN
+    )
+
+    assert [(email["to"], email["template_model"]) for email in sender.sent] == [
+        (
+            "bob@auth0.test",
+            {
+                "previous_user_type": "standard",
+                "user_type": "admin",
+                "promoted": True,
+                "app_url": APP_URL,
+            },
+        )
+    ]
+    assert scripted.email_failure is None
+    assert unchanged.email_failure is None
+
+
+def test_the_script_learns_why_the_user_was_not_emailed(store: V2Store) -> None:
+    _signed_in_admin(store, ALICE)
+    _sign_in(store, BOB_WITH_EMAIL)
+    reader = StandInProfileReader()
+
+    scripted = _emailing_user_types(
+        store, RecordingEmailSender(), reader
+    ).set_user_type_by_email(email="bob@example.test", user_type=UserType.AUTHOR)
+
+    assert scripted.user.user_type is UserType.AUTHOR
+    assert scripted.email_failure == "no_verified_email"
+
+
+def test_an_unsent_type_change_email_leaves_the_change_committed(
+    store: V2Store,
+) -> None:
+    _signed_in_admin(store, ALICE)
+    bob_id = _sign_in(store, BOB)
+    sender = RecordingEmailSender(EmailSendError("http_500"))
+    reader = StandInProfileReader([auth0_profile(BOB.subject, "bob@auth0.test")])
+
+    changed = _emailing_user_types(store, sender, reader).change_user_type(
+        principal=ALICE,
+        user_id=bob_id,
+        user_type=UserType.AUTHOR,
+        expected_user_type=UserType.STANDARD,
+    )
+
+    assert changed.user_type is UserType.AUTHOR
+    assert _stored_type(store, bob_id) == "author"

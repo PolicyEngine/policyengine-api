@@ -321,6 +321,8 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
             ),
         ),
         catalog_versions_left_to_prune=3,
+        catalog_tables_analyzed=("parameter_values", "parameters"),
+        catalog_statistics_failure="psycopg.errors.QueryCanceled",
         spm_availability=publication_types.SPMAvailabilityRecording(
             recorded=(("uk", "2.50.0", False),),
             not_recorded=(("us", "1.450.0"),),
@@ -399,6 +401,8 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
             }
         ],
         "catalog_versions_left_to_prune": 3,
+        "catalog_tables_analyzed": ["parameter_values", "parameters"],
+        "catalog_statistics_failure": "psycopg.errors.QueryCanceled",
         "spm_availability": {
             "recorded": [{"country_id": "uk", "version": "2.50.0", "available": False}],
             "not_recorded": [{"country_id": "us", "version": "1.450.0"}],

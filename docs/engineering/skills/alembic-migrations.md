@@ -253,7 +253,7 @@ and a revision runs once per database, so it can't repair drift.
 | Role | Used by |
 | --- | --- |
 | `policyengine_v2_runtime` | The Public API on Cloud Run |
-| `policyengine_v2_catalog_writer` | `scripts/publish_v2_metadata_catalog.py` |
+| `policyengine_v2_catalog_writer` | `scripts/publish_v2_metadata_catalog.py`, which also runs `ANALYZE` on seven catalog tables after every publication, with `MAINTAIN` (PostgreSQL 17) |
 | `policyengine_stage12_<environment>` | The simulation API and its Modal worker, on the temporary comparison-run tables |
 | `policyengine_v2_simulation_service` | The simulation API on Cloud Run: creates simulations, reports, their runs, budget-window runs and household jobs, and reads the policy, dynamic, household and catalog rows a run needs. It updates only the status, Modal call ID, error and completion columns of the runs and household jobs whose Modal calls it starts, and the status, error and completion columns of a budget-window run, which it fails at once when Modal refuses the calls of the window's first years |
 | `policyengine_v2_modal_worker` | The simulation API's Modal workers: write their runs' and household jobs' status and results, and budget-window runs' status, and read the rows a run needs. It updates only a run's status, Modal call ID, error, time and result columns, and a budget-window run's status, error and time columns: each year's coordinator starts the window's next unstarted year when its own year finishes, the last year to finish marks the window succeeded, and a failed year fails it. The workers' code, not the database, keeps a worker to its own run |
@@ -283,14 +283,23 @@ check the declarations:
   then `verify`, before the catalog is seeded.
 
 `apply` grants each declared privilege a role lacks, as one `GRANT` per role
-and table and one per column privilege. It never revokes: it reports
-privileges the file doesn't declare, on whole tables or on columns, and the
-projects' default privileges, in the job summary. It grants nothing when a
-declared role or table is missing. `verify` checks each column of a column
-privilege with `has_column_privilege`, and fails when a role holds the same
-privilege on the whole table. The roles themselves are provisioned outside
-the repository; `--create-missing-roles` is accepted only for the disposable
-test database.
+and table and one per column privilege. It revokes one kind of privilege
+only: one a role holds directly on a whole table that the file declares for
+named columns only. The projects' default privileges give the runtime role
+`UPDATE` on every new table, so `user_type_changes`, where it may update only
+`dismissed_at`, starts with one. PostgreSQL's `REVOKE` on a table also removes
+the role's column grants of that privilege, undeclared ones included, so
+`apply` grants the declared columns again, in the same transaction; the job
+summary lists the revoke with the undeclared column grants it removed. It
+reports every other privilege the file doesn't declare, on whole tables or on
+columns, and the projects' default privileges, without revoking them. It
+changes nothing when a declared role or table is missing. `verify` checks each
+column of a column privilege with `has_column_privilege`, and fails when a role
+still holds the same privilege on the whole table: through a role it belongs
+to, or through a grant another role made, which the owner's `REVOKE` leaves in
+place. The roles themselves are provisioned outside the repository;
+`--create-missing-roles` is accepted only for the disposable test database,
+which has no default privileges.
 
 A pull request may declare a role before an operator creates it by listing it
 in `ROLES_AWAITING_PROVISIONING` in `privileges.py`. While a listed role is
@@ -323,6 +332,7 @@ When a pull request adds or changes a v2 table, or a connector's use of one:
      tests/integration/test_v2_catalog_publication.py \
      tests/integration/test_v2_catalog_publication_pruning.py \
      tests/integration/test_v2_simulation_role_privileges.py \
+     tests/integration/test_v2_shared_report_rows.py \
      tests/integration/test_v2_household_calculation_reads.py \
      tests/integration/test_v2_privilege_reconciliation.py
    ```
@@ -446,6 +456,11 @@ it publishes that version, with nothing to restore it. Downgrading past the
 revision is therefore safe only while no version is pruned (no
 `tax_benefit_model_versions` row has `catalog_values_pruned_at` set).
 From the head, such a downgrade first runs the later revisions' downgrades:
+`f519a77ba122`'s drops `user_invitations` and needs no recorded change with
+source `invitation` (see "API v2 user invitations"),
+`94dc43079186`'s drops every user's report-run record, the simulation and
+report keys and the window runs' .py versions, and needs every report to have
+a label and every run a trigger (see "API v2 shared reports and user report-run records"),
 `970be5d29283`'s drops `user_type_changes` with every recorded change (see
 "API v2 user type changes"), `617f531f1506`'s needs no user to be an author
 or an admin (see "API v2 user types"), and `1356f658347d`'s needs
@@ -795,9 +810,9 @@ script), the previous and new types (each `standard`, `author` or `admin`,
 and different), and the `source`, `admin_route` or `script`. An index on
 `(user_id, created_at)` serves a user's history, and one on
 `changed_by_user_id` the `SET NULL` that every user deletion runs. The runtime role may read and
-insert its rows, never update or delete them; a user's deletion removes them
-through the foreign key, which PostgreSQL runs with the table owner's
-privileges.
+insert its rows, and since the user invitations revision update only their
+`dismissed_at`, never delete them; a user's deletion removes them through
+the foreign key, which PostgreSQL runs with the table owner's privileges.
 
 The previous Public API revision never uses the table. The downgrade drops it
 with every recorded change. `test_user_type_changes_revision_adds_only_its_table`
@@ -857,3 +872,143 @@ revision, which doesn't map the table, keeps working at it. The downgrade
 drops the table with its rows. `tests/integration/test_alembic_v2_withheld_area_codes.py`
 checks that nothing else changes, that the downgrade removes the type and an
 upgrade works again, and the table's keys and delete rules.
+
+### API v2 shared reports and user report-run records
+
+Revision `94dc43079186` (parent `1e1e3f079f2c`) was autogenerated, with its
+ID given by `--rev-id`, after these model changes, so that identical requests
+share simulations, reports and runs. It was generated on `0c136a278f29`; when
+`master` gained the withheld area codes revision `1e1e3f079f2c` on the same
+parent, its `down_revision` moved to `1e1e3f079f2c`, and generating it again
+from there gives the same operations.
+
+- `simulations` and `reports` gain `key_version` and `definition_key`, and
+  `reports` also `dataset_independent_key`: the simulation service's SHA-256
+  of what the row calculates (and, for the report key shared across datasets,
+  the same without the dataset), in the key format
+  `key_version` names. They are nullable, so rows from before the keys stay
+  unkeyed, and each table is unique on `(key_version, definition_key)`;
+  PostgreSQL's unique constraint allows any number of unkeyed rows. Checks
+  require a key of 64 lowercase hexadecimal digits, a positive `key_version`,
+  and a key with its version (on `reports`, all three columns or none). An
+  index on `dataset_independent_key` alone finds the reports that share that
+  key, a national report and its local-area report: the app looks one up by
+  the other's key, which holds its own key version.
+- `simulation_runs` and `report_runs` gain `forced` (`false` by default, for
+  every existing row and every writer that doesn't name it), which marks a run
+  a forced re-run created.
+- Partial unique indexes allow one run that hasn't failed and isn't forced per
+  definition and version set:
+  `uq_simulation_runs_unfailed_unforced_versions` on `(simulation_id, year,
+  tax_benefit_model_version_id, country_package_version,
+  policyengine_version)`, and `uq_report_runs_unfailed_unforced_versions` on
+  `(report_id, country_package_version, policyengine_version)` outside budget
+  windows (`budget_window_run_id IS NULL`). A failed run never counts, so the
+  next request starts a new run, and a forced re-run is an extra run nothing
+  joins. The simulation service finds or creates with `INSERT ... ON
+  CONFLICT (<the index's columns>) WHERE <its condition> DO NOTHING`, naming
+  each index's whole condition: `status <> 'failed' AND NOT forced` for
+  simulation runs, and `budget_window_run_id IS NULL AND status <> 'failed'
+  AND NOT forced` for report runs; with less, PostgreSQL finds no matching
+  index. Naming a conflict target needs `SELECT` as well as `INSERT` on the
+  table, which its role already holds. Both are also declared
+  for SQLite, so the unit tests' databases keep the same rule. A failed run
+  can't be set back to another status while a newer unfailed run on its
+  versions exists.
+- `budget_window_runs` gains `policyengine_version` (nullable: window runs
+  written before it stay unversioned, and an unversioned run is never
+  joined), and `uq_budget_window_runs_unfailed_unforced_versions` allows one
+  window run per report, catalog version and `policyengine_version` that
+  hasn't failed and isn't recalculated (`status <> 'failed' AND NOT
+  recalculate`): `recalculate` is a window run's forced marker. Each year's
+  report run belongs to its window run, outside the report-run index; each
+  year's simulation runs are under the simulation-run index.
+- The per-user columns of shared rows become nullable, with no default:
+  `reports.label`, `report_runs.trigger` and `budget_window_runs.trigger`
+  (`reports.description` and `user_id` already were). A shared row describes
+  no one caller, so the simulation service stops writing them, and a later
+  revision drops them; until then the report read and run lists answer a
+  missing label or trigger as null. A user's trigger is on their
+  `user_report_run_associations` row.
+- `user_report_run_associations` records each user's request for a report
+  run: the user (`CASCADE`), the run (`RESTRICT`, so a run a user asked for
+  can't be deleted), `requested_at` (required, with no default: the writer
+  says when the user asked) and `trigger` (`initial` for a create, `manual`
+  for a re-run; checked, since a system re-run is nobody's request). One row
+  per user and run. The runtime role may read, insert and delete its rows,
+  never update them, and no other role reads them.
+
+One post-generation correction: `user_report_run_associations.trigger`
+reuses the `v2_report_run_trigger` type (`create_type=False`) instead of
+creating it again, as `1356f658347d` does for `budget_window_runs`.
+
+The previous Public API revision maps none of the new columns or the new
+table and writes none of these tables, so it keeps working at this revision
+while the simulation service still writes `reports.label` and the triggers.
+Once it stops (and writes null there), the previous revision's report reads,
+which take both as required, answer 500 on those rows, so the Public API is
+not rolled back below this revision after that.
+The upgrade fails, changing nothing, while a simulation already has two runs
+that would break its index (same year, catalog version and package versions,
+neither failed), or a report two outside budget windows. The simulation
+service's re-runs on unchanged versions make such pairs until it joins runs
+instead of creating them; check each database first:
+
+```sql
+SELECT simulation_id, year, tax_benefit_model_version_id,
+       country_package_version, policyengine_version, count(*)
+FROM simulation_runs WHERE status <> 'failed'
+GROUP BY 1, 2, 3, 4, 5 HAVING count(*) > 1;
+SELECT report_id, country_package_version, policyengine_version, count(*)
+FROM report_runs WHERE budget_window_run_id IS NULL AND status <> 'failed'
+GROUP BY 1, 2, 3 HAVING count(*) > 1;
+```
+
+Once applied, the indexes refuse any such re-run (a unique violation): one
+beside a succeeded run on the same versions, and also one after a failed
+report run whose other side's simulation run succeeded, until the simulation
+service joins runs instead. The downgrade drops the keys, the
+markers, the indexes, the window runs' `policyengine_version` and every
+user's run records, and makes the per-user columns required again, so it
+fails while any report has no label or any run no trigger.
+`tests/integration/test_alembic_v2_shared_report_keys.py` checks that the
+revision changes nothing else and downgrades exactly, and
+`tests/integration/test_v2_shared_report_rows.py` runs the finding, joining
+and recording as the roles that do them.
+
+### API v2 user invitations
+
+Revision `f519a77ba122` (parent `94dc43079186`) was autogenerated, with no
+post-generation corrections, after the `UserInvitation` model was added,
+`UserTypeChange` gained `dismissed_at`, and `UserTypeChangeSource` gained
+`invitation`. It was generated on `0c136a278f29`; when `master` gained the
+withheld area codes revision on the same parent, its `down_revision` moved to
+`1e1e3f079f2c`, and when `master` then gained the shared reports revision on
+that one, to `94dc43079186`. Generating it again from that revision gives the
+same operations. It adds `user_invitations`, one row per admin's invitation for
+an email address to become an author or admin: the address, the type
+(`author` or `admin`), the SHA-256 digest of its token in hexadecimal
+(unique; the token itself is never stored), the inviting admin, its expiry,
+its last send's time or failure, and when it was accepted, and by whom, or
+revoked (never both). Deleting the inviting admin keeps the invitation and
+sets that column to NULL; deleting the user who accepted it deletes it, since
+its address was theirs (`CASCADE`). An index on each serves what every user
+deletion runs. It adds the nullable `user_type_changes.dismissed_at`, and
+replaces the source check: Alembic compares checks by name only, so the
+check that also allows `invitation` is named
+`ck_user_type_changes_source_allowed`, and autogenerate drops
+`ck_user_type_changes_source` and adds it, as for the user types revision.
+The runtime role reads, inserts and updates invitations, never deletes them,
+and updates only `dismissed_at` of `user_type_changes`
+(`update_columns("dismissed_at")`).
+
+The previous Public API revision never uses `user_invitations` and doesn't
+map `dismissed_at`, but it reads every recorded change's source as
+`admin_route` or `script`: there, an admin's read of the type history of a
+user who accepted an invitation fails with 500. The downgrade drops
+`user_invitations` and `dismissed_at` with their values, and restores the
+check that allows only `admin_route` and `script`, so it fails while any
+change's source is `invitation`.
+`test_user_invitations_revision_adds_invitations_and_dismissals_only` and
+`test_user_invitations_revision_records_invitation_changes_until_downgraded`
+in `tests/integration/test_alembic_v2_user_types.py` check both.

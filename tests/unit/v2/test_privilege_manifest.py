@@ -11,6 +11,9 @@ import pytest
 import sqlalchemy as sa
 
 from policyengine_api.data.v2 import models
+from policyengine_api.data.v2.catalog.publication_statistics import (
+    CATALOG_STATISTICS_TABLES,
+)
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.privilege_requirements import (
     required_privileges,
@@ -22,6 +25,8 @@ from policyengine_api.data.v2.privileges import (
     NO_ACCESS,
     READ,
     READ_INSERT,
+    READ_INSERT_DELETE,
+    READ_INSERT_UPDATE,
     READ_WRITE,
     ROLES_AWAITING_PROVISIONING,
     RUNTIME_ROLE,
@@ -106,6 +111,7 @@ RUN_DEFINITION_COLUMNS = {
             "policyengine_version",
             "dataset_id",
             "region_id",
+            "forced",
         }
     ),
     "report_runs": frozenset(
@@ -119,6 +125,7 @@ RUN_DEFINITION_COLUMNS = {
             "policyengine_version",
             "trigger",
             "idempotency_key",
+            "forced",
         }
     ),
     "household_jobs": frozenset(
@@ -135,7 +142,13 @@ RUN_DEFINITION_COLUMNS = {
         }
     ),
     "budget_window_runs": frozenset(
-        {"report_id", "tax_benefit_model_version_id", "trigger", "recalculate"}
+        {
+            "report_id",
+            "tax_benefit_model_version_id",
+            "policyengine_version",
+            "trigger",
+            "recalculate",
+        }
     ),
 }
 # The policy, dynamic, household and catalog rows a run needs.
@@ -383,6 +396,21 @@ def test_rule_proof_runtime_privileges_declared() -> None:
     assert undeclared_requirements(good, runtime_before_3977) == []
 
 
+def test_the_catalog_writer_may_analyze_the_tables_publication_refreshes() -> None:
+    """Publication runs ANALYZE on these tables, which needs MAINTAIN or ownership.
+
+    The migration role owns every table, so the catalog writer needs MAINTAIN
+    (PostgreSQL 17); without it, ANALYZE skips the table with only a warning.
+    """
+    writer_tables = declared_privileges(TEST_ENVIRONMENT)[CATALOG_WRITER_ROLE]
+
+    assert {
+        table
+        for table, privileges in writer_tables.items()
+        if TablePrivilege.MAINTAIN in privileges
+    } == set(CATALOG_STATISTICS_TABLES)
+
+
 def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> None:
     """Catalog pruning deletes from three tables and marks the pruned version.
 
@@ -400,19 +428,55 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         if TablePrivilege.DELETE in privileges
     } == {"parameter_values", "parameter_tree_children", "parameter_search_files"}
     assert TablePrivilege.UPDATE in catalog_writer["tax_benefit_model_versions"]
+    # MAINTAIN is for ANALYZE after publication, not for deleting.
     assert catalog_writer["parameter_tree_children"] == frozenset(
-        {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
+        {
+            TablePrivilege.SELECT,
+            TablePrivilege.INSERT,
+            TablePrivilege.DELETE,
+            TablePrivilege.MAINTAIN,
+        }
     )
     assert catalog_writer["parameter_search_files"] == frozenset(
         {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
     )
-    assert catalog_writer["parameter_values"] == READ_WRITE
+    assert catalog_writer["parameter_values"] == READ_WRITE | {TablePrivilege.MAINTAIN}
 
 
 def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:
     declared = declared_privileges(TEST_ENVIRONMENT)
 
-    assert declared[RUNTIME_ROLE]["user_type_changes"] == READ_INSERT
+    # It updates only when the user dismissed the change's notice.
+    assert declared[RUNTIME_ROLE]["user_type_changes"] == READ_INSERT | {
+        update_columns("dismissed_at")
+    }
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_type_changes"] == NO_ACCESS, role
+
+
+def test_the_public_api_revokes_and_accepts_invitations_but_never_deletes_them() -> (
+    None
+):
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_invitations"] == READ_INSERT_UPDATE
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_invitations"] == NO_ACCESS, role
+
+
+def test_the_public_api_records_each_users_report_run_requests() -> None:
+    """The Public API writes a user's record of each report run they asked for.
+
+    It reads, adds and deletes them, but never changes one: a later request
+    for the same run is the same record. No other role reads them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_report_run_associations"] == (
+        READ_INSERT_DELETE
+    )
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_report_run_associations"] == NO_ACCESS, role

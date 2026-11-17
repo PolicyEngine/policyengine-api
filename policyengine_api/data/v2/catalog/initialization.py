@@ -177,10 +177,10 @@ def _error_payload(error: Exception) -> dict[str, object]:
 def main() -> int:
     """Run explicit initialization and return a shell-compatible status.
 
-    A failure to prune an older catalog version, or to read the simulation
-    service's versions to record SPM availability, leaves the status
-    successful, since the publication had committed; each one is in the
-    evidence and is also printed to stderr.
+    A failure to prune an older catalog version, to analyze the catalog
+    tables, or to read the simulation service's versions to record SPM
+    availability, leaves the status successful, since the publication had
+    committed; each one is in the evidence and is also printed to stderr.
     """
     try:
         evidence = initialize_catalog()
@@ -197,6 +197,13 @@ def main() -> int:
         print(
             f"catalog pruning failed for {country_and_version}: "
             f"{failure.error_type}: {failure.message}",
+            file=sys.stderr,
+        )
+    if evidence.catalog_statistics_failure is not None:
+        print(
+            "catalog table statistics were not refreshed: "
+            f"{evidence.catalog_statistics_failure}; the next publication "
+            "analyzes the catalog tables again",
             file=sys.stderr,
         )
     spm_recording = evidence.spm_availability

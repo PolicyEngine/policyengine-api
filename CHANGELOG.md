@@ -1,3 +1,30 @@
+## [5.50.1] - 2026-11-17
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.20.0.
+- A v2 metadata read that answers the generic 503 or the 500 now records one runtime event, `v2_metadata_read_failed`, naming the route, the error's class and failure category, the error classes in its cause chain, the database's SQLSTATE and whether the connection was lost, without any error message.
+
+### Fixed
+
+- Catalog publication now refreshes PostgreSQL's statistics of the catalog tables after every publication, so a new version's rows no longer leave `GET /v2/parameter-values` planned as if the version had one parameter (43 to 47 seconds on staging, 4.1 ms after `ANALYZE`); a failed refresh is reported in the publication's summary and repeated by the next one. The catalog writer role gains `MAINTAIN` on those tables.
+- The v2 privilege reconciliation now revokes a privilege a role holds on a whole table when the manifest declares it for named columns only, such as the `UPDATE` new tables' default privileges give the runtime role on `user_type_changes`, and grants those columns again, so the deploy's privilege verification passes.
+
+
+## [5.50.0] - 2026-11-16
+
+### Added
+
+- Admins invite an email address to become an author or admin, and a signed-in user with that verified Auth0 email accepts the invitation; every type change emails the user through Postmark, and `GET /v2/me` reports the latest type change until the user dismisses it.
+
+
+## [5.49.0] - 2026-11-16
+
+### Added
+
+- The detailed-save database can share identical simulations, reports and runs. `simulations` and `reports` gain optional key columns (`key_version`, `definition_key`, and on reports `dataset_independent_key`), unique on the key and its version; `simulation_runs` and `report_runs` gain a `forced` marker, false by default; partial unique indexes allow one run that hasn't failed and isn't forced per simulation, year, catalog version and package versions, and per report and package versions outside budget windows; `budget_window_runs` records its .py version, with one window run per report and version set that hasn't failed and isn't recalculated; the new `user_report_run_associations` table records each user's request for a report run, which the Public API's runtime role reads, inserts and deletes; and `reports.label`, `report_runs.trigger` and `budget_window_runs.trigger` become nullable, so `/v2/reports` answers a shared report's `label` and a shared run's `trigger` as null.
+
+
 ## [5.48.0] - 2026-11-13
 
 ### Added

@@ -1,8 +1,9 @@
-"""Canonical SQLModel tables linking v2 users to their saved records.
+"""Canonical SQLModel tables linking v2 users to their saved records and requests.
 
-Every association names its target through a nullable v2 reference, a
-nullable country-scoped v1 (legacy) reference, or both; a database check
-requires at least one.
+Every saved-item association names its target through a nullable v2
+reference, a nullable country-scoped v1 (legacy) reference, or both; a
+database check requires at least one. A user's record of a report run they
+asked for names the v2 run alone.
 
 The simulation and report associations still carry the pre-Stage 12A
 ``country`` and ``label`` columns. Nothing reads or writes them; they stay
@@ -18,9 +19,14 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
-from policyengine_api.data.v2.models.base import TimestampedModel
+from policyengine_api.data.v2.models.base import (
+    IdentifiedModel,
+    TimestampedModel,
+    enum_type,
+)
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.policies import Policy
+from policyengine_api.data.v2.models.reports import ReportRunTrigger
 from policyengine_api.data.v2.models.users import User
 from policyengine_api.utils.budget_window import BUDGET_WINDOW_MAX_YEARS
 
@@ -319,3 +325,46 @@ class UserReportAssociation(TimestampedModel, table=True):
     label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="report_associations")
+
+
+# A user asks for a report run by creating the report or by running it again;
+# a system re-run is nobody's request.
+_USER_REQUEST_TRIGGERS_SQL = ", ".join(
+    f"'{trigger.value}'"
+    for trigger in (ReportRunTrigger.INITIAL, ReportRunTrigger.MANUAL)
+)
+
+
+class UserReportRunAssociation(IdentifiedModel, table=True):
+    """A user's request for a report run: the run they asked for, and when.
+
+    The Public API records one each time a user creates a report (``trigger``
+    ``initial``) or runs it again (``manual``), naming the run the simulation
+    service created or joined, so users who ask for the same report share its
+    run and each have a record of it, once per run. ``requested_at`` is when
+    the user asked, the time the user sees. Deleted with the user;
+    ``report_run_id`` is a foreign key to ``report_runs`` with ``RESTRICT``,
+    so a run a user asked for can't be deleted.
+    """
+
+    __tablename__ = "user_report_run_associations"
+    __table_args__ = (
+        sa.UniqueConstraint("user_id", "report_run_id"),
+        sa.CheckConstraint(
+            f"trigger IN ({_USER_REQUEST_TRIGGERS_SQL})",
+            name="ck_user_report_run_associations_trigger",
+        ),
+    )
+
+    user_id: UUID = Field(foreign_key="users.id", ondelete="CASCADE")
+    report_run_id: UUID = Field(
+        foreign_key="report_runs.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    requested_at: datetime = Field(sa_type=sa.DateTime(timezone=True))
+    trigger: ReportRunTrigger = Field(
+        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
+    )
+
+    user: User = Relationship(back_populates="report_run_associations")

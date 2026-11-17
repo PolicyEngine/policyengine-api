@@ -46,10 +46,12 @@ Core reads that compatibility environment variable. `HUGGING_FACE_TOKEN` is
 not the name of the stored GitHub or Google Cloud credential.
 
 The pull-request environment check verifies the token identity, confirms that
-it has no write permission, and checks both required private repositories. The
-Cloud Run candidate resolver verifies that the exact deployed revision binds
-`HUGGING_FACE_TOKEN` to `pe-uk-private-hf-read-token:latest`, without printing
-the credential.
+it has no write permission, and checks both required private repositories. For
+the dataset repository it lists the files at the revision the installed bundle
+pins for its default UK dataset and checks that the dataset's file is among
+them, so the check follows bundle upgrades. The Cloud Run candidate resolver
+verifies that the exact deployed revision binds `HUGGING_FACE_TOKEN` to
+`pe-uk-private-hf-read-token:latest`, without printing the credential.
 
 The v2 catalog publication step of `.github/workflows/seed-v2-database.yml`
 also receives the organization secret as `HUGGING_FACE_TOKEN`, step-scoped.

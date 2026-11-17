@@ -1140,3 +1140,121 @@ def test_each_call_without_a_budget_gets_its_own_two_seconds(operation: str) -> 
 
     assert waits == [1.5, 1.5]
     assert len(_searches(requests)) == 4
+
+
+def _token_then_user(answer_user):
+    """Issue a token, then answer each read of one user with ``answer_user``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": "mgmt", "expires_in": 3600}
+            )
+        return answer_user(request)
+
+    return handler
+
+
+def test_one_user_is_read_by_id_which_auth0_answers_at_once() -> None:
+    """The read by ID is immediately consistent, unlike the user search."""
+    client, requests = _client(
+        _token_then_user(
+            lambda request: httpx.Response(
+                200,
+                json=_profile_payload(
+                    "google-oauth2|ada/1",
+                    email=" ada@example.test ",
+                    email_verified=True,
+                    name="Ada",
+                ),
+            )
+        )
+    )
+
+    profile = client.read_user_profile("google-oauth2|ada/1")
+
+    (read,) = [request for request in requests if request.url.path != "/oauth/token"]
+    assert read.method == "GET"
+    assert read.url.raw_path.startswith(b"/api/v2/users/google-oauth2%7Cada%2F1?")
+    assert read.url.params["fields"] == PROFILE_FIELDS
+    assert read.url.params["include_fields"] == "true"
+    assert read.headers["authorization"] == "Bearer mgmt"
+    assert profile == Auth0UserProfile(
+        user_id="google-oauth2|ada/1",
+        email="ada@example.test",
+        email_verified=True,
+        given_name=None,
+        family_name=None,
+        name="Ada",
+    )
+
+
+def test_a_user_auth0_doesnt_know_reads_as_none() -> None:
+    client, _requests = _client(
+        _token_then_user(lambda _request: httpx.Response(404, json={}))
+    )
+
+    assert client.read_user_profile("auth0|gone") is None
+
+
+@pytest.mark.parametrize(
+    ("answer", "cause"),
+    [
+        (httpx.Response(403, json={}), "http_403"),
+        (httpx.Response(500), "http_500"),
+        (httpx.Response(200, text="not json"), "unreadable_answer"),
+        (httpx.Response(200, json=[]), "unreadable_answer"),
+        (httpx.Response(200, json={"user_id": "auth0|other"}), "unreadable_answer"),
+    ],
+)
+def test_a_failed_read_of_one_user_says_why_without_naming_it(
+    answer: httpx.Response, cause: str
+) -> None:
+    client, _requests = _client(_token_then_user(lambda _request: answer))
+
+    with pytest.raises(Auth0UserProfilesUnavailableError) as failed:
+        client.read_user_profile("auth0|ada")
+
+    assert failed.value.cause == cause
+    assert "auth0|ada" not in str(failed.value)
+
+
+def test_a_rate_limited_read_of_one_user_is_retried_once_within_the_budget() -> None:
+    client, requests, waits = _rate_limited_client(
+        [
+            httpx.Response(429, headers={"Retry-After": "1"}),
+            httpx.Response(200, json=_profile_payload("auth0|1", email="a@b.test")),
+        ]
+    )
+    budget = RateLimitWaitBudget()
+
+    profile = client.read_user_profile("auth0|1", wait_budget=budget)
+
+    assert profile is not None
+    assert waits == [1.0]
+    assert budget.remaining_seconds == 1.0
+    assert [
+        request.url.path
+        for request in requests
+        if request.url.path.startswith("/api/v2/users/")
+    ] == ["/api/v2/users/auth0|1"] * 2
+
+
+def test_a_rejected_token_is_replaced_once_for_a_read_of_one_user() -> None:
+    tokens = iter(["mgmt-1", "mgmt-2"])
+    reads: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200, json={"access_token": next(tokens), "expires_in": 3600}
+            )
+        reads.append(request.headers["authorization"])
+        if request.headers["authorization"] == "Bearer mgmt-1":
+            return httpx.Response(401)
+        return httpx.Response(200, json=_profile_payload("auth0|1"))
+
+    client, _requests = _client(handler)
+
+    assert client.read_user_profile("auth0|1") is not None
+    assert reads == ["Bearer mgmt-1", "Bearer mgmt-2"]
