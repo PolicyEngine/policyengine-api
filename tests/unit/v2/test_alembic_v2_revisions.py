@@ -1161,8 +1161,9 @@ def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> 
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert f'down_revision: Union[str, None] = "{USER_INVITATIONS_REVISION}"' in (
-        revision
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{USER_INVITATIONS_REVISION}["']""",
+        revision,
     )
     assert revision.count("Dialect correction:") == 1
     assert re.search(
