@@ -1,0 +1,1 @@
+The release workflow's Cloud Run image cleanup no longer fails on images built on Ubuntu 26.04 runners, and it keeps the images of the 15 most recent releases again. The Cloud Run image build turns off Docker's provenance attestation, so each release pushes one image manifest instead of an image index and two manifests.
