@@ -35,6 +35,7 @@ from policyengine_api.data.v2.models import (
     LocalAuthorityImpact,
     Poverty,
     ProgramStatistics,
+    SimulationStatus,
     WithheldAreaCode,
 )
 from policyengine_api.services.v2.stored_reports.economy_results import (
@@ -99,6 +100,16 @@ def side_calculations(
     )
 
 
+def table_row(table: str, row: dict[str, Any]) -> Any:
+    """Load one stored row as its table's model, with a new ID.
+
+    A cliff calculation's status is loaded as the enum a database read gives.
+    """
+    if "status" in row:
+        row = {**row, "status": SimulationStatus(row["status"])}
+    return TABLE_MODELS[table](id=uuid4(), **row)
+
+
 def stored_rows(
     output: dict[str, Any],
     *,
@@ -121,7 +132,7 @@ def stored_rows(
     stored = economy_result_rows(output, run_ids=run_ids, country=country)
     tables: dict[str, tuple[Any, ...]] = {}
     for table, rows in stored.rows.items():
-        loaded = [TABLE_MODELS[table](id=uuid4(), **row) for row in rows]
+        loaded = [table_row(table, row) for row in rows]
         if reverse_rows:
             loaded.reverse()
         tables[table] = tuple(loaded)

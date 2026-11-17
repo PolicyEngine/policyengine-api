@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from policyengine_api.data.v2.models import SimulationStatus
 from policyengine_api.services.v2.simulation_service.types import LOCAL_AREA_DATASET
 from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowReportRead,
@@ -11,8 +12,10 @@ from policyengine_api.services.v2.stored_reports.types import (
     BudgetWindowRunRead,
     BudgetWindowRunsRead,
     BudgetWindowYearRead,
+    CliffCalculationRead,
     HouseholdReportRead,
     HouseholdReportSummaryRead,
+    ReportCliffsRead,
     ReportDefinitionRead,
     ReportRead,
     ReportRunRead,
@@ -27,6 +30,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import (
         BudgetWindowRun,
+        CliffImpact,
         Report,
         ReportRun,
         Simulation,
@@ -39,12 +43,14 @@ if TYPE_CHECKING:
     )
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResult,
+        ReportRunCliffRows,
     )
     from policyengine_api.services.v2.stored_reports.household_results.types import (
         HouseholdReportFailure,
         HouseholdReportResult,
     )
     from policyengine_api.services.v2.stored_reports.types import (
+        CliffCalculationStatusName,
         ReportKind,
         ReportRunsKind,
         ReportStatusName,
@@ -139,10 +145,58 @@ def report_read(
     *,
     current_versions: PackageVersions,
     result: EconomyResult | None,
+    cliffs: ReportCliffsRead | None,
 ) -> ReportRead:
-    """Return an economy report with the run read's result, if it has one."""
+    """Return an economy report with the run read's result and cliffs, if any."""
     summary = report_summary_read(rows, current_versions=current_versions)
-    return ReportRead(**vars(summary), result=result)
+    return ReportRead(**vars(summary), result=result, cliffs=cliffs)
+
+
+# A side's status for its cliff calculation's.
+CLIFF_CALCULATION_STATUSES: dict[SimulationStatus, CliffCalculationStatusName] = {
+    SimulationStatus.PENDING: "pending",
+    SimulationStatus.RUNNING: "running",
+    SimulationStatus.SUCCEEDED: "succeeded",
+    SimulationStatus.FAILED: "failed",
+}
+
+
+def _cliff_calculation_read(calculation: CliffImpact | None) -> CliffCalculationRead:
+    """Return how far a side's cliff calculation has got; the error once failed."""
+    if calculation is None:
+        return CliffCalculationRead(status="not_calculated", error_message=None)
+    status = CLIFF_CALCULATION_STATUSES[calculation.status]
+    return CliffCalculationRead(
+        status=status,
+        error_message=calculation.error_message if status == "failed" else None,
+    )
+
+
+# A report run's cliff status is the first of these that either side has,
+# else succeeded: a failed or missing side needs a new request, and one
+# still pending or running needs only time.
+CLIFF_STATUSES_BEFORE_SUCCESS: tuple[CliffCalculationStatusName, ...] = (
+    "failed",
+    "not_calculated",
+    "running",
+    "pending",
+)
+
+
+def report_cliffs(cliff_calculations: ReportRunCliffRows) -> ReportCliffsRead:
+    """Return how far a report run's two cliff calculations have got.
+
+    Its status is ``succeeded`` once both sides are, else the first of
+    ``CLIFF_STATUSES_BEFORE_SUCCESS`` either side has.
+    """
+    baseline = _cliff_calculation_read(cliff_calculations.baseline)
+    reform = _cliff_calculation_read(cliff_calculations.reform)
+    side_statuses = {baseline.status, reform.status}
+    status: CliffCalculationStatusName = next(
+        (status for status in CLIFF_STATUSES_BEFORE_SUCCESS if status in side_statuses),
+        "succeeded",
+    )
+    return ReportCliffsRead(status=status, baseline=baseline, reform=reform)
 
 
 def household_report_summary_read(

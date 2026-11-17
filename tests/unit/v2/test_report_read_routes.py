@@ -161,7 +161,8 @@ def test_a_listed_report_answers_no_cliffs() -> None:
 
 
 def test_the_openapi_document_describes_a_reports_cliffs() -> None:
-    schemas = report_route_client().get("/openapi.json").json()["components"]["schemas"]
+    document = report_route_client().get("/v2/openapi.json").json()
+    schemas = document["components"]["schemas"]
 
     cliffs = schemas["ReportCliffsItem"]
     assert set(cliffs["properties"]) == {"status", "baseline", "reform"}

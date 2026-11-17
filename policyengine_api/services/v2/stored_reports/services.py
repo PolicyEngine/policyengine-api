@@ -17,7 +17,11 @@ result.
 
 The result is rebuilt from the run's result rows once it has succeeded; a
 local-area report's (a UK-wide or nation report on the dataset its catalog
-version gives local areas) also lists its withheld area codes. A
+version gives local areas) also lists its withheld area codes. An economy
+report's read also says how far the cliff calculations of the run's two
+simulation runs have got, whatever the run's status, and the result's cliff
+impact is theirs once both have succeeded: a run's cliffs are calculated
+apart from it, and never read from the report run's own cliff columns. A
 budget-window report's run is a budget-window run, read with its years;
 once that run has succeeded, its result is the budget-window format,
 rebuilt from each year's budget rows. Reading a
@@ -117,6 +121,7 @@ from policyengine_api.services.v2.stored_reports.transformations import (
     household_report_read,
     household_report_summary_read,
     listed_reports,
+    report_cliffs,
     report_kind,
     report_policy_ids,
     report_read,
@@ -460,21 +465,31 @@ class V2StoredReportService:
             if kind == "household":
                 return self._household_report(session, stored)
             run = stored.run
-            result = None
-            if run is not None and run.status is ReportRunStatus.SUCCEEDED:
-                result = result_transformations.economy_result(
-                    result_reads.read_economy_result_rows(
-                        session,
-                        country_id=country_id,
-                        report_run=run,
-                        reform_simulation_run_id=require_reform_run(run),
-                        on_local_area_dataset=stored.on_local_area_dataset,
-                    )
+            result = cliffs = None
+            if run is not None:
+                reform_simulation_run_id = require_reform_run(run)
+                cliff_calculations = result_reads.read_cliff_calculations(
+                    session,
+                    baseline_simulation_run_id=run.baseline_simulation_run_id,
+                    reform_simulation_run_id=reform_simulation_run_id,
                 )
+                cliffs = report_cliffs(cliff_calculations)
+                if run.status is ReportRunStatus.SUCCEEDED:
+                    result = result_transformations.economy_result(
+                        result_reads.read_economy_result_rows(
+                            session,
+                            country_id=country_id,
+                            report_run=run,
+                            reform_simulation_run_id=reform_simulation_run_id,
+                            on_local_area_dataset=stored.on_local_area_dataset,
+                            cliff_calculations=cliff_calculations,
+                        )
+                    )
             return report_read(
                 stored,
                 current_versions=self._current_versions(country_id),
                 result=result,
+                cliffs=cliffs,
             )
 
     def _budget_window(

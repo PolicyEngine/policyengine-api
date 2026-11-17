@@ -28,6 +28,9 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     CliffImpactInSimulation,
     ReportRunCliffRows,
 )
+from policyengine_api.services.v2.stored_reports.transformations import (
+    report_cliffs,
+)
 from policyengine_api.services.v2.stored_reports.types import (
     CliffCalculationRead,
     CliffCalculationStatusName,
@@ -102,9 +105,7 @@ def store_calculations(
 
 
 def test_sides_without_cliff_calculations_are_not_calculated() -> None:
-    cliffs = result_transformations.report_cliffs(
-        ReportRunCliffRows(baseline=None, reform=None)
-    )
+    cliffs = report_cliffs(ReportRunCliffRows(baseline=None, reform=None))
 
     assert cliffs == ReportCliffsRead(
         status="not_calculated",
@@ -123,9 +124,7 @@ def test_a_side_reads_its_unfailed_calculations_status_without_an_error(
 ) -> None:
     calculation = cliff_calculation(status)
 
-    cliffs = result_transformations.report_cliffs(
-        ReportRunCliffRows(baseline=calculation, reform=calculation)
-    )
+    cliffs = report_cliffs(ReportRunCliffRows(baseline=calculation, reform=calculation))
 
     assert cliffs.baseline == CliffCalculationRead(
         status=status.value, error_message=None
@@ -134,7 +133,7 @@ def test_a_side_reads_its_unfailed_calculations_status_without_an_error(
 
 
 def test_a_failed_side_says_why_its_calculation_failed() -> None:
-    cliffs = result_transformations.report_cliffs(
+    cliffs = report_cliffs(
         ReportRunCliffRows(
             baseline=cliff_calculation(SimulationStatus.SUCCEEDED),
             reform=cliff_calculation(SimulationStatus.FAILED),
@@ -165,12 +164,12 @@ def test_the_reports_cliff_status_follows_its_least_finished_side(
     reform: CliffCalculationStatusName,
     overall: CliffCalculationStatusName,
 ) -> None:
-    cliffs = result_transformations.report_cliffs(
+    cliffs = report_cliffs(
         ReportRunCliffRows(
             baseline=side_calculation(baseline), reform=side_calculation(reform)
         )
     )
-    swapped = result_transformations.report_cliffs(
+    swapped = report_cliffs(
         ReportRunCliffRows(
             baseline=side_calculation(reform), reform=side_calculation(baseline)
         )
