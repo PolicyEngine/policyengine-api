@@ -1,3 +1,10 @@
+## [5.52.1] - 2026-11-17
+
+### Changed
+
+- Requests to api.policyengine.org without an Authorization header, outside the Public API's public routes, are refused at the load balancer with 403 instead of reaching the Public API, which answers them with 401; the Cloud Armor runbook records the rules.
+
+
 ## [5.52.0] - 2026-11-17
 
 ### Added
