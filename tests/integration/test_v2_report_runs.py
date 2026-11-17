@@ -43,6 +43,12 @@ from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from policyengine_api.services.v2.report_run_records.database_session import (
+    ReportRunRecordDatabaseSession,
+)
+from policyengine_api.services.v2.report_run_records.services import (
+    ReportRunRecordService,
+)
 from policyengine_api.services.v2.simulation_service.services import (
     SimulationSubmissionService,
 )
@@ -51,6 +57,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
     SimulationServiceConflictError,
     SimulationServiceUnavailableError,
+    StartedReportRun,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
@@ -70,12 +77,17 @@ from tests.integration.stored_report_rows import (
     store_report_run,
     store_year_simulations,
 )
+from tests.integration.user_report_run_support import store_signed_in_user
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from sqlalchemy import Connection, Engine
 
+    from policyengine_api.services.v2.identity.types import (
+        AccountPrincipal,
+        UserPrincipal,
+    )
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -153,7 +165,7 @@ class RerunningSimulationService:
     new_run_ids: list[UUID] = field(default_factory=list)
     open_sessions_when_asked: list[int] = field(default_factory=list)
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
         self.reruns.append(rerun)
         if self.database_session is not None:
             self.open_sessions_when_asked.append(self.database_session.open_sessions)
@@ -183,15 +195,27 @@ class RerunningSimulationService:
                 )
                 mark_window_manual(connection, window_run_id, recalculate=rerun.force)
                 self.new_run_ids.append(window_run_id)
+                started = StartedReportRun(
+                    report_run_id=connection.execute(
+                        text(
+                            "SELECT id FROM report_runs WHERE budget_window_run_id "
+                            "= :id ORDER BY year LIMIT 1"
+                        ),
+                        {"id": window_run_id},
+                    ).scalar_one(),
+                    budget_window_run_id=window_run_id,
+                )
             else:
                 run_ids = store_report_run(connection, self.catalog, report, settings)
                 mark_manual(connection, run_ids.report_run_id)
                 self.new_run_ids.append(run_ids.report_run_id)
+                started = StartedReportRun(report_run_id=run_ids.report_run_id)
             if self.delete_report:
                 connection.execute(
                     text("DELETE FROM reports WHERE id = :id"),
                     {"id": rerun.report_id},
                 )
+        return started
 
 
 @pytest.fixture
@@ -218,6 +242,17 @@ def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
     engine.dispose()
 
 
+@pytest.fixture
+def admin(owner_engine: Engine, runtime_sessions: Any) -> Iterator[UserPrincipal]:
+    """Provision an admin user, who may force a re-run; delete it after."""
+    principal, user_id = store_signed_in_user(
+        runtime_sessions, owner_engine, user_type="admin"
+    )
+    yield principal
+    with owner_engine.begin() as connection:
+        connection.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+
+
 class CountingDatabaseSession(StoredReportDatabaseSession):
     """Count the report service's read sessions open at each moment."""
 
@@ -239,8 +274,13 @@ def client_for(
     sessions: Any,
     simulation_service: RerunningSimulationService,
     database_session: StoredReportDatabaseSession | None = None,
+    requester: AccountPrincipal | None = None,
 ) -> TestClient:
-    """Serve the routes as the runtime role, running reports through the stand-in."""
+    """Serve the routes as the runtime role, running reports through the stand-in.
+
+    With ``requester``, every request acts for that principal, as a
+    signed-in user's verified bearer token does, and is recorded for it.
+    """
     submissions = SimulationSubmissionService(
         countries=V2CountryService(CountryDatabaseSession(sessions)),
         households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
@@ -249,7 +289,9 @@ def client_for(
         ),
         client_factory=lambda: simulation_service,
     )
+    signed_in = {} if requester is None else {"optional_user": lambda: requester}
     dependencies = NativeRouteDependencies(
+        **signed_in,
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
@@ -257,6 +299,9 @@ def client_for(
             database_session or StoredReportDatabaseSession(sessions),
             current_versions=current_versions,
             submissions=submissions,
+            run_records=ReportRunRecordService(
+                ReportRunRecordDatabaseSession(sessions)
+            ),
         ),
     )
     settings = RouteImplementationSettings(
@@ -502,6 +547,7 @@ def test_running_a_report_again_answers_it_with_its_new_run(
     owner_engine: Engine,
     catalog: CatalogRows,
     runtime_sessions: Any,
+    admin: UserPrincipal,
     force: bool,  # noqa: FBT001  # pytest passes parameters positionally
 ) -> None:
     with owner_engine.begin() as connection:
@@ -510,7 +556,10 @@ def test_running_a_report_again_answers_it_with_its_new_run(
             connection, catalog, report, RunSettings(versions=OLDER_VERSIONS)
         )
     simulation_service = RerunningSimulationService(owner_engine, catalog)
-    client = client_for(runtime_sessions, simulation_service)
+    # Only an admin user may force a re-run.
+    client = client_for(
+        runtime_sessions, simulation_service, requester=admin if force else None
+    )
 
     response = client.post(
         f"/v2/reports/{report.report_id}/runs?country_id=us", json={"force": force}
@@ -585,15 +634,17 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id(
     )
 
     assert response.status_code == 502
+    (new_run_id,) = simulation_service.new_run_ids
     assert response.json() == {
         "status": "error",
         "message": (
-            f"The simulation service started a new run of report "
+            f"The simulation service started a run of report "
             f"{report.report_id}, but the report could not be read back. Read it "
-            f"with GET /v2/reports/{report.report_id}?country_id=us rather than "
-            "running it again."
+            f"with GET /v2/reports/{report.report_id}?country_id=us"
+            f"&run_id={new_run_id} rather than running it again."
         ),
         "report_id": str(report.report_id),
+        "run_id": str(new_run_id),
     }
 
 
@@ -689,6 +740,7 @@ def test_running_a_budget_window_again_answers_it_with_its_new_run(
     owner_engine: Engine,
     catalog: CatalogRows,
     runtime_sessions: Any,
+    admin: UserPrincipal,
     force: bool,  # noqa: FBT001  # pytest passes parameters positionally
 ) -> None:
     with owner_engine.begin() as connection:
@@ -703,7 +755,10 @@ def test_running_a_budget_window_again_answers_it_with_its_new_run(
     simulation_service = RerunningSimulationService(
         owner_engine, catalog, window_years=(2026, 2027)
     )
-    client = client_for(runtime_sessions, simulation_service)
+    # Only an admin user may force a re-run.
+    client = client_for(
+        runtime_sessions, simulation_service, requester=admin if force else None
+    )
 
     response = client.post(
         f"/v2/reports/{window.report_id}/runs?country_id=us", json={"force": force}

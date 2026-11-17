@@ -12,9 +12,13 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     V2MissingParametersErrorResponse,
 )
 from policyengine_api.fastapi_routes.v2.reports.response_models import (
+    MACHINE_REQUESTER,
+    NOT_RECORDED,
+    UNAUTHENTICATED_REQUESTER,
     BudgetWindowRunItem,
     PackageVersionsItem,
     ReportRunItem,
+    ReportRunNotRecordedResponse,
     ReportSuccessResponse,
     StrictReportAPIModel,
 )
@@ -129,13 +133,18 @@ class ReportRerunConflictResponse(V2ErrorResponse):
 
 
 class RerunReportUnreadableResponse(V2ErrorResponse):
-    """The 502 answer when the report cannot be read back after its new run started.
+    """The 502 answer when the run a re-run started cannot be answered.
 
-    The simulation service started the run, so the caller reads the report
-    with ``GET /v2/reports/{report_id}`` rather than running it again.
+    Either the report cannot be read back with the run ``run_id``, which the
+    caller then reads with ``GET /v2/reports/{report_id}?run_id={run_id}``,
+    or a budget window's answer named no budget-window run, when ``run_id``
+    is null and the caller finds the run in ``GET
+    /v2/reports/{report_id}/runs``. Either way the run exists, so the caller
+    doesn't run the report again.
     """
 
     report_id: UUID
+    run_id: UUID | None
 
 
 NOT_FOUND = "No report has this ID in this country."
@@ -143,6 +152,14 @@ RUN_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: error_response(NOT_FOUND),
 }
 RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
+    401: error_response(
+        f"{UNAUTHENTICATED_REQUESTER} Or the request forces a re-run without a "
+        "user credential: only an admin user may force one."
+    ),
+    403: error_response(
+        f"{MACHINE_REQUESTER} Or the request forces a re-run, and its user is "
+        "not an admin: only an admin user may force one."
+    ),
     404: error_response(
         f"{NOT_FOUND} Or a policy a simulation of the report names is no longer "
         "stored in the country."
@@ -181,19 +198,26 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "see whether it has a new run before running it again; while that "
             "run is pending or running, running it again answers 409. Or it "
             "started the run, but the report cannot be read back: the answer "
-            "gives its report_id."
+            "gives its report_id and run_id, to read with GET "
+            "/v2/reports/{report_id}?run_id={run_id}. Or it started a budget "
+            "window's run, but its answer named no budget-window run: run_id "
+            "is null, and the message points to GET "
+            "/v2/reports/{report_id}/runs."
         ),
     },
-    503: error_response(
-        "The simulation service started nothing that runs: it cannot be reached "
-        "or is not configured; it answered a readable 503, and the message gives "
-        "its status and code, and names the new run it failed when Modal refused "
-        "the run's call; it answered a 400 about its own state rather than a row "
-        "the report names (such as a catalog version missing while a release "
-        "deploys), and the message gives its code and reason; it answered 400, "
-        "409 or 422 in a shape the Public API cannot read; or it answered 401, "
-        "403, 404, 405, 413 or 429, which it sends before writing anything. Or "
-        "the v2 database, or the catalog the policies are checked against, "
-        "cannot be read."
-    ),
+    503: {
+        "model": V2ErrorResponse | ReportRunNotRecordedResponse,
+        "description": (
+            "The simulation service started nothing that runs: it cannot be reached "
+            "or is not configured; it answered a readable 503, and the message gives "
+            "its status and code, and names the new run it failed when Modal refused "
+            "the run's call; it answered a 400 about its own state rather than a row "
+            "the report names (such as a catalog version missing while a release "
+            "deploys), and the message gives its code and reason; it answered 400, "
+            "409 or 422 in a shape the Public API cannot read; or it answered 401, "
+            "403, 404, 405, 413 or 429, which it sends before writing anything. Or "
+            "the v2 database, or the catalog the policies are checked against, "
+            f"cannot be read. {NOT_RECORDED}"
+        ),
+    },
 }

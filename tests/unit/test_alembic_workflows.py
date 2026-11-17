@@ -206,11 +206,14 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "alembic-v2.ini" in workflow
     assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
     assert "test_alembic_v2.py" in lifecycle_script
+    assert "test_alembic_v2_revisions.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
     assert "test_alembic_v2_catalog_tables.py" in lifecycle_script
     assert "test_alembic_v2_simulation_runs.py" in lifecycle_script
     assert "test_alembic_v2_saved_item_keys.py" in lifecycle_script
     assert "test_alembic_v2_user_types.py" in lifecycle_script
+    assert "test_alembic_v2_withheld_area_codes.py" in lifecycle_script
+    assert "test_alembic_v2_shared_report_keys.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -220,6 +223,31 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_runtime_cache_redis.py" not in workflow
     assert "coverage run" not in workflow
     assert "codecov/codecov-action" not in workflow
+
+
+def test_reusable_v2_integration_check_runs_shared_report_rows_as_managed_roles():
+    """The shared-report tests run after the managed roles get their privileges."""
+    workflow = _workflow("v2-integration-check.yml")
+
+    assert workflow.index("reconcile_v2_privileges.py apply") < workflow.index(
+        "test_v2_shared_report_rows.py"
+    )
+
+
+def test_reusable_v2_integration_check_runs_the_users_report_run_tests():
+    """Reading a report by run and users' run records run as the runtime role."""
+    workflow = _workflow("v2-integration-check.yml")
+
+    privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
+    for module in (
+        "test_v2_report_reads_by_run.py",
+        "test_v2_user_report_runs.py",
+        "test_v2_user_report_run_requesters.py",
+        "test_v2_user_budget_window_runs.py",
+        "test_v2_forced_report_reruns.py",
+        "test_v2_user_report_views.py",
+    ):
+        assert privileges_applied < workflow.index(module), module
 
 
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():

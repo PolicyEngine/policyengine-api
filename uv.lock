@@ -2954,7 +2954,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "6.17.1"
+version = "6.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2966,9 +2966,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/45/483142f35ce0dfa02db01e541f730843b9108ae4b60a8bdae92ac223f3b2/policyengine-6.17.1.tar.gz", hash = "sha256:07a2617c738a77d2f1fd8ff2c5f4d89b040a54f44e9f931331a7ae34fdbbfc9f", size = 1629731, upload-time = "2026-11-10T16:26:24.672Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/e8/4373c716f428ed885392ff1776dc1be1f9e9a3a6f7608afcc1f39d683546/policyengine-6.20.0.tar.gz", hash = "sha256:65dad563d92c17485c5943b2bb8114d8f16cd49c977acbce6412cd8b8bcfadfd", size = 1863269, upload-time = "2026-11-16T16:21:45.756Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/d5/e8b6181f512e5c3b14bbd0638a4c179515a9f479a68a6eaba640005b0fad/policyengine-6.17.1-py3-none-any.whl", hash = "sha256:7fa63f9f6524d911ff7a490448a2b202341487dc09d5c945fc0e0c816893df1e", size = 562776, upload-time = "2026-11-10T16:26:22.717Z" },
+    { url = "https://files.pythonhosted.org/packages/64/b6/9ebed9a78c755c25893a20c924bc6952100bc3376608511fbcdb065145c3/policyengine-6.20.0-py3-none-any.whl", hash = "sha256:cc2da1b7448ae229294090318140bfe39440e8899415b8e465459c7e89bb7135", size = 774390, upload-time = "2026-11-16T16:21:43.414Z" },
 ]
 
 [package.optional-dependencies]
@@ -2981,7 +2981,7 @@ models = [
 
 [[package]]
 name = "policyengine-api"
-version = "5.47.0"
+version = "5.50.2"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
@@ -3072,7 +3072,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15,<2" },
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
-    { name = "policyengine", extras = ["models"], specifier = "==6.17.1" },
+    { name = "policyengine", extras = ["models"], specifier = "==6.20.0" },
     { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.3,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
@@ -3169,7 +3169,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-us"
-version = "2.2.1"
+version = "2.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -3179,9 +3179,9 @@ dependencies = [
     { name = "tables" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2c/09/763b21371a62635e15e62b53fb696e299f01460907c27313d40f63031eb2/policyengine_us-2.2.1.tar.gz", hash = "sha256:d5300c91f3eae2e47a61f485fdfde91a892b80e95db3e46ff2c4bbd417d76501", size = 11946510, upload-time = "2026-09-15T04:45:50.33Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/86/1bbc7ab8d689987b364e624ef550a7a43ec49343b863be39b267a7c3477b/policyengine_us-2.2.2.tar.gz", hash = "sha256:a7cd4383d82e2453a3433e49d5501fd21b01b43b3910a66954d0a3cfe65f422b", size = 11947023, upload-time = "2026-11-09T20:52:43.712Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/09/86ac3968d2a18e28fce3ba1186fc21728e9f299b96a806d6f204f1e0aaed/policyengine_us-2.2.1-py3-none-any.whl", hash = "sha256:0993a6c73fcdfbe171a796aca9d302741bd8e00ab83388ad81c15a08740318c6", size = 14885537, upload-time = "2026-09-15T04:45:46.649Z" },
+    { url = "https://files.pythonhosted.org/packages/84/89/12a44d68e4131cc6ad92cfa22959254c69306d1f25fa6760ea1aab851bcb/policyengine_us-2.2.2-py3-none-any.whl", hash = "sha256:82ac620444dc0f246559fcbf7b34daee5a921a57684b63121f319365820811ce", size = 14885748, upload-time = "2026-11-09T20:52:38.979Z" },
 ]
 
 [[package]]
@@ -4109,7 +4109,7 @@ wheels = [
 
 [[package]]
 name = "spm-calculator"
-version = "1.0.0"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "census" },
@@ -4119,9 +4119,9 @@ dependencies = [
     { name = "requests" },
     { name = "us" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/5e/3f28b212c401795990250bb3daec741f699a8c7dc2a23a3db7005df6feb6/spm_calculator-1.0.0.tar.gz", hash = "sha256:a99aac8c2c0bf81a9455105bbf872366f1ea9066a99cd793714881cd3db846dc", size = 7150825, upload-time = "2026-09-11T15:45:12.732Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/84/19057fa04e6c8cce85494458b2164d473ce82cbf54608a3b2951af2c36b1/spm_calculator-1.1.0.tar.gz", hash = "sha256:1be418c6a1baaba86f63c3287b38efecf7f94af563b864a73934ecbf60a01f38", size = 9625137, upload-time = "2026-11-02T18:48:45.002Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/a0/c484f69a0ebf88a9b9fd0ac28176f8df66550f46714f1b0c5ec0b360824e/spm_calculator-1.0.0-py3-none-any.whl", hash = "sha256:e354937a5e1a4045d4966ed594a528d8b02866fabaac9bb5672017004b627305", size = 7395384, upload-time = "2026-09-11T15:45:10.492Z" },
+    { url = "https://files.pythonhosted.org/packages/35/91/12a744eb7f3445db8899dc187bbd193c884f9fe4c373851c0ddb24cc0f5e/spm_calculator-1.1.0-py3-none-any.whl", hash = "sha256:c528ec0f06eeb1188b7d6cf456ff3a9b73a0fd8856b3938358251cc5f9be83e8", size = 9881340, upload-time = "2026-11-02T18:48:42.665Z" },
 ]
 
 [[package]]

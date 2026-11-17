@@ -55,6 +55,7 @@ COMPARISON_RESULT_TABLES = (
     "intra_decile_impacts",
     "local_authority_impacts",
     "program_statistics",
+    "withheld_area_codes",
 )
 # The tables the simulation service and its Modal workers write. The Public API
 # writes every other table.
@@ -178,6 +179,7 @@ def test_each_simulation_run_records_its_versions_status_and_output() -> None:
         "country_package_version",
         "policyengine_version",
         "status",
+        "forced",
         "created_at",
         "updated_at",
     }
@@ -242,6 +244,15 @@ def test_run_tables_require_a_completion_time_and_index_running_runs() -> None:
         "ix_simulation_runs_status_started_at": ("status", "started_at"),
         "ix_simulation_runs_tax_benefit_model_version_id": (
             "tax_benefit_model_version_id",
+        ),
+        # One unfailed, unforced run per year and version set
+        # (test_shared_report_models.py).
+        "uq_simulation_runs_unfailed_unforced_versions": (
+            "simulation_id",
+            "year",
+            "tax_benefit_model_version_id",
+            "country_package_version",
+            "policyengine_version",
         ),
     }
     assert _indexes(report_runs)["ix_report_runs_status_started_at"] == (
@@ -341,6 +352,42 @@ def test_uk_area_impacts_record_disclosure_control() -> None:
         assert f"ck_{table_name}_disclosure_tier" in _check_names(table)
 
 
+def test_withheld_area_codes_list_each_area_a_report_run_held_back() -> None:
+    """One row per UK area that disclosure control withheld from a report run."""
+    withheld = V2_METADATA.tables["withheld_area_codes"]
+
+    assert set(withheld.c.keys()) == {
+        "id",
+        "created_at",
+        "report_run_id",
+        "baseline_simulation_run_id",
+        "reform_simulation_run_id",
+        "area_type",
+        "code",
+    }
+    area_type = withheld.c.area_type
+    assert not area_type.nullable
+    assert isinstance(area_type.type, sa.Enum)
+    assert area_type.type.name == "v2_uk_area_type"
+    assert area_type.type.enums == ["constituency", "local_authority"]
+    assert not withheld.c.code.nullable
+    assert withheld.c.code.type.length == 64
+    assert {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in withheld.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    } == {
+        "uq_withheld_area_codes_run_type_code": (
+            "report_run_id",
+            "area_type",
+            "code",
+        )
+    }
+    relationship = sa.inspect(ReportRun).relationships["withheld_area_codes"]
+    assert relationship.mapper.local_table is withheld
+    assert "delete" in relationship.cascade
+
+
 def test_congressional_district_impacts_record_winner_and_loser_shares() -> None:
     districts = V2_METADATA.tables["congressional_district_impacts"]
 
@@ -403,13 +450,18 @@ def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
     required = {
         "report_id",
         "tax_benefit_model_version_id",
-        "trigger",
         "recalculate",
         "status",
         "created_at",
         "updated_at",
     }
-    optional = {"error_message", "started_at", "completed_at"}
+    optional = {
+        "error_message",
+        "started_at",
+        "completed_at",
+        "policyengine_version",
+        "trigger",
+    }
     assert set(windows.c.keys()) == {"id"} | required | optional
     assert all(not windows.c[name].nullable for name in required)
     assert all(windows.c[name].nullable for name in optional)

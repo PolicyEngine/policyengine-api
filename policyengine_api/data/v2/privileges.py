@@ -25,8 +25,9 @@ Roles and what decides their privileges:
   temporary Stage 12 tables (``docs/migration/stage-12-worker-contract.md``).
 - ``policyengine_v2_catalog_writer``: the metadata catalog publication
   (``scripts/publish_v2_metadata_catalog.py``). Its privileges follow what
-  publication writes and reads; its code isn't organized as connector modules,
-  so the deploy check, not the connector analysis, covers it.
+  publication writes and reads, plus ``MAINTAIN`` on the catalog tables it
+  analyzes afterwards; its code isn't organized as connector modules, so the
+  deploy check, not the connector analysis, covers it.
 - ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
   creates simulations, reports, their runs, budget-window runs and household
   jobs, and reads the policy, dynamic, household and catalog rows a run needs.
@@ -45,20 +46,25 @@ Roles and what decides their privileges:
 
 Both simulation API roles update only the columns ``update_columns`` names, so
 the database refuses any change to what a run is (its simulation or report,
-versions, dataset, region, year, simulation runs or budget-window run) or to
-what a budget-window run is (its report, catalog version, trigger or whether
-it calculates again). It doesn't limit a worker to its own run; the workers'
-code does. Their code lives in the simulation API's repository, so the deploy
-check covers them here.
+versions, dataset, region, year, simulation runs, budget-window run or whether
+a forced re-run created it) or to what a budget-window run is (its report,
+catalog version, .py version, trigger or whether it calculates again). It
+doesn't limit a worker to its own run; the workers' code does. Their code
+lives in the simulation API's repository, so the deploy check covers them
+here.
 
 The Public API reads the simulation tables it serves, and writes none of them.
 
 The migration role (``policyengine_v2_migrator``) owns every table, and
 Supabase's ``postgres`` role administers the project; neither is managed here.
 
-Extra privileges a database holds beyond this manifest are reported, never
-revoked. The v2 schema has no sequences (every key is a UUID); a test fails if
-one appears, so the manifest can be extended to cover it.
+Extra privileges a database holds beyond this manifest are reported, not
+revoked, with one exception: a privilege a role holds on a whole table that
+this manifest declares for named columns only is revoked, with the role's
+column grants of it, and the declared columns are granted again.
+
+The v2 schema has no sequences (every key is a UUID); a test fails if one
+appears, so the manifest can be extended to cover it.
 """
 
 from __future__ import annotations
@@ -90,6 +96,8 @@ class TablePrivilege(StrEnum):
     INSERT = "INSERT"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    # PostgreSQL 17: lets a role that doesn't own the table run ANALYZE on it.
+    MAINTAIN = "MAINTAIN"
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,13 @@ READ_WRITE: Final = frozenset(
         TablePrivilege.DELETE,
     }
 )
+# ANALYZE after publication (``catalog.publication_statistics``): the migration
+# role owns the catalog tables, and PostgreSQL skips a table the role neither
+# owns nor holds MAINTAIN on, with only a warning. PostgreSQL 17 has no narrower
+# privilege: MAINTAIN also allows VACUUM (FULL included), CLUSTER, REINDEX,
+# REFRESH MATERIALIZED VIEW and LOCK TABLE on them, of which publication runs
+# only ANALYZE.
+_ANALYZE: Final = frozenset({TablePrivilege.MAINTAIN})
 
 
 @dataclass(frozen=True)
@@ -264,30 +279,37 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "local_authority_impacts": _RESULT,
     "poverty": _RESULT,
     "program_statistics": _RESULT,
+    # The UK areas disclosure control withheld from a local-area run's results.
+    "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
+    # The writer also analyzes seven of them after every publication (_ANALYZE).
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
-    "parameter_nodes": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "parameter_nodes": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE
+    ),
     # Written by catalog publication for each version it publishes, from the
     # installed packages' catalog; never rewritten. Catalog pruning deletes an
     # older version's file, which publishing that version again writes back.
     "parameter_search_files": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
     # Written with each catalog version that publication publishes; catalog
     # pruning deletes an older version's rows.
-    "parameter_tree_children": _access(runtime=READ, catalog_writer=READ_INSERT_DELETE),
+    "parameter_tree_children": _access(
+        runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
+    ),
     # The Public API also inserts a v2 policy's own parameter values. Catalog
     # pruning deletes an older version's current-law values (those with no
     # policy or dynamic), never a policy's or a dynamic's.
     "parameter_values": _access(
-        runtime=READ_INSERT, catalog_writer=READ_WRITE, **_RUN_INPUT_READS
+        runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "parameters": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "regions": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
     # Catalog publication updates a version's time periods,
     # catalog_last_published_at and spm_availability, and catalog pruning its
@@ -298,7 +320,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "tax_benefit_models": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE, **_RUN_INPUT_READS
     ),
-    "variables": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE),
+    "variables": _access(runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE),
     # v2 policies and households, created by the native routes and by Stage 10
     # dual-write. A copy locks its mapping row (FOR UPDATE), which needs UPDATE.
     "households": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),
@@ -316,11 +338,21 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "user_identities": _access(runtime=READ_WRITE),
     "user_policies": _access(runtime=READ_WRITE),
     "user_report_associations": _access(runtime=READ_WRITE),
+    # Each user's request for a report run, which the Public API records when
+    # the user creates or re-runs a report, reads, and deletes; nothing
+    # changes one afterwards.
+    "user_report_run_associations": _access(runtime=READ_INSERT_DELETE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
     "users": _access(runtime=READ_WRITE),
-    # Each change of a signed-in user's type, recorded by the admin routes and
-    # the type script and never changed afterwards.
-    "user_type_changes": _access(runtime=READ_INSERT),
+    # Each change of a signed-in user's type, recorded by the admin routes,
+    # invitations and the type script. Afterwards only the time the user
+    # dismissed its notice is set.
+    "user_type_changes": _access(
+        runtime=READ_INSERT | {update_columns("dismissed_at")}
+    ),
+    # Admins' email invitations: revoking or accepting one updates it, and none
+    # is deleted.
+    "user_invitations": _access(runtime=READ_INSERT_UPDATE),
     # Temporary Stage 12 comparison-run tables.
     "stage12_evaluation_reports": _access(runtime=READ_WRITE, stage12=READ_WRITE),
     "stage12_evaluation_simulations": _access(runtime=READ_WRITE, stage12=READ_WRITE),

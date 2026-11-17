@@ -14,6 +14,10 @@ import pytest
 from flask import Flask
 
 from policyengine_api import worker_spm
+from policyengine_api.economy_years import (
+    US_FIRST_ECONOMY_YEAR,
+    US_LAST_ECONOMY_YEAR,
+)
 from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
@@ -28,6 +32,8 @@ from tests.fixtures.services.economy_service import ECONOMY_SERVICE_LOGGER_MODUL
 
 STORED_EXECUTION_ID = "stored-impact-job"
 STORED_IMPACT = {"budget": {"budgetary_impact": 1_000_000}}
+# The first year after the US years.
+US_YEAR_AFTER = str(US_LAST_ECONOMY_YEAR + 1)
 
 
 def unavailable_year_body(country: str, first: int, last: int, year: str) -> dict:
@@ -71,9 +77,27 @@ def _client() -> Flask:
 @pytest.mark.parametrize(
     ("country_id", "year", "expected_body"),
     [
-        ("us", "2022", unavailable_year_body("US", 2024, 2035, "2022")),
-        ("us", "2023", unavailable_year_body("US", 2024, 2035, "2023")),
-        ("us", "2036", unavailable_year_body("US", 2024, 2035, "2036")),
+        (
+            "us",
+            "2022",
+            unavailable_year_body(
+                "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, "2022"
+            ),
+        ),
+        (
+            "us",
+            "2023",
+            unavailable_year_body(
+                "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, "2023"
+            ),
+        ),
+        (
+            "us",
+            US_YEAR_AFTER,
+            unavailable_year_body(
+                "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, US_YEAR_AFTER
+            ),
+        ),
         ("uk", "2023", unavailable_year_body("UK", 2024, 2032, "2023")),
         ("uk", "2033", unavailable_year_body("UK", 2024, 2032, "2033")),
     ],
@@ -98,8 +122,22 @@ def test_an_annual_year_outside_the_countrys_years_gets_400_and_nothing_runs(
 @pytest.mark.parametrize(
     ("country_id", "start_year", "window_size", "expected_body"),
     [
-        ("us", "2023", "3", unavailable_year_body("US", 2024, 2035, "2023")),
-        ("us", "2036", "1", unavailable_year_body("US", 2024, 2035, "2036")),
+        (
+            "us",
+            "2023",
+            "3",
+            unavailable_year_body(
+                "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, "2023"
+            ),
+        ),
+        (
+            "us",
+            US_YEAR_AFTER,
+            "1",
+            unavailable_year_body(
+                "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, US_YEAR_AFTER
+            ),
+        ),
         ("uk", "2023", "2", unavailable_year_body("UK", 2024, 2032, "2023")),
     ],
 )
@@ -181,7 +219,9 @@ def test_a_stored_result_for_an_unavailable_year_is_not_returned(stored_us_impac
     )
 
     assert response.status_code == 400
-    assert response.json == unavailable_year_body("US", 2024, 2035, "2022")
+    assert response.json == unavailable_year_body(
+        "US", US_FIRST_ECONOMY_YEAR, US_LAST_ECONOMY_YEAR, "2022"
+    )
     assert stored_us_impact.gateway.mock_calls == []
     assert stored_us_impact.policies.mock_calls == []
     stored = stored_us_impact.cache.get_by_execution_id(STORED_EXECUTION_ID)

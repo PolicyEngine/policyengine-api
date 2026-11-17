@@ -24,6 +24,7 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2StoredReportResourceService,
     V2StoredSimulationResourceService,
     V2UserHouseholdResourceService,
+    V2UserInvitationResourceService,
     V2UserPolicyResourceService,
     V2UserReportResourceService,
     V2UserSimulationResourceService,
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_service.types import (
         SimulationServiceClient,
     )
+    from policyengine_api.services.v2.user_emails.services import V2UserEmailService
 
 __all__ = [
     "MetadataReader",
@@ -76,6 +78,7 @@ __all__ = [
     "V2StoredReportResourceService",
     "V2StoredSimulationResourceService",
     "V2UserHouseholdResourceService",
+    "V2UserInvitationResourceService",
     "V2UserPolicyResourceService",
     "V2UserReportResourceService",
     "V2UserSimulationResourceService",
@@ -239,6 +242,12 @@ def _default_v2_stored_report_service_factory() -> V2StoredReportResourceService
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
     )
+    from policyengine_api.services.v2.report_run_records.database_session import (
+        ReportRunRecordDatabaseSession,
+    )
+    from policyengine_api.services.v2.report_run_records.services import (
+        ReportRunRecordService,
+    )
     from policyengine_api.services.v2.stored_reports.database_session import (
         StoredReportDatabaseSession,
     )
@@ -250,6 +259,9 @@ def _default_v2_stored_report_service_factory() -> V2StoredReportResourceService
         StoredReportDatabaseSession(get_v2_session_factory()),
         current_versions=_current_package_versions,
         submissions=_default_simulation_submissions(),
+        run_records=ReportRunRecordService(
+            ReportRunRecordDatabaseSession(get_v2_session_factory())
+        ),
     )
 
 
@@ -290,6 +302,26 @@ _unauthenticated_user_scheme = APIKeyHeader(
 )
 
 
+def _user_authorization(
+    request: Request, credentials: HTTPAuthorizationCredentials | None
+) -> str | None:
+    """Return the user's bearer credential, or None when the request sends none.
+
+    When the credential check before routing found a server credential, it
+    is the one that server forwards (see ``user_auth_support``).
+    """
+    caller = current_request_caller()
+    if caller is not None and caller.kind is CallerKind.SERVER:
+        # Authorization carries the server's own token; the user is the one
+        # the server forwards.
+        return forwarded_user_credential(
+            request.headers.getlist(FORWARDED_USER_AUTHORIZATION_HEADER)
+        )
+    if credentials is not None:
+        return f"Bearer {credentials.credentials}"
+    return None
+
+
 def _default_require_user(
     request: Request,
     credentials: Annotated[
@@ -302,17 +334,28 @@ def _default_require_user(
     When the credential check before routing found a server credential, the
     account is the user that server forwards (see ``user_auth_support``).
     """
-    caller = current_request_caller()
-    if caller is not None and caller.kind is CallerKind.SERVER:
-        # Authorization carries the server's own token; the user is the one
-        # the server forwards.
-        user_authorization = forwarded_user_credential(
-            request.headers.getlist(FORWARDED_USER_AUTHORIZATION_HEADER)
-        )
-    elif credentials is not None:
-        user_authorization = f"Bearer {credentials.credentials}"
-    else:
-        user_authorization = None
+    return authenticate_account_request(
+        _user_authorization(request, credentials), unauthenticated_user
+    )
+
+
+def _default_optional_user(
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_user_bearer_scheme)
+    ],
+    unauthenticated_user: Annotated[str | None, Depends(_unauthenticated_user_scheme)],
+) -> AccountPrincipal | None:
+    """Authenticate the request's account, or return None when it names no user.
+
+    A request sending no user credential, such as an API caller's, or a
+    server's forwarding none, acts as nobody. One that sends a credential is
+    authenticated exactly as ``_default_require_user`` authenticates it, and
+    refused the same way when it is not valid.
+    """
+    user_authorization = _user_authorization(request, credentials)
+    if user_authorization is None and unauthenticated_user is None:
+        return None
     return authenticate_account_request(user_authorization, unauthenticated_user)
 
 
@@ -441,6 +484,23 @@ def _default_user_profile_source() -> UserProfileSource | None:
     return UserProfileSource(issuer=load_user_auth_settings().issuer, reader=reader)
 
 
+def _default_user_email_service() -> V2UserEmailService:
+    """Return the email service: Postmark, and the users' Auth0 tenant.
+
+    Without the POSTMARK_* settings it sends nothing and records a WARNING
+    for each email; settings are read when an email is sent.
+    """
+    from policyengine_api.libs.postmark_email import build_postmark_email_sender
+    from policyengine_api.services.v2.user_emails.services import (
+        V2UserEmailService,
+    )
+
+    return V2UserEmailService(
+        email_sender_factory=build_postmark_email_sender,
+        user_profile_source_factory=_default_user_profile_source,
+    )
+
+
 def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -452,6 +512,25 @@ def _default_v2_user_type_service_factory() -> V2UserTypeResourceService:
 
     return V2UserTypeService(
         UserTypeDatabaseSession(get_v2_session_factory()),
+        user_profile_source_factory=_default_user_profile_source,
+        user_email_service=_default_user_email_service(),
+    )
+
+
+def _default_v2_user_invitation_service_factory() -> V2UserInvitationResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_invitations.database_session import (
+        UserInvitationDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_invitations.services import (
+        V2UserInvitationService,
+    )
+
+    return V2UserInvitationService(
+        UserInvitationDatabaseSession(get_v2_session_factory()),
+        user_email_service=_default_user_email_service(),
         user_profile_source_factory=_default_user_profile_source,
     )
 
@@ -490,6 +569,9 @@ class NativeRouteDependencies:
     )
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
     v2_user_type_service_factory: Callable[[], V2UserTypeResourceService] | None = None
+    v2_user_invitation_service_factory: (
+        Callable[[], V2UserInvitationResourceService] | None
+    ) = None
     # Whole catalog-version responses (/v2/model-catalog and its variables) are
     # kept here once built; None reads them on every request.
     v2_metadata_response_cache: MetadataResponseCache | None = None
@@ -498,6 +580,8 @@ class NativeRouteDependencies:
     # fails closed (401/403/503); tests replace it with a callable returning a
     # fixed principal.
     require_user: Callable[..., AccountPrincipal] = _default_require_user
+    # The account of a route a user may call without signing in, or None.
+    optional_user: Callable[..., AccountPrincipal | None] = _default_optional_user
 
     @classmethod
     def defaults(cls) -> NativeRouteDependencies:
@@ -528,5 +612,9 @@ class NativeRouteDependencies:
             v2_user_report_service_factory=_default_v2_user_report_service_factory,
             v2_account_service_factory=_default_v2_account_service_factory,
             v2_user_type_service_factory=_default_v2_user_type_service_factory,
+            v2_user_invitation_service_factory=(
+                _default_v2_user_invitation_service_factory
+            ),
             require_user=_default_require_user,
+            optional_user=_default_optional_user,
         )

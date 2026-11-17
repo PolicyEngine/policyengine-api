@@ -21,6 +21,7 @@ from policyengine_api.data.v2.models.associations import (  # noqa: E402
     UserHouseholdAssociation,
     UserPolicy,
     UserReportAssociation,
+    UserReportRunAssociation,
     UserSimulationAssociation,
 )
 from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
@@ -89,6 +90,8 @@ from policyengine_api.data.v2.models.run_results import (  # noqa: E402  # table
     OutputStatus,
     Poverty,
     ProgramStatistics,
+    UKAreaType,
+    WithheldAreaCode,
 )
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
@@ -97,9 +100,11 @@ from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     SimulationType,
 )
 from policyengine_api.data.v2.models.users import (  # noqa: E402
+    INVITATION_USER_TYPES,
     SIGNED_IN_USER_TYPES,
     User,
     UserIdentity,
+    UserInvitation,
     UserType,
     UserTypeChange,
     UserTypeChangeSource,
@@ -109,6 +114,7 @@ V2_METADATA = SQLModel.metadata
 validate_v2_metadata_table_names(V2_METADATA.tables)
 
 __all__ = [
+    "INVITATION_USER_TYPES",
     "SIGNED_IN_USER_TYPES",
     "V2_METADATA",
     "AggregateOutput",
@@ -165,14 +171,18 @@ __all__ = [
     "Stage12SimulationRole",
     "TaxBenefitModel",
     "TaxBenefitModelVersion",
+    "UKAreaType",
     "User",
     "UserHouseholdAssociation",
     "UserIdentity",
+    "UserInvitation",
     "UserPolicy",
     "UserReportAssociation",
+    "UserReportRunAssociation",
     "UserSimulationAssociation",
     "UserType",
     "UserTypeChange",
     "UserTypeChangeSource",
     "Variable",
+    "WithheldAreaCode",
 ]

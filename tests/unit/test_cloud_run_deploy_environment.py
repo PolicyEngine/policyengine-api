@@ -532,3 +532,66 @@ def test_validate_cloud_run_deploy_env_accepts_the_enforcement_setting(
     result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
 
     assert result.returncode == 0, result.stderr
+
+
+POSTMARK_SETTINGS = {
+    "POSTMARK_SERVER_TOKEN_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/postmark-server-token/versions/latest"
+    ),
+    "POSTMARK_SENDER_ADDRESS": "PolicyEngine <no-reply@policyengine.org>",
+    "POLICYENGINE_APP_URL": "https://app.policyengine.org",
+}
+
+
+@pytest.mark.parametrize("left_out", list(POSTMARK_SETTINGS))
+def test_validate_cloud_run_deploy_env_requires_every_postmark_setting_or_none(
+    left_out: str,
+):
+    partial = {
+        name: value for name, value in POSTMARK_SETTINGS.items() if name != left_out
+    }
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(**_required_runtime_env(), **partial),
+    )
+
+    assert result.returncode == 1
+    assert (
+        "Set POSTMARK_SERVER_TOKEN_SECRET_RESOURCE, POSTMARK_SENDER_ADDRESS, and "
+        "POLICYENGINE_APP_URL together, or none"
+    ) in result.stderr
+
+
+def test_validate_cloud_run_deploy_env_allows_postmark_in_staging_and_production():
+    results = [
+        _run_script(
+            ".github/scripts/validate_cloud_run_deploy_env.sh",
+            _script_env(**environment, **POSTMARK_SETTINGS),
+        )
+        for environment in (_staging_runtime_env(), _required_runtime_env())
+    ]
+
+    for result in results:
+        assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "app_url",
+    [
+        "http://app.policyengine.org",
+        "app.policyengine.org",
+        "https://app.policyengine.org/?next=1",
+    ],
+)
+def test_validate_cloud_run_deploy_env_requires_an_https_app_url(app_url: str):
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(
+            **_required_runtime_env(),
+            **(POSTMARK_SETTINGS | {"POLICYENGINE_APP_URL": app_url}),
+        ),
+    )
+
+    assert result.returncode == 1
+    assert "POLICYENGINE_APP_URL must be an https address" in result.stderr

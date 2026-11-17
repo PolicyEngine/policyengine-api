@@ -358,13 +358,13 @@ def test_a_budget_window_with_no_run_answers_its_definition(
     assert (item["status"], item["run"], item["result"]) == ("not_run", None, None)
 
 
-def test_the_newest_window_run_is_read_even_when_an_older_one_succeeded(
+def test_an_older_succeeded_window_run_is_read_before_a_newer_pending_one(
     owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
 ) -> None:
     catalog = catalogs["us"]
     with owner_engine.begin() as connection:
         report = store_report(connection, catalog, budget_window_size=2)
-        store_window(
+        succeeded_run_id, _ = store_window(
             connection,
             catalog,
             report,
@@ -373,7 +373,7 @@ def test_the_newest_window_run_is_read_even_when_an_older_one_succeeded(
                 {2026: "succeeded", 2027: "succeeded"},
             ),
         )
-        newest_run_id, _ = store_window(
+        store_window(
             connection,
             catalog,
             report,
@@ -389,10 +389,10 @@ def test_the_newest_window_run_is_read_even_when_an_older_one_succeeded(
 
     item = read_item(client, report.report_id, "us")
 
-    assert item["run"]["id"] == str(newest_run_id)
-    assert item["run"]["country_package_version"] == "1.5.0"
-    assert item["status"] == "pending"
-    assert item["result"] is None
+    assert item["run"]["id"] == str(succeeded_run_id)
+    assert item["run"]["country_package_version"] == "1.4.0"
+    assert item["status"] == "succeeded"
+    assert item["result"] is not None
 
 
 def test_of_two_window_runs_created_together_the_larger_id_is_the_newest(

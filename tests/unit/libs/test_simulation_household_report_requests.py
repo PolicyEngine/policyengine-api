@@ -72,8 +72,6 @@ def test_a_household_report_is_posted_and_the_created_report_returned() -> None:
     assert service.sent_body() == {
         "country": "uk",
         "report_type": "household",
-        "label": "My household under the reform",
-        "description": "Doubles the credit",
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {"policy_id": None},
         "reform": {"policy_id": str(POLICY_ID)},
@@ -89,8 +87,6 @@ def test_a_report_of_the_baseline_alone_sends_a_null_reform() -> None:
     assert household_report_request(body) == {
         "country": "uk",
         "report_type": "household",
-        "label": "My household under the reform",
-        "description": None,
         "household_id": str(HOUSEHOLD_ID),
         "baseline": {"policy_id": str(POLICY_ID)},
         "reform": None,

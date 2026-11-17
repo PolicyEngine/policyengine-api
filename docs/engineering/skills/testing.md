@@ -302,7 +302,8 @@ uv run pytest tests/unit/v2/test_models.py tests/unit/v2/test_model_persistence.
 The generated-only v2 Alembic chain and disposable Postgres lifecycle:
 
 ```bash
-uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/test_alembic_workflows.py -q
+uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/v2/test_alembic_v2_revisions.py \
+  tests/unit/test_alembic_workflows.py -q
 V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
   uv run pytest tests/integration/test_alembic_v2_lifecycle.py tests/integration/test_alembic_v2_catalog_tables.py -q
 ```
@@ -613,6 +614,7 @@ uv run --frozen --extra dev mypy
 uv run --frozen pytest \
   tests/unit/libs/test_user_auth.py \
   tests/unit/libs/test_auth0_management.py \
+  tests/unit/libs/test_postmark_email.py \
   tests/unit/libs/test_rate_limit_wait_budget.py \
   tests/unit/v2/test_user_route_auth.py \
   tests/unit/v2/test_me_routes.py \
@@ -622,6 +624,9 @@ uv run --frozen pytest \
   tests/unit/v2/test_admin_user_profile_service.py \
   tests/unit/v2/test_admin_user_deletion.py \
   tests/unit/v2/test_admin_user_saved_items_service.py \
+  tests/unit/v2/test_admin_invitation_routes.py \
+  tests/unit/v2/test_user_invitation_service.py \
+  tests/unit/v2/test_user_email_service.py \
   tests/unit/test_set_v2_user_type_script.py \
   tests/unit/v2/test_user_policy_routes.py \
   tests/unit/v2/test_user_household_routes.py \
@@ -634,6 +639,7 @@ uv run --frozen pytest \
   tests/unit/v2/test_user_association_migration_qualification.py \
   tests/unit/v2/test_models.py \
   tests/unit/v2/test_alembic_v2.py \
+  tests/unit/v2/test_alembic_v2_revisions.py \
   tests/unit/test_readiness.py \
   tests/unit/test_cloud_run_deploy_scripts.py \
   tests/unit/test_migration_contract_artifacts.py \
