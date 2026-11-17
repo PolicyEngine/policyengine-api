@@ -299,7 +299,9 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
     start = datetime(2026, 1, 1, tzinfo=UTC)
 
     with Session(engine) as session:
-        session.add_all([parameter, policy, dynamic])
+        session.add_all([parameter, policy])
+        session.commit()
+        session.add(dynamic)
         session.commit()
 
         invalid_owner = ParameterValue(

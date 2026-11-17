@@ -1,7 +1,7 @@
 """Durable source-identity mappings for immediate v1 policy mirroring."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -11,7 +11,7 @@ from policyengine_api.data.v2.models.base import TimestampedModel, utc_now
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserPolicy
-    from policyengine_api.data.v2.models.policies import Policy
+    from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 
 class LegacyUserMapping(SQLModel, table=True):
@@ -39,7 +39,13 @@ class LegacyUserMapping(SQLModel, table=True):
 
 
 class LegacyPolicyMapping(TimestampedModel, table=True):
-    """Map one country-scoped v1 policy ID to deduplicated v2 content."""
+    """Map one country-scoped v1 policy ID to deduplicated v2 content.
+
+    The copy splits a v1 policy's model assumptions into a dynamic of the same
+    country (``dynamic_id``), and keeps the rest in the policy. A v1 policy
+    with no such values, and every v1 policy copied before the split existed,
+    maps to no dynamic.
+    """
 
     __tablename__ = "legacy_policy_mappings"
     __table_args__ = (
@@ -58,18 +64,30 @@ class LegacyPolicyMapping(TimestampedModel, table=True):
             name="fk_legacy_policy_mappings_policy_country",
             ondelete="RESTRICT",
         ),
+        sa.ForeignKeyConstraint(
+            ["dynamic_id", "country_id"],
+            ["dynamics.id", "dynamics.country_id"],
+            name="fk_legacy_policy_mappings_dynamic_country",
+            ondelete="RESTRICT",
+        ),
         sa.Index(
             "ix_legacy_policy_mappings_policy",
             "policy_id",
+        ),
+        sa.Index(
+            "ix_legacy_policy_mappings_dynamic",
+            "dynamic_id",
         ),
     )
 
     country_id: str = Field(max_length=2)
     legacy_policy_id: int = Field(sa_type=sa.BigInteger)
     policy_id: UUID
+    dynamic_id: UUID | None = None
     source_policy_hash: str = Field(max_length=255)
 
     policy: "Policy" = Relationship(back_populates="legacy_mappings")
+    dynamic: Optional["Dynamic"] = Relationship(back_populates="legacy_mappings")
 
 
 class LegacyUserPolicyMapping(TimestampedModel, table=True):

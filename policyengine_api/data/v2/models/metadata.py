@@ -418,8 +418,9 @@ class Parameter(IdentifiedModel, table=True):
 class ParameterValue(IdentifiedModel, table=True):
     """A parameter's value from ``start_date`` until ``end_date``, or indefinitely.
 
-    A value owned by a policy or dynamic is deleted with its owner. A value with
-    neither is current law, and a parameter has at most one per start date.
+    A value owned by a policy or dynamic is deleted with its owner, and each
+    owner sets at most one per parameter and start date. A value with neither
+    is current law, and a parameter has at most one per start date.
     """
 
     __tablename__ = "parameter_values"
@@ -437,6 +438,18 @@ class ParameterValue(IdentifiedModel, table=True):
             "parameter_id",
             "start_date",
             name="uq_parameter_values_policy_parameter_start_date",
+        ),
+        # A dynamic's values are unique as a policy's are. The index covers
+        # only dynamics' rows, so it doesn't index every current-law value;
+        # rows without a dynamic never conflict in a unique key anyway.
+        sa.Index(
+            "uq_parameter_values_dynamic_parameter_start_date",
+            "dynamic_id",
+            "parameter_id",
+            "start_date",
+            unique=True,
+            postgresql_where=sa.text("dynamic_id IS NOT NULL"),
+            sqlite_where=sa.text("dynamic_id IS NOT NULL"),
         ),
         sa.Index(
             "ix_parameter_values_parameter_period",

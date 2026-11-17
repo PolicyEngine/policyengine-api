@@ -164,7 +164,9 @@ def test_identical_dynamic_content_is_stored_once() -> None:
     model, version, parameter = _catalog()
 
     with Session(engine) as session:
-        session.add_all([model, version, parameter, _dynamic(model, version)])
+        session.add_all([model, version, parameter])
+        session.commit()
+        session.add(_dynamic(model, version))
         session.commit()
         session.add(_dynamic(model, version))
         with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
@@ -181,8 +183,10 @@ def test_a_dynamic_sets_one_value_per_parameter_and_start_date() -> None:
     model, version, parameter = _catalog()
 
     with Session(engine) as session:
+        session.add_all([model, version, parameter])
+        session.commit()
         dynamic = _dynamic(model, version)
-        session.add_all([model, version, parameter, dynamic])
+        session.add(dynamic)
         session.commit()
         for value in (0.1, 0.2):
             session.add(
@@ -211,8 +215,10 @@ def test_a_mapping_cannot_name_another_country_s_dynamic() -> None:
             canonicalization_version=1,
             content_hash="a" * 64,
         )
+        session.add_all([model, version, policy])
+        session.commit()
         us_dynamic = _dynamic(model, version)
-        session.add_all([model, version, policy, us_dynamic])
+        session.add(us_dynamic)
         session.commit()
         session.add(
             LegacyPolicyMapping(
