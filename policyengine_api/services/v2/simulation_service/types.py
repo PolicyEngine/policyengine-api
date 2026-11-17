@@ -186,14 +186,14 @@ class EconomySimulationFields(PolicyChoice):
     """An economy simulation: a policy and dynamic applied to one region's data.
 
     ``region_code`` is a region of the country's current catalog version
-    (``us``, ``state/ca``, ``country/wales``), and ``dataset_name`` one of its
-    datasets; without it the region's default dataset is used.
+    (``us``, ``state/ca``, ``country/wales``). No field names a dataset: the
+    simulation service calculates on the dataset the catalog version gives
+    the region.
     """
 
     kind: Literal["economy"]
     year: SimulationYear
     region_code: CatalogKey
-    dataset_name: CatalogKey | None = None
 
 
 class EconomySimulationCreationInput(EconomySimulationFields):
@@ -214,11 +214,11 @@ class ReportDefinitionFields(StrictSubmissionModel):
     ``UNSTORED_FIELD_DESCRIPTION``).
 
     Both simulations use the report's year (a budget window's first year;
-    each later year gets simulations of its own), region and dataset, as
-    ``EconomySimulationFields`` describes them. ``spm`` selects the SPM
-    forecast scenario and geography; omit it, rather than sending null, to
-    use the simulation service's default. Each kind of report narrows
-    ``kind`` and adds its own fields.
+    each later year gets simulations of its own) and region, and that
+    region's dataset, as ``EconomySimulationFields`` describes them.
+    ``spm`` selects the SPM forecast scenario and geography; omit it, rather
+    than sending null, to use the simulation service's default. Each kind of
+    report narrows ``kind`` and adds its own fields.
     """
 
     kind: Literal["economy", "budget_window"]
@@ -230,7 +230,6 @@ class ReportDefinitionFields(StrictSubmissionModel):
     )
     year: SimulationYear
     region_code: CatalogKey
-    dataset_name: CatalogKey | None = None
     baseline: PolicyChoice
     reform: PolicyChoice
     spm: SPMSelection | SkipJsonSchema[None] = Field(

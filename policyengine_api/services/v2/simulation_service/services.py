@@ -9,9 +9,9 @@ country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
 none), and that none of those policies sets a parameter the running catalog
 version lacks (``require_runnable_policies``, which re-runs call too).
-Only then is the simulation service asked. The dynamics a submission names,
-its region and its dataset are checked by the simulation service, which reads
-them in the catalog version its default worker runs.
+Only then is the simulation service asked. The dynamics a submission names
+and its region are checked by the simulation service, which reads them, and
+the region's dataset, in the catalog version its default worker runs.
 
 A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),
