@@ -12,13 +12,16 @@ record of what is currently deployed is the newest exported snapshot in
 |---|---|
 | Policy | `pol-api-lb`, attached to the Cloud Run backend service of the public API load balancer |
 | Rules | Per-IP throttles on the metadata and calculate path families (1000, 1100; thresholds in the snapshot); a bearer-token exemption from them (900); a 403 for requests without `Authorization` outside the Public API's public routes (770–800) |
-| Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **ENFORCED** by the 2026-11-10 snapshot (it was still in preview on 2026-08-30, when observed legit/partner clients ran 39–88/min there); rules 900 and 770–800 enforced |
+| Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **ENFORCED** 2026-11-09 15:01 UTC (it had stayed in preview because observed legit/partner clients ran 39–88/min there, including a partner API fallback that was removed in July 2026); rules 900 and 770–800 enforced |
 
-Note on preview validation: Cloud Armor **throttle** rules in preview only ever
-log `CONFORM` (never `EXCEEDED`), so the `previewSecurityPolicy` outcome field
-cannot be used to count would-be-throttled requests. Judge a throttle rule's
-enforcement readiness from **raw per-IP request-rate analysis of LB logs**, not
-from preview outcome counts.
+Note on preview validation: Cloud Armor **throttle** rules in preview do log
+would-be throttling. `jsonPayload.previewSecurityPolicy.outcome` is
+`RATE_LIMIT_THRESHOLD_EXCEED` for a request over the threshold: in the 30 days
+before rule 1100 was enforced, its preview logged that outcome for 29,037 of
+162,011 matching requests. (This note once said preview logs only `CONFORM`.)
+Count those outcomes, and still judge a throttle rule's enforcement readiness
+from **raw per-IP request-rate analysis of LB logs**, which shows who would be
+throttled and by how much.
 
 Origin: overnight bot waves saturated backends / churned autoscaling
 (2026-07-13 → 2026-07-21 incidents; details in the cutover execution plan).
@@ -131,9 +134,9 @@ no longer reach Cloud Run.
 Rule 800 ran in preview for 2 hours before it was enforced, shorter than the
 24 hours under "Preview-to-enforcement checks", by decision. It logged 264
 would-be refusals, and the Public API had answered every one of them with 401.
-Unlike throttle rules, a deny rule in preview logs `DENY` in
-`jsonPayload.previewSecurityPolicy.outcome`, so preview hits can be counted
-directly.
+A deny rule in preview logs `DENY` in
+`jsonPayload.previewSecurityPolicy.outcome`; group those entries by
+`httpRequest.status` to see whether the Public API served any of them.
 
 Check it with requests of your own, without a credential, to
 `api.policyengine.org`: `/`, `/us/metadata`, `POST /us/calculate` and `/v2/me`
