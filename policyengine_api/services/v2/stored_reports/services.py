@@ -15,7 +15,9 @@ for anyone else. Nothing is calculated again on a read. A report with no
 run, as a report migrated from v1 has none, answers its definition with no
 result.
 
-The result is rebuilt from the run's result rows once it has succeeded. A
+The result is rebuilt from the run's result rows once it has succeeded; a
+local-area report's (a UK-wide or nation report on the dataset its catalog
+version gives local areas) also lists its withheld area codes. A
 budget-window report's run is a budget-window run, read with its years;
 once that run has succeeded, its result is the budget-window format,
 rebuilt from each year's budget rows. Reading a
@@ -26,7 +28,10 @@ instead each of its simulation runs' calculated household
 succeeded, and each side's failure once it has failed. Lists name at most 25
 reports and read them as a read without a run does, with any window's
 years, without results: two queries, and with a user three or four more for
-their labels and their newest recorded runs.
+their labels and their newest recorded runs. A search finds the country's
+reports that share a ``dataset_independent_key``, which a national report
+shares with its local-area report: the 25 created last, newest first, read
+as a list reads them.
 
 Creating a report or budget window checks the country and the policies it
 names (and a household report's household), asks the simulation service to
@@ -61,6 +66,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.models import ReportRunStatus, ReportRunTrigger
 from policyengine_api.data.v2.models.base import utc_now
+from policyengine_api.query_parameters import MAXIMUM_LISTED_REPORTS
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
 )
@@ -87,6 +93,7 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
 from policyengine_api.services.v2.stored_reports.database_connectors.reads import (
     read_budget_window_years,
     read_report_rows,
+    search_report_ids,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors.reads_runs import (
     read_budget_window_run,
@@ -461,6 +468,7 @@ class V2StoredReportService:
                         country_id=country_id,
                         report_run=run,
                         reform_simulation_run_id=require_reform_run(run),
+                        on_local_area_dataset=stored.on_local_area_dataset,
                     )
                 )
             return report_read(
@@ -537,6 +545,41 @@ class V2StoredReportService:
         cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
+            rows = _requesters_view(
+                session,
+                read_report_rows(session, country_id=country_id, report_ids=report_ids),
+                requester=requester,
+                with_requested_runs=True,
+            )
+            current_versions = self._current_versions(country_id)
+            return tuple(
+                _summary_read(stored, current_versions=current_versions)
+                for stored in listed_reports(rows, report_ids=report_ids)
+            )
+
+    def search_reports(
+        self,
+        *,
+        country_id: str,
+        dataset_independent_key: str,
+        requester: AccountPrincipal | None = None,
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports that share a dataset-independent key.
+
+        They are read as ``list_reports`` reads them, without results: the
+        ``MAXIMUM_LISTED_REPORTS`` reports created last, newest first (ties
+        going to the larger ID), of every kind. Raise
+        StandardUserRequiresSignInError for an unauthenticated credential
+        that names a signed-in user, and ReportStorageError when the database
+        cannot be read.
+        """
+        with _storage_failures(), self._database_session.read() as session:
+            report_ids = search_report_ids(
+                session,
+                country_id=country_id,
+                dataset_independent_key=dataset_independent_key,
+                limit=MAXIMUM_LISTED_REPORTS,
+            )
             rows = _requesters_view(
                 session,
                 read_report_rows(session, country_id=country_id, report_ids=report_ids),

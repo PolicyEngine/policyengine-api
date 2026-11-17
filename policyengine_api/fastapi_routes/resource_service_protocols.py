@@ -235,6 +235,20 @@ class V2StoredReportResourceService(Protocol):
         """
         ...
 
+    def search_reports(
+        self,
+        *,
+        country_id: str,
+        dataset_independent_key: str,
+        requester: AccountPrincipal | None = None,
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports with the dataset-independent key, newest first.
+
+        At most ``MAXIMUM_LISTED_REPORTS``, the ones created last, each read
+        as ``list_reports`` reads it.
+        """
+        ...
+
     def create_report(
         self,
         report_input: ReportCreationInput,
