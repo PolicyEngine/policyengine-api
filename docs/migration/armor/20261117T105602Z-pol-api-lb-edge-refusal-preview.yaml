@@ -1,0 +1,99 @@
+creationTimestamp: '2026-07-21T07:16:39.177-07:00'
+description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
+fingerprint: w1MANeduEPA=
+id: '200433714284642728'
+kind: compute#securityPolicy
+labelFingerprint: 42WmSpB8rSM=
+name: pol-api-lb
+rules:
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/metadata$')
+  preview: false
+  priority: 1000
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 30
+      intervalSec: 60
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')
+  preview: false
+  priority: 1100
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 75
+      intervalSec: 60
+- action: allow
+  description: default rule
+  kind: compute#securityPolicyRule
+  match:
+    config:
+      srcIpRanges:
+      - '*'
+    versionedExpr: SRC_IPS_V1
+  preview: false
+  priority: 2147483647
+- action: allow
+  description: Public route GET/HEAD /health served without a credential (API lockdown
+    5.1 · 4)
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path == '/health' && (request.method == 'GET' || request.method
+        == 'HEAD')
+  preview: false
+  priority: 770
+- action: allow
+  description: Public route GET /v2/openapi.json served without a credential (API
+    lockdown 5.1 · 4)
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path == '/v2/openapi.json' && request.method == 'GET'
+  preview: false
+  priority: 771
+- action: allow
+  description: CORS preflights served without a credential (API lockdown 5.1 · 4)
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.method == 'OPTIONS' && has(request.headers['origin']) &&
+        has(request.headers['access-control-request-method'])
+  preview: false
+  priority: 772
+- action: deny(403)
+  description: Refuse requests without Authorization outside the public routes; API
+    v1 refuses them too (API lockdown 5.1 · 4)
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: "!has(request.headers['authorization']) || request.headers['authorization'].matches('^[[:blank:]]*$')"
+  preview: true
+  priority: 800
+- action: allow
+  description: Requests carrying a bearer token skip the per-address /metadata and
+    /calculate limits; API v1 refuses any that fails validation (API lockdown 2.2
+    · 5). See docs/migration/lb-cloud-armor-runbook.md
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/(?:metadata|calculate(?:-full)?)$')
+        && has(request.headers['authorization']) && request.headers['authorization'].matches('^[Bb]earer
+        [A-Za-z0-9._~+/-]+=*$')
+  preview: false
+  priority: 900
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/securityPolicies/pol-api-lb
+type: CLOUD_ARMOR
