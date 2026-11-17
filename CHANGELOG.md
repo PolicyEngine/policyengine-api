@@ -1,3 +1,10 @@
+## [5.52.0] - 2026-11-17
+
+### Added
+
+- `POST /v2/reports` takes `data_source: "local_area_dataset"` on an economy report and passes it to the simulation service, which calculates a UK-wide or nation report on the dataset its catalog gives local areas. Every report read answers its `dataset_independent_key`, `GET /v2/reports?dataset_independent_key=` finds the country's reports that share one, and a local-area report's read says `data_source` and lists the constituency and local-authority codes disclosure control withheld.
+
+
 ## [5.51.0] - 2026-11-17
 
 ### Added
