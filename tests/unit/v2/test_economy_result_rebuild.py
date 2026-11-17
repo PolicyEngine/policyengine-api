@@ -6,7 +6,10 @@ reverses that writer. ``economy_result_rows_golden.json`` holds what the
 writer itself stored at a named commit
 (``scripts/generate_economy_result_golden.py``), so a rebuild that matches it
 reverses the real writer, and a change in the writer fails once the file is
-generated again.
+generated again. That writer no longer stores cliffs
+(PolicyEngine/policyengine-sim-api's C1 · 38): a result's cliff impact comes
+from its two simulation runs' cliff calculations, so the golden rows rebuild
+their results without one, whatever the report run's four cliff columns hold.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import pytest
 
 from policyengine_api.data.v2.models import (
     BudgetSummary,
+    CliffImpact,
     CongressionalDistrictImpact,
     ConstituencyImpact,
     DecileImpact,
@@ -39,6 +43,7 @@ from policyengine_api.services.v2.stored_reports.economy_results import (
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultRows,
     EconomyResultUnreadableError,
+    ReportRunCliffRows,
     ReportRunResultColumns,
 )
 from policyengine_api.spm import SPMComparisonProvenance
@@ -69,7 +74,29 @@ TABLE_MODELS = {
     "constituency_impacts": ConstituencyImpact,
     "local_authority_impacts": LocalAuthorityImpact,
     "withheld_area_codes": WithheldAreaCode,
+    "cliff_impacts": CliffImpact,
 }
+# The report run's own cliff columns, which no read uses: C1 · 41 drops them.
+REPORT_RUN_CLIFF_COLUMNS = (
+    "baseline_cliff_gap",
+    "baseline_cliff_share",
+    "reform_cliff_gap",
+    "reform_cliff_share",
+)
+NO_CLIFF_CALCULATIONS = ReportRunCliffRows(baseline=None, reform=None)
+
+
+def side_calculations(
+    calculations: tuple[CliffImpact, ...], run_ids: RunIds
+) -> ReportRunCliffRows:
+    """Return each side's cliff calculation among ``calculations``, or none."""
+    by_run = {
+        calculation.simulation_run_id: calculation for calculation in calculations
+    }
+    return ReportRunCliffRows(
+        baseline=by_run.get(run_ids.baseline_simulation_run_id),
+        reform=by_run.get(run_ids.reform_simulation_run_id),
+    )
 
 
 def stored_rows(
@@ -99,6 +126,7 @@ def stored_rows(
             loaded.reverse()
         tables[table] = tuple(loaded)
     withheld_area_codes = tables.pop("withheld_area_codes")
+    cliff_calculations = side_calculations(tables.pop("cliff_impacts"), run_ids)
     local_area_rows: dict[str, Any] = (
         {"on_local_area_dataset": True, "withheld_area_codes": withheld_area_codes}
         if on_local_area_dataset
@@ -112,6 +140,7 @@ def stored_rows(
         ),
         baseline_simulation_run_id=run_ids.baseline_simulation_run_id,
         reform_simulation_run_id=run_ids.reform_simulation_run_id,
+        cliff_calculations=cliff_calculations,
         **tables,
         **local_area_rows,
     )
@@ -126,7 +155,8 @@ def golden_rows(case: dict[str, Any]) -> EconomyResultRows:
     """Load one golden case's stored rows as the database connectors read them.
 
     Run IDs come back as UUIDs and each row gets a new ID, as the writer
-    draws them.
+    draws them. The report run's cliff columns are left out, and neither
+    side has a cliff calculation.
     """
     run_ids = {key: UUID(value) for key, value in GOLDEN["run_ids"].items()}
 
@@ -143,10 +173,15 @@ def golden_rows(case: dict[str, Any]) -> EconomyResultRows:
         country_id=case["country"],
         report_run=ReportRunResultColumns(
             country_package_version=case["output"]["model_version"],
-            **case["report_run_columns"],
+            **{
+                column: value
+                for column, value in case["report_run_columns"].items()
+                if column not in REPORT_RUN_CLIFF_COLUMNS
+            },
         ),
         baseline_simulation_run_id=run_ids["baseline_simulation_run_id"],
         reform_simulation_run_id=run_ids["reform_simulation_run_id"],
+        cliff_calculations=NO_CLIFF_CALCULATIONS,
         **{
             table: tuple(loaded(table, row) for row in rows)
             for table, rows in case["rows"].items()
@@ -162,7 +197,24 @@ def test_rows_the_simulation_services_own_writer_stored_rebuild_its_result(
 ) -> None:
     rebuilt = result_transformations.economy_result(golden_rows(case))
 
-    assert rebuilt.model_dump(mode="json", by_alias=True) == case["output"]
+    assert rebuilt.model_dump(mode="json", by_alias=True) == {
+        **case["output"],
+        "cliff_impact": None,
+    }
+
+
+def test_the_golden_report_runs_cliff_columns_are_not_read() -> None:
+    case = next(
+        case for case in GOLDEN["cases"] if case["output"]["cliff_impact"] is not None
+    )
+    assert all(
+        case["report_run_columns"][column] is not None
+        for column in REPORT_RUN_CLIFF_COLUMNS
+    )
+
+    rebuilt = result_transformations.economy_result(golden_rows(case))
+
+    assert rebuilt.cliff_impact is None
 
 
 def test_the_golden_rows_cover_the_shapes_the_fixtures_alone_do_not() -> None:
