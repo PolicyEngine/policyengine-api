@@ -288,8 +288,14 @@ def test_policy_content_hash_is_unique_per_canonicalization_version() -> None:
 
 def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
     engine = _relational_sqlite_engine()
-    _model, _version, parameter, policy = _policy_graph(content_hash="b" * 64)
-    dynamic = Dynamic(name="dynamic")
+    model, version, parameter, policy = _policy_graph(content_hash="b" * 64)
+    dynamic = Dynamic(
+        country_id="us",
+        tax_benefit_model_id=model.id,
+        tax_benefit_model_version_id=version.id,
+        canonicalization_version=1,
+        content_hash="d" * 64,
+    )
     start = datetime(2026, 1, 1, tzinfo=UTC)
 
     with Session(engine) as session:
