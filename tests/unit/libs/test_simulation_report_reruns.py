@@ -132,6 +132,25 @@ def test_a_rerun_posts_force_to_the_reports_runs_route(
     assert json.loads(request.content) == {"force": force}
 
 
+def test_a_rerun_asking_for_cliffs_sends_include_cliffs() -> None:
+    service = ScriptedService()
+
+    service.rerun(include_cliffs=True)
+
+    (request,) = service.requests
+    assert json.loads(request.content) == {"force": False, "include_cliffs": True}
+
+
+def test_a_rerun_not_asking_for_cliffs_sends_no_include_cliffs() -> None:
+    """Sim's re-run body before C1 · 39 refuses any field but ``force``."""
+    service = ScriptedService()
+
+    service.rerun(include_cliffs=False)
+
+    (request,) = service.requests
+    assert json.loads(request.content) == {"force": False}
+
+
 @pytest.mark.parametrize("status_code", [201, 202])
 def test_a_started_rerun_naming_the_report_is_accepted(status_code: int) -> None:
     service = ScriptedService(

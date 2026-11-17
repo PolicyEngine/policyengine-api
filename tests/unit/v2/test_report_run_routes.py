@@ -26,6 +26,7 @@ from policyengine_api.services.v2.simulation_service.validators import (
     SubmissionStorageError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    CliffsNotAvailableError,
     ReportStorageError,
     RerunReportUnreadableError,
     StoredReportNotFoundError,
@@ -239,8 +240,35 @@ def test_running_a_report_again_answers_the_report_with_its_new_run(
     assert item["result"] is None
     assert item["current_versions"]["policyengine_version"] == "4.2.0"
     assert service.calls == [
-        ("rerun_report", {"country_id": "us", "report_id": REPORT_ID, "force": force})
+        (
+            "rerun_report",
+            {
+                "country_id": "us",
+                "report_id": REPORT_ID,
+                "force": force,
+                "include_cliffs": False,
+            },
+        )
     ]
+
+
+@pytest.mark.parametrize(
+    ("body", "include_cliffs"),
+    [({}, False), ({"include_cliffs": False}, False), ({"include_cliffs": True}, True)],
+    ids=["omitted", "not-asked", "asked"],
+)
+def test_running_a_report_again_passes_on_whether_it_asks_for_cliffs(
+    body: dict[str, bool],
+    include_cliffs: bool,  # noqa: FBT001  # pytest passes parameters positionally
+) -> None:
+    service = FakeReportRunService()
+
+    response = report_route_client(reports=service).post(RUNS_PATH, json=body)
+
+    assert response.status_code == 201, response.text
+    ((_, arguments),) = service.calls
+    assert arguments["include_cliffs"] is include_cliffs
+    assert arguments["force"] is False
 
 
 @pytest.mark.parametrize(
@@ -252,8 +280,21 @@ def test_running_a_report_again_answers_the_report_with_its_new_run(
         {"force": True, "country_id": "us"},
         [],
         "force",
+        {"include_cliffs": "yes"},
+        {"include_cliffs": 1},
+        {"include_cliffs": None},
     ],
-    ids=["text", "number", "null", "extra-field", "list", "string"],
+    ids=[
+        "text",
+        "number",
+        "null",
+        "extra-field",
+        "list",
+        "string",
+        "text-cliffs",
+        "number-cliffs",
+        "null-cliffs",
+    ],
 )
 def test_a_rerun_refuses_a_malformed_body(body: object) -> None:
     service = FakeReportRunService()
@@ -405,6 +446,13 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> 
             503,
             "V2 report storage is unavailable",
         ),
+        (
+            CliffsNotAvailableError(
+                "include_cliffs: a household report has no cliff impacts"
+            ),
+            422,
+            "include_cliffs: a household report has no cliff impacts",
+        ),
         (RuntimeError("unexpected"), 500, "V2 report operation failed"),
     ],
     ids=[
@@ -418,6 +466,7 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id() -> 
         "service-unavailable",
         "check-storage",
         "report-storage",
+        "no-cliffs",
         "unexpected",
     ],
 )
