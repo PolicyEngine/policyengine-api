@@ -12,13 +12,28 @@ record of what is currently deployed is the newest exported snapshot in
 |---|---|
 | Policy | `pol-api-lb`, attached to the Cloud Run backend service of the public API load balancer |
 | Rules | Per-IP throttles on the metadata and calculate path families; thresholds in the snapshot |
-| Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **stays in preview at 75/60s** — observed legit/partner clients run 39–88/min there, so enforcing would 429 real use (incl. the partner API fallback) |
+| Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **ENFORCED** 2026-11-09 at 75/60s (see below) |
 
-Note on preview validation: Cloud Armor **throttle** rules in preview only ever
-log `CONFORM` (never `EXCEEDED`), so the `previewSecurityPolicy` outcome field
-cannot be used to count would-be-throttled requests. Judge a throttle rule's
-enforcement readiness from **raw per-IP request-rate analysis of LB logs**, not
-from preview outcome counts.
+Calculate rule enforcement, 2026-11-09: in the 30 days of LB logs before the
+change (2026-10-10 to 2026-11-09), 162,011 requests matched the rule, and the
+preview logged 29,037 of them as over the limit, from 29 client addresses.
+Those came from bulk scripts (Python-urllib, curl, node), shared proxy or
+carrier addresses, and one local development page. Pages with a PolicyEngine
+Referer peaked at 16 requests a minute per address, and Modal on AWS at 17.
+The partner API fallback that ran at 39–88/min was removed from the partner's
+code in July 2026, and the partner sent no requests to this API in the 30 days
+before 2026-11-06. The Public API's own CI tests call the Cloud Run URLs
+directly, so this policy never sees them (see "Known caveat").
+
+Note on preview validation: throttle rules in preview record their result in
+`jsonPayload.previewSecurityPolicy.rateLimitAction.outcome`.
+`RATE_LIMIT_THRESHOLD_EXCEED` marks a request the rule would have refused, and
+`RATE_LIMIT_THRESHOLD_CONFORM` one it would have allowed. In July 2026 the
+preview logged only `CONFORM`. By November 2026 it logged `EXCEED` too, and
+the count agreed within 1% with a per-address, per-minute count rebuilt from
+request timestamps. Use the preview outcome to count would-be-throttled
+requests, and still check it against raw per-IP request-rate analysis of LB
+logs before enforcing.
 
 Origin: overnight bot waves saturated backends / churned autoscaling
 (2026-07-13 → 2026-07-21 incidents; details in the cutover execution plan).

@@ -1,0 +1,1 @@
+The load balancer now refuses more than 75 calculation requests (`/<country>/calculate` and `/<country>/calculate-full`) a minute from one client address, with HTTP 429. The rule previously only logged.
