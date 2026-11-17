@@ -157,6 +157,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
         BudgetWindowReportRead,
         HouseholdReportRead,
+        ReportRead,
         StoredReportRead,
         StoredReportRows,
         StoredReportRunsRead,
@@ -329,8 +330,9 @@ class V2StoredReportService:
         ``run_id`` (a budget window's runs are its budget-window runs; any
         other report's, its own report runs),
         StandardUserRequiresSignInError for an unauthenticated credential
-        that names a signed-in user, EconomyResultUnreadableError when a
-        succeeded run's rows lack a part every result has,
+        that names a signed-in user, EconomyResultUnreadableError when an
+        economy run names no reform simulation run or a succeeded one's rows
+        lack a part every result has,
         HouseholdResultUnreadableError when a
         succeeded household report run's calculated households cannot be
         read, BudgetWindowResultUnreadableError when a succeeded window run's
@@ -375,33 +377,42 @@ class V2StoredReportService:
                 return self._budget_window(session, stored)
             if kind == "household":
                 return self._household_report(session, stored)
-            run = stored.run
-            result = cliffs = None
-            if run is not None:
-                reform_simulation_run_id = require_reform_run(run)
-                cliff_calculations = result_reads.read_cliff_calculations(
-                    session,
-                    baseline_simulation_run_id=run.baseline_simulation_run_id,
-                    reform_simulation_run_id=reform_simulation_run_id,
-                )
-                cliffs = report_cliffs(cliff_calculations)
-                if run.status is ReportRunStatus.SUCCEEDED:
-                    result = result_transformations.economy_result(
-                        result_reads.read_economy_result_rows(
-                            session,
-                            country_id=country_id,
-                            report_run=run,
-                            reform_simulation_run_id=reform_simulation_run_id,
-                            on_local_area_dataset=stored.on_local_area_dataset,
-                            cliff_calculations=cliff_calculations,
-                        )
-                    )
-            return report_read(
-                stored,
-                current_versions=self._current_versions(country_id),
-                result=result,
-                cliffs=cliffs,
+            return self._economy_report(session, stored)
+
+    def _economy_report(self, session: Session, stored: StoredReportRows) -> ReportRead:
+        """Return an economy report with its run's cliffs, and its result if succeeded.
+
+        The cliffs of its two simulation runs are read whatever the run's
+        status, since they are calculated apart from it; the result's cliff
+        impact is theirs once both have succeeded.
+        """
+        run = stored.run
+        result = cliffs = None
+        if run is not None:
+            reform_simulation_run_id = require_reform_run(run)
+            cliff_calculations = result_reads.read_cliff_calculations(
+                session,
+                baseline_simulation_run_id=run.baseline_simulation_run_id,
+                reform_simulation_run_id=reform_simulation_run_id,
             )
+            cliffs = report_cliffs(cliff_calculations)
+            if run.status is ReportRunStatus.SUCCEEDED:
+                result = result_transformations.economy_result(
+                    result_reads.read_economy_result_rows(
+                        session,
+                        country_id=stored.report.country,
+                        report_run=run,
+                        reform_simulation_run_id=reform_simulation_run_id,
+                        on_local_area_dataset=stored.on_local_area_dataset,
+                        cliff_calculations=cliff_calculations,
+                    )
+                )
+        return report_read(
+            stored,
+            current_versions=self._current_versions(stored.report.country),
+            result=result,
+            cliffs=cliffs,
+        )
 
     def _budget_window(
         self, session: Session, stored: StoredReportRows

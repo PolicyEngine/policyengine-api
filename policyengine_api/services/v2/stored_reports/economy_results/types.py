@@ -326,8 +326,11 @@ class EconomyResult(EconomyResultModel):
     and ``local_authority_withheld_codes`` are a local-area report's sorted
     codes of the areas each level withheld, empty when it withheld none; for
     every other report they are null and left out of the JSON, as the
-    simulation service leaves them out. ``labor_supply_response`` and
-    ``cliff_impact`` are null when the run did not compute them.
+    simulation service leaves them out. ``labor_supply_response`` is null
+    when the run did not compute it, and ``cliff_impact`` until both
+    simulation runs' cliff calculations have succeeded: a run's cliffs are
+    calculated apart from it, and the report's ``cliffs`` says how far they
+    have got.
     """
 
     spm_provenance: SPMComparisonProvenance | None

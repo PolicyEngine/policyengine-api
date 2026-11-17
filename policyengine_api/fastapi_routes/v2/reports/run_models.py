@@ -49,7 +49,8 @@ class ReportRerunRequest(StrictSubmissionModel):
     runs that has none, or whose newest one failed, and joins one under way;
     the report's ``cliffs`` then says how far they have got. Only an
     economy report has cliffs: a household report or budget window asking
-    for them is refused with 422.
+    for them is refused with 422, and so is any request with it while the
+    simulation service doesn't calculate cliffs per simulation run yet.
     """
 
     force: StrictBool = False

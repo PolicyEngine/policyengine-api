@@ -15,7 +15,7 @@ their results without one, whatever the report run's four cliff columns hold.
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -214,18 +214,11 @@ def test_rows_the_simulation_services_own_writer_stored_rebuild_its_result(
     }
 
 
-def test_the_golden_report_runs_cliff_columns_are_not_read() -> None:
-    case = next(
-        case for case in GOLDEN["cases"] if case["output"]["cliff_impact"] is not None
-    )
-    assert all(
-        case["report_run_columns"][column] is not None
-        for column in REPORT_RUN_CLIFF_COLUMNS
-    )
+def test_the_report_runs_result_columns_hold_none_of_its_cliff_columns() -> None:
+    """A report run's cliffs are its simulation runs'; its own columns are not read."""
+    column_names = {column.name for column in fields(ReportRunResultColumns)}
 
-    rebuilt = result_transformations.economy_result(golden_rows(case))
-
-    assert rebuilt.cliff_impact is None
+    assert column_names.isdisjoint(REPORT_RUN_CLIFF_COLUMNS)
 
 
 def test_the_golden_rows_cover_the_shapes_the_fixtures_alone_do_not() -> None:

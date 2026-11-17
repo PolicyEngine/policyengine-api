@@ -168,10 +168,12 @@ class ReportCliffsItem(StrictReportAPIModel):
     the run shares them. ``status`` is ``succeeded`` once both sides are;
     otherwise ``failed`` when either side is, else ``not_calculated`` when
     either side is, else ``running`` when either side is, else ``pending``.
-    Running the report again with ``include_cliffs`` starts a new
-    calculation for each side that is ``not_calculated`` or ``failed``, and
-    joins one under way. A report naming one simulation run on both sides
-    gives its calculation for each.
+    Running the report again with ``include_cliffs`` on the current versions
+    starts a new calculation for each side that is ``not_calculated`` or
+    ``failed``, and joins one under way; a run on older versions is not run
+    again, so its re-run answers another run, with that run's ``cliffs``. A
+    report naming one simulation run on both sides gives its calculation for
+    each.
     """
 
     status: CliffCalculationStatus

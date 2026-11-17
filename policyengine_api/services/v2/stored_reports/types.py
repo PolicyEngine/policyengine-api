@@ -160,9 +160,10 @@ class ReportCliffsRead:
     ``status`` is ``succeeded`` once both sides are; otherwise ``failed``
     when either side is, else ``not_calculated`` when either side is, else
     ``running`` when either side is, else ``pending``. A request with
-    ``include_cliffs`` starts a new calculation for each side that is
-    ``not_calculated`` or ``failed``. A report naming one simulation run on
-    both sides reads its calculation for each.
+    ``include_cliffs`` ending on this run (on the current versions) starts a
+    new calculation for each side that is ``not_calculated`` or ``failed``.
+    A report naming one simulation run on both sides reads its calculation
+    for each.
     """
 
     status: CliffCalculationStatusName
