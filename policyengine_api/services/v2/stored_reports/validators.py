@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
+from policyengine_api.data.v2.models import UserType
+from policyengine_api.services.v2.identity.validators import user_type_meets_minimum
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
@@ -12,11 +14,21 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.data.v2.models import ReportRun
+    from policyengine_api.services.v2.report_run_records.types import (
+        CheckedRequester,
+    )
     from policyengine_api.services.v2.stored_reports.types import StoredReportRows
+
+# A report run, or a budget window's budget-window run.
+RunT = TypeVar("RunT")
 
 
 class StoredReportNotFoundError(LookupError):
     """No report has this ID in the requested country."""
+
+
+class ReportRunNotFoundError(LookupError):
+    """The report has no run with the ID a read names."""
 
 
 class ReportStorageError(RuntimeError):
@@ -27,36 +39,104 @@ class CreatedReportUnreadableError(RuntimeError):
     """The simulation service created the report, but it could not be read back.
 
     The simulation service answered with the report's ID, so the report
-    exists and submitting it again would create another. ``report_id`` and
-    ``country_id`` say where to read it; the error's cause says why reading
-    it back failed.
+    exists and submitting it again would create another. ``report_id``,
+    ``run_id`` (the run the answer named, which a read names to answer it)
+    and ``country_id`` say where to read it; the error's cause says why
+    reading it back failed.
     """
 
-    def __init__(self, *, report_id: UUID, country_id: str) -> None:
-        """Name the created report and its country."""
+    def __init__(self, *, report_id: UUID, run_id: UUID, country_id: str) -> None:
+        """Name the created report, its run and its country."""
         super().__init__(
             f"The simulation service created report {report_id} in country "
             f"{country_id!r}, but it could not be read back"
         )
         self.report_id = report_id
+        self.run_id = run_id
+        self.country_id = country_id
+
+
+class ForcedRerunRequiresSignInError(PermissionError):
+    """A forced re-run sent no user credential; only an admin user may force one."""
+
+
+class ForcedRerunRequiresAdminError(PermissionError):
+    """A forced re-run's user is below admin; only an admin user may force one."""
+
+
+FORCED_RERUN_SIGN_IN_MESSAGE = (
+    "Only admin users may force a re-run: sign in with a bearer access token"
+)
+FORCED_RERUN_ADMIN_MESSAGE = "Only admin users may force a re-run"
+
+
+def require_admin_to_force(requester: CheckedRequester | None) -> None:
+    """Allow a forced re-run only for a requester whose stored type is admin.
+
+    Raise ForcedRerunRequiresSignInError for a request naming no user, and
+    ForcedRerunRequiresAdminError for one below admin: a signed-out
+    browser, a signed-in user not stored yet, or a standard or author user.
+    """
+    if requester is None:
+        raise ForcedRerunRequiresSignInError(FORCED_RERUN_SIGN_IN_MESSAGE)
+    if requester.user_type is None or not user_type_meets_minimum(
+        requester.user_type, UserType.ADMIN
+    ):
+        raise ForcedRerunRequiresAdminError(FORCED_RERUN_ADMIN_MESSAGE)
+
+
+class ReportRunRecordsNotConfiguredError(ReportStorageError):
+    """A request named its user, but the service records no users' runs."""
+
+
+class ReportRunNotRecordedError(RuntimeError):
+    """The simulation service started the run, but the user's request wasn't recorded.
+
+    The run exists, so the caller reads it rather than asking again; asking
+    again records it once the simulation service finds runs by key, since
+    the request then ends on the same run. ``report_id``, ``run_id`` (a
+    report run, or a budget window's budget-window run) and ``country_id``
+    say where to read it; the error's cause says why the record failed.
+    """
+
+    def __init__(self, *, report_id: UUID, run_id: UUID, country_id: str) -> None:
+        """Name the report, its run and its country."""
+        super().__init__(
+            f"The simulation service started run {run_id} of report "
+            f"{report_id}, but the request could not be recorded for its user. "
+            f"Read it with GET /v2/reports/{report_id}?country_id={country_id}"
+            f"&run_id={run_id}."
+        )
+        self.report_id = report_id
+        self.run_id = run_id
         self.country_id = country_id
 
 
 class RerunReportUnreadableError(RuntimeError):
-    """The simulation service started the report's new run, but it could not be read.
+    """The simulation service started the report's run, but it can't be answered.
 
-    The new run exists, so the caller reads the report rather than running
-    it again. ``report_id`` and ``country_id`` say where to read it; the
-    error's cause says why reading it back failed.
+    Either the report could not be read back with the run the answer named
+    (``run_id``), and the error's cause says why, or a budget window's answer
+    named no budget-window run (``run_id`` None, and no cause). The run
+    exists, so the caller reads the report rather than running it again;
+    ``report_id`` and ``country_id`` say where.
     """
 
-    def __init__(self, *, report_id: UUID, country_id: str) -> None:
-        """Name the report and its country."""
+    def __init__(
+        self, *, report_id: UUID, run_id: UUID | None, country_id: str
+    ) -> None:
+        """Name the report, its run and its country."""
+        failure = (
+            "its answer named no budget-window run"
+            if run_id is None
+            else "the report could not be read back"
+        )
         super().__init__(
-            f"The simulation service started a new run of report {report_id} in "
-            f"country {country_id!r}, but the report could not be read back"
+            f"The simulation service started a run of report {report_id} in "
+            f"country {country_id!r}, but {failure}"
         )
         self.report_id = report_id
+        self.run_id = run_id
         self.country_id = country_id
 
 
@@ -68,6 +148,14 @@ def require_report(
         msg = f"Report {report_id} was not found in country {country_id!r}"
         raise StoredReportNotFoundError(msg)
     return rows
+
+
+def require_report_run(run: RunT | None, *, report_id: UUID, run_id: UUID) -> RunT:
+    """Return the report's run, or raise ReportRunNotFoundError for None."""
+    if run is None:
+        msg = f"Report {report_id} has no run {run_id}"
+        raise ReportRunNotFoundError(msg)
+    return run
 
 
 def require_reform_run(report_run: ReportRun) -> UUID:

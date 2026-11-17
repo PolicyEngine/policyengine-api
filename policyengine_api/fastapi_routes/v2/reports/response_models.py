@@ -86,15 +86,16 @@ class ReportSimulationItem(StrictReportAPIModel):
 class ReportDefinitionItem(StrictReportAPIModel):
     """What every report item gives: its definition and the current versions.
 
-    ``current_versions`` are the versions the Public API runs now, so a
-    newest run on other versions is out of date. ``options`` are the options
-    the report was created with. ``label`` is null for a report the simulation
-    service shares between requests, which records no one caller's label.
-    ``dataset_independent_key`` is the simulation service's key for the
-    report's definition without its dataset, which a national report shares
-    with its local-area report: find reports by it with
-    ``GET /v2/reports?dataset_independent_key=``. It is null for a report
-    stored before the keys.
+    ``label`` and ``description`` are the requesting user's saved report's
+    name and description, null without a user credential or a saved report:
+    a report the simulation service shares between requests records no one
+    caller's. ``current_versions`` are the versions the Public API runs now,
+    so a run on other versions is out of date. ``options`` are the options
+    the report was created with. ``dataset_independent_key`` is the
+    simulation service's key for the report's definition without its
+    dataset, which a national report shares with its local-area report: find
+    reports by it with ``GET /v2/reports?dataset_independent_key=``. It is
+    null for a report stored before the keys.
     """
 
     id: UUID
@@ -120,8 +121,10 @@ class ReportSummaryItem(ReportDefinitionItem):
     codes of those withheld. A request with that data_source creates one,
     but the request's field isn't stored: the read derives it from the
     report's region and dataset. It is null for every other report.
-    ``status`` is the newest run's, or ``not_run`` for a report with no run.
-    ``run`` is the newest run, whatever its status and versions.
+    ``run`` is the run the read answers: the one it names, else the
+    requesting user's newest recorded run, else the newest succeeded run
+    that wasn't forced, else the newest run that wasn't forced, whatever its
+    versions. ``status`` is that run's, or ``not_run`` without one.
     """
 
     kind: Literal["economy"]
@@ -138,10 +141,10 @@ class ReportSummaryItem(ReportDefinitionItem):
 
 
 class ReportItem(ReportSummaryItem):
-    """An economy report with its newest run's result.
+    """An economy report with its run's result.
 
     ``result`` is the single-year economy result, in the format the app reads
-    today, once the newest run has succeeded, and null otherwise.
+    today, once the run read has succeeded, and null otherwise.
     """
 
     result: EconomyResult | None
@@ -157,9 +160,9 @@ class HouseholdReportSummaryItem(ReportDefinitionItem):
 
     Both simulations calculate the household ``household_id`` in its default
     year, ``year``; ``reform_simulation`` is null for a report of the
-    baseline alone. ``status`` is the newest run's, or ``not_run`` for a
-    report with no run. ``run`` is the newest run, whatever its status and
-    versions, naming each simulation's run.
+    baseline alone. ``run`` is the run the read answers, chosen as for an
+    economy report, naming each simulation's run; ``status`` is that run's,
+    or ``not_run`` without one.
     """
 
     kind: Literal["household"]
@@ -215,9 +218,9 @@ class HouseholdReportFailureItem(StrictReportAPIModel):
 
 
 class HouseholdReportItem(HouseholdReportSummaryItem):
-    """A household report with its newest run's outcome.
+    """A household report with its run's outcome.
 
-    ``result`` holds the calculated households once the newest run has
+    ``result`` holds the calculated households once the run read has
     succeeded, and ``failure`` each side's error once it has failed; each is
     null otherwise.
     """
@@ -276,13 +279,14 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     The window is ``budget_window_size`` years from ``year``, in the region
     and dataset named. ``baseline_simulation`` and ``reform_simulation`` are
     the first year's; each year's run names that year's own simulation runs.
-    ``status`` is the newest run's, or ``not_run`` for a
-    report with no run. ``run`` is the newest budget-window run, whatever its
-    status and versions, with its years; ``current_versions`` are the
-    versions the Public API runs now, so a newest run on other versions is
-    out of date. ``options`` are the options the report was created with.
-    ``label`` is null for a shared report, which records no one caller's label.
-    ``dataset_independent_key`` is as ``ReportDefinitionItem`` describes it.
+    ``run`` is the budget-window run the read answers, chosen as for an
+    economy report (a recalculated window run is a forced one), with its
+    years; ``status`` is that run's, or ``not_run`` without one.
+    ``current_versions`` are the versions the Public API runs now, so a run
+    on other versions is out of date. ``options`` are the options the report
+    was created with. ``label`` and ``description`` are the requesting user's
+    saved report's, null otherwise. ``dataset_independent_key`` is as
+    ``ReportDefinitionItem`` describes it.
     """
 
     id: UUID
@@ -312,11 +316,11 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
 
 
 class BudgetWindowReportItem(BudgetWindowReportSummaryItem):
-    """A budget window with its newest run's result.
+    """A budget window with its run's result.
 
     ``result`` is the budget-window result, in the format the app reads
     today: each year's budget figures, in year order, and their totals. It is
-    there once the newest run has succeeded, and null otherwise.
+    there once the run read has succeeded, and null otherwise.
     """
 
     result: BudgetWindowResult | None
@@ -397,11 +401,14 @@ class ReportListResponse(ReportSuccessResponse[ReportListResult]):
 class CreatedReportUnreadableResponse(V2ErrorResponse):
     """The 502 answer when the created report cannot be read back.
 
-    The simulation service created ``report_id``, so the caller reads it
-    with ``GET /v2/reports/{report_id}`` rather than submitting it again.
+    The simulation service created ``report_id`` with the run ``run_id`` (a
+    report run, or a budget window's budget-window run), so the caller reads
+    it with ``GET /v2/reports/{report_id}?run_id={run_id}`` rather than
+    submitting it again.
     """
 
     report_id: UUID
+    run_id: UUID
 
 
 class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
@@ -414,6 +421,36 @@ class UnavailableAfterReportCreatedResponse(V2ErrorResponse):
     report_id: UUID
 
 
+class ReportRunNotRecordedResponse(V2ErrorResponse):
+    """The 503 answer when a user's request for a run could not be recorded.
+
+    The simulation service created or joined the run ``run_id`` of
+    ``report_id`` (a report run, or a budget window's budget-window run), so
+    the caller reads it with ``GET /v2/reports/{report_id}?run_id={run_id}``.
+    Sending the request again records it, once the simulation service finds
+    runs by key, since the request then ends on the same run.
+    """
+
+    report_id: UUID
+    run_id: UUID
+
+
+UNAUTHENTICATED_REQUESTER = (
+    "The request sent a user credential that is not valid: a bearer access "
+    "token that is invalid, or an unauthenticated-user header that is not a "
+    "canonical UUID or names a signed-in user. Nothing was started."
+)
+MACHINE_REQUESTER = (
+    "A server forwarded a machine client's token as the user's: these routes "
+    "record requests for users only. Nothing was started."
+)
+NOT_RECORDED = (
+    "Or the simulation service started the run, but the user's request for it "
+    "could not be recorded: the answer gives its report_id and run_id, to read "
+    "with GET /v2/reports/{report_id}?run_id={run_id}."
+)
+
+
 # Every report route can answer these.
 REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: error_response("The request does not match the schema."),
@@ -421,10 +458,23 @@ REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     503: error_response("The v2 database or the simulation service is unavailable."),
 }
 READ_RESPONSES: dict[int | str, dict[str, Any]] = {
-    404: error_response("No report has this ID in this country."),
+    401: error_response(
+        "The request sent a user credential that is not valid: a bearer access "
+        "token that is invalid, or an unauthenticated-user header that is not a "
+        "canonical UUID or names a signed-in user."
+    ),
+    403: error_response(
+        "A server forwarded a machine client's token as the user's: reports are "
+        "read as users see them."
+    ),
+    404: error_response(
+        "No report has this ID in this country, or run_id is not one of the "
+        "report's runs (a budget window's budget-window runs; any other "
+        "report's own report runs)."
+    ),
     422: error_response("The request does not match the schema."),
     500: error_response(
-        "The newest run succeeded but its stored result cannot be read (for a "
+        "The run read succeeded but its stored result cannot be read (for a "
         "household report, a simulation run's calculated household; for a "
         "budget window, a year has no succeeded run or no budget figures), or "
         "the operation could not be completed."
@@ -432,6 +482,8 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
+    401: error_response(UNAUTHENTICATED_REQUESTER),
+    403: error_response(MACHINE_REQUESTER),
     404: error_response(
         "A policy the report names, or a household report's household, is not "
         "stored in the country."
@@ -470,12 +522,15 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "again, which creates a second report if the first request went through. "
             "Or it created the report, but its answer cannot be read. Or it created "
             "the report, but the report cannot be read back: the answer gives its "
-            "report_id, to read with GET /v2/reports/{report_id} rather than "
-            "submitting it again."
+            "report_id and run_id, to read with GET "
+            "/v2/reports/{report_id}?run_id={run_id} rather than submitting it "
+            "again."
         ),
     },
     503: {
-        "model": V2ErrorResponse | UnavailableAfterReportCreatedResponse,
+        "model": V2ErrorResponse
+        | UnavailableAfterReportCreatedResponse
+        | ReportRunNotRecordedResponse,
         "description": (
             "The simulation service created nothing: it cannot be reached or is not "
             "configured; it answered a readable 503 naming no record, and the message "
@@ -488,7 +543,7 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "be read. Or the service created the report, then "
             "Modal refused the run's call and the service failed the run: its 503 "
             "named the report, with its status and code, and the answer gives its "
-            "report_id."
+            f"report_id. {NOT_RECORDED}"
         ),
     },
 }

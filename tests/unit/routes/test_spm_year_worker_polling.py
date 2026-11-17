@@ -8,6 +8,10 @@ import pytest
 from flask import Flask
 
 from policyengine_api import worker_spm
+from policyengine_api.economy_years import (
+    US_LAST_ECONOMY_YEAR,
+    dataset_year_unavailable_message,
+)
 from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
 from policyengine_api.routes import economy_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
@@ -31,20 +35,18 @@ SELECTION = {
     "county_vintage": "2020",
     "as_of": None,
 }
-# The annual requests ask for 2035, the last US year the Public API accepts,
-# so they reach the worker, which may still refuse the year. The budget windows
-# run from 2035 to 2036: they start in a US year, so they reach it too.
-ANNUAL_YEAR = "2035"
+# The annual requests ask for the last US year the Public API accepts, so they
+# reach the worker, which may still refuse the year. The budget windows run from
+# that year to the year after it: they start in a US year, so they reach it too.
+ANNUAL_YEAR = str(US_LAST_ECONOMY_YEAR)
+YEAR_AFTER = str(US_LAST_ECONOMY_YEAR + 1)
 YEAR_ERROR = {
     "code": "SPM_YEAR_UNAVAILABLE",
-    "message": "Forecast has no entry for 2036",
+    "message": f"Forecast has no entry for {YEAR_AFTER}",
 }
 DATASET_YEAR_ERROR = {
     "code": "DATASET_YEAR_UNAVAILABLE",
-    "message": (
-        "US results are available for 2024 to 2035. 2036 is outside the years "
-        "the current US model and data cover."
-    ),
+    "message": dataset_year_unavailable_message("us", YEAR_AFTER),
 }
 
 
@@ -163,8 +165,8 @@ def _typed_failure(
             "kind": "budgetWindow",
             "windowSize": 2,
             "annualImpacts": [
-                segmented_result("2035"),
-                segmented_result("2036", side),
+                segmented_result(ANNUAL_YEAR),
+                segmented_result(YEAR_AFTER, side),
             ],
         }
         if budget_window
@@ -236,7 +238,7 @@ def _setup_options(service: EconomyService, *, budget_window: bool) -> Any:
             options={},
             api_version="1.0.0",
         ),
-        time_period="budget_window:2035:2" if budget_window else ANNUAL_YEAR,
+        time_period=f"budget_window:{ANNUAL_YEAR}:2" if budget_window else ANNUAL_YEAR,
     )
 
 
@@ -262,7 +264,7 @@ def _economy_request(*, budget_window: bool) -> tuple[str, dict[str, str]]:
     """Return the economy route and query for an annual or budget-window run."""
     if budget_window:
         return "/us/economy/1/over/2/budget-window", {
-            "start_year": "2035",
+            "start_year": ANNUAL_YEAR,
             "window_size": "2",
         }
     return "/us/economy/1/over/2", {"time_period": ANNUAL_YEAR}
@@ -491,8 +493,8 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
                     "kind": "budgetWindow",
                     "windowSize": 2,
                     "annualImpacts": [
-                        segmented_result("2035"),
-                        segmented_result("2036", "reform"),
+                        segmented_result(ANNUAL_YEAR),
+                        segmented_result(YEAR_AFTER, "reform"),
                     ],
                 },
                 setup.observability_id,
