@@ -46,7 +46,8 @@ LABOR_SUPPLY_DECILE_COLUMNS = (
     "relative_income_effect",
     "relative_substitution_effect",
 )
-PER_SIMULATION_RESULT_TABLES = ("inequality", "poverty")
+# A simulation run's cliff calculation is one of its results too.
+PER_SIMULATION_RESULT_TABLES = ("inequality", "poverty", "cliff_impacts")
 COMPARISON_RESULT_TABLES = (
     "budget_summary",
     "congressional_district_impacts",

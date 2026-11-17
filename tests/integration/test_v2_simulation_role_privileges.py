@@ -1,8 +1,9 @@
 """Run the simulation tables' writes as the roles that do them in production.
 
 The simulation service creates simulations, reports, their runs, budget-window
-runs and household jobs; its Modal workers write their runs' status and
-results and their budget-window runs' status; the Public API reads them. Each
+runs, household jobs and simulation runs' cliff calculations; its Modal
+workers write their runs' and cliff calculations' status and results and
+their budget-window runs' status; the Public API reads them. Each
 role holds only its declared privileges
 (``policyengine_api/data/v2/privileges.py``), so a statement outside them
 fails here as it would in staging and production.
@@ -561,6 +562,7 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
         "report_runs",
         "household_jobs",
         "budget_window_runs",
+        "cliff_impacts",
     ):
         updatable = {
             column
@@ -577,3 +579,156 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
                 connection.execute(text(statement))
             else:
                 _refused(connection, statement)
+
+
+# What the simulation service inserts to start a run's cliff calculation,
+# unless one that hasn't failed exists. Naming the partial unique index's
+# conflict target needs SELECT as well as INSERT.
+START_CLIFF_CALCULATION = (
+    "INSERT INTO cliff_impacts (id, simulation_run_id, status) "
+    "VALUES (:id, :simulation_run_id, 'pending') "
+    "ON CONFLICT (simulation_run_id) WHERE status <> 'failed' DO NOTHING "
+    "RETURNING id"
+)
+
+
+def _start_cliff_calculation(connection: Connection, run_id: object) -> object:
+    return connection.execute(
+        text(START_CLIFF_CALCULATION), {"id": uuid4(), "simulation_run_id": run_id}
+    ).scalar_one_or_none()
+
+
+def test_the_simulation_service_starts_cliff_calculations_and_records_calls(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The service inserts a run's calculation once, and records or fails its call.
+
+    It never claims a calculation, writes its numbers, changes the run it
+    calculates or deletes it.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+
+    calculation_id = _start_cliff_calculation(connection, ids["run"])
+    joined_calculation = _start_cliff_calculation(connection, ids["run"])
+    recorded = connection.execute(
+        text(
+            "UPDATE cliff_impacts SET modal_call_id = 'fc-cliffs', "
+            "updated_at = now() WHERE id = :id AND status = 'pending' "
+            "AND modal_call_id IS NULL RETURNING id"
+        ),
+        {"id": calculation_id},
+    ).scalar_one()
+    failed = connection.execute(
+        text(
+            "UPDATE cliff_impacts SET status = 'failed', "
+            "error_message = 'modal_refused: refused', completed_at = now(), "
+            "updated_at = now() WHERE id = :id AND status = 'pending' RETURNING id"
+        ),
+        {"id": calculation_id},
+    ).scalar_one()
+
+    assert calculation_id is not None
+    assert joined_calculation is None
+    assert recorded == failed == calculation_id
+    for statement in (
+        "UPDATE cliff_impacts SET started_at = now() WHERE id = :id",
+        "UPDATE cliff_impacts SET cliff_gap = 1.0 WHERE id = :id",
+        "UPDATE cliff_impacts SET simulation_run_id = simulation_run_id WHERE id = :id",
+        "DELETE FROM cliff_impacts WHERE id = :id",
+    ):
+        _refused(connection, statement, id=calculation_id)
+
+
+def test_modal_workers_claim_cliff_calculations_and_write_their_results(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """A worker claims a pending calculation under its call and finishes it.
+
+    It never inserts a calculation, changes the run it calculates or deletes
+    one.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+    calculation_id = _start_cliff_calculation(connection, ids["run"])
+    _act_as(connection, managed_v2_roles.modal_worker)
+
+    claimed = connection.execute(
+        text(
+            "UPDATE cliff_impacts SET status = 'running', started_at = now(), "
+            "modal_call_id = 'fc-cliffs', updated_at = now() "
+            "WHERE id = :id AND status = 'pending' RETURNING id"
+        ),
+        {"id": calculation_id},
+    ).scalar_one()
+    succeeded = connection.execute(
+        text(
+            "UPDATE cliff_impacts SET status = 'succeeded', cliff_gap = 1.5e9, "
+            "cliff_share = 0.04, completed_at = now(), updated_at = now() "
+            "WHERE id = :id AND status = 'running' RETURNING id"
+        ),
+        {"id": calculation_id},
+    ).scalar_one()
+
+    assert claimed == succeeded == calculation_id
+    _refused(
+        connection,
+        "INSERT INTO cliff_impacts (id, simulation_run_id, status) "
+        "VALUES (:id, :run_id, 'pending')",
+        id=uuid4(),
+        run_id=ids["run"],
+    )
+    for statement in (
+        "UPDATE cliff_impacts SET simulation_run_id = simulation_run_id WHERE id = :id",
+        "DELETE FROM cliff_impacts WHERE id = :id",
+    ):
+        _refused(connection, statement, id=calculation_id)
+
+
+def test_the_public_api_reads_cliff_results_and_other_roles_cannot(
+    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+) -> None:
+    """The Public API reads a report run's two cliff results and writes none.
+
+    The catalog writer and the Stage 12 role can't read them.
+    """
+    _act_as(connection, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(connection, public_api_rows)
+    calculation_id = _start_cliff_calculation(connection, ids["run"])
+    _act_as(connection, managed_v2_roles.modal_worker)
+    connection.execute(
+        text(
+            "UPDATE cliff_impacts SET status = 'succeeded', cliff_gap = 1.5e9, "
+            "cliff_share = 0.04, completed_at = now() WHERE id = :id"
+        ),
+        {"id": calculation_id},
+    )
+    _act_as(connection, managed_v2_roles.runtime)
+
+    results = connection.execute(
+        text(
+            "SELECT cliff_impacts.cliff_gap, cliff_impacts.cliff_share "
+            "FROM report_runs JOIN cliff_impacts ON cliff_impacts.simulation_run_id "
+            "IN (report_runs.baseline_simulation_run_id, "
+            "report_runs.reform_simulation_run_id) "
+            "WHERE report_runs.id = :id AND cliff_impacts.status = 'succeeded'"
+        ),
+        {"id": ids["report_run"]},
+    ).all()
+
+    assert [tuple(result) for result in results] == [(1.5e9, 0.04)]
+    _refused(
+        connection,
+        "INSERT INTO cliff_impacts (id, simulation_run_id, status) "
+        "VALUES (:id, :run_id, 'pending')",
+        id=uuid4(),
+        run_id=ids["run"],
+    )
+    _refused(
+        connection,
+        "UPDATE cliff_impacts SET cliff_gap = 0 WHERE id = :id",
+        id=calculation_id,
+    )
+    for role in (managed_v2_roles.stage12, CATALOG_WRITER_ROLE):
+        _act_as(connection, role)
+        _refused(connection, "SELECT count(*) FROM cliff_impacts")
