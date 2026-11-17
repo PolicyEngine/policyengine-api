@@ -6,8 +6,12 @@ it. Two modes:
 
 - ``apply`` reads the managed roles' current grants, on whole tables and on
   columns, grants every declared privilege a role lacks, and reports privileges
-  the manifest doesn't declare. It never revokes, and it changes nothing when a
-  declared role or table is missing. Running it again grants nothing more.
+  the manifest doesn't declare. It revokes only a whole-table privilege the
+  manifest declares for named columns only, such as the ``UPDATE`` a new
+  table's default privileges give, which also removes the role's column grants
+  of it, and then grants the declared columns again, in the same transaction.
+  It changes nothing when a declared role or table is missing. Running it
+  again changes nothing more.
 - ``verify`` checks every declared privilege with ``has_table_privilege``, or
   ``has_column_privilege`` for each column of a column privilege (rule
   ``api.v2.deployed-privileges-match``), and fails on any that is missing. It
@@ -61,6 +65,7 @@ from policyengine_api.data.v2.privilege_plans import (
     grant_statements,
     plan_reconciliation,
     render_summary,
+    revoke_statements,
     safe_identifier,
     skipped_roles_line,
     table_wide_overrides,
@@ -105,6 +110,7 @@ __all__ = [
     "read_granted_privileges",
     "read_public_tables",
     "render_summary",
+    "revoke_statements",
     "run",
     "skipped_roles",
     "table_wide_overrides",
@@ -274,10 +280,14 @@ def apply_declared_privileges(
     *,
     roles_awaiting_creation: Collection[str] = (),
 ) -> tuple[ReconciliationPlan, list[DefaultPrivilege]]:
-    """Grant every declared privilege a role lacks; never revoke.
+    """Grant every declared privilege a role lacks.
 
-    Grants nothing when a declared role or table is missing, unless the missing
-    role awaits creation, which is skipped.
+    First revokes each whole-table privilege the manifest declares for named
+    columns only, which also removes the role's column grants of it, so the
+    grants that follow include those columns again. Every other privilege the
+    manifest doesn't declare is reported, not revoked. Changes nothing when a
+    declared role or table is missing, unless the missing role awaits creation,
+    which is skipped.
     """
     roles = list(declared)
     plan = plan_reconciliation(
@@ -291,9 +301,8 @@ def apply_declared_privileges(
         roles_awaiting_creation=roles_awaiting_creation,
     )
     if plan.can_apply:
-        for statement in grant_statements(
-            plan, connection.dialect.identifier_preparer.quote
-        ):
+        quote = connection.dialect.identifier_preparer.quote
+        for statement in revoke_statements(plan, quote) + grant_statements(plan, quote):
             connection.execute(text(statement))
     return plan, read_default_privileges(connection, roles)
 

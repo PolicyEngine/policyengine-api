@@ -1,0 +1,1 @@
+The v2 privilege reconciliation now revokes a privilege a role holds on a whole table when the manifest declares it for named columns only, such as the `UPDATE` new tables' default privileges give the runtime role on `user_type_changes`, and grants those columns again, so the deploy's privilege verification passes.
