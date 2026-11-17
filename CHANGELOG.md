@@ -1,3 +1,16 @@
+## [5.50.1] - 2026-11-17
+
+### Changed
+
+- Update the PolicyEngine bundle to 6.20.0.
+- A v2 metadata read that answers the generic 503 or the 500 now records one runtime event, `v2_metadata_read_failed`, naming the route, the error's class and failure category, the error classes in its cause chain, the database's SQLSTATE and whether the connection was lost, without any error message.
+
+### Fixed
+
+- Catalog publication now refreshes PostgreSQL's statistics of the catalog tables after every publication, so a new version's rows no longer leave `GET /v2/parameter-values` planned as if the version had one parameter (43 to 47 seconds on staging, 4.1 ms after `ANALYZE`); a failed refresh is reported in the publication's summary and repeated by the next one. The catalog writer role gains `MAINTAIN` on those tables.
+- The v2 privilege reconciliation now revokes a privilege a role holds on a whole table when the manifest declares it for named columns only, such as the `UPDATE` new tables' default privileges give the runtime role on `user_type_changes`, and grants those columns again, so the deploy's privilege verification passes.
+
+
 ## [5.50.0] - 2026-11-16
 
 ### Added

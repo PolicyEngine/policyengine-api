@@ -11,6 +11,9 @@ import pytest
 import sqlalchemy as sa
 
 from policyengine_api.data.v2 import models
+from policyengine_api.data.v2.catalog.publication_statistics import (
+    CATALOG_STATISTICS_TABLES,
+)
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.privilege_requirements import (
     required_privileges,
@@ -393,6 +396,21 @@ def test_rule_proof_runtime_privileges_declared() -> None:
     assert undeclared_requirements(good, runtime_before_3977) == []
 
 
+def test_the_catalog_writer_may_analyze_the_tables_publication_refreshes() -> None:
+    """Publication runs ANALYZE on these tables, which needs MAINTAIN or ownership.
+
+    The migration role owns every table, so the catalog writer needs MAINTAIN
+    (PostgreSQL 17); without it, ANALYZE skips the table with only a warning.
+    """
+    writer_tables = declared_privileges(TEST_ENVIRONMENT)[CATALOG_WRITER_ROLE]
+
+    assert {
+        table
+        for table, privileges in writer_tables.items()
+        if TablePrivilege.MAINTAIN in privileges
+    } == set(CATALOG_STATISTICS_TABLES)
+
+
 def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> None:
     """Catalog pruning deletes from three tables and marks the pruned version.
 
@@ -410,13 +428,19 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         if TablePrivilege.DELETE in privileges
     } == {"parameter_values", "parameter_tree_children", "parameter_search_files"}
     assert TablePrivilege.UPDATE in catalog_writer["tax_benefit_model_versions"]
+    # MAINTAIN is for ANALYZE after publication, not for deleting.
     assert catalog_writer["parameter_tree_children"] == frozenset(
-        {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
+        {
+            TablePrivilege.SELECT,
+            TablePrivilege.INSERT,
+            TablePrivilege.DELETE,
+            TablePrivilege.MAINTAIN,
+        }
     )
     assert catalog_writer["parameter_search_files"] == frozenset(
         {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
     )
-    assert catalog_writer["parameter_values"] == READ_WRITE
+    assert catalog_writer["parameter_values"] == READ_WRITE | {TablePrivilege.MAINTAIN}
 
 
 def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:

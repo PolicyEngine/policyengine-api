@@ -84,6 +84,27 @@ own level is dropped before the runtime's handler sees it. Attribute names
 must avoid the runtime's prohibited key parts (such as `authorization`,
 `credential` and `token`), which it drops.
 
+## v2 metadata read failures
+
+A v2 metadata read that answers the generic 503 "V2 metadata catalog is
+unavailable", or the 500 "V2 metadata query failed", records one runtime
+event at ERROR, `v2_metadata_read_failed`
+(`policyengine_api.fastapi_routes.v2.metadata.read_failure_support`). The
+runtime adds the request's ID, method and matched route. The event adds
+`http.response.status_code`, `error_type` (the caught error's class as
+`module.QualifiedName`), `failure_category` (`v2_metadata_catalog_unavailable`
+or `v2_metadata_query_failed`), `error.cause_types` (the classes of its
+`__cause__` chain, outermost first), `database.sqlstate` (the first SQLSTATE in
+the chain) and `database.connection_invalidated` (SQLAlchemy's lost-connection
+flag). The scheduled error-issue job groups the event by route, `error_type`
+and `failure_category`. A pruned catalog version, or a missing parameter tree
+or search file, answers with its own message and records nothing. On the two
+routes that share one read of a whole catalog version
+(`response_cache_support`), only the request that ran the failed read records
+it; requests that waited for it answer with a copy of its 503. The event never
+carries an error's message: SQLAlchemy's and the driver's name the SQL
+statement and its parameters, and can name hosts, addresses and credentials.
+
 ## Simulation client transport
 
 The simulation HTTP client reads identifiers from request context. Its request
