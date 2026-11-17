@@ -1037,8 +1037,11 @@ changes, so that dynamics are stored as policies are:
   with a dynamic: a dynamic sets one value per parameter and start date, as a
   policy does. Rows without a dynamic never conflict in a unique key, so the
   partial index refuses exactly what a full unique constraint would, but it
-  holds only dynamics' rows instead of every current-law value. It is also
-  declared for SQLite, so the unit tests' databases keep the same rule.
+  holds only dynamics' rows instead of every current-law value. Building it
+  still reads every row of `parameter_values` (millions of current-law
+  values), and, as Alembic creates it without `CONCURRENTLY`, inserts into
+  that table wait until the build finishes. It is also declared for SQLite,
+  so the unit tests' databases keep the same rule.
 - `legacy_policy_mappings` gains the nullable `dynamic_id`, the dynamic the
   v1-to-v2 policy copy split from a v1 policy: a key with the mapping's
   country to `dynamics` (`fk_legacy_policy_mappings_dynamic_country`,

@@ -287,10 +287,10 @@ class V2StoredReportResourceService(Protocol):
         country without household calculations, ``HouseholdNotFoundError``
         for a household the country does not store,
         ``HouseholdCalculationYearError`` for one with no default year,
-        ``PolicyNotFoundError``
-        for a policy the country does not store,
-        ``PolicyParametersMissingError`` for a policy that sets parameters the
-        running catalog version lacks, ``SubmissionStorageError`` when the
+        ``PolicyNotFoundError`` or ``DynamicNotFoundError`` for a policy or
+        dynamic the country does not store, ``PolicyParametersMissingError``
+        (``DynamicParametersMissingError`` for a dynamic) for one setting
+        parameters the running catalog lacks, ``SubmissionStorageError`` when the
         database or its catalog cannot be read for those checks, the
         simulation service's errors, ``ReportRunNotRecordedError`` when the
         request could not be recorded, and ``CreatedReportUnreadableError``
@@ -357,7 +357,7 @@ class V2StoredSimulationResourceService(Protocol):
 
         Raise the checks' and the simulation service's errors as
         ``V2StoredReportResourceService.create_report`` does, for the
-        simulation's one policy, and ``CreatedSimulationUnreadableError`` when
+        simulation's policy and dynamic, and ``CreatedSimulationUnreadableError`` when
         the simulation it created cannot be read back.
         """
         ...

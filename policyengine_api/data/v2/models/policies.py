@@ -146,12 +146,13 @@ class Dynamic(TimestampedModel, table=True):
     canonicalization_version: int
     content_hash: str = Field(max_length=64)
 
+    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="dynamics")
+    tax_benefit_model_version: "TaxBenefitModelVersion" = Relationship(
+        back_populates="dynamics"
+    )
     parameter_values: list["ParameterValue"] = Relationship(
         back_populates="dynamic",
         cascade_delete=True,
     )
     simulations: list["Simulation"] = Relationship(back_populates="dynamic")
     household_jobs: list["HouseholdJob"] = Relationship(back_populates="dynamic")
-    legacy_mappings: list["LegacyPolicyMapping"] = Relationship(
-        back_populates="dynamic"
-    )

@@ -137,7 +137,7 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "catalog version does not have (code missing_parameters, which names "
             "them; the policy is checked first); or the "
             "simulation service cannot run the simulation: its 422, or its 400 "
-            "for a region, dataset or dynamic it does not have. The message says "
+            "for a region or dataset it does not have. The message says "
             "which; for the simulation service's refusal, it gives the service's "
             "code, when it gave one, and its reason, but not its status."
         ),

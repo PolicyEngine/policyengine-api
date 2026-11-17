@@ -1,5 +1,7 @@
 """Dynamics are stored as policies are: once per canonical content hash."""
 
+import subprocess
+import sys
 from datetime import UTC, datetime
 
 import pytest
@@ -231,5 +233,50 @@ def test_a_mapping_cannot_name_another_country_s_dynamic() -> None:
         )
         with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
             session.commit()
+
+    engine.dispose()
+
+
+def test_the_v2_mappers_configure_without_relationship_warnings() -> None:
+    # A fresh interpreter, since a process configures its mappers only once
+    # and an error there would break every later mapper in this one.
+    configuration = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import warnings\n"
+            "from sqlalchemy.exc import SAWarning\n"
+            "warnings.simplefilter('error', SAWarning)\n"
+            "import policyengine_api.data.v2.models\n"
+            "from sqlalchemy.orm import configure_mappers\n"
+            "configure_mappers()",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert configuration.returncode == 0, configuration.stderr
+
+
+def test_a_dynamic_is_stored_in_one_flush_with_its_new_catalog_version() -> None:
+    engine = _sqlite_engine_with_foreign_keys()
+    model, version, parameter = _catalog()
+
+    with Session(engine) as session:
+        dynamic = Dynamic(
+            country_id="us",
+            tax_benefit_model=model,
+            tax_benefit_model_version=version,
+            canonicalization_version=1,
+            content_hash="d" * 64,
+        )
+        session.add_all([parameter, dynamic])
+        session.commit()
+        stored = session.get(Dynamic, dynamic.id)
+
+        assert stored is not None
+        assert stored.tax_benefit_model_version_id == version.id
+        assert stored in version.dynamics
 
     engine.dispose()

@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
+import sqlalchemy as sa
 from pydantic import ValidationError
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
@@ -258,3 +259,24 @@ def test_a_dynamic_storage_that_cannot_be_read_is_a_storage_error() -> None:
         engine.dispose()
 
     assert isinstance(failure.value.__cause__, OperationalError)
+
+
+def test_a_dynamic_that_cannot_be_written_is_a_storage_error(
+    session: Session, catalog: Catalog
+) -> None:
+    engine = session.get_bind()
+    with engine.begin() as connection:
+        connection.execute(sa.text("DROP TABLE dynamics"))
+    service = V2DynamicService(
+        DynamicDatabaseSession(sessionmaker(engine, class_=Session)),
+        running_policyengine_version=RUNNING_VERSION,
+    )
+
+    with pytest.raises(DynamicStorageError) as failure:
+        service.create_dynamic(
+            NativeDynamicCreationInput(
+                **_dynamic_input(catalog, INCOME_ELASTICITY).model_dump()
+            )
+        )
+
+    assert isinstance(failure.value.__cause__, SQLAlchemyError)

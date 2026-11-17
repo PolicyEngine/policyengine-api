@@ -493,3 +493,33 @@ def test_an_untranslatable_assumption_fails_the_copy_before_anything_is_written(
 
     assert failure.value.reason == reason
     assert recorded_writes == RecordedCopyWrites()
+
+
+def test_a_copy_that_loses_the_mapping_race_reports_the_mapped_dynamic(
+    catalog_session: Session,
+    recorded_writes: RecordedCopyWrites,
+    monkeypatch,
+) -> None:
+    _add_running_catalog(
+        catalog_session, country_id="us", parameter_names=[US_INCOME_ELASTICITY]
+    )
+    snapshot = _snapshot(
+        country_id="us",
+        legacy_policy_id=504,
+        api_version="1.600.0",
+        policy_json={US_INCOME_ELASTICITY: {"2026": 0.25}},
+    )
+    _lose_mapping_race(monkeypatch, winning_source_hash=snapshot.source_policy_hash)
+
+    result = _copy(catalog_session, snapshot)
+
+    # This copy created a dynamic, but the concurrent copy's mapping, made
+    # before the split existed, names none; the result reports the mapping.
+    assert len(recorded_writes.created_dynamics) == 1
+    assert result == LegacyPolicyPersistenceResult(
+        policy_id=EARLIER_COPY_POLICY_ID,
+        policy_created=False,
+        mapping_created=False,
+        dynamic_id=None,
+        dynamic_created=False,
+    )

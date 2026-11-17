@@ -167,7 +167,7 @@ class LegacyPolicyTranslation:
 class LegacyPolicyMappingInput:
     """The mapping a copy records from a v1 policy to its v2 policy and dynamic."""
 
-    country_id: str
+    country_id: CountryId
     legacy_policy_id: int
     source_policy_hash: str
     policy_id: UUID

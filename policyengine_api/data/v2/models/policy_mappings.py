@@ -1,7 +1,7 @@
 """Durable source-identity mappings for immediate v1 policy mirroring."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -11,7 +11,7 @@ from policyengine_api.data.v2.models.base import TimestampedModel, utc_now
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserPolicy
-    from policyengine_api.data.v2.models.policies import Dynamic, Policy
+    from policyengine_api.data.v2.models.policies import Policy
 
 
 class LegacyUserMapping(SQLModel, table=True):
@@ -87,7 +87,6 @@ class LegacyPolicyMapping(TimestampedModel, table=True):
     source_policy_hash: str = Field(max_length=255)
 
     policy: "Policy" = Relationship(back_populates="legacy_mappings")
-    dynamic: Optional["Dynamic"] = Relationship(back_populates="legacy_mappings")
 
 
 class LegacyUserPolicyMapping(TimestampedModel, table=True):

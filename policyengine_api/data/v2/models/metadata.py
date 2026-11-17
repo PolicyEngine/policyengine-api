@@ -80,6 +80,7 @@ class TaxBenefitModel(TimestampedModel, table=True):
         back_populates="tax_benefit_model"
     )
     policies: list["Policy"] = Relationship(back_populates="tax_benefit_model")
+    dynamics: list["Dynamic"] = Relationship(back_populates="tax_benefit_model")
     reports: list["Report"] = Relationship(back_populates="tax_benefit_model")
 
 
@@ -156,6 +157,7 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     datasets: list["Dataset"] = Relationship(back_populates="tax_benefit_model_version")
     regions: list["Region"] = Relationship(back_populates="tax_benefit_model_version")
     policies: list["Policy"] = Relationship(back_populates="tax_benefit_model_version")
+    dynamics: list["Dynamic"] = Relationship(back_populates="tax_benefit_model_version")
 
 
 class Region(TimestampedModel, table=True):

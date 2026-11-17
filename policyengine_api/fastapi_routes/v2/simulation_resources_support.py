@@ -160,9 +160,8 @@ def simulation_resource_operation(
 
     A policy or dynamic that sets parameters the running catalog version
     lacks answers 422 with code ``missing_parameters``, naming them, whatever
-    the route. A
-    failure of a type in ``refusals`` is the caller's to act on and is not
-    logged, nor is that 422; any other is logged under ``event``.
+    the route. A failure of a type in ``refusals`` is the caller's to act on
+    and is not logged, nor is that 422; any other is logged under ``event``.
     """
 
     def logged() -> OperationT | JSONResponse:
