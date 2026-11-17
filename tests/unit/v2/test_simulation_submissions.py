@@ -8,6 +8,11 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from policyengine_api.services.v2.dynamics.types import CheckedDynamicRead
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+)
 from sqlalchemy.exc import OperationalError
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
@@ -50,6 +55,18 @@ MISSING_PARAMETERS: dict[UUID, tuple[str, ...] | None] = {
     OUTDATED_POLICY_ID: REMOVED_PARAMETERS,
     SECOND_OUTDATED_POLICY_ID: SECOND_REMOVED_PARAMETERS,
     UNCHECKED_POLICY_ID: None,
+}
+# Stored US dynamics; the second sets parameters the running catalog lacks.
+STORED_DYNAMIC_ID = UUID("00000000-0000-0000-0000-00000000c101")
+OUTDATED_DYNAMIC_ID = UUID("00000000-0000-0000-0000-00000000c102")
+# A stored UK dynamic.
+UK_DYNAMIC_ID = UUID("00000000-0000-0000-0000-00000000c103")
+REMOVED_ASSUMPTIONS = ("gov.simulation.removed_elasticity",)
+# Each stored dynamic's country, and its parameters the running catalog lacks.
+STORED_DYNAMICS: dict[UUID, tuple[str, tuple[str, ...] | None]] = {
+    STORED_DYNAMIC_ID: ("us", ()),
+    OUTDATED_DYNAMIC_ID: ("us", REMOVED_ASSUMPTIONS),
+    UK_DYNAMIC_ID: ("uk", ()),
 }
 SERVED_COUNTRIES = [
     CountryRead(id="uk", household_enabled=True, society_wide_enabled=True),
@@ -111,6 +128,37 @@ class StoredPolicies:
 
 
 @dataclass
+class StoredDynamics:
+    """The dynamics in STORED_DYNAMICS, each stored in its own country.
+
+    With ``error``, every read raises it, as a database or catalog that
+    cannot be read does.
+    """
+
+    error: Exception | None = None
+    asked: list[tuple[str, UUID]] = field(default_factory=list)
+
+    def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
+        self.asked.append((country_id, dynamic_id))
+        if self.error is not None:
+            raise self.error
+        stored = STORED_DYNAMICS.get(dynamic_id)
+        if stored is None or stored[0] != country_id:
+            msg = f"Dynamic {dynamic_id} was not found"
+            raise DynamicNotFoundError(msg)
+        return CheckedDynamicRead(
+            id=dynamic_id,
+            country_id=country_id,
+            tax_benefit_model_id=uuid4(),
+            tax_benefit_model_version_id=uuid4(),
+            created_at=STORED_AT,
+            updated_at=STORED_AT,
+            parameter_values=(),
+            missing_parameters=stored[1],
+        )
+
+
+@dataclass
 class RecordingSimulationService:
     """The simulation service's client, recording what it is sent."""
 
@@ -166,12 +214,15 @@ def simulation_input(**changes: Any) -> EconomySimulationCreationInput:
 
 
 def submissions(
-    client_factory: Any, policies: StoredPolicies | None = None
+    client_factory: Any,
+    policies: StoredPolicies | None = None,
+    dynamics: StoredDynamics | None = None,
 ) -> SimulationSubmissionService:
     return SimulationSubmissionService(
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=policies or StoredPolicies(),
+        dynamics=dynamics or StoredDynamics(),
         client_factory=client_factory,
     )
 
@@ -196,7 +247,7 @@ def test_current_law_needs_no_stored_policy() -> None:
     policies = StoredPolicies()
 
     submissions(lambda: client, policies).submit_report(
-        report_input(reform={"dynamic_id": str(uuid4())})
+        report_input(reform={"dynamic_id": str(STORED_DYNAMIC_ID)})
     )
 
     assert policies.asked == []
@@ -208,6 +259,7 @@ def test_a_household_only_country_is_refused_before_sending() -> None:
         countries=StoredCountries(countries=HOUSEHOLD_ONLY_UK),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -222,6 +274,7 @@ def test_a_country_without_a_countries_row_is_refused() -> None:
         countries=StoredCountries(countries=SERVED_COUNTRIES[:1]),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -350,3 +403,94 @@ def test_a_policy_check_that_cannot_read_storage_is_storage_unavailable(
         service.submit_report(report_input())
 
     assert unavailable.value.__cause__ is error
+
+
+def test_a_report_s_dynamics_are_checked_in_its_country_and_sent() -> None:
+    client = RecordingSimulationService()
+    dynamics = StoredDynamics()
+    report = report_input(
+        baseline={"dynamic_id": str(STORED_DYNAMIC_ID)},
+        reform={
+            "policy_id": str(STORED_POLICY_ID),
+            "dynamic_id": str(STORED_DYNAMIC_ID),
+        },
+    )
+
+    submissions(lambda: client, dynamics=dynamics).submit_report(report)
+
+    assert client.reports == [report]
+    assert dynamics.asked == [("us", STORED_DYNAMIC_ID)]
+
+
+@pytest.mark.parametrize("side", ["baseline", "reform"])
+def test_a_report_naming_another_country_s_dynamic_is_refused(side: str) -> None:
+    service = submissions(unconfigured_client)
+
+    with pytest.raises(DynamicNotFoundError, match=str(UK_DYNAMIC_ID)):
+        service.submit_report(
+            report_input(**{side: {"dynamic_id": str(UK_DYNAMIC_ID)}})
+        )
+
+
+def test_a_simulation_is_sent_once_its_dynamic_is_checked() -> None:
+    client = RecordingSimulationService()
+    dynamics = StoredDynamics()
+    simulation = simulation_input(dynamic_id=str(UK_DYNAMIC_ID))
+
+    submissions(lambda: client, dynamics=dynamics).submit_simulation(simulation)
+
+    assert client.simulations == [simulation]
+    assert dynamics.asked == [("uk", UK_DYNAMIC_ID)]
+
+
+def test_a_simulation_naming_another_country_s_or_no_stored_dynamic_is_refused() -> (
+    None
+):
+    service = submissions(unconfigured_client)
+
+    for dynamic_id in (STORED_DYNAMIC_ID, uuid4()):
+        with pytest.raises(DynamicNotFoundError, match=str(dynamic_id)):
+            service.submit_simulation(simulation_input(dynamic_id=str(dynamic_id)))
+
+
+def test_a_dynamic_setting_parameters_the_running_catalog_lacks_is_refused() -> None:
+    service = submissions(unconfigured_client)
+
+    with pytest.raises(DynamicParametersMissingError) as refusal:
+        service.submit_report(
+            report_input(reform={"dynamic_id": str(OUTDATED_DYNAMIC_ID)})
+        )
+
+    assert isinstance(refusal.value, PolicyParametersMissingError)
+    assert refusal.value.dynamic_id == OUTDATED_DYNAMIC_ID
+    assert refusal.value.missing_parameters == REMOVED_ASSUMPTIONS
+    assert str(refusal.value).startswith(f"Dynamic {OUTDATED_DYNAMIC_ID} sets")
+
+
+def test_policies_are_checked_before_dynamics() -> None:
+    dynamics = StoredDynamics()
+    service = submissions(unconfigured_client, dynamics=dynamics)
+
+    with pytest.raises(PolicyNotFoundError):
+        service.submit_report(
+            report_input(
+                reform={
+                    "policy_id": str(OTHER_POLICY_ID),
+                    "dynamic_id": str(UK_DYNAMIC_ID),
+                }
+            )
+        )
+
+    assert dynamics.asked == []
+
+
+def test_a_dynamic_read_that_fails_is_a_storage_error() -> None:
+    error = OperationalError("SELECT 1", {}, Exception("connection refused"))
+    service = submissions(unconfigured_client, dynamics=StoredDynamics(error=error))
+
+    with pytest.raises(SubmissionStorageError) as failure:
+        service.submit_simulation(
+            simulation_input(dynamic_id=str(UK_DYNAMIC_ID), policy_id=None)
+        )
+
+    assert failure.value.__cause__ is error

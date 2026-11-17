@@ -46,6 +46,7 @@ from tests.unit.v2.test_simulation_submissions import (
     SERVED_COUNTRIES,
     STORED_POLICY_ID,
     StoredCountries,
+    StoredDynamics,
     StoredPolicies,
 )
 
@@ -134,6 +135,7 @@ def household_submissions(
         countries=StoredCountries(countries=countries),
         households=households or StoredHouseholds(),
         policies=policies or StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=client_factory,
     )
 

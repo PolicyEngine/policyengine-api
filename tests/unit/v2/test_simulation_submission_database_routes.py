@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import V2DynamicService
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +25,7 @@ from sqlmodel import Session, create_engine
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     Country,
+    Dynamic,
     Parameter,
     ParameterValue,
     Policy,
@@ -70,6 +75,9 @@ RUNNING_VERSION = "6.10.0"
 EARLIER_VERSION = "6.9.0"
 KEPT_PARAMETER = "gov.example.rate"
 REMOVED_PARAMETER = "gov.example.removed_rate"
+KEPT_ASSUMPTION = "gov.simulation.labor_supply_responses.elasticities.income"
+REMOVED_ASSUMPTION = "gov.simulation.labor_supply_responses.removed_elasticity"
+UK_ASSUMPTION = "gov.simulation.labour_supply_responses.income_elasticity"
 STORED_AT = datetime(2026, 11, 10, tzinfo=UTC)
 REPORTS = "/v2/reports?country_id=us"
 SIMULATIONS = "/v2/simulations?country_id=us"
@@ -181,6 +189,75 @@ def stored_policy_ids(engine: Engine) -> dict[str, UUID]:
     return {name: policy.id for name, policy in policies.items()}
 
 
+def store_dynamic(
+    session: Session,
+    country_id: str,
+    parameters: dict[str, Parameter],
+    content_hash_letter: str,
+) -> Dynamic:
+    """Store a dynamic setting each of ``parameters``, of their catalog version."""
+    model_version = next(iter(parameters.values())).tax_benefit_model_version
+    dynamic = Dynamic(
+        country_id=country_id,
+        tax_benefit_model_id=model_version.model_id,
+        tax_benefit_model_version_id=model_version.id,
+        canonicalization_version=1,
+        content_hash=content_hash_letter * 64,
+        created_at=STORED_AT,
+        updated_at=STORED_AT,
+    )
+    session.add(dynamic)
+    session.flush()
+    session.add_all(
+        ParameterValue(
+            parameter_id=parameter.id,
+            value_json=0.25,
+            start_date=STORED_AT,
+            dynamic_id=dynamic.id,
+        )
+        for parameter in parameters.values()
+    )
+    return dynamic
+
+
+@pytest.fixture
+def stored_dynamic_ids(engine: Engine) -> dict[str, UUID]:
+    """Store the US with two catalog versions, the UK with one, and three dynamics.
+
+    ``outdated_dynamic`` sets an assumption the running US catalog version
+    removed, ``running_dynamic`` was made on the running US version, and
+    ``uk_dynamic`` is the UK's.
+    """
+    with Session(engine, expire_on_commit=False) as session:
+        session.add_all(
+            [
+                Country(id="us", household_enabled=True, society_wide_enabled=True),
+                Country(id="uk", household_enabled=True, society_wide_enabled=True),
+            ]
+        )
+        us_model = TaxBenefitModel(name="policyengine-us")
+        earlier = store_catalog_version(
+            session, us_model, EARLIER_VERSION, [KEPT_ASSUMPTION, REMOVED_ASSUMPTION]
+        )
+        running = store_catalog_version(
+            session, us_model, RUNNING_VERSION, [KEPT_ASSUMPTION]
+        )
+        uk_running = store_catalog_version(
+            session,
+            TaxBenefitModel(name="policyengine-uk"),
+            RUNNING_VERSION,
+            [UK_ASSUMPTION],
+        )
+        session.flush()
+        dynamics = {
+            "outdated_dynamic": store_dynamic(session, "us", earlier, "d"),
+            "running_dynamic": store_dynamic(session, "us", running, "e"),
+            "uk_dynamic": store_dynamic(session, "uk", uk_running, "f"),
+        }
+        session.commit()
+    return {name: dynamic.id for name, dynamic in dynamics.items()}
+
+
 @pytest.fixture
 def simulation_service() -> RecordingSimulationService:
     return RecordingSimulationService()
@@ -196,6 +273,10 @@ def submissions(
         households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
         policies=V2PolicyService(
             PolicyDatabaseSession(sessions),
+            running_policyengine_version=RUNNING_VERSION,
+        ),
+        dynamics=V2DynamicService(
+            DynamicDatabaseSession(sessions),
             running_policyengine_version=RUNNING_VERSION,
         ),
         client_factory=lambda: simulation_service,
@@ -333,3 +414,64 @@ def test_a_catalog_that_cannot_be_queried_answers_503(
     }
     assert simulation_service.reports == []
     assert simulation_service.simulations == []
+
+
+@pytest.mark.parametrize("side", ["baseline", "reform"])
+def test_a_report_naming_another_country_s_dynamic_answers_404(
+    client: TestClient,
+    stored_dynamic_ids: dict[str, UUID],
+    simulation_service: RecordingSimulationService,
+    side: str,
+) -> None:
+    uk_dynamic_id = stored_dynamic_ids["uk_dynamic"]
+
+    response = client.post(
+        REPORTS, json=report_body(**{side: {"dynamic_id": str(uk_dynamic_id)}})
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json() == {
+        "status": "error",
+        "message": f"dynamic {uk_dynamic_id} was not found",
+    }
+    assert simulation_service.reports == []
+
+
+def test_a_simulation_whose_dynamic_sets_parameters_the_catalog_lacks_answers_422(
+    client: TestClient,
+    stored_dynamic_ids: dict[str, UUID],
+    simulation_service: RecordingSimulationService,
+) -> None:
+    outdated_dynamic_id = stored_dynamic_ids["outdated_dynamic"]
+    body = {**simulation_body(uuid4()), "policy_id": None}
+
+    response = client.post(
+        SIMULATIONS, json={**body, "dynamic_id": str(outdated_dynamic_id)}
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"Dynamic {outdated_dynamic_id} sets parameters the running catalog "
+            f"version does not have: {REMOVED_ASSUMPTION}"
+        ),
+        "code": "missing_parameters",
+        "missing_parameters": [REMOVED_ASSUMPTION],
+    }
+    assert simulation_service.simulations == []
+
+
+def test_a_dynamic_of_the_country_on_the_running_catalog_is_sent(
+    submissions: SimulationSubmissionService,
+    stored_dynamic_ids: dict[str, UUID],
+    simulation_service: RecordingSimulationService,
+) -> None:
+    running_dynamic = {"dynamic_id": str(stored_dynamic_ids["running_dynamic"])}
+    report = EconomyReportCreationInput.model_validate(
+        report_body(baseline=running_dynamic, reform=running_dynamic)
+    )
+
+    submissions.submit_report(report)
+
+    assert simulation_service.reports == [report]
