@@ -19,6 +19,7 @@ from policyengine_api import country as country_module
 from policyengine_api import spm
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.data.v1_models import Policy
+from policyengine_api.economy_years import US_LAST_ECONOMY_YEAR
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
@@ -488,11 +489,13 @@ MISSING_INPUT_CASES = {
         geography_kind="national",
         age=14,
     ),
+    # The installed forecast ends with the last US year (test_economy_years
+    # checks this), so the year after it has no entry.
     "year-after-forecast": MissingInputCase(
         "SPM_YEAR_UNAVAILABLE",
-        "Forecast has no entry for 2037",
+        f"Forecast has no entry for {US_LAST_ECONOMY_YEAR + 1}",
         geography_kind="national",
-        year="2037",
+        year=str(US_LAST_ECONOMY_YEAR + 1),
     ),
 }
 

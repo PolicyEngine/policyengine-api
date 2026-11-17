@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from policyengine_api.economy_years import US_LAST_ECONOMY_YEAR
 from policyengine_api.services.budget_window_cache import BudgetWindowCacheState
 from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_END_YEAR,
@@ -73,25 +74,27 @@ class TestEconomyService:
         ):
             """Only the start year must be one of the country's years.
 
-            2034 is a US year, so the window from 2034 to 2038 is submitted as
-            before, although 2037 and 2038 are after the last US year (2036).
+            The window starts two years before the last US year, so it is
+            submitted as before, although its last two years are after it.
             """
-            base_params["start_year"] = "2034"
+            start_year = US_LAST_ECONOMY_YEAR - 2
+            window_years = [str(start_year + offset) for offset in range(5)]
+            base_params["start_year"] = str(start_year)
             base_params["window_size"] = 5
             mock_simulation_entrypoint.run_budget_window_batch.return_value = (
                 create_mock_budget_window_batch_execution(
-                    batch_job_id="fc-budget-after-2036", status="submitted"
+                    batch_job_id="fc-budget-after-the-us-years", status="submitted"
                 )
             )
 
             result = economy_service.get_budget_window_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            assert result.queued_years == ["2034", "2035", "2036", "2037", "2038"]
+            assert result.queued_years == window_years
             submitted_payload = (
                 mock_simulation_entrypoint.run_budget_window_batch.call_args.args[0]
             )
-            assert submitted_payload["start_year"] == "2034"
+            assert submitted_payload["start_year"] == str(start_year)
             assert submitted_payload["window_size"] == 5
             mock_budget_window_cache.store_submitted.assert_called_once()
 
