@@ -44,10 +44,16 @@ class ReportRerunRequest(StrictSubmissionModel):
     Without ``force`` (``{}``), each side reuses a run of its own simulation
     that succeeded on those versions; with it, both simulations are
     calculated again. A household report's sides are always calculated
-    again. The new run is kept beside every earlier one.
+    again. The new run is kept beside every earlier one. ``include_cliffs``
+    also starts a cliff calculation for each of the run's two simulation
+    runs that has none, or whose newest one failed, and joins one under way;
+    the report's ``cliffs`` then says how far they have got. Only an
+    economy report has cliffs: a household report or budget window asking
+    for them is refused with 422.
     """
 
     force: StrictBool = False
+    include_cliffs: StrictBool = False
 
 
 class ReportRunListResult(StrictReportAPIModel):
@@ -178,7 +184,9 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
-            "The request does not match the schema; the country has no economy "
+            "The request does not match the schema; a household report or "
+            "budget window asks for cliffs (include_cliffs), which only an "
+            "economy report has; the country has no economy "
             "reports, or no household calculations for a household report; a "
             "policy of the report's simulations sets "
             "parameters the running catalog version does not have (code "

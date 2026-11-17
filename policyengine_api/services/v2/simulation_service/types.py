@@ -258,12 +258,17 @@ LOCAL_AREA_DATASET: ReportDataSource = "local_area_dataset"
 class EconomyReportFields(ReportDefinitionFields):
     """An economy report: a baseline and a reform simulation of one region's data.
 
-    ``include_cliffs`` also calculates the baseline's and reform's cliff
-    impact. ``data_source`` ``local_area_dataset`` calculates both
-    simulations on the dataset the catalog version gives local areas
-    instead of the region's, so the result also has each constituency's and
-    local authority's impact and the codes of those disclosure control
-    withheld; omit it, rather than sending null, for the region's dataset.
+    ``include_cliffs`` also starts a cliff calculation for each of the two
+    simulation runs that has none, or whose newest one failed, and joins one
+    under way: a simulation run's cliffs are calculated once, apart from it,
+    and every report naming the run shares them. It is never stored. The
+    report's ``cliffs`` says how far they have got, and its result's
+    ``cliff_impact`` holds them once both have succeeded.
+    ``data_source`` ``local_area_dataset`` calculates both simulations on
+    the dataset the catalog version gives local areas instead of the
+    region's, so the result also has each constituency's and local
+    authority's impact and the codes of those disclosure control withheld;
+    omit it, rather than sending null, for the region's dataset.
     The simulation service takes it only for ``uk`` and the four
     ``country/*`` nations, on a release that gives local areas a dataset of
     their own, and refuses it with 422 otherwise: the Public API checks only
@@ -427,7 +432,9 @@ class ReportRerunInput:
     economy calculations. ``policy_ids`` are the policies of the report's
     simulations, baseline first, None for current law, a report of the
     baseline alone or a simulation that is gone, for the checks before the
-    simulation service is asked.
+    simulation service is asked. ``include_cliffs``, only for an economy
+    report, also starts a cliff calculation for each side's simulation run
+    that has none, or whose newest one failed; it is sent only when true.
     """
 
     country_id: str
@@ -435,6 +442,7 @@ class ReportRerunInput:
     kind: ReportRerunKind
     force: bool
     policy_ids: tuple[UUID | None, ...]
+    include_cliffs: bool = False
 
 
 class SimulationServiceClient(Protocol):

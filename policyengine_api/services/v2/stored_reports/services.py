@@ -18,10 +18,7 @@ result.
 The result is rebuilt from the run's result rows once it has succeeded; a
 local-area report's (a UK-wide or nation report on the dataset its catalog
 version gives local areas) also lists its withheld area codes. An economy
-report's read also says how far the cliff calculations of the run's two
-simulation runs have got, whatever the run's status, and the result's cliff
-impact is theirs once both have succeeded: a run's cliffs are calculated
-apart from it, and never read from the report run's own cliff columns. A
+report's read also gives its run's cliffs (``ReportCliffsRead``). A
 budget-window report's run is a budget-window run, read with its years;
 once that run has succeeded, its result is the budget-window format,
 rebuilt from each year's budget rows. Reading a
@@ -135,6 +132,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
     RerunReportUnreadableError,
     require_admin_to_force,
+    require_cliffs_available,
     require_reform_run,
     require_report,
     require_report_run,
@@ -680,6 +678,7 @@ class V2StoredReportService:
         country_id: str,
         report_id: UUID,
         force: bool,
+        include_cliffs: bool = False,
         requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         """Run the country's report again; return it with the run the request ended on.
@@ -691,14 +690,16 @@ class V2StoredReportService:
         on the current versions; with it, both are calculated again (a budget
         window's new run then recalculates each year). A household report's
         sides are always calculated again. Only an admin user may force a
-        re-run. With a ``requester``, it is
+        re-run; ``include_cliffs`` asks for an economy report run's cliffs
+        too. With a ``requester``, it is
         checked before the simulation service is asked, and the request is
         recorded for its user (trigger ``manual``, forced or not) once the
         service has answered: that run, or each year's report run of a budget
         window's. Raise StoredReportNotFoundError when the country has no such
         report, ForcedRerunRequiresSignInError for a forced re-run naming no
-        user and ForcedRerunRequiresAdminError for one by a user below admin,
-        both before the simulation service is asked, ReportStorageError when
+        user, ForcedRerunRequiresAdminError for one by a user below admin and
+        CliffsNotAvailableError for a household report's or window's cliffs,
+        each before the simulation service is asked, ReportStorageError when
         it cannot be read, the recorder's check's
         errors, the submission's checks' and the simulation service's errors
         (see ``SimulationSubmissionService.rerun_report``),
@@ -715,6 +716,7 @@ class V2StoredReportService:
         recording = self._run_recording(requester)
         if force:
             require_admin_to_force(None if recording is None else recording.requester)
+        require_cliffs_available(kind, include_cliffs=include_cliffs)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -722,6 +724,7 @@ class V2StoredReportService:
                 kind=kind,
                 force=force,
                 policy_ids=report_policy_ids(stored),
+                include_cliffs=include_cliffs,
             )
         )
         if kind != "budget_window":
