@@ -1047,10 +1047,10 @@ It creates `cliff_impacts`, one row per cliff calculation of a simulation run:
 - `uq_cliff_impacts_unfailed`, a partial unique index on `simulation_run_id`
   where `status <> 'failed'` (also declared for SQLite): a run has at most one
   calculation that hasn't failed, and so at most one result. The simulation
-  service starts one with `INSERT ... ON CONFLICT (simulation_run_id) WHERE
-  status <> 'failed' DO NOTHING`, so two requests at once start one
-  calculation and the second joins it. A failed calculation never counts: it
-  stays as a record, and the next request inserts another.
+  service is to start one with `INSERT ... ON CONFLICT (simulation_run_id)
+  WHERE status <> 'failed' DO NOTHING`, so that two requests at once start
+  one calculation and the second joins it. A failed calculation never counts:
+  it stays as a record, and the next request inserts another.
 - An index on `(status, started_at)`, as `simulation_runs` has, for finding
   unfinished calculations by age, as the simulation API's stuck-run sweep
   does for runs: a calculation whose worker ended without recording its
@@ -1064,8 +1064,10 @@ status, Modal call ID, error and completion columns; the Modal worker may read
 them and update their state and result columns, never insert them; the
 runtime role may read them; neither simulation role may change the run a row
 names or delete a row. The reconcile step after each schema upgrade grants
-them. `report_runs`' four cliff columns stay until a later revision drops
-them, once the Public API reads cliffs from here.
+them. Until the simulation API writes the table, no run has a cliff
+calculation, and its cliffs stay refused. `report_runs`' four cliff columns
+stay until a later revision drops them, once the Public API reads cliffs from
+here.
 
 It has one post-generation correction, commented in the revision: `status`
 reuses the baseline's `v2_simulation_status` type
