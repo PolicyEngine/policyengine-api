@@ -485,8 +485,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     401: error_response(UNAUTHENTICATED_REQUESTER),
     403: error_response(MACHINE_REQUESTER),
     404: error_response(
-        "A policy the report names, or a household report's household, is not "
-        "stored in the country."
+        "A policy or dynamic the report names, or a household report's "
+        "household, is not stored in the country."
     ),
     413: error_response("The request body exceeds 16 KiB."),
     422: {
@@ -497,10 +497,11 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "country has no economy reports (such as a household-only country), "
             "for an economy report or budget window, or no household "
             "calculations, for a household report; a household "
-            "report's household has no default year; a policy the report names "
-            "sets parameters the running catalog version does not have "
-            "(code missing_parameters, which names them; the baseline's policy is "
-            "checked first); or the simulation service cannot run the report: its "
+            "report's household has no default year; a policy or dynamic the "
+            "report names sets parameters the running catalog version does not "
+            "have (code missing_parameters, which names them; the policies are "
+            "checked before the dynamics, the baseline's first); or the "
+            "simulation service cannot run the report: its "
             "422, or its 400 for a region, dataset or dynamic it does not have. The "
             "message says which; for the simulation service's refusal, it gives "
             "the service's code, when it gave one, and its reason, but not its "

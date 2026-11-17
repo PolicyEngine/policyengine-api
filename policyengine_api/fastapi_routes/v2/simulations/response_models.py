@@ -126,15 +126,16 @@ READ_RESPONSES: dict[int | str, dict[str, Any]] = {
 CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: error_response("The body and query name different countries."),
     404: error_response(
-        "The policy the simulation names is not stored in the country."
+        "The policy or dynamic the simulation names is not stored in the country."
     ),
     413: error_response("The request body exceeds 16 KiB."),
     422: {
         "model": V2MissingParametersErrorResponse | V2ErrorResponse,
         "description": (
             "The request does not match the schema; the country has no economy "
-            "calculations; the policy sets parameters the running catalog version "
-            "does not have (code missing_parameters, which names them); or the "
+            "calculations; the policy or dynamic sets parameters the running "
+            "catalog version does not have (code missing_parameters, which names "
+            "them; the policy is checked first); or the "
             "simulation service cannot run the simulation: its 422, or its 400 "
             "for a region, dataset or dynamic it does not have. The message says "
             "which; for the simulation service's refusal, it gives the service's "
