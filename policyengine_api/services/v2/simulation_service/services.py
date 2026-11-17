@@ -13,9 +13,9 @@ economy simulation, economy report or budget window then has each dynamic it
 names checked the same way, through the same service as ``/v2/dynamics``
 (none means no assumptions beyond the model's defaults):
 ``require_runnable_dynamics``.
-Only then is the simulation service asked. The submission's region and its
-dataset are checked by the simulation service, which reads them in the
-catalog version its default worker runs.
+Only then is the simulation service asked. The submission's region is
+checked by the simulation service, which reads it, and the region's dataset,
+in the catalog version its default worker runs.
 
 A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),

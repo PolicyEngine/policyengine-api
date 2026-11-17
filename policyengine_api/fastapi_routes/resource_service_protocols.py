@@ -136,24 +136,16 @@ class V2PolicyResourceService(Protocol):
 
 
 class V2DynamicResourceService(Protocol):
-    """Route-independent native dynamic operations for one request."""
+    """Route-independent native dynamic operations, stored as policies are."""
 
     def create_dynamic(
-        self,
-        dynamic_input: NativeDynamicCreationInput,
+        self, dynamic_input: NativeDynamicCreationInput
     ) -> NativeDynamicCreation:
-        """Store the dynamic, or return the identical one already stored.
-
-        Dynamics are immutable and deduplicated by canonical content hash, as
-        policies are; ``created`` says whether this call inserted the dynamic.
-        """
+        """Store the dynamic, or return the identical one; ``created`` says which."""
         ...
 
     def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
-        """Return one dynamic of the country with its parameter values.
-
-        Raise ``DynamicNotFoundError`` when no such dynamic exists in that country.
-        """
+        """Return the country's dynamic, or raise ``DynamicNotFoundError``."""
         ...
 
 
@@ -259,6 +251,20 @@ class V2StoredReportResourceService(Protocol):
 
         Each is read as ``get_report`` reads it without a run, as the
         requester sees it.
+        """
+        ...
+
+    def search_reports(
+        self,
+        *,
+        country_id: str,
+        dataset_independent_key: str,
+        requester: AccountPrincipal | None = None,
+    ) -> tuple[StoredReportSummaryRead, ...]:
+        """Return the country's reports with the dataset-independent key, newest first.
+
+        At most ``MAXIMUM_LISTED_REPORTS``, the ones created last, each read
+        as ``list_reports`` reads it.
         """
         ...
 

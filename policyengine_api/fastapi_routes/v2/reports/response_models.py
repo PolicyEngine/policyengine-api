@@ -18,6 +18,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
 from policyengine_api.fastapi_routes.v2.simulation_resources_support import (
     error_response,
 )
+from policyengine_api.services.v2.simulation_service.types import ReportDataSource
 from policyengine_api.services.v2.stored_reports.budget_window_results.types import (
     BudgetWindowResult,
 )
@@ -90,13 +91,18 @@ class ReportDefinitionItem(StrictReportAPIModel):
     a report the simulation service shares between requests records no one
     caller's. ``current_versions`` are the versions the Public API runs now,
     so a run on other versions is out of date. ``options`` are the options
-    the report was created with.
+    the report was created with. ``dataset_independent_key`` is the
+    simulation service's key for the report's definition without its
+    dataset, which a national report shares with its local-area report: find
+    reports by it with ``GET /v2/reports?dataset_independent_key=``. It is
+    null for a report stored before the keys.
     """
 
     id: UUID
     country_id: str
     label: str | None
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     baseline_simulation: ReportSimulationItem | None
     reform_simulation: ReportSimulationItem | None
@@ -108,16 +114,23 @@ class ReportDefinitionItem(StrictReportAPIModel):
 class ReportSummaryItem(ReportDefinitionItem):
     """An economy report comparing a baseline and a reform simulation.
 
-    Both simulations use the region and dataset named. ``run`` is the run
-    the read answers: the one it names, else the requesting user's newest
-    recorded run, else the newest succeeded run that wasn't forced, else the
-    newest run that wasn't forced, whatever its versions. ``status`` is that
-    run's, or ``not_run`` without one.
+    Both simulations use the region and dataset named. ``data_source`` is
+    ``local_area_dataset`` for a local-area report: a UK-wide or nation
+    report on the dataset the catalog version gives local areas, whose
+    result also has each constituency's and local authority's impact and the
+    codes of those withheld. A request with that data_source creates one,
+    but the request's field isn't stored: the read derives it from the
+    report's region and dataset. It is null for every other report.
+    ``run`` is the run the read answers: the one it names, else the
+    requesting user's newest recorded run, else the newest succeeded run
+    that wasn't forced, else the newest run that wasn't forced, whatever its
+    versions. ``status`` is that run's, or ``not_run`` without one.
     """
 
     kind: Literal["economy"]
     region_code: str | None
     dataset_name: str | None
+    data_source: ReportDataSource | None
     status: Literal["not_run", "pending", "running", "succeeded", "failed"]
     run: ReportRunItem | None
 
@@ -272,7 +285,8 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     ``current_versions`` are the versions the Public API runs now, so a run
     on other versions is out of date. ``options`` are the options the report
     was created with. ``label`` and ``description`` are the requesting user's
-    saved report's, null otherwise.
+    saved report's, null otherwise. ``dataset_independent_key`` is as
+    ``ReportDefinitionItem`` describes it.
     """
 
     id: UUID
@@ -280,6 +294,7 @@ class BudgetWindowReportSummaryItem(StrictReportAPIModel):
     kind: Literal["budget_window"]
     label: str | None
     description: str | None
+    dataset_independent_key: str | None
     year: int | None
     budget_window_size: int
     region_code: str | None
@@ -348,7 +363,11 @@ class ReportDetailResult(StrictReportAPIModel):
 
 
 class ReportListResult(StrictReportAPIModel):
-    """The listed reports in ``items``, in the order named, without results."""
+    """The listed reports in ``items``, without results.
+
+    Reports chosen by ``report_id`` are in the order named; reports found by
+    ``dataset_independent_key`` are newest created first.
+    """
 
     items: list[
         Annotated[
@@ -515,9 +534,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": (
             "The simulation service created nothing: it cannot be reached or is not "
             "configured; it answered a readable 503 naming no record, and the message "
-            "gives its status and code; it answered a 400 naming no region, dataset or "
-            "dynamic of the caller's (such as a catalog version missing while a "
-            "release deploys), and the message gives its code and reason; it "
+            "gives its status and code; it answered a 400 for anything but a missing "
+            "region, dynamic or region dataset (such as a catalog version missing "
+            "while a release deploys), and the message gives its code and reason; it "
             "answered 400 or 422 in a shape the Public API cannot read; or it answered "
             "401, 403, 404, 405, 413 or 429, which are sent before its route runs. Or "
             "the v2 database, or the catalog the policies are checked against, cannot "

@@ -18,6 +18,7 @@ from policyengine_api.data.v2.models import (
     LocalAuthorityImpact,
     Poverty,
     ProgramStatistics,
+    WithheldAreaCode,
 )
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultRows,
@@ -38,11 +39,14 @@ def read_economy_result_rows(
     country_id: str,
     report_run: ReportRun,
     reform_simulation_run_id: UUID,
+    on_local_area_dataset: bool,
 ) -> EconomyResultRows:
     """Return every result row of ``report_run``, one query per result table.
 
     The comparison tables' rows are the report run's; the poverty and
     inequality rows are those of its baseline and reform simulation runs.
+    The withheld area codes are read only for a local-area report's run
+    (``on_local_area_dataset``), whose writer records them.
     """
     report_run_id = report_run.id
     simulation_run_ids = (
@@ -136,5 +140,17 @@ def read_economy_result_rows(
                     LocalAuthorityImpact.report_run_id == report_run_id
                 )
             )
+        ),
+        on_local_area_dataset=on_local_area_dataset,
+        withheld_area_codes=(
+            tuple(
+                session.exec(
+                    select(WithheldAreaCode).where(
+                        WithheldAreaCode.report_run_id == report_run_id
+                    )
+                )
+            )
+            if on_local_area_dataset
+            else ()
         ),
     )

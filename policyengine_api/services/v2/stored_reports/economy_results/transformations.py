@@ -22,13 +22,17 @@ This reverses the simulation service's writer
 - ``congressional_district_impact``, ``constituency_impact`` and
   ``local_authority_impact`` from their tables, in district or area code
   order.
+- ``constituency_withheld_codes`` and ``local_authority_withheld_codes``,
+  for a local-area report only, from ``withheld_area_codes``, sorted.
 - ``cliff_impact``, ``spm_provenance``, ``data_version`` and
   ``model_version`` from the report run's own columns; the SPM receipts are
   read as ``SPMComparisonProvenance``.
 
 An optional part with no rows is null. The writer stores no rows for an empty
 list either, so a UK result whose areas were all withheld reads back with
-null areas, and a UK wealth breakdown without deciles as no breakdown.
+null areas, and a UK wealth breakdown without deciles as no breakdown. A
+local-area report's run always calculates both area levels, so its levels
+read as lists, empty when every area was withheld.
 """
 
 from __future__ import annotations
@@ -247,6 +251,8 @@ def economy_result(rows: EconomyResultRows) -> EconomyResult:
         constituency_impact=_constituencies(rows),
         local_authority_impact=_local_authorities(rows),
         congressional_district_impact=_districts(rows.congressional_district_impacts),
+        constituency_withheld_codes=_withheld_codes(rows, "constituency"),
+        local_authority_withheld_codes=_withheld_codes(rows, "local_authority"),
         cliff_impact=_cliff_impact(report_run),
     )
 
@@ -515,9 +521,28 @@ def _area_values(row: object) -> dict[str, Any]:
     }
 
 
+def _no_area_rows(rows: EconomyResultRows) -> list[Any] | None:
+    """Return a level with no rows: empty for a local-area report, else null."""
+    return [] if rows.on_local_area_dataset else None
+
+
+def _withheld_codes(
+    rows: EconomyResultRows, area_type: Literal["constituency", "local_authority"]
+) -> list[str] | None:
+    """Return a local-area report's sorted withheld codes of a level, else None.
+
+    A row's ``area_type`` is a ``StrEnum``, equal to its value.
+    """
+    if not rows.on_local_area_dataset:
+        return None
+    return sorted(
+        row.code for row in rows.withheld_area_codes if row.area_type == area_type
+    )
+
+
 def _constituencies(rows: EconomyResultRows) -> list[ConstituencyImpact] | None:
     if not rows.constituency_impacts:
-        return None
+        return _no_area_rows(rows)
     return [
         ConstituencyImpact(
             constituency_code=row.constituency_code,
@@ -532,7 +557,7 @@ def _constituencies(rows: EconomyResultRows) -> list[ConstituencyImpact] | None:
 
 def _local_authorities(rows: EconomyResultRows) -> list[LocalAuthorityImpact] | None:
     if not rows.local_authority_impacts:
-        return None
+        return _no_area_rows(rows)
     return [
         LocalAuthorityImpact(
             local_authority_code=row.local_authority_code,

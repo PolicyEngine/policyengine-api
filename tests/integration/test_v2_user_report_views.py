@@ -320,6 +320,39 @@ def test_a_reports_label_and_description_are_the_users_saved_reports(
     assert (anonymous_item["label"], anonymous_item["description"]) == (None, None)
 
 
+def test_a_search_by_key_reads_each_report_as_the_user_sees_it(
+    owner_engine: Engine,
+    catalog: CatalogRows,
+    runtime_sessions: Any,
+    browsers: list[UUID],
+) -> None:
+    saver, _ = browsers
+    dataset_independent_key = "b" * 64
+    with owner_engine.begin() as connection:
+        report = store_report(
+            connection, catalog, dataset_independent_key=dataset_independent_key
+        )
+    store_saved_report(owner_engine, user_id=saver, report_id=report.report_id)
+    client = client_for(
+        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+    )
+    search = (
+        f"/v2/reports?country_id=us&dataset_independent_key={dataset_independent_key}"
+    )
+
+    savers_found = client.get(search, headers=as_browser(saver)).json()["result"][
+        "items"
+    ]
+    anonymous_found = client.get(search).json()["result"]["items"]
+
+    assert [(item["id"], item["label"]) for item in savers_found] == [
+        (str(report.report_id), "My report")
+    ]
+    assert [(item["id"], item["label"]) for item in anonymous_found] == [
+        (str(report.report_id), None)
+    ]
+
+
 def test_a_malformed_browser_credential_on_a_read_is_refused(
     owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
 ) -> None:

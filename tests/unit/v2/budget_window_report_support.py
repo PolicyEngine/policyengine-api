@@ -99,6 +99,7 @@ def budget_window_summary_fields(**changes: Any) -> dict[str, Any]:
         "kind": "budget_window",
         "label": "Expanded child tax credit, 2026 to 2027",
         "description": None,
+        "dataset_independent_key": None,
         "year": 2026,
         "budget_window_size": 2,
         "region_code": "us",

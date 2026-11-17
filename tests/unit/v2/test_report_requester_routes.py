@@ -86,8 +86,9 @@ def test_a_malformed_browser_credential_is_refused_before_the_service() -> None:
         ("POST", f"/v2/reports/{REPORT_ID}/runs?country_id=us", {}),
         ("GET", f"/v2/reports/{REPORT_ID}?country_id=us", None),
         ("GET", f"/v2/reports?country_id=us&report_id={REPORT_ID}", None),
+        ("GET", f"/v2/reports?country_id=us&dataset_independent_key={'a' * 64}", None),
     ],
-    ids=["create", "rerun", "one-report", "report-list"],
+    ids=["create", "rerun", "one-report", "report-list", "report-search"],
 )
 def test_a_browser_credential_naming_a_signed_in_user_answers_401(
     method: str, path: str, body: dict[str, object] | None
