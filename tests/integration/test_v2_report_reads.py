@@ -134,7 +134,7 @@ def _as_json(value: Any) -> Any:
     [("us", us_economy_result()), ("uk", uk_economy_result())],
     ids=["us", "uk"],
 )
-def test_a_report_reads_its_newest_run_and_that_runs_result(
+def test_a_report_reads_its_newest_unforced_success_and_that_runs_result(
     owner_engine: Engine,
     catalogs: dict[str, CatalogRows],
     client: TestClient,
@@ -142,19 +142,20 @@ def test_a_report_reads_its_newest_run_and_that_runs_result(
     output: dict[str, Any],
 ) -> None:
     catalog = catalogs[country]
-    older_output = json.loads(json.dumps(output))
-    older_output["budget"]["tax_revenue_impact"] = 1.0
+    forced_output = json.loads(json.dumps(output))
+    forced_output["budget"]["tax_revenue_impact"] = 1.0
     with owner_engine.begin() as connection:
         report = store_report(connection, catalog)
-        store_report_run(
+        newest = store_report_run(
             connection,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS),
-            result=older_output,
+            result=output,
         )
-        # On the same versions, the newer run is a forced re-run's.
-        newest = store_report_run(
+        # On the same versions, the newer run is a forced re-run's, which is
+        # never a read's default run.
+        store_report_run(
             connection,
             catalog,
             report,
@@ -163,7 +164,7 @@ def test_a_report_reads_its_newest_run_and_that_runs_result(
                 created_at=STARTED_AT + timedelta(days=1),
                 forced=True,
             ),
-            result=output,
+            result=forced_output,
         )
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id={country}")
@@ -193,7 +194,7 @@ def test_a_report_reads_its_newest_run_and_that_runs_result(
     assert item["kind"] == "economy"
 
 
-def test_a_newest_run_still_running_has_no_result_even_after_an_older_success(
+def test_an_older_success_is_read_before_a_newer_run_still_running(
     owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
 ) -> None:
     catalog = catalogs["us"]
@@ -221,9 +222,9 @@ def test_a_newest_run_still_running_has_no_result_even_after_an_older_success(
         "item"
     ]
 
-    assert item["status"] == "running"
-    assert item["run"]["completed_at"] is None
-    assert item["result"] is None
+    assert item["status"] == "succeeded"
+    assert item["run"]["policyengine_version"] == "4.1.0"
+    assert item["result"] is not None
 
 
 def test_a_failed_newest_run_says_why_without_a_result(
@@ -268,7 +269,8 @@ def test_a_report_with_no_run_answers_its_definition(
     assert item["status"] == "not_run"
     assert item["run"] is None
     assert item["result"] is None
-    assert item["label"] == "uk reform"
+    # A label is the requesting user's saved report's; this read names no user.
+    assert item["label"] is None
     assert item["year"] == 2026
     assert item["dataset_name"] == "enhanced_frs_2023_24"
 
@@ -408,7 +410,7 @@ def test_a_simulation_with_no_run_answers_its_definition(
     assert item["year"] == 2026
 
 
-def test_of_two_report_runs_created_together_the_larger_id_is_the_newest(
+def test_of_two_unsucceeded_runs_created_together_the_larger_id_is_read(
     owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
 ) -> None:
     catalog = catalogs["us"]
@@ -429,8 +431,9 @@ def test_of_two_report_runs_created_together_the_larger_id_is_the_newest(
             connection,
             catalog,
             report,
-            RunSettings(versions=CURRENT_VERSIONS, run_id=SMALLER_RUN_ID),
-            result=us_economy_result(),
+            RunSettings(
+                versions=CURRENT_VERSIONS, status="pending", run_id=SMALLER_RUN_ID
+            ),
         )
 
     read = client.get(f"/v2/reports/{report.report_id}?country_id=us")

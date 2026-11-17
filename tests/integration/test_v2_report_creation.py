@@ -92,7 +92,7 @@ class StoringSimulationService:
     """Store what the simulation service would create, and answer with its IDs.
 
     With ``answer_unstored``, it answers with IDs it stored nothing for, and
-    keeps them in ``unstored_ids``.
+    keeps them in ``unstored_ids`` (a report's run in ``unstored_run_ids``).
     """
 
     engine: Engine
@@ -101,13 +101,16 @@ class StoringSimulationService:
     reports: list[EconomyReportCreationInput] = field(default_factory=list)
     simulations: list[EconomySimulationCreationInput] = field(default_factory=list)
     unstored_ids: list[UUID] = field(default_factory=list)
+    unstored_run_ids: list[UUID] = field(default_factory=list)
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         self.reports.append(report)
         if self.answer_unstored:
             self.unstored_ids.append(uuid4())
+            self.unstored_run_ids.append(uuid4())
             return SubmittedReport(
-                report_id=self.unstored_ids[-1], report_run_id=uuid4()
+                report_id=self.unstored_ids[-1],
+                report_run_id=self.unstored_run_ids[-1],
             )
         with self.engine.begin() as connection:
             stored = store_report(connection, self.catalog)
@@ -271,14 +274,16 @@ def test_a_created_report_that_cannot_be_read_back_answers_its_id(
 
     assert response.status_code == 502
     (report_id,) = simulation_service.unstored_ids
+    (run_id,) = simulation_service.unstored_run_ids
     assert response.json() == {
         "status": "error",
         "message": (
             f"The simulation service created report {report_id}, but it could "
             f"not be read back. Read it with GET /v2/reports/{report_id}"
-            "?country_id=us rather than submitting it again."
+            f"?country_id=us&run_id={run_id} rather than submitting it again."
         ),
         "report_id": str(report_id),
+        "run_id": str(run_id),
     }
 
 

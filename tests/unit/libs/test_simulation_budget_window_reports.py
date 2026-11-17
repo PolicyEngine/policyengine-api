@@ -112,8 +112,6 @@ def test_a_budget_window_is_posted_to_reports_and_its_window_run_returned(
     assert service.sent_body() == {
         "country": "us",
         "report_type": "budget_window",
-        "label": "Expanded child tax credit, ten years",
-        "description": None,
         "year": 2026,
         "budget_window_size": 10,
         "region_code": "us",
@@ -135,7 +133,7 @@ def test_a_budget_window_sends_its_spm_settings_only_when_given() -> None:
 
     body = service.sent_body()
     assert body["dataset_name"] == "enhanced_cps_2024"
-    assert body["description"] == "Doubles the credit"
+    assert "description" not in body
     assert body["reform"] == {
         "policy_id": str(POLICY_ID),
         "dynamic_id": str(DYNAMIC_ID),

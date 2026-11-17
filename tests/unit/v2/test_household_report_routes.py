@@ -155,7 +155,8 @@ def test_a_household_report_of_the_baseline_alone_can_be_created() -> None:
 @pytest.mark.parametrize(
     "changes",
     [
-        pytest.param({"label": None}, id="no-label"),
+        # A label is optional and unused, but one that is sent is checked.
+        pytest.param({"label": ""}, id="empty-label"),
         # The report is for the household's default year, so it names none.
         pytest.param({"year": 2026}, id="year"),
         pytest.param({"household_id": None}, id="no-household"),
@@ -357,10 +358,11 @@ def test_the_create_routes_schema_offers_the_household_kind() -> None:
     assert set(household_request["required"]) >= {
         "country_id",
         "kind",
-        "label",
         "household_id",
         "baseline",
     }
+    # A report's name is each user's saved report's.
+    assert "label" not in household_request["required"]
     assert "year" not in household_request["properties"]
     # Each side's failure is read from the household function's failure
     # document, which always names its code.

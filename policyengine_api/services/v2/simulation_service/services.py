@@ -65,6 +65,7 @@ if TYPE_CHECKING:
         ReportRerunInput,
         ReportRerunKind,
         SimulationServiceClient,
+        StartedReportRun,
         SubmittedBudgetWindow,
         SubmittedReport,
         SubmittedSimulation,
@@ -221,8 +222,11 @@ class SimulationSubmissionService:
         )
         return self._client_factory().submit_budget_window(report)
 
-    def rerun_report(self, rerun: ReportRerunInput) -> None:
-        """Check the stored report, then have the simulation service run it again.
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
+        """Check the stored report, have the simulation service run it again.
+
+        Return the run the simulation service named: a new one, or one the
+        request joined.
 
         The country is checked as for a new report of the report's kind, then
         the policies of the report's simulations, the baseline's first. A
@@ -238,7 +242,7 @@ class SimulationSubmissionService:
             rerun.policy_ids,
             require_country=_country_check(rerun.kind),
         )
-        self._client_factory().rerun_report(rerun)
+        return self._client_factory().rerun_report(rerun)
 
 
 def _country_check(kind: ReportRerunKind) -> CountryCheck:

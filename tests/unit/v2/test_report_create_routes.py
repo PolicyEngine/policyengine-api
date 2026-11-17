@@ -48,6 +48,7 @@ from tests.unit.v2.stored_report_support import (
     CURRENT_VERSIONS,
     POLICY_ID,
     REPORT_ID,
+    REPORT_RUN_ID,
     FakeReportService,
     FakeSimulationService,
     report_route_client,
@@ -138,7 +139,8 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
 @pytest.mark.parametrize(
     "body",
     [
-        {key: value for key, value in report_body().items() if key != "label"},
+        # A label is optional and unused, but one that is sent is checked.
+        report_body(label=""),
         report_body(kind="household"),
         report_body(year=2201),
         report_body(region_code="two words"),
@@ -148,7 +150,7 @@ def test_a_report_body_naming_another_country_is_refused() -> None:
         report_body(reform={"policy_id": "not-a-uuid"}),
     ],
     ids=[
-        "no-label",
+        "empty-label",
         "household-kind",
         "year-too-late",
         "region-with-space",
@@ -315,7 +317,9 @@ def test_simulation_creation_failures_answer_typed_errors(
 
 
 def test_a_created_report_that_cannot_be_read_back_answers_its_id() -> None:
-    error = CreatedReportUnreadableError(report_id=REPORT_ID, country_id="us")
+    error = CreatedReportUnreadableError(
+        report_id=REPORT_ID, run_id=REPORT_RUN_ID, country_id="us"
+    )
     client = report_route_client(reports=FakeReportService(error=error))
 
     response = client.post("/v2/reports?country_id=us", json=report_body())
@@ -326,9 +330,11 @@ def test_a_created_report_that_cannot_be_read_back_answers_its_id() -> None:
         "message": (
             f"The simulation service created report {REPORT_ID}, but it could "
             f"not be read back. Read it with GET /v2/reports/{REPORT_ID}"
-            "?country_id=us rather than submitting it again."
+            f"?country_id=us&run_id={REPORT_RUN_ID} rather than submitting it "
+            "again."
         ),
         "report_id": str(REPORT_ID),
+        "run_id": str(REPORT_RUN_ID),
     }
 
 
@@ -460,40 +466,40 @@ def test_the_openapi_document_gives_the_missing_parameters_refusal(path: str) ->
 
 
 @pytest.mark.parametrize(
-    ("path", "status_code", "schema", "id_field"),
+    ("path", "status_code", "schema", "id_fields"),
     [
         pytest.param(
             "/v2/reports",
             "502",
             "CreatedReportUnreadableResponse",
-            "report_id",
+            ("report_id", "run_id"),
             id="report-502",
         ),
         pytest.param(
             "/v2/simulations",
             "502",
             "CreatedSimulationUnreadableResponse",
-            "simulation_id",
+            ("simulation_id",),
             id="simulation-502",
         ),
         pytest.param(
             "/v2/reports",
             "503",
             "UnavailableAfterReportCreatedResponse",
-            "report_id",
+            ("report_id",),
             id="report-503",
         ),
         pytest.param(
             "/v2/simulations",
             "503",
             "UnavailableAfterSimulationCreatedResponse",
-            "simulation_id",
+            ("simulation_id",),
             id="simulation-503",
         ),
     ],
 )
 def test_the_openapi_document_gives_the_created_records_id(
-    path: str, status_code: str, schema: str, id_field: str
+    path: str, status_code: str, schema: str, id_fields: tuple[str, ...]
 ) -> None:
     document = report_route_client().get("/v2/openapi.json").json()
 
@@ -503,7 +509,7 @@ def test_the_openapi_document_gives_the_created_records_id(
     ]["schema"]["anyOf"]
     assert document["components"]["schemas"][schema]["required"] == [
         "message",
-        id_field,
+        *id_fields,
     ]
 
 

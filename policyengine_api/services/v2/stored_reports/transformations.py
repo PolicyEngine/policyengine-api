@@ -95,8 +95,8 @@ def _report_definition(
     return ReportDefinitionRead(
         id=report.id,
         country_id=report.country,
-        label=report.label,
-        description=report.description,
+        label=rows.saved_report_name,
+        description=rows.saved_report_description,
         year=report.year,
         baseline_simulation=_simulation(rows.baseline_simulation),
         reform_simulation=_simulation(rows.reform_simulation),
@@ -106,11 +106,11 @@ def _report_definition(
     )
 
 
-def _newest_run(
+def _run_and_status(
     rows: StoredReportRows,
 ) -> tuple[ReportStatusName, ReportRunRead | None]:
-    """Return the report's status and newest run: ``not_run`` and None without one."""
-    run = rows.newest_run
+    """Return the report's status and the run read: ``not_run`` and None without one."""
+    run = rows.run
     if run is None:
         return "not_run", None
     return run.status.value, report_run_read(run)
@@ -119,8 +119,8 @@ def _newest_run(
 def report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> ReportSummaryRead:
-    """Return an economy report's definition and newest run, without a result."""
-    status, run = _newest_run(rows)
+    """Return an economy report's definition and the run read, without a result."""
+    status, run = _run_and_status(rows)
     return ReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="economy",
@@ -137,7 +137,7 @@ def report_read(
     current_versions: PackageVersions,
     result: EconomyResult | None,
 ) -> ReportRead:
-    """Return an economy report with its newest run's result, if it has one."""
+    """Return an economy report with the run read's result, if it has one."""
     summary = report_summary_read(rows, current_versions=current_versions)
     return ReportRead(**vars(summary), result=result)
 
@@ -145,7 +145,7 @@ def report_read(
 def household_report_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> HouseholdReportSummaryRead:
-    """Return a household report's definition and newest run, without a result.
+    """Return a household report's definition and the run read, without a result.
 
     Raise ValueError for a report naming no household, which is not a
     household report.
@@ -154,7 +154,7 @@ def household_report_summary_read(
     if report.household_id is None:
         msg = f"Report {report.id} is not a household report"
         raise ValueError(msg)
-    status, run = _newest_run(rows)
+    status, run = _run_and_status(rows)
     return HouseholdReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="household",
@@ -171,7 +171,7 @@ def household_report_read(
     result: HouseholdReportResult | None,
     failure: HouseholdReportFailure | None,
 ) -> HouseholdReportRead:
-    """Return a household report with its newest run's outcome, if it has one."""
+    """Return a household report with the run read's outcome, if it has one."""
     summary = household_report_summary_read(rows, current_versions=current_versions)
     return HouseholdReportRead(**vars(summary), result=result, failure=failure)
 
@@ -212,7 +212,7 @@ def budget_window_run_read(
 def budget_window_summary_read(
     rows: StoredReportRows, *, current_versions: PackageVersions
 ) -> BudgetWindowReportSummaryRead:
-    """Return a budget-window report's definition and newest run, without a result.
+    """Return a budget-window report's definition and the run read, without a result.
 
     Raise ValueError for a report with no window size, which is not a budget
     window.
@@ -221,7 +221,7 @@ def budget_window_summary_read(
     if report.budget_window_size is None:
         msg = f"Report {report.id} is not a budget window"
         raise ValueError(msg)
-    window_run = rows.newest_budget_window_run
+    window_run = rows.budget_window_run
     return BudgetWindowReportSummaryRead(
         **vars(_report_definition(rows, current_versions=current_versions)),
         kind="budget_window",
@@ -243,7 +243,7 @@ def budget_window_read(
     current_versions: PackageVersions,
     result: window_result_types.BudgetWindowResult | None,
 ) -> BudgetWindowReportRead:
-    """Return a budget-window report with its newest run's result, if it has one."""
+    """Return a budget-window report with the run read's result, if it has one."""
     summary = budget_window_summary_read(rows, current_versions=current_versions)
     return BudgetWindowReportRead(**vars(summary), result=result)
 
