@@ -11,24 +11,35 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from policyengine_api.services.v2.dynamics.services import (
-    resolve_dynamic_creation_input,
-)
-from policyengine_api.services.v2.dynamics.types import (
-    DynamicCreationInput,
-    ResolvedDynamicCreationInput,
-)
-from policyengine_api.services.v2.dynamics.validators import (
-    DynamicSetsPolicyParametersError,
-)
 from pydantic import ValidationError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine
 
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    MetadataCatalogUnavailableError,
+)
 from policyengine_api.data.v2.models import (
     V2_METADATA,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+)
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import (
+    V2DynamicService,
+    resolve_dynamic_creation_input,
+)
+from policyengine_api.services.v2.dynamics.types import (
+    DynamicCreationInput,
+    NativeDynamicCreationInput,
+    ResolvedDynamicCreationInput,
+)
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicSetsPolicyParametersError,
+    DynamicStorageError,
 )
 from policyengine_api.services.v2.policies.services import (
     resolve_policy_creation_input,
@@ -216,3 +227,34 @@ def test_a_policy_without_dynamic_parameters_is_still_bound(
     assert [value.parameter_id for value in resolved.parameter_values] == [
         catalog.parameter_ids[TAX_RATE]
     ]
+
+
+def test_a_dynamic_storage_that_cannot_be_read_is_a_storage_error() -> None:
+    # A database without the v2 tables fails every read with OperationalError.
+    # A create's first read is the catalog query, which reports its own error.
+    engine = create_engine("sqlite://")
+    service = V2DynamicService(
+        DynamicDatabaseSession(sessionmaker(engine, class_=Session)),
+        running_policyengine_version=RUNNING_VERSION,
+    )
+    try:
+        with pytest.raises(DynamicStorageError) as failure:
+            service.get_dynamic(country_id="us", dynamic_id=UUID(int=3))
+        with pytest.raises(MetadataCatalogUnavailableError):
+            service.create_dynamic(
+                NativeDynamicCreationInput(
+                    country_id="us",
+                    tax_benefit_model_id=UUID(int=1),
+                    parameter_values=[
+                        {
+                            "parameter_id": UUID(int=2),
+                            "value": 0.25,
+                            "start_date": "2026-01-01T00:00:00Z",
+                        }
+                    ],
+                )
+            )
+    finally:
+        engine.dispose()
+
+    assert isinstance(failure.value.__cause__, OperationalError)

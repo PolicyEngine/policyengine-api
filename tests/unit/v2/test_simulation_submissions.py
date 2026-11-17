@@ -8,17 +8,18 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from policyengine_api.services.v2.dynamics.types import CheckedDynamicRead
-from policyengine_api.services.v2.dynamics.validators import (
-    DynamicNotFoundError,
-    DynamicParametersMissingError,
-)
 from sqlalchemy.exc import OperationalError
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.dynamics.types import CheckedDynamicRead
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+    DynamicStorageError,
+)
 from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
@@ -484,8 +485,15 @@ def test_policies_are_checked_before_dynamics() -> None:
     assert dynamics.asked == []
 
 
-def test_a_dynamic_read_that_fails_is_a_storage_error() -> None:
-    error = OperationalError("SELECT 1", {}, Exception("connection refused"))
+@pytest.mark.parametrize(
+    "error",
+    [
+        DynamicStorageError("dynamics cannot be read"),
+        OperationalError("SELECT 1", {}, Exception("connection refused")),
+        MetadataCatalogUnavailableError("catalog cannot be queried"),
+    ],
+)
+def test_a_dynamic_read_that_fails_is_a_storage_error(error: Exception) -> None:
     service = submissions(unconfigured_client, dynamics=StoredDynamics(error=error))
 
     with pytest.raises(SubmissionStorageError) as failure:

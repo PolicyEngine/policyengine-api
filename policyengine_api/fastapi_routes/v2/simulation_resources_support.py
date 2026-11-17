@@ -22,6 +22,7 @@ from policyengine_api.fastapi_routes.v2.errors_support import (
     run_v2_operation,
     v2_missing_parameters_response,
 )
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationYearError,
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 # not logged.
 SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
     PolicyNotFoundError,
+    DynamicNotFoundError,
     HouseholdNotFoundError,
     EconomyCalculationsUnsupportedError,
     HouseholdCalculationCountryError,
@@ -69,7 +71,9 @@ SUBMISSION_REFUSALS: tuple[type[Exception], ...] = (
 # the record it created and failed is still a 503, and each create route
 # answers it with the record's ID (``unavailable_after_creation_answer``).
 SUBMISSION_ERROR_MAPPINGS = (
-    V2ErrorMapping((PolicyNotFoundError, HouseholdNotFoundError), 404),
+    V2ErrorMapping(
+        (PolicyNotFoundError, DynamicNotFoundError, HouseholdNotFoundError), 404
+    ),
     V2ErrorMapping(
         (
             EconomyCalculationsUnsupportedError,
@@ -154,8 +158,9 @@ def simulation_resource_operation(
 ) -> OperationT | JSONResponse:
     """Run one service call and answer its failure with a typed v2 error.
 
-    A policy that sets parameters the running catalog version lacks answers
-    422 with code ``missing_parameters``, naming them, whatever the route. A
+    A policy or dynamic that sets parameters the running catalog version
+    lacks answers 422 with code ``missing_parameters``, naming them, whatever
+    the route. A
     failure of a type in ``refusals`` is the caller's to act on and is not
     logged, nor is that 422; any other is logged under ``event``.
     """

@@ -3,6 +3,7 @@
 from typing import get_args
 
 import pytest
+
 from policyengine_api.dynamic_parameters import (
     DYNAMIC_PARAMETER_PREFIXES,
     ConflictingParameterSpellingsError,
@@ -10,7 +11,6 @@ from policyengine_api.dynamic_parameters import (
     is_dynamic_parameter,
     split_legacy_policy_json,
 )
-
 from policyengine_api.supported_countries import SupportedCountryId
 
 UK_OLD_INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.income_elasticity"

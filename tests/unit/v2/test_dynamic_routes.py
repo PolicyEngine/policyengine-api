@@ -8,6 +8,17 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
+
+from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    MetadataCatalogUnavailableError,
+    MetadataCatalogVersionNotFoundError,
+)
+from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.migration_flags import (
+    RouteImplementation,
+    RouteImplementationSettings,
+)
 from policyengine_api.services.v2.dynamics.types import (
     CheckedDynamicRead,
     NativeDynamicCreation,
@@ -18,17 +29,7 @@ from policyengine_api.services.v2.dynamics.validators import (
     DynamicCreationIntegrityError,
     DynamicNotFoundError,
     DynamicSetsPolicyParametersError,
-)
-from sqlalchemy.exc import OperationalError
-
-from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.data.v2.catalog.catalog_selection_validation import (
-    MetadataCatalogVersionNotFoundError,
-)
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.migration_flags import (
-    RouteImplementation,
-    RouteImplementationSettings,
+    DynamicStorageError,
 )
 from policyengine_api.services.v2.policies.types import PolicyParameterValueRead
 from policyengine_api.services.v2.policies.validators import (
@@ -257,7 +258,12 @@ def test_detail_is_country_scoped_and_reports_missing_parameters() -> None:
             "Stored dynamic integrity failed",
         ),
         (
-            OperationalError("SELECT secret", {}, Exception("password")),
+            DynamicStorageError("SELECT secret"),
+            503,
+            "V2 dynamic persistence is unavailable",
+        ),
+        (
+            MetadataCatalogUnavailableError("catalog secret"),
             503,
             "V2 dynamic persistence is unavailable",
         ),
@@ -298,7 +304,7 @@ def test_dynamics_are_neither_listed_nor_changed(method: str, path: str) -> None
 def test_openapi_publishes_the_dynamic_routes_and_their_errors() -> None:
     client, _flask_calls = _client(FakeDynamicService())
 
-    schema = client.get("/openapi.json").json()
+    schema = client.get("/v2/openapi.json").json()
 
     create = schema["paths"]["/v2/dynamics"]["post"]
     detail = schema["paths"]["/v2/dynamics/{dynamic_id}"]["get"]

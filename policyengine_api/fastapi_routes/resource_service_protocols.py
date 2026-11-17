@@ -10,6 +10,11 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.dynamics.types import (
+        CheckedDynamicRead,
+        NativeDynamicCreation,
+        NativeDynamicCreationInput,
+    )
     from policyengine_api.services.v2.household_calculations.types import (
         HouseholdCalculationInput,
         HouseholdCalculationRead,
@@ -127,6 +132,28 @@ class V2PolicyResourceService(Protocol):
         limit: int = 100,
     ) -> CheckedPolicyPage:
         """Return a page of the country's policies, optionally for one model."""
+        ...
+
+
+class V2DynamicResourceService(Protocol):
+    """Route-independent native dynamic operations for one request."""
+
+    def create_dynamic(
+        self,
+        dynamic_input: NativeDynamicCreationInput,
+    ) -> NativeDynamicCreation:
+        """Store the dynamic, or return the identical one already stored.
+
+        Dynamics are immutable and deduplicated by canonical content hash, as
+        policies are; ``created`` says whether this call inserted the dynamic.
+        """
+        ...
+
+    def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
+        """Return one dynamic of the country with its parameter values.
+
+        Raise ``DynamicNotFoundError`` when no such dynamic exists in that country.
+        """
         ...
 
 

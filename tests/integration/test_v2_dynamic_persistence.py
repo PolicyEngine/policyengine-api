@@ -13,12 +13,6 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from policyengine_api.services.v2.dynamics.database_session import (
-    DynamicDatabaseSession,
-)
-from policyengine_api.services.v2.dynamics.services import V2DynamicService
-from policyengine_api.services.v2.dynamics.types import NativeDynamicCreationInput
-from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
@@ -37,6 +31,12 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import V2DynamicService
+from policyengine_api.services.v2.dynamics.types import NativeDynamicCreationInput
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
@@ -380,17 +380,18 @@ def test_a_copy_made_before_the_split_keeps_its_mapping_without_a_dynamic(
         )
         session.add(earlier_copy)
         session.flush()
+        earlier_copy_id = earlier_copy.id
         session.add(
             LegacyPolicyMapping(
                 country_id="us",
                 legacy_policy_id=9301,
-                policy_id=earlier_copy.id,
+                policy_id=earlier_copy_id,
                 source_policy_hash=snapshot.source_policy_hash,
             )
         )
 
     result = _policy_service(runtime_sessions).mirror_legacy_policy(snapshot)
 
-    assert result.policy_id == earlier_copy.id
+    assert result.policy_id == earlier_copy_id
     assert result.dynamic_id is None
     assert result.mapping_created is False

@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 18 |
-| request count | 101 |
+| workflow count | 19 |
+| request count | 103 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -19,7 +19,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check`, `deployment` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
 | `metadata` | `metadata`, `countries`, `datasets`, `economy-options`, `model-catalog`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
-| `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |
+| `policy` | `policy`, `policies`, `dynamics`, `user-policy`, `user-policies` | `policy` | `none` |
 | `household` | `household`, `households`, `household-calculations`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
@@ -48,6 +48,16 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `POST` | `/v2/policies?country_id=us` | 201 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
 | `GET` | `/v2/policies/{policy_id}?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
 | `GET` | `/v2/policies?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+
+### `dynamic_resources_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: Dynamics stored like policies
+
+| Method | Path | Status | Route group | Required headers | Stable response fields |
+| --- | --- | ---: | --- | --- | --- |
+| `POST` | `/v2/dynamics?country_id=us` | 201 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
+| `GET` | `/v2/dynamics/{dynamic_id}?country_id=us` | 200 | `policy` | none | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.tax_benefit_model_id`, `result.item.parameter_values`, `result.item.created_at`, `result.item.updated_at`, `result.item.missing_parameters` |
 
 ### `user_policy_associations_v2`
 

@@ -6,15 +6,11 @@ PostgreSQL's ON CONFLICT ON CONSTRAINT, so the tests record them instead.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from policyengine_api.services.v2.dynamics.types import (
-    DynamicCreationResult,
-    ResolvedDynamicCreationInput,
-)
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
@@ -23,6 +19,11 @@ from policyengine_api.data.v2.models import (
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+)
+from policyengine_api.services.v2.dynamics import services as dynamic_services
+from policyengine_api.services.v2.dynamics.types import (
+    DynamicCreationResult,
+    ResolvedDynamicCreationInput,
 )
 from policyengine_api.services.v2.policies import services as policy_services
 from policyengine_api.services.v2.policies.types import (
@@ -68,12 +69,12 @@ def recorded_writes(monkeypatch) -> RecordedCopyWrites:
         writes.created_dynamics.append(dynamic_input)
         return DynamicCreationResult(dynamic_id=COPIED_DYNAMIC_ID, created=True)
 
-    def record_mapping(_session, **mapping_fields):
-        writes.created_mappings.append(mapping_fields)
+    def record_mapping(_session, mapping):
+        writes.created_mappings.append(asdict(mapping))
         return MAPPING_ID
 
     monkeypatch.setattr(policy_services, "create_resolved_policy", record_policy)
-    monkeypatch.setattr(policy_services, "create_resolved_dynamic", record_dynamic)
+    monkeypatch.setattr(dynamic_services, "create_resolved_dynamic", record_dynamic)
     monkeypatch.setattr(policy_services, "create_legacy_policy_mapping", record_mapping)
     return writes
 
@@ -315,11 +316,11 @@ def _lose_mapping_race(monkeypatch, *, winning_source_hash: str) -> None:
     constraint makes it a no-op.
     """
 
-    def insert_after_concurrent_copy(session, **mapping_fields):
+    def insert_after_concurrent_copy(session, mapping):
         session.add(
             LegacyPolicyMapping(
-                country_id=mapping_fields["country_id"],
-                legacy_policy_id=mapping_fields["legacy_policy_id"],
+                country_id=mapping.country_id,
+                legacy_policy_id=mapping.legacy_policy_id,
                 policy_id=EARLIER_COPY_POLICY_ID,
                 source_policy_hash=winning_source_hash,
             )
