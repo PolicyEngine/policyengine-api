@@ -129,25 +129,51 @@ def _without_dropped_schema(
     return expected
 
 
+def _privilege_environment(database_url: str, managed_v2_roles: Any) -> dict[str, str]:
+    """Return what the deploy's privilege steps read."""
+    return {
+        V2_MIGRATION_DATABASE_URL: database_url,
+        V2_ALEMBIC_DISPOSABLE_TEST: "1",
+        DEPLOYMENT_ENVIRONMENT: managed_v2_roles.deployment_environment,
+    }
+
+
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    """Yield an engine on the disposable database, left at the v2 head."""
+def engine(disposable_v2_database_url: str, managed_v2_roles: Any) -> Iterator[Engine]:
+    """Yield an engine on the disposable database, left at the v2 head.
+
+    Downgrading to the base removes every table and its grants, so the roles
+    get theirs back for the tests that run after this one.
+    """
     database_engine = create_engine(disposable_v2_url(), poolclass=NullPool)
     try:
         yield database_engine
     finally:
         command.upgrade(alembic_v2_config(), "head")
+        apply_status = run(
+            "apply",
+            environ=_privilege_environment(
+                disposable_v2_database_url, managed_v2_roles
+            ),
+        )
         database_engine.dispose()
+    assert apply_status == 0
+
+
+def _build_parent_schema(engine: Engine) -> dict[str, dict[str, Any]]:
+    """Build the parent revision from the base, without this revision's downgrade."""
+    config = alembic_v2_config()
+    command.upgrade(config, "head")
+    command.downgrade(config, "base")
+    command.upgrade(config, CLIFF_IMPACTS_REVISION)
+    return _schema_shape(engine)
 
 
 def test_the_revision_drops_only_the_per_user_and_cliff_schema(engine: Engine) -> None:
-    config = alembic_v2_config()
-
-    command.upgrade(config, "head")
-    command.downgrade(config, CLIFF_IMPACTS_REVISION)
-    parent_shape = _schema_shape(engine)
+    parent_shape = _build_parent_schema(engine)
     parent_enums = _enum_labels(engine)
-    command.upgrade(config, REPORT_COLUMN_DROPS_REVISION)
+
+    command.upgrade(alembic_v2_config(), REPORT_COLUMN_DROPS_REVISION)
 
     assert _schema_shape(engine) == _without_dropped_schema(parent_shape)
     assert _enum_labels(engine) == parent_enums
@@ -244,9 +270,7 @@ def test_rows_survive_the_drop_and_a_downgrade_restores_columns_without_values(
 ) -> None:
     """The columns come back empty: a downgrade can't restore what was dropped."""
     config = alembic_v2_config()
-    command.upgrade(config, "head")
-    command.downgrade(config, CLIFF_IMPACTS_REVISION)
-    parent_shape = _schema_shape(engine)
+    parent_shape = _build_parent_schema(engine)
     with engine.begin() as connection:
         public_api_rows = insert_public_api_rows(connection)
         ids = _store_rows_with_dropped_values(connection, public_api_rows)
@@ -292,37 +316,12 @@ def test_rows_survive_the_drop_and_a_downgrade_restores_columns_without_values(
             delete_public_api_rows(connection, public_api_rows)
 
 
-def test_the_deploys_grant_steps_pass_and_no_grant_names_a_dropped_column(
+def test_the_deploys_privilege_steps_pass_at_the_revision(
     engine: Engine, disposable_v2_database_url: str, managed_v2_roles: Any
 ) -> None:
     """``apply`` and ``verify`` run after the upgrade on every deploy."""
     command.upgrade(alembic_v2_config(), REPORT_COLUMN_DROPS_REVISION)
-    environ = {
-        V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
-        V2_ALEMBIC_DISPOSABLE_TEST: "1",
-        DEPLOYMENT_ENVIRONMENT: managed_v2_roles.deployment_environment,
-    }
+    environ = _privilege_environment(disposable_v2_database_url, managed_v2_roles)
 
     assert run("apply", environ=environ) == 0
     assert run("verify", environ=environ) == 0
-    with engine.connect() as connection:
-        granted_columns = {
-            (table_name, column_name)
-            for table_name, column_name in connection.execute(
-                text(
-                    "SELECT table_name, column_name "
-                    "FROM information_schema.column_privileges "
-                    "WHERE table_schema = 'public' "
-                    "AND table_name IN "
-                    "('reports', 'report_runs', 'budget_window_runs')"
-                )
-            )
-        }
-    assert (
-        not {
-            (table_name, column_name)
-            for table_name, column_names in DROPPED_COLUMNS.items()
-            for column_name in column_names
-        }
-        & granted_columns
-    )

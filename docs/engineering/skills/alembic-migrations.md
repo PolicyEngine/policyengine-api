@@ -1121,11 +1121,15 @@ release serves on this schema, for longer if promotion fails:
 - A simulation API release whose v2 Modal runtime no longer writes the four
   cliff columns. Otherwise every economy report run's completion fails.
 
+The simulation API's table models must then lose the same columns. Until they
+do, its comparison with API v1's tables fails; requests are not affected.
+
 **The dropped values are not kept.** Nothing copies them, since these rows name
-no user to copy them to, and the downgrade can't restore them. Before the
-revision reaches an environment, an operator exports what those rows hold there
-with these read-only queries, and keeps the result outside the repository,
-because labels and descriptions are users' text:
+no user to copy them to, and the downgrade can't restore them. One merge takes
+the revision through staging and production in a single release run, so before
+merging, an operator exports what those rows hold in both environments with
+these read-only queries, and keeps the result outside the repository, because
+labels and descriptions are users' text:
 
 ```sql
 SELECT id, created_at, label, description, user_id FROM reports
@@ -1139,10 +1143,13 @@ WHERE trigger IS NOT NULL;
 ```
 
 The downgrade adds the columns, key, index and check back with every value
-null. Continuing below `bc334f9877b7` to `94dc43079186`'s parent then fails
-while any report or run exists, because that downgrade needs every report to
-have a label and every run a trigger.
+null. The Modal worker's `UPDATE` on the four cliff columns doesn't come back
+with them: it returns only when `reconcile_v2_privileges.py apply` runs from a
+`privileges.py` that names them. Continuing below `bc334f9877b7` to
+`94dc43079186`'s parent fails while any report or run exists, because that
+downgrade needs every report to have a label and every run a trigger.
 
-`tests/integration/test_alembic_v2_report_column_drops.py` checks that nothing
-else changes, that rows survive the upgrade, that the downgrade restores the
-schema without the values, and that the deploy's privilege steps pass.
+`tests/integration/test_alembic_v2_report_column_drops.py` compares the revision
+and its downgrade with the parent schema built from the base, and checks that
+rows survive the upgrade, that the downgrade restores no values, and that the
+deploy's privilege steps pass.
