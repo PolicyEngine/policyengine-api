@@ -140,7 +140,7 @@ def report_rerun_request(rerun: ReportRerunInput) -> dict[str, Any]:
 
     ``include_cliffs`` is sent only when true: a simulation service that
     doesn't calculate cliffs per simulation run refuses the field, so a
-    re-run that doesn't ask for cliffs still runs there.
+    re-run that doesn't ask for cliffs isn't refused for it.
     """
     body: dict[str, Any] = {"force": rerun.force}
     if rerun.include_cliffs:

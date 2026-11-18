@@ -50,8 +50,8 @@ class ReportRerunRequest(StrictSubmissionModel):
     the report's ``cliffs`` then says how far they have got. Only an
     economy report has cliffs: a household report or budget window asking
     for them is refused with 422. A simulation service that doesn't
-    calculate cliffs per simulation run refuses ``include_cliffs`` with 422
-    and starts no run.
+    calculate cliffs per simulation run refuses ``include_cliffs: true`` with
+    422 and starts no run.
     """
 
     force: StrictBool = False
@@ -189,8 +189,8 @@ RERUN_RESPONSES: dict[int | str, dict[str, Any]] = {
             "The request does not match the schema; a household report or "
             "budget window asks for cliffs (include_cliffs), which only an "
             "economy report has; a simulation service that doesn't calculate "
-            "cliffs per simulation run refuses include_cliffs; the country has "
-            "no economy "
+            "cliffs per simulation run refuses include_cliffs: true; the country "
+            "has no economy "
             "reports, or no household calculations for a household report; a "
             "policy of the report's simulations sets "
             "parameters the running catalog version does not have (code "

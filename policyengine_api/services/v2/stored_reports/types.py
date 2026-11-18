@@ -164,7 +164,7 @@ class ReportCliffsRead:
     new calculation for each side that is ``not_calculated`` or ``failed``.
     A report naming one simulation run on both sides reads its calculation
     for each. A simulation service that doesn't calculate cliffs per
-    simulation run starts none and refuses ``include_cliffs``.
+    simulation run starts none and refuses ``include_cliffs: true``.
     """
 
     status: CliffCalculationStatusName

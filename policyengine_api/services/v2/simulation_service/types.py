@@ -264,8 +264,8 @@ class EconomyReportFields(ReportDefinitionFields):
     and every report naming the run shares them. It is never stored. The
     report's ``cliffs`` says how far they have got, and its result's
     ``cliff_impact`` holds them once both have succeeded. A simulation
-    service that doesn't calculate cliffs per simulation run refuses it with
-    422 and creates nothing.
+    service that doesn't calculate cliffs per simulation run refuses
+    ``include_cliffs: true`` with 422 and creates nothing.
     ``data_source`` ``local_area_dataset`` calculates both simulations on
     the dataset the catalog version gives local areas instead of the
     region's, so the result also has each constituency's and local
