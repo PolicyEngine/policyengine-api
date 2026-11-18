@@ -347,8 +347,8 @@ def store_report_run(
 ) -> RunIds:
     """Store a run of the report and its two simulation runs.
 
-    With ``result``, the run's result columns and rows are stored as the
-    simulation service's writer stores that economy result.
+    With ``result``, the run's result columns and rows are stored as
+    ``economy_result_rows`` gives them.
     """
     budget_window_year = settings.budget_window_year
     simulation_run_settings = replace(settings, run_id=None)

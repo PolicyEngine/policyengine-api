@@ -8,10 +8,10 @@ its rows is tested against the same mapping. Its ``withheld_area_codes`` rows
 follow the writer as PolicyEngine/policyengine-sim-api#1068 changes it
 (``46c38f07``): one row per code a result's ``constituency_withheld_codes``
 and ``local_authority_withheld_codes`` list. A result's ``cliff_impact`` is
-the one exception: that writer can store it in the report run's four cliff
-columns, which no read uses, so they are left out here, and it becomes a
-succeeded ``cliff_impacts`` row for each side's simulation run, the rows the
-Public API reads. Each row is a dict of the table's columns; ``id`` and
+the one exception: the report run's four cliff columns are left out, whatever
+that writer stores there, since no read uses them, and it becomes a succeeded
+``cliff_impacts`` row for each side's simulation run, the rows the Public API
+reads. Each row is a dict of the table's columns; ``id`` and
 ``created_at`` are left for the caller.
 """
 

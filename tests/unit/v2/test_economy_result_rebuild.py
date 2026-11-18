@@ -116,7 +116,7 @@ def stored_rows(
     reverse_rows: bool = False,
     on_local_area_dataset: bool = False,
 ) -> EconomyResultRows:
-    """Store ``output`` as the writer does and load its rows as table models.
+    """Store ``output`` as ``economy_result_rows`` does; load its table models.
 
     With ``reverse_rows``, each table's rows come back in reverse order, as a
     query without an order may return them. With ``on_local_area_dataset``,
