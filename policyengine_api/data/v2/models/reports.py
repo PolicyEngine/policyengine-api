@@ -284,11 +284,14 @@ class ReportRun(TimestampedModel, table=True):
     It compares ``baseline_simulation_run_id`` with
     ``reform_simulation_run_id``; a household report with only a baseline has
     no reform run. A year of a budget window names its ``budget_window_run_id``
-    and ``year``, at most one report run per year of a window run. An economy
-    comparison's cliff impact is the baseline's and reform's cliff gap and
-    share, stored together or not at all; ``spm_provenance`` is the SPM receipt
-    and ``data_version`` the data release it used. Its labour supply response
-    has its own two tables.
+    and ``year``, at most one report run per year of a window run.
+    ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
+    it used. Its labour supply response has its own two tables. Its cliff impact
+    is its two simulation runs' (``CliffImpact``), and each user's trigger is on
+    their record of the run. The table's four older cliff columns and
+    ``trigger`` are declared in ``__table_args__`` and left out of the mapper, so
+    API v1 neither loads nor writes them and a release keeps working while a
+    later revision drops them.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -297,12 +300,22 @@ class ReportRun(TimestampedModel, table=True):
     """
 
     __tablename__ = "report_runs"
-    __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("trigger",)}
+    __mapper_args__: ClassVar[dict[str, Any]] = {
+        "exclude_properties": (
+            "trigger",
+            "baseline_cliff_gap",
+            "baseline_cliff_share",
+            "reform_cliff_gap",
+            "reform_cliff_share",
+        )
+    }
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops it: a shared run
-        # answers more than one request, and each user's trigger is on their
-        # record of it.
+        # Kept in the table, unmapped, until a revision drops them.
         sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
+        sa.Column("baseline_cliff_gap", sa.Float),
+        sa.Column("baseline_cliff_share", sa.Float),
+        sa.Column("reform_cliff_gap", sa.Float),
+        sa.Column("reform_cliff_share", sa.Float),
         sa.UniqueConstraint(
             "report_id",
             "idempotency_key",
@@ -399,10 +412,6 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
-    baseline_cliff_gap: float | None = None
-    baseline_cliff_share: float | None = None
-    reform_cliff_gap: float | None = None
-    reform_cliff_share: float | None = None
     spm_provenance: dict[str, Any] | None = Field(
         default=None,
         sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
