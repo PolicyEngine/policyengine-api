@@ -21,7 +21,7 @@ generated, apart from ruff format.
 
 Nothing wrote dynamics before this revision, and its new columns are
 required with no default, so the upgrade fails, changing nothing, while
-dynamics has a row. The previous Public API revision maps the columns this
+dynamics has a row. The previous API v1 revision maps the columns this
 revision drops, but never reads or writes dynamics, and its v1-to-v2 copy
 writes mappings without dynamic_id, which stays null. The simulation service
 selects only dynamics.id. The downgrade drops the new columns, their

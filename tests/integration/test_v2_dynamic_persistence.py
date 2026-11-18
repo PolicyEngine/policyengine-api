@@ -1,6 +1,6 @@
 """PostgreSQL tests for dynamics, created by ``/v2/dynamics`` and the v1-to-v2 copy.
 
-The services run as the Public API's runtime role, which proves its declared
+The services run as API v1's runtime role, which proves its declared
 privileges cover them (rule ``api.v2.runtime-privileges-tested-as-runtime-role``);
 the catalog is written and everything removed as the superuser.
 """
@@ -159,7 +159,7 @@ def superuser_engine() -> Iterator[object]:
 def runtime_sessions(
     managed_v2_roles, v2_engine_as_role
 ) -> Iterator[sessionmaker[Session]]:
-    """Open sessions as the Public API's runtime role."""
+    """Open sessions as API v1's runtime role."""
     runtime_engine = v2_engine_as_role(managed_v2_roles.runtime)
     try:
         yield sessionmaker(runtime_engine, class_=Session, expire_on_commit=False)

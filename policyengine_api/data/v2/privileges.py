@@ -301,7 +301,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "parameter_tree_children": _access(
         runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
     ),
-    # The Public API also inserts a v2 policy's or dynamic's own parameter
+    # API v1 also inserts a v2 policy's or dynamic's own parameter
     # values. Catalog pruning deletes an older version's current-law values
     # (those with no policy or dynamic), never a policy's or a dynamic's.
     "parameter_values": _access(

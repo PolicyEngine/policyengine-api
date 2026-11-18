@@ -407,7 +407,7 @@ def translate_legacy_policy(
     rewritten first (``split_legacy_policy``).
 
     The country package version the v1 policy was saved under is not compared:
-    the Public API simulates an old policy with the running package, so the copy
+    API v1 simulates an old policy with the running package, so the copy
     binds it to the running catalog the same way.
 
     ``parameters`` holds the running catalog's parameters with the split's

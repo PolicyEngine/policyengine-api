@@ -1063,7 +1063,7 @@ them read-only:
 SELECT count(*) FROM dynamics;
 ```
 
-The previous Public API revision maps `name` and `description` but never
+The previous API v1 revision maps `name` and `description` but never
 reads or writes `dynamics`, and its copy writes mappings without
 `dynamic_id`, which stays null, so it keeps working at this revision. The
 simulation service selects only `dynamics.id`. The downgrade drops the new
