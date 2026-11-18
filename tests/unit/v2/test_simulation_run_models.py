@@ -296,6 +296,8 @@ def test_report_runs_load_and_write_none_of_their_cliff_columns() -> None:
     assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(
         sa.inspect(ReportRun).column_attrs.keys()
     )
+    assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(ReportRun.model_fields)
+    assert [name for name in CLIFF_IMPACT_COLUMNS if hasattr(ReportRun, name)] == []
 
 
 def test_labor_supply_responses_have_one_typed_row_per_report_run() -> None:

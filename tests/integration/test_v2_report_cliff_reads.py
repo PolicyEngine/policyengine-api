@@ -110,7 +110,7 @@ def runtime_statements(runtime_engine: Engine) -> list[str]:
 
 
 @pytest.fixture
-def client(runtime_engine: Engine) -> Iterator[TestClient]:
+def client(runtime_engine: Engine) -> TestClient:
     """Serve the report routes as the runtime role."""
     sessions = sessionmaker(runtime_engine, class_=Session)
     dependencies = NativeRouteDependencies(

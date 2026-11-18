@@ -101,6 +101,7 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
         "transaction_conflict_recovery",
+        "unmapped_columns_awaiting_removal",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
