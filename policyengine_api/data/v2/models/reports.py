@@ -7,7 +7,7 @@ results are in ``run_results``.
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -277,11 +277,12 @@ class ReportRun(TimestampedModel, table=True):
     It compares ``baseline_simulation_run_id`` with
     ``reform_simulation_run_id``; a household report with only a baseline has
     no reform run. A year of a budget window names its ``budget_window_run_id``
-    and ``year``, at most one report run per year of a window run. An economy
-    comparison's cliff impact is the baseline's and reform's cliff gap and
-    share, stored together or not at all; ``spm_provenance`` is the SPM receipt
-    and ``data_version`` the data release it used. Its labour supply response
-    has its own two tables.
+    and ``year``, at most one report run per year of a window run.
+    ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
+    it used. Its labour supply response has its own two tables. Its cliff impact
+    is its two simulation runs' (``CliffImpact``): the table's four older cliff
+    columns are left out of this model, so API v1 neither loads nor writes them
+    and a release keeps working while a later revision drops them.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -290,6 +291,14 @@ class ReportRun(TimestampedModel, table=True):
     """
 
     __tablename__ = "report_runs"
+    __mapper_args__: ClassVar[dict[str, Any]] = {
+        "exclude_properties": (
+            "baseline_cliff_gap",
+            "baseline_cliff_share",
+            "reform_cliff_gap",
+            "reform_cliff_share",
+        )
+    }
     __table_args__ = (
         sa.UniqueConstraint(
             "report_id",
