@@ -771,14 +771,15 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
   downgrades run first: the report column drops revision (`4e30076d4b9f`) adds
-  those columns back empty, the cliff impacts revision (`bc334f9877b7`) drops
+  the dropped report columns back empty, the cliff impacts revision (`bc334f9877b7`) drops
   every simulation run's cliff results, the user invitations revision
   (`f519a77ba122`) drops
   every invitation and dismissal and needs no change with source
   `invitation`, the shared reports revision (`94dc43079186`) drops
   every user's report-run record, every simulation and report key, the runs'
   `forced` markers, the window runs' .py versions and the one-unfailed-run
-  indexes, and needs every report to have a label and every run a trigger, the
+  indexes, and needs no report or report run to exist, since the report column
+  drops revision restored their labels and triggers empty, the
   user type changes revision (`970be5d29283`) drops every recorded change,
   the user types revision (`617f531f1506`) needs no
   author or admin, and the simulation runs revision (`1356f658347d`) needs

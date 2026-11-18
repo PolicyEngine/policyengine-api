@@ -124,7 +124,6 @@ RUN_DEFINITION_COLUMNS = {
             "year",
             "country_package_version",
             "policyengine_version",
-            "trigger",
             "idempotency_key",
             "forced",
         }
@@ -147,7 +146,6 @@ RUN_DEFINITION_COLUMNS = {
             "report_id",
             "tax_benefit_model_version_id",
             "policyengine_version",
-            "trigger",
             "recalculate",
         }
     ),

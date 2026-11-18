@@ -316,11 +316,23 @@ def test_rows_survive_the_drop_and_a_downgrade_restores_columns_without_values(
             delete_public_api_rows(connection, public_api_rows)
 
 
-def test_the_deploys_privilege_steps_pass_at_the_revision(
+def test_the_deploys_privilege_steps_pass_after_the_upgrade(
     engine: Engine, disposable_v2_database_url: str, managed_v2_roles: Any
 ) -> None:
-    """``apply`` and ``verify`` run after the upgrade on every deploy."""
-    command.upgrade(alembic_v2_config(), REPORT_COLUMN_DROPS_REVISION)
+    """``apply`` and ``verify`` pass when the Modal worker held the cliff grants."""
+    config = alembic_v2_config()
+    command.upgrade(config, "head")
+    command.downgrade(config, CLIFF_IMPACTS_REVISION)
+    cliff_columns = ", ".join(sorted(DROPPED_COLUMNS["report_runs"] - {"trigger"}))
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                f"GRANT UPDATE ({cliff_columns}) ON report_runs "
+                f'TO "{managed_v2_roles.modal_worker}"'
+            )
+        )
+
+    command.upgrade(config, REPORT_COLUMN_DROPS_REVISION)
     environ = _privilege_environment(disposable_v2_database_url, managed_v2_roles)
 
     assert run("apply", environ=environ) == 0

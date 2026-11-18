@@ -3,7 +3,20 @@
 Revision ID: 4e30076d4b9f
 Revises: bc334f9877b7
 Create Date: 2026-11-19 02:25:37.425693
-Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
+Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id 4e30076d4b9f
+
+One post-generation correction, commented where it is made: the downgrade's
+check condition gets back the first and last parenthesis autogenerate strips.
+
+Reports, report runs and budget-window runs are shared by every request that
+joins them, so they hold nothing about one caller, and a report run's cliffs
+are its simulation runs' results in cliff_impacts. This drops reports.label,
+description and user_id, report_runs.trigger and its four cliff columns, and
+budget_window_runs.trigger, with their foreign key, index and check.
+
+The dropped values are not recoverable: the downgrade adds the columns back
+empty. Export them first if they are wanted. Every release still serving when
+this runs must already leave these columns out of its models and statements.
 """
 
 from typing import Sequence, Union

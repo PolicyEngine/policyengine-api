@@ -11,8 +11,7 @@ from sqlmodel import Field, SQLModel
 
 # These are the complete direct-SQLAlchemy categories permitted in the v2
 # table layer. Each remains underneath canonical SQLModel table classes and
-# Field/Relationship declarations, apart from table-only columns awaiting
-# removal; no parallel declarative model exists.
+# Field/Relationship declarations; no parallel declarative model exists.
 DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
     {
         "timezone_aware_timestamps": (

@@ -463,8 +463,9 @@ results (see "API v2 simulation-run cliff impacts"),
 `f519a77ba122`'s drops `user_invitations` and needs no recorded change with
 source `invitation` (see "API v2 user invitations"),
 `94dc43079186`'s drops every user's report-run record, the simulation and
-report keys and the window runs' .py versions, and needs every report to have
-a label and every run a trigger (see "API v2 shared reports and user report-run records"),
+report keys and the window runs' .py versions, and needs no report or report
+run to exist, since `4e30076d4b9f`'s restored their labels and triggers empty
+(see "API v2 shared reports and user report-run records"),
 `970be5d29283`'s drops `user_type_changes` with every recorded change (see
 "API v2 user type changes"), `617f531f1506`'s needs no user to be an author
 or an admin (see "API v2 user types"), and `1356f658347d`'s needs
