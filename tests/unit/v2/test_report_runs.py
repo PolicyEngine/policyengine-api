@@ -155,7 +155,7 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
             )
 
 
-def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
+def test_new_keys_create_a_same_version_run_once_the_last_one_failed(
     engine,
 ) -> None:
     with Session(engine) as session:
