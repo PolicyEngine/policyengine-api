@@ -263,7 +263,9 @@ class EconomyReportFields(ReportDefinitionFields):
     under way: a simulation run's cliffs are calculated once, apart from it,
     and every report naming the run shares them. It is never stored. The
     report's ``cliffs`` says how far they have got, and its result's
-    ``cliff_impact`` holds them once both have succeeded.
+    ``cliff_impact`` holds them once both have succeeded. A simulation
+    service that doesn't calculate cliffs per simulation run refuses it with
+    422 and creates nothing.
     ``data_source`` ``local_area_dataset`` calculates both simulations on
     the dataset the catalog version gives local areas instead of the
     region's, so the result also has each constituency's and local
@@ -433,8 +435,10 @@ class ReportRerunInput:
     simulations, baseline first, None for current law, a report of the
     baseline alone or a simulation that is gone, for the checks before the
     simulation service is asked. ``include_cliffs``, only for an economy
-    report, also starts a cliff calculation for each side's simulation run
-    that has none, or whose newest one failed; it is sent only when true.
+    report, asks the service to start a cliff calculation for each side's
+    simulation run that has none, or whose newest one failed; it is sent
+    only when true, and a service that doesn't calculate cliffs per
+    simulation run refuses it.
     """
 
     country_id: str

@@ -173,7 +173,9 @@ class ReportCliffsItem(StrictReportAPIModel):
     ``failed``, and joins one under way; a run on older versions is not run
     again, so its re-run answers another run, with that run's ``cliffs``. A
     report naming one simulation run on both sides gives its calculation for
-    each.
+    each. A simulation service that doesn't calculate cliffs per simulation
+    run starts none, so each side stays ``not_calculated``, and it refuses
+    ``include_cliffs`` with 422.
     """
 
     status: CliffCalculationStatus
@@ -547,7 +549,9 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "sets parameters the running catalog version does not have "
             "(code missing_parameters, which names them; the baseline's policy is "
             "checked first); or the simulation service cannot run the report: its "
-            "422, or its 400 for a region, dataset or dynamic it does not have. The "
+            "422, such as one that doesn't calculate cliffs per simulation run "
+            "refusing include_cliffs, or its 400 for a region, dataset or dynamic "
+            "it does not have. The "
             "message says which; for the simulation service's refusal, it gives "
             "the service's code, when it gave one, and its reason, but not its "
             "status."

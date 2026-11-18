@@ -9,8 +9,8 @@ service creates the stored report's new run on its default worker's
 versions and starts it, keeping every earlier run. Without ``force``, each
 side reuses a run of its own simulation that succeeded on those versions.
 With ``include_cliffs``, it also starts a cliff calculation for each side's
-simulation run that has none; until it calculates cliffs per simulation
-run, it refuses the field with 422, which is passed on as any 422 is.
+simulation run that has none; a service that doesn't calculate cliffs per
+simulation run refuses the field with 422, passed on as any 422 is.
 
 The Public API reads the report in its country before asking, so it never
 asks about a report it does not have. The simulation service answers:
@@ -138,8 +138,8 @@ def report_runs_path(report_id: UUID) -> str:
 def report_rerun_request(rerun: ReportRerunInput) -> dict[str, Any]:
     """Return the simulation service's request body for the re-run.
 
-    ``include_cliffs`` is sent only when true: a simulation service from
-    before cliffs were calculated per simulation run refuses the field, so a
+    ``include_cliffs`` is sent only when true: a simulation service that
+    doesn't calculate cliffs per simulation run refuses the field, so a
     re-run that doesn't ask for cliffs still runs there.
     """
     body: dict[str, Any] = {"force": rerun.force}
