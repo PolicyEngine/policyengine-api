@@ -40,6 +40,7 @@ def test_a_model_has_no_attribute_for_an_unmapped_column(
     model: type, column_name: str
 ) -> None:
     assert column_name not in sa.inspect(model).column_attrs
+    assert column_name not in model.model_fields
     assert not hasattr(model, column_name)
 
 
