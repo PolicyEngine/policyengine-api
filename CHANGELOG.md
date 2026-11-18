@@ -1,3 +1,17 @@
+## [5.52.2] - 2026-11-18
+
+### Changed
+
+- Document which Auth0 tenant issues each token API v1 accepts or requests in staging and production.
+
+
+## [5.52.1] - 2026-11-17
+
+### Changed
+
+- Requests to api.policyengine.org without an Authorization header, outside the Public API's public routes, are refused at the load balancer with 403 instead of reaching the Public API, which answers them with 401; the Cloud Armor runbook records the rules.
+
+
 ## [5.52.0] - 2026-11-17
 
 ### Added
