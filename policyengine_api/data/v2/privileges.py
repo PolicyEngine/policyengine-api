@@ -245,9 +245,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Custom totals, unused until they return.
     "aggregates": _access(),
     "change_aggregates": _access(),
-    # A simulation's or household job's dynamic, which a run reads. The Public
-    # API creates them, as it does policies, through /v2/dynamics and the
-    # v1-to-v2 policy copy; a dynamic never changes once stored.
+    # A simulation's or household job's dynamic, which a run reads. API v1
+    # creates them, as it does policies, through /v2/dynamics and the v1-to-v2
+    # policy copy; a dynamic never changes once stored.
     "dynamics": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.

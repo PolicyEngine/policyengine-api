@@ -482,7 +482,7 @@ def test_the_public_api_records_each_users_report_run_requests() -> None:
             assert tables["user_report_run_associations"] == NO_ACCESS, role
 
 
-def test_the_public_api_creates_and_reads_dynamics_but_never_changes_them() -> None:
+def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
     """``POST /v2/dynamics`` and the v1-to-v2 copy create dynamics, as policies.
 
     A dynamic is immutable once stored, so API v1 reads and inserts
