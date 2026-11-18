@@ -280,9 +280,11 @@ class ReportRun(TimestampedModel, table=True):
     and ``year``, at most one report run per year of a window run.
     ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
     it used. Its labour supply response has its own two tables. Its cliff impact
-    is its two simulation runs' (``CliffImpact``): the table's four older cliff
-    columns are left out of this model, so API v1 neither loads nor writes them
-    and a release keeps working while a later revision drops them.
+    is its two simulation runs' (``CliffImpact``). The table's four older cliff
+    columns are declared in ``__table_args__`` and left out of the mapper, so API
+    v1 neither loads nor writes them. This covers only those four: ``trigger`` is
+    still mapped, so it must stop being mapped in an earlier release before a
+    revision drops it.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -300,6 +302,11 @@ class ReportRun(TimestampedModel, table=True):
         )
     }
     __table_args__ = (
+        # Kept in the table, unmapped, until a revision drops them.
+        sa.Column("baseline_cliff_gap", sa.Float),
+        sa.Column("baseline_cliff_share", sa.Float),
+        sa.Column("reform_cliff_gap", sa.Float),
+        sa.Column("reform_cliff_share", sa.Float),
         sa.UniqueConstraint(
             "report_id",
             "idempotency_key",
@@ -402,10 +409,6 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
-    baseline_cliff_gap: float | None = None
-    baseline_cliff_share: float | None = None
-    reform_cliff_gap: float | None = None
-    reform_cliff_share: float | None = None
     spm_provenance: dict[str, Any] | None = Field(
         default=None,
         sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
