@@ -10,10 +10,9 @@ follow the writer as PolicyEngine/policyengine-sim-api#1068 changes it
 and ``local_authority_withheld_codes`` list. A result's ``cliff_impact`` is
 not the report run's: each side's simulation run stores its own succeeded
 cliff calculation (``cliff_impacts``, which sim's cliff calculation writes,
-not that writer), and the report run's four cliff columns stay null, as the
-writer leaves them from PolicyEngine/policyengine-sim-api's C1 · 38 on. Each
-row is a dict of the table's columns; ``id`` and ``created_at`` are left for
-the caller.
+not that writer), and the report run's four cliff columns stay null, since
+no read uses them. Each row is a dict of the table's columns; ``id`` and
+``created_at`` are left for the caller.
 """
 
 from __future__ import annotations

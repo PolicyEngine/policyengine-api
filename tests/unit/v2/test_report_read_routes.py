@@ -181,6 +181,30 @@ def test_the_openapi_document_describes_a_reports_cliffs() -> None:
     assert "cliffs" not in schemas["ReportSummaryItem"]["properties"]
 
 
+def test_the_openapi_document_says_a_service_may_refuse_to_calculate_cliffs() -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+    create = document["paths"]["/v2/reports"]["post"]
+    rerun = document["paths"]["/v2/reports/{report_id}/runs"]["post"]
+    schemas = document["components"]["schemas"]
+    descriptions = {
+        "create route": create["description"],
+        "create 422": create["responses"]["422"]["description"],
+        "re-run route": rerun["description"],
+        "re-run 422": rerun["responses"]["422"]["description"],
+        "re-run body": schemas["ReportRerunRequest"]["description"],
+        "cliffs": schemas["ReportCliffsItem"]["description"],
+    }
+
+    missing = [
+        name
+        for name, description in descriptions.items()
+        if "doesn't calculate cliffs per simulation run"
+        not in " ".join(description.split())
+    ]
+
+    assert missing == []
+
+
 @pytest.mark.parametrize(
     ("error", "status_code", "message"),
     [

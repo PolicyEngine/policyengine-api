@@ -282,6 +282,35 @@ def test_request_fields_the_service_refuses_are_reported_one_by_one() -> None:
     )
 
 
+def test_a_report_asking_for_cliffs_the_service_does_not_calculate_is_refused() -> None:
+    """The 422 of a service that doesn't calculate cliffs per simulation run."""
+    reason = (
+        "Cliff impacts are not calculated yet: they will be calculated for each "
+        "simulation run on its own. Send include_cliffs: false."
+    )
+    service = RecordingService(
+        status_code=422,
+        body={
+            "detail": [
+                {
+                    "loc": ["body", "include_cliffs"],
+                    "msg": reason,
+                    "type": "cliffs_not_available",
+                }
+            ],
+            "code": "cliffs_not_available",
+        },
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit_report(report_input(include_cliffs=True))
+
+    assert str(refused.value) == (
+        "The simulation service cannot run this request (cliffs_not_available): "
+        f"include_cliffs: {reason}"
+    )
+
+
 def test_a_refusal_names_the_services_code_when_it_gives_one() -> None:
     service = RecordingService(
         status_code=422,

@@ -157,7 +157,7 @@ def test_a_report_runs_own_cliff_columns_are_not_read(
             RunSettings(versions=CURRENT_VERSIONS),
             result=uk_economy_result(),
         )
-        # As a report run stored its cliffs before C1 · 38.
+        # As the report run writer stores a result that has cliffs.
         connection.execute(
             text(
                 "UPDATE report_runs SET baseline_cliff_gap = 1.0, "
