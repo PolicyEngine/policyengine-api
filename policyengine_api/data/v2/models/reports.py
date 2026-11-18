@@ -28,7 +28,6 @@ from policyengine_api.data.v2.models.metadata import (
 )
 from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation
-from policyengine_api.data.v2.models.users import User
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.run_results import (
@@ -61,7 +60,10 @@ class ReportRunStatus(StrEnum):
 
 
 class ReportRunTrigger(StrEnum):
-    """Why a report run started: the report's first run, a manual or a system rerun."""
+    """Why a user asked for a report run: the report's creation or a re-run.
+
+    ``system`` remains in the database type; no user's record may hold it.
+    """
 
     INITIAL = "initial"
     MANUAL = "manual"
@@ -71,12 +73,14 @@ class ReportRunTrigger(StrEnum):
 class Report(TimestampedModel, table=True):
     """Stable report definition; execution state belongs to ReportRun.
 
-    The simulation service writes reports, and the Public API the user, model,
-    policy, household, dataset and region a report names; each service writes
-    only its own tables, and the foreign keys between them stay. Deleting the
-    user, policy, dataset or region clears the reference, which for the user
-    is found through ``user_id``'s index; the model and household can't be
+    The simulation service writes reports, and API v1 the model, policy,
+    household, dataset and region a report names; each service writes only its
+    own tables, and the foreign keys between them stay. Deleting the policy,
+    dataset or region clears the reference; the model and household can't be
     deleted while a report names them.
+
+    A report is shared by everyone who asks for it, so it names no user. A
+    report's name and description are on each user's saved report.
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
@@ -117,18 +121,8 @@ class Report(TimestampedModel, table=True):
         sa.Index("ix_reports_dataset_independent_key", "dataset_independent_key"),
     )
 
-    # Per-user: nullable until a later revision drops it, since a shared report
-    # describes no one caller.
-    label: str | None = Field(default=None, max_length=255)
-    description: str | None = None
     country: str = Field(max_length=16)
     type: str | None = Field(default=None, max_length=128)
-    user_id: UUID | None = Field(
-        default=None,
-        foreign_key="users.id",
-        ondelete="SET NULL",
-        index=True,
-    )
     tax_benefit_model_id: UUID = Field(
         foreign_key="tax_benefit_models.id",
         ondelete="RESTRICT",
@@ -171,7 +165,6 @@ class Report(TimestampedModel, table=True):
     definition_key: str | None = Field(default=None, max_length=64)
     dataset_independent_key: str | None = Field(default=None, max_length=64)
 
-    user: User | None = Relationship(back_populates="reports")
     tax_benefit_model: TaxBenefitModel = Relationship(back_populates="reports")
     policy: Policy | None = Relationship(back_populates="reports")
     baseline_simulation: Simulation | None = Relationship(
@@ -247,12 +240,6 @@ class BudgetWindowRun(TimestampedModel, table=True):
         index=True,
     )
     policyengine_version: str | None = Field(default=None, max_length=128)
-    # Per-user: nullable until a later revision drops it, since a shared run
-    # answers more than one request; each user's trigger is on their record.
-    trigger: ReportRunTrigger | None = Field(
-        default=None,
-        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
-    )
     recalculate: bool = False
     status: ReportRunStatus = Field(
         default=ReportRunStatus.PENDING,
@@ -278,10 +265,11 @@ class ReportRun(TimestampedModel, table=True):
     ``reform_simulation_run_id``; a household report with only a baseline has
     no reform run. A year of a budget window names its ``budget_window_run_id``
     and ``year``, at most one report run per year of a window run. An economy
-    comparison's cliff impact is the baseline's and reform's cliff gap and
-    share, stored together or not at all; ``spm_provenance`` is the SPM receipt
-    and ``data_version`` the data release it used. Its labour supply response
-    has its own two tables.
+    comparison's cliff impact is its two simulation runs' cliff results
+    (``cliff_impacts``); ``spm_provenance`` is the SPM receipt and
+    ``data_version`` the data release it used. Its labour supply response has
+    its own two tables. A run is shared by every request that joins it, so
+    each user's trigger is on their ``user_report_run_associations`` row.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -320,12 +308,6 @@ class ReportRun(TimestampedModel, table=True):
             ["budget_window_runs.id", "budget_window_runs.report_id"],
             name="fk_report_runs_budget_window_run_id_budget_window_runs",
             ondelete="CASCADE",
-        ),
-        sa.CheckConstraint(
-            "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
-            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
-            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)",
-            name="ck_report_runs_cliff_impact_complete",
         ),
         sa.Index(
             "ix_report_runs_current_output",
@@ -375,12 +357,6 @@ class ReportRun(TimestampedModel, table=True):
         default=ReportRunStatus.PENDING,
         sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
     )
-    # Per-user: nullable until a later revision drops it, since a shared run
-    # answers more than one request; each user's trigger is on their record.
-    trigger: ReportRunTrigger | None = Field(
-        default=None,
-        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
-    )
     idempotency_key: UUID | None = Field(default=None)
     modal_call_id: str | None = Field(default=None, max_length=255)
     started_at: datetime | None = Field(
@@ -393,10 +369,6 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
-    baseline_cliff_gap: float | None = None
-    baseline_cliff_share: float | None = None
-    reform_cliff_gap: float | None = None
-    reform_cliff_share: float | None = None
     spm_provenance: dict[str, Any] | None = Field(
         default=None,
         sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),

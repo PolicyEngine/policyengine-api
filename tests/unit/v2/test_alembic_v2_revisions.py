@@ -1238,6 +1238,13 @@ def test_report_column_drops_revision_drops_only_the_named_columns() -> None:
     )
     assert sorted(re.findall(drop_column_call, upgrade)) == dropped_columns
     assert sorted(re.findall(add_column_call, downgrade)) == dropped_columns
+    # The one correction restores the parentheses autogenerate strips.
+    assert revision.count("Post-generation correction:") == 1
+    assert (
+        "'(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)'"
+    ) in downgrade
     assert "ix_reports_user_id" in upgrade
     assert "fk_reports_user_id_users" in upgrade
     assert "ck_report_runs_cliff_impact_complete" in upgrade

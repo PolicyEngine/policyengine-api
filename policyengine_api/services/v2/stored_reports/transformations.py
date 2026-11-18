@@ -68,11 +68,10 @@ def report_kind(report: Report) -> ReportKind:
 
 
 def report_run_read(run: ReportRun) -> ReportRunRead:
-    """Return the run's status, trigger, versions and times."""
+    """Return the run's status, versions and times."""
     return ReportRunRead(
         id=run.id,
         status=run.status.value,
-        trigger=None if run.trigger is None else run.trigger.value,
         country_package_version=run.country_package_version,
         policyengine_version=run.policyengine_version,
         baseline_simulation_run_id=run.baseline_simulation_run_id,
@@ -236,7 +235,7 @@ def household_report_read(
 def budget_window_run_read(
     window_run: BudgetWindowRun, years: Sequence[ReportRun]
 ) -> BudgetWindowRunRead:
-    """Return the window run's status, trigger and times, with its years.
+    """Return the window run's status and times, with its years.
 
     Its versions are its first year's, since the simulation service creates
     every year on one version; a run with no year has none.
@@ -250,7 +249,6 @@ def budget_window_run_read(
     return BudgetWindowRunRead(
         id=window_run.id,
         status=window_run.status.value,
-        trigger=None if window_run.trigger is None else window_run.trigger.value,
         recalculate=window_run.recalculate,
         country_package_version=(
             None if first_year is None else first_year.country_package_version

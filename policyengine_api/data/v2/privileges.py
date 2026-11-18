@@ -258,10 +258,6 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     ),
     "household_jobs": _run_table("result"),
     "report_runs": _run_table(
-        "baseline_cliff_gap",
-        "baseline_cliff_share",
-        "reform_cliff_gap",
-        "reform_cliff_share",
         "spm_provenance",
         "data_version",
         catalog_writer=READ,

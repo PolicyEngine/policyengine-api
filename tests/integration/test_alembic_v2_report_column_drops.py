@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from sqlalchemy import Connection, Engine, create_engine, inspect, text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_DISPOSABLE_TEST
@@ -59,7 +60,7 @@ def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
         table_name: {
             "columns": {
                 column["name"]: (
-                    str(column["type"]),
+                    column["type"].compile(dialect=postgresql.dialect()),
                     column["nullable"],
                     column.get("default"),
                 )
