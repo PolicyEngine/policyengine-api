@@ -822,10 +822,13 @@ No setting is new for signed-out saving: the unauthenticated-user header works
 whether or not the Auth0 settings below are present. Without them, bearer
 requests keep their 401/503 behavior, and signed-out requests still work.
 
+[Auth0 tenants and tokens](cloud-run-operations.md#auth0-tenants-and-tokens)
+lists which tenant issues each token in each environment.
+
 | Setting | Source | Meaning |
 | --- | --- | --- |
 | `PUBLIC_API_AUTH_REQUIRED` | GitHub variable (`staging`, `production`) | `1` requires issuer and audience; `0` allows them to be absent, so bearer requests answer 401 or 503 |
-| `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Auth0 issuer URL, normalized to a trailing `/` (the custom domain, for example `https://auth.policyengine.org/`) |
+| `PUBLIC_API_AUTH_ISSUER` | GitHub variable | Issuer URL of the users' Auth0 tenant, normalized to a trailing `/`: the custom domain `https://auth.policyengine.org/` in production, the tenant's own domain `https://policyengine-dev.uk.auth0.com/` in staging |
 | `PUBLIC_API_AUTH_AUDIENCE` | GitHub variable | The Public API resource-server identifier |
 | `PUBLIC_API_SERVER_CREDENTIAL_REQUIRED` | GitHub variable (optional) | `1` refuses every request without a server credential outside the public routes; unset, empty or `0` (what deploys write by default) serves them. `1` needs `PUBLIC_API_SERVER_CLIENT_IDS` |
 | `PUBLIC_API_SERVER_AUTH_ISSUER` | GitHub variable (optional) | Issuer of server tokens: the Public API's own Auth0 tenant (decision 1.1 · 5), for example `https://policyengine-api.uk.auth0.com/` in production and `https://policyengine-api-staging.uk.auth0.com/` in staging. Normalized to a trailing `/`; HTTPS; needs `PUBLIC_API_AUTH_AUDIENCE` and must differ from `PUBLIC_API_AUTH_ISSUER`. Set it to the new tenant's issuer exactly as its OpenID configuration publishes it: the check can't tell that another domain of the users' tenant, such as `policyengine.uk.auth0.com`, names the same tenant. Unset accepts no server token |
@@ -842,10 +845,11 @@ requests keep their 401/503 behavior, and signed-out requests still work.
 
 > **Set the final issuer before the first sign-in.** `user_identities` is
 > keyed by `(issuer, subject)`, so `PUBLIC_API_AUTH_ISSUER` must hold its
-> final value, the custom domain (for example
-> `https://auth.policyengine.org/`) rather than the tenant's `*.auth0.com`
-> domain, before anyone signs in to that environment. Changing it later
-> makes every existing user look new: their next sign-in provisions a new,
+> final value before anyone signs in to that environment. In production that
+> is the custom domain `https://auth.policyengine.org/`, not the tenant's
+> `*.auth0.com` domain. Staging's users' tenant has no custom domain, so its
+> final value is `https://policyengine-dev.uk.auth0.com/`. Changing the value
+> later makes every existing user look new: their next sign-in provisions a new,
 > empty account, and their old account and its saved work are orphaned,
 > with no sign-in that can read, export, or delete them. Nothing re-keys
 > identities automatically.
@@ -976,11 +980,15 @@ may have it.
 
 ## Auth0 prerequisites (operator)
 
-Configure staging first, then production:
+Configure staging's users' tenant (`policyengine-dev`) first, then
+production's (`policyengine`).
+[Auth0 tenants and tokens](cloud-run-operations.md#auth0-tenants-and-tokens)
+lists every tenant and the tokens it issues.
 
-1. **Custom domain** (for example `auth.policyengine.org`). Tokens then carry
-   that issuer. Finish this before setting `PUBLIC_API_AUTH_ISSUER`, which
-   must not change once a user has signed in (see "Settings").
+1. **Custom domain, production only** (`auth.policyengine.org`). Tokens
+   requested through it carry that issuer. Finish this before setting
+   production's `PUBLIC_API_AUTH_ISSUER`, which must not change once a user
+   has signed in (see "Settings"). Staging uses its tenant's own domain.
 2. **Public API resource server** (RS256), whose identifier becomes
    `PUBLIC_API_AUTH_AUDIENCE`.
 3. **Social connections and SPA applications** for app v3.
