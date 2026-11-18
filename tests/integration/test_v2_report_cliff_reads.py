@@ -18,7 +18,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
@@ -55,6 +55,12 @@ if TYPE_CHECKING:
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
 FAILURE = "cliff_calculation_failed: the calculation raised an error"
+REPORT_RUN_CLIFF_COLUMNS = (
+    "baseline_cliff_gap",
+    "baseline_cliff_share",
+    "reform_cliff_gap",
+    "reform_cliff_share",
+)
 
 
 def current_versions(country_id: str) -> PackageVersions:
@@ -83,9 +89,29 @@ def catalogs(owner_engine: Engine) -> Iterator[dict[str, CatalogRows]]:
 
 
 @pytest.fixture
-def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
+def runtime_engine(managed_v2_roles, v2_engine_as_role) -> Iterator[Engine]:
+    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def runtime_statements(runtime_engine: Engine) -> list[str]:
+    """Collect each SQL statement the runtime role runs during the test."""
+    statements: list[str] = []
+
+    def record_statement(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(runtime_engine, "before_cursor_execute", record_statement)
+    return statements
+
+
+@pytest.fixture
+def client(runtime_engine: Engine) -> Iterator[TestClient]:
     """Serve the report routes as the runtime role."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
     sessions = sessionmaker(runtime_engine, class_=Session)
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
@@ -100,12 +126,11 @@ def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
         specification=RouteImplementation.FLASK_FALLBACK,
         metadata=RouteImplementation.FLASK_FALLBACK,
     )
-    yield TestClient(
+    return TestClient(
         create_asgi_app(
             Flask(__name__), dependencies=dependencies, route_settings=settings
         )
     )
-    runtime_engine.dispose()
 
 
 def read_report(client: TestClient, report_id: object, country: str) -> Any:
@@ -171,6 +196,37 @@ def test_a_report_runs_own_cliff_columns_are_not_read(
     assert item["status"] == "succeeded"
     assert item["result"]["cliff_impact"] is None
     assert item["cliffs"]["status"] == "not_calculated"
+
+
+def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
+    owner_engine: Engine,
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
+    runtime_statements: list[str],
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalogs["us"])
+        store_report_run(
+            connection,
+            catalogs["us"],
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=us_economy_result(),
+        )
+
+    read_report(client, report.report_id, "us")
+    runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
+
+    assert runs.status_code == 200, runs.text
+    report_run_loads = [
+        statement for statement in runtime_statements if "report_runs" in statement
+    ]
+    assert report_run_loads
+    assert [
+        column
+        for column in REPORT_RUN_CLIFF_COLUMNS
+        if any(column in statement for statement in report_run_loads)
+    ] == []
 
 
 def test_a_run_still_calculating_reads_each_sides_cliff_progress(
