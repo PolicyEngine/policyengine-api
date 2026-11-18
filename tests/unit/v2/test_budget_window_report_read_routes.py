@@ -15,7 +15,6 @@ from tests.unit.v2.budget_window_report_support import (
     budget_window_report_read,
     budget_window_run_read,
     budget_window_summary_read,
-    budget_window_year_read,
 )
 from tests.unit.v2.stored_report_support import (
     REPORT_ID,
@@ -42,11 +41,8 @@ def test_a_budget_window_answers_its_window_newest_run_years_and_result() -> Non
     assert (item["year"], item["budget_window_size"]) == (2026, 2)
     run = item["run"]
     assert run["id"] == str(BUDGET_WINDOW_RUN_ID)
-    assert (run["status"], run["trigger"], run["recalculate"]) == (
-        "succeeded",
-        "initial",
-        False,
-    )
+    assert (run["status"], run["recalculate"]) == ("succeeded", False)
+    assert "trigger" not in run
     assert (run["country_package_version"], run["policyengine_version"]) == (
         "1.4.0",
         "4.1.0",
@@ -58,7 +54,6 @@ def test_a_budget_window_answers_its_window_newest_run_years_and_result() -> Non
         "year",
         "id",
         "status",
-        "trigger",
         "country_package_version",
         "policyengine_version",
         "baseline_simulation_run_id",
@@ -81,20 +76,14 @@ def test_a_budget_window_answers_its_window_newest_run_years_and_result() -> Non
     ]
 
 
-def test_a_window_run_and_its_years_without_a_trigger_answer_it_as_null() -> None:
-    run = budget_window_run_read(
-        trigger=None,
-        years=tuple(
-            budget_window_year_read(year, trigger=None) for year in YEAR_RUN_IDS
-        ),
-    )
-    service = FakeReportService(report=budget_window_report_read(run=run, label=None))
+def test_a_window_run_and_its_years_answer_no_trigger() -> None:
+    service = FakeReportService(report=budget_window_report_read(label=None))
 
     item = read_item(service)
 
     assert item["label"] is None
-    assert item["run"]["trigger"] is None
-    assert {year["trigger"] for year in item["run"]["years"]} == {None}
+    assert "trigger" not in item["run"]
+    assert all("trigger" not in year for year in item["run"]["years"])
 
 
 def test_a_budget_window_without_a_run_answers_no_run_and_no_result() -> None:

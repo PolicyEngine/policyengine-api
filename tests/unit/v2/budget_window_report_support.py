@@ -62,7 +62,6 @@ def budget_window_year_read(year: int, **changes: Any) -> BudgetWindowYearRead:
         "year": year,
         "id": YEAR_RUN_IDS[year],
         "status": "succeeded",
-        "trigger": "initial",
         "country_package_version": "1.4.0",
         "policyengine_version": "4.1.0",
         "baseline_simulation_run_id": UUID(int=year * 2),
@@ -79,7 +78,6 @@ def budget_window_run_read(**changes: Any) -> BudgetWindowRunRead:
     values: dict[str, Any] = {
         "id": BUDGET_WINDOW_RUN_ID,
         "status": "succeeded",
-        "trigger": "initial",
         "recalculate": False,
         "country_package_version": "1.4.0",
         "policyengine_version": "4.1.0",

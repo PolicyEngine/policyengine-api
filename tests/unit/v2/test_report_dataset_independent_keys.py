@@ -121,7 +121,6 @@ def store_household_report(
     session.add_all(simulations)
     session.flush()
     report = Report(
-        label="My household",
         country=catalog.country,
         tax_benefit_model_id=catalog.model_id,
         baseline_simulation_id=simulations[0].id,

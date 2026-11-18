@@ -15,7 +15,6 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     ReportRunStatus,
-    ReportRunTrigger,
     TaxBenefitModel,
 )
 from policyengine_api.data.v2.report_runs import (
@@ -50,7 +49,6 @@ def _create_report(session: Session) -> Report:
     session.add(model)
     session.flush()
     report = Report(
-        label="Distributional report",
         country="us",
         tax_benefit_model_id=model.id,
         inputs={},
@@ -75,29 +73,7 @@ def test_unknown_report_is_rejected_before_any_validation(engine) -> None:
                 ),
                 simulation_runs=SIMULATION_RUNS,
             ),
-            trigger=ReportRunTrigger.MANUAL,
         )
-
-
-def test_manual_run_without_a_key_is_rejected_before_version_checks(engine) -> None:
-    with Session(engine) as session:
-        report = _create_report(session)
-
-        with pytest.raises(
-            ValueError, match=r"^manual report reruns require an idempotency key$"
-        ):
-            create_report_run(
-                session,
-                report_id=report.id,
-                inputs=ReportRunInputs(
-                    versions=ReportRunPackageVersions(
-                        country_package_version="",
-                        policyengine_version="",
-                    ),
-                    simulation_runs=SIMULATION_RUNS,
-                ),
-                trigger=ReportRunTrigger.MANUAL,
-            )
 
 
 @pytest.mark.parametrize(
@@ -125,7 +101,6 @@ def test_empty_package_versions_are_rejected(
                     ),
                     simulation_runs=SIMULATION_RUNS,
                 ),
-                trigger=ReportRunTrigger.SYSTEM,
             )
 
 
@@ -143,7 +118,6 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
                 ),
                 simulation_runs=SIMULATION_RUNS,
             ),
-            trigger=ReportRunTrigger.INITIAL,
         )
 
         stored = session.exec(select(ReportRun)).one()
@@ -151,7 +125,6 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
         assert run.report_id == report.id
         assert run.country_package_version == "1.2.3"
         assert run.policyengine_version == "4.5.6"
-        assert run.trigger is ReportRunTrigger.INITIAL
         assert run.idempotency_key is None
         assert run.status is ReportRunStatus.PENDING
         assert run.baseline_simulation_run_id == UUID(int=101)
@@ -184,7 +157,6 @@ def test_conflict_without_a_matching_keyed_run_reraises(
                     ),
                     simulation_runs=SIMULATION_RUNS,
                 ),
-                trigger=ReportRunTrigger.MANUAL,
                 idempotency_key=uuid4(),
             )
 

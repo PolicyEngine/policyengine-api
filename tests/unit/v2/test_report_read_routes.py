@@ -73,12 +73,10 @@ def test_a_reports_spm_receipts_are_answered_with_package_names_as_keys() -> Non
     }
 
 
-def test_a_report_without_a_label_or_run_trigger_answers_them_as_null() -> None:
+def test_a_report_without_a_label_answers_null_and_its_run_no_trigger() -> None:
     """A shared report holds no caller's label, and its runs no request's trigger."""
     service = FakeReportService()
-    service.report = replace(
-        service.report, label=None, run=report_run_read(trigger=None)
-    )
+    service.report = replace(service.report, label=None, run=report_run_read())
     client = report_route_client(reports=service)
 
     response = client.get(f"/v2/reports/{REPORT_ID}?country_id=us")
@@ -86,7 +84,7 @@ def test_a_report_without_a_label_or_run_trigger_answers_them_as_null() -> None:
     assert response.status_code == 200, response.text
     item = response.json()["result"]["item"]
     assert item["label"] is None
-    assert item["run"]["trigger"] is None
+    assert "trigger" not in item["run"]
 
 
 def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
