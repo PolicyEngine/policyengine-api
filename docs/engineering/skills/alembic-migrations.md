@@ -928,10 +928,9 @@ from there gives the same operations.
 - The per-user columns of shared rows become nullable, with no default:
   `reports.label`, `report_runs.trigger` and `budget_window_runs.trigger`
   (`reports.description` and `user_id` already were). A shared row describes
-  no one caller, so the simulation service stops writing them, and a later
-  revision drops them; until then the report read and run lists answer a
-  missing label or trigger as null. A user's trigger is on their
-  `user_report_run_associations` row.
+  no one caller, so the simulation service stops writing them, API v1's models
+  leave them out, and a later revision drops them. A user's trigger is on
+  their `user_report_run_associations` row.
 - `user_report_run_associations` records each user's request for a report
   run: the user (`CASCADE`), the run (`RESTRICT`, so a run a user asked for
   can't be deleted), `requested_at` (required, with no default: the writer
