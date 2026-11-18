@@ -282,6 +282,88 @@ tests therefore run against the staging simulation service and staging Modal
 workers. The old gateway is one shared Modal app that reports no environment,
 so `old_gateway_direct` is not checked.
 
+## Auth0 tenants and tokens
+
+Four Auth0 tenants issue the tokens API v1 accepts or requests. Each
+environment signs users in through one tenant and gives PolicyEngine's servers
+their tokens from another (decisions 1.1 · 5 and 6.1 · 1). The settings named
+below hold the live values. This section records them as of 2026-11-18,
+because the repository alone can't show which tenant issues what.
+
+| Tenant | Used by | What it issues | Issuer (`iss`) |
+| --- | --- | --- | --- |
+| `policyengine` | Production, and Simulation API tokens for both environments | Signed-in users' tokens for app v3; Management API tokens for API v1; Simulation API tokens; Household API tokens for partner clients and the developer portal, which API v1 doesn't accept | `https://auth.policyengine.org/` for user sign-in, `https://policyengine.uk.auth0.com/` for the rest |
+| `policyengine-dev` | Staging, app v3 previews and local development | Signed-in users' tokens, the staging test user's tokens, and Management API tokens for API v1 | `https://policyengine-dev.uk.auth0.com/` |
+| `policyengine-api` | Production | Client-credentials tokens for API v1's production server clients | `https://policyengine-api.uk.auth0.com/` |
+| `policyengine-api-staging` | Staging | Client-credentials tokens for API v1's staging server clients | `https://policyengine-api-staging.uk.auth0.com/` |
+
+A token's issuer is the address it was requested from, so `policyengine` has
+two: its custom domain and its own `*.auth0.com` domain. Only `policyengine`
+has a custom domain.
+
+### Tokens in each environment
+
+| Token | Requested by | Production tenant and audience | Staging tenant and audience | Settings |
+| --- | --- | --- | --- | --- |
+| Signed-in user, sent to API v1 | App v3; a PolicyEngine server may forward it in `PolicyEngine-User-Authorization` | `policyengine` through `auth.policyengine.org`, `https://api.policyengine.org/` | `policyengine-dev`, `https://staging-api.policyengine.org/` | `PUBLIC_API_AUTH_ISSUER`, `PUBLIC_API_AUTH_AUDIENCE` |
+| Server, sent to API v1 | PolicyEngine's servers | `policyengine-api`, `https://api.policyengine.org/` | `policyengine-api-staging`, `https://staging-api.policyengine.org/` | `PUBLIC_API_SERVER_AUTH_ISSUER`, `PUBLIC_API_AUTH_AUDIENCE`, `PUBLIC_API_SERVER_CLIENT_IDS` |
+| CI server, sent to API v1 | Deployed-API test jobs in `push.yml` | `policyengine-api`, `https://api.policyengine.org/` | `policyengine-api-staging`, `https://staging-api.policyengine.org/` | `CI_SERVER_AUTH0_*` |
+| CI test user, sent to API v1 | Staging live tests, by the password-realm grant on the `policyengine-staging-ci` connection | None | `policyengine-dev`, `https://staging-api.policyengine.org/` | `STAGING_AUTH0_TEST_*` |
+| Simulation API, sent by API v1 | API v1 | `policyengine`, `https://simulation-api.policyengine.org` | `policyengine`, `https://simulation-api.policyengine.org` | `GATEWAY_AUTH_*` |
+| Management API, to delete Auth0 users (`delete:users`) | API v1 | `policyengine`, `https://policyengine.uk.auth0.com/api/v2/` | None | `AUTH0_MANAGEMENT_*` |
+| Management API, to read users' profiles (`read:users`) | API v1 | `policyengine`, `https://policyengine.uk.auth0.com/api/v2/` | `policyengine-dev`, `https://policyengine-dev.uk.auth0.com/api/v2/` | `AUTH0_USER_PROFILES_*` |
+
+### How API v1 tells the tenants apart
+
+- API v1 verifies a bearer token with the signing keys, issuer and audience of
+  the issuer the token names, and refuses any other issuer.
+- From `PUBLIC_API_AUTH_ISSUER` it accepts signed-in users' tokens only. A
+  client-credentials token from that issuer is refused, even when its client
+  ID is in `PUBLIC_API_SERVER_CLIENT_IDS`.
+- From `PUBLIC_API_SERVER_AUTH_ISSUER` it accepts only client-credentials
+  tokens of clients in `PUBLIC_API_SERVER_CLIENT_IDS`.
+- Deploy validation requires the two issuers to differ.
+- Staging and production differ in both issuer and audience, so a token from
+  one environment is refused in the other.
+- `policyengine-api` and `policyengine-api-staging` refuse user access to their
+  API definitions (`deny_all`) and have no sign-in connections.
+- `policyengine` grants no client access to `https://api.policyengine.org/`, so
+  it issues no client-credentials token for API v1.
+
+Don't change `PUBLIC_API_AUTH_ISSUER` in an environment where users have signed
+in: accounts are keyed by issuer and subject, so every user would get a new,
+empty account (see "Settings" in
+[`stage-12a-user-login.md`](stage-12a-user-login.md#settings)).
+
+### Where the settings come from
+
+| Provider | Settings |
+| --- | --- |
+| GitHub `staging` and `production` environment variables | `PUBLIC_API_AUTH_*`, `PUBLIC_API_SERVER_AUTH_ISSUER`, `PUBLIC_API_SERVER_CLIENT_IDS`, `CI_SERVER_AUTH0_DOMAIN`, `CI_SERVER_AUTH0_CLIENT_ID`, `CI_SERVER_AUTH0_AUDIENCE`, `AUTH0_USER_PROFILES_DOMAIN`, `AUTH0_USER_PROFILES_CLIENT_ID` |
+| GitHub `production` environment variables | `AUTH0_MANAGEMENT_DOMAIN`, `AUTH0_MANAGEMENT_CLIENT_ID` |
+| GitHub `staging` environment variables | `STAGING_AUTH0_TEST_DOMAIN`, `STAGING_AUTH0_TEST_AUDIENCE`, `STAGING_AUTH0_TEST_REALM` |
+| GitHub environment secrets | `CI_SERVER_AUTH0_CLIENT_SECRET`, and in `staging`, `STAGING_AUTH0_TEST_CLIENT_ID`, `STAGING_AUTH0_TEST_CLIENT_SECRET`, `STAGING_AUTH0_TEST_USERNAME`, `STAGING_AUTH0_TEST_PASSWORD` |
+| GitHub environment secrets naming Secret Manager versions | `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE`, `AUTH0_USER_PROFILES_CLIENT_SECRET_RESOURCE` |
+| GitHub organization secrets, shared by both environments | `GATEWAY_AUTH_ISSUER`, `GATEWAY_AUTH_AUDIENCE`, `GATEWAY_AUTH_CLIENT_ID`, and `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`, which names a Secret Manager version |
+
+To compare this section with what is deployed:
+
+```bash
+# The GitHub settings of one environment
+gh variable list --repo PolicyEngine/policyengine-api --env production
+
+# The issuers and audiences on the service's latest revision
+gcloud run services describe policyengine-api \
+  --project policyengine-api --region us-central1 --format=json \
+  | jq -r '.spec.template.spec.containers[0].env[]
+      | select(.name | test("^(PUBLIC_API_(AUTH_ISSUER|AUTH_AUDIENCE|SERVER_AUTH_ISSUER)|GATEWAY_AUTH_(ISSUER|AUDIENCE))$"))
+      | "\(.name)=\(.value)"'
+
+# The issuer a tenant publishes
+curl -s https://policyengine-api.uk.auth0.com/.well-known/openid-configuration \
+  | jq -r .issuer
+```
+
 ## IAM and bootstrap constraints
 
 - The GitHub deploy service account holds `roles/run.developer`: it can deploy to
