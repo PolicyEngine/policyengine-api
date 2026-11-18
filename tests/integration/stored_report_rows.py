@@ -439,7 +439,7 @@ def store_cliff_calculation(  # noqa: PLR0913  # the connection, the run and its
     cliff_gap: float | None = None,
     cliff_share: float | None = None,
 ) -> UUID:
-    """Store one cliff calculation of the simulation run, as sim and its worker do.
+    """Store one cliff calculation of the simulation run, in the state named.
 
     A finished calculation has a completion time; a succeeded one needs
     ``cliff_gap`` and ``cliff_share``, a failed one an ``error_message``.

@@ -155,8 +155,8 @@ class RerunningSimulationService:
     With ``window_years``, the report is a budget window, and the new run is
     a budget-window run with a pending report run for each of those years.
     A report run again with ``include_cliffs`` also gets a pending cliff
-    calculation for each side's new simulation run, as the simulation
-    service starts them.
+    calculation for each side's new simulation run, as a service calculating
+    them per run starts them.
     """
 
     engine: Engine

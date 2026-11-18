@@ -95,7 +95,7 @@ class StoringSimulationService:
     With ``answer_unstored``, it answers with IDs it stored nothing for, and
     keeps them in ``unstored_ids`` (a report's run in ``unstored_run_ids``).
     A report with ``include_cliffs`` also gets a pending cliff calculation for
-    each side's simulation run, as the simulation service starts them.
+    each side's simulation run, as a service calculating them per run starts them.
     """
 
     engine: Engine

@@ -2,9 +2,8 @@
 
 The routes run as the Public API's runtime role, so the tests prove its
 ``SELECT`` on ``cliff_impacts`` covers the read (rule
-``api.v2.runtime-privileges-tested-as-runtime-role``). The simulation
-service inserts a run's cliff calculations and its Modal worker finishes
-them; here the database owner stores them, commits them, and the catalog's
+``api.v2.runtime-privileges-tested-as-runtime-role``). The database owner
+stores each run's cliff calculations here, commits them, and the catalog's
 deletion removes them with their runs.
 """
 
@@ -157,7 +156,7 @@ def test_a_report_runs_own_cliff_columns_are_not_read(
             RunSettings(versions=CURRENT_VERSIONS),
             result=uk_economy_result(),
         )
-        # As the report run writer stores a result that has cliffs.
+        # The report run's own columns hold cliffs; its simulation runs have none.
         connection.execute(
             text(
                 "UPDATE report_runs SET baseline_cliff_gap = 1.0, "

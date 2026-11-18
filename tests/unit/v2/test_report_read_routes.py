@@ -195,14 +195,20 @@ def test_the_openapi_document_says_a_service_may_refuse_to_calculate_cliffs() ->
         "cliffs": schemas["ReportCliffsItem"]["description"],
     }
 
-    missing = [
+    def states_the_refusal(description: str) -> bool:
+        words = " ".join(description.replace("`", "").split())
+        return (
+            "doesn't calculate cliffs per simulation run" in words
+            and "include_cliffs: true" in words
+        )
+
+    assert [
         name
         for name, description in descriptions.items()
-        if "doesn't calculate cliffs per simulation run"
-        not in " ".join(description.split())
-    ]
-
-    assert missing == []
+        if not states_the_refusal(description)
+    ] == []
+    cliffs_description = " ".join(descriptions["cliffs"].replace("`", "").split())
+    assert "a side with no calculation stays not_calculated" in cliffs_description
 
 
 @pytest.mark.parametrize(
