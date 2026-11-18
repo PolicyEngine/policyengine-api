@@ -286,7 +286,9 @@ so `old_gateway_direct` is not checked.
 
 Four Auth0 tenants issue the tokens API v1 accepts or requests. Each
 environment signs users in through one tenant and gives PolicyEngine's servers
-their tokens from another (decisions 1.1 · 5 and 6.1 · 1). The settings named
+their tokens from another (decisions 1.1 · 5 and 6.1 · 1). User sign-in stays
+on `policyengine` and `policyengine-dev`; it doesn't move to API v1's own
+tenants. The settings named
 below hold the live values. This section records them as of 2026-11-18,
 because the repository alone can't show which tenant issues what.
 
