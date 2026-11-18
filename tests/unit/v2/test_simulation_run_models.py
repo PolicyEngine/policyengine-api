@@ -289,7 +289,7 @@ def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
 
 
 def test_report_runs_load_and_write_none_of_their_cliff_columns() -> None:
-    """A run's cliffs are its simulation runs', so a revision can drop the columns."""
+    """A run's cliffs are its simulation runs', so API v1 leaves these columns alone."""
     loaded_columns = str(sa.select(ReportRun).compile(dialect=postgresql.dialect()))
 
     assert [name for name in CLIFF_IMPACT_COLUMNS if name in loaded_columns] == []
