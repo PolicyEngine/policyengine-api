@@ -118,7 +118,6 @@ def _create_simulation_rows(
         connection,
         "reports",
         id=ids["report"],
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -131,7 +130,6 @@ def _create_simulation_rows(
         id=ids["budget_window_run"],
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="initial",
         recalculate=False,
         status="pending",
     )
@@ -144,7 +142,6 @@ def _create_simulation_rows(
         year=2026,
         baseline_simulation_run_id=ids["run"],
         status="pending",
-        trigger="initial",
         **RUN_VERSIONS,
     )
     insert_row(
@@ -201,7 +198,7 @@ def test_the_simulation_service_creates_rows_and_records_only_its_calls(
         _refused(connection, statement, id=ids["run"])
     _refused(
         connection,
-        "UPDATE report_runs SET baseline_cliff_gap = 1.0 WHERE id = :id",
+        "UPDATE report_runs SET data_version = '1.0.0' WHERE id = :id",
         id=ids["report_run"],
     )
     _refused(
@@ -248,9 +245,7 @@ def test_modal_workers_write_their_run_status_and_results_only(
     connection.execute(
         text(
             "UPDATE report_runs SET status = 'running', started_at = now(), "
-            "modal_call_id = 'fc-coordinator', baseline_cliff_gap = 1.0, "
-            "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-            "reform_cliff_share = 0.2, data_version = '1.0.0', "
+            "modal_call_id = 'fc-coordinator', data_version = '1.0.0', "
             "spm_provenance = CAST('{}' AS jsonb), updated_at = now() "
             "WHERE id = :id"
         ),
@@ -291,8 +286,8 @@ def test_modal_workers_write_their_run_status_and_results_only(
     _refused(
         connection,
         "INSERT INTO budget_window_runs (id, report_id, "
-        "tax_benefit_model_version_id, trigger, recalculate, status) "
-        "VALUES (:id, :report_id, :version_id, 'manual', true, 'pending')",
+        "tax_benefit_model_version_id, recalculate, status) "
+        "VALUES (:id, :report_id, :version_id, true, 'pending')",
         id=uuid4(),
         report_id=ids["report"],
         version_id=public_api_rows.version_id,
@@ -439,7 +434,6 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
         id=failing_window_id,
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="manual",
         recalculate=True,
         status="pending",
     )
@@ -479,7 +473,6 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
         failing_window_id,
     )
     for statement in (
-        "UPDATE budget_window_runs SET trigger = 'manual' WHERE id = :id",
         "UPDATE budget_window_runs SET recalculate = false WHERE id = :id",
         "UPDATE budget_window_runs SET tax_benefit_model_version_id = "
         "tax_benefit_model_version_id WHERE id = :id",
@@ -540,8 +533,8 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
     _refused(
         connection,
         "INSERT INTO report_runs (id, report_id, baseline_simulation_run_id, "
-        "country_package_version, policyengine_version, status, trigger) "
-        "VALUES (:id, :report_id, :run_id, '1.0.0', '4.0.0', 'pending', 'initial')",
+        "country_package_version, policyengine_version, status) "
+        "VALUES (:id, :report_id, :run_id, '1.0.0', '4.0.0', 'pending')",
         id=uuid4(),
         report_id=uuid4(),
         run_id=uuid4(),

@@ -342,7 +342,6 @@ def test_report_definition_and_run_columns_are_separated() -> None:
         "country_package_version",
         "policyengine_version",
         "status",
-        "trigger",
         "idempotency_key",
         "started_at",
         "completed_at",

@@ -76,7 +76,7 @@ TABLE_MODELS = {
     "withheld_area_codes": WithheldAreaCode,
     "cliff_impacts": CliffImpact,
 }
-# The report run's own cliff columns, which no read uses: C1 · 41 drops them.
+# The cliff columns report runs held when the golden rows were recorded.
 REPORT_RUN_CLIFF_COLUMNS = (
     "baseline_cliff_gap",
     "baseline_cliff_share",

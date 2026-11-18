@@ -65,7 +65,6 @@ def report_run_read(**changes: Any) -> ReportRunRead:
     values: dict[str, Any] = {
         "id": REPORT_RUN_ID,
         "status": "succeeded",
-        "trigger": "initial",
         "country_package_version": "1.4.0",
         "policyengine_version": "4.1.0",
         "baseline_simulation_run_id": BASELINE_RUN_ID,

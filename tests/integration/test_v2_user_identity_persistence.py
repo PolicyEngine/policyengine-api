@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, delete, func, select, update
+from sqlalchemy import create_engine, delete, func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
@@ -87,6 +87,11 @@ from policyengine_api.services.v2.user_simulations.services import (
 )
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
+)
+from tests.integration.simulation_rows import (
+    delete_public_api_rows,
+    insert_public_api_rows,
+    insert_row,
 )
 from tests.unit.v2.user_service_support import default_legacy_references
 
@@ -760,6 +765,58 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
                 ).scalar_one()
                 == 0
             )
+
+
+def test_account_deletion_leaves_reports_which_name_no_user(sessions) -> None:
+    """A report is shared, so deleting an account neither needs nor changes it."""
+
+    class NoOpDeleter:
+        def prepare_deletion(self) -> None:
+            return None
+
+        def delete_user(self, subject: str) -> None:
+            return None
+
+    owner_engine = create_engine(_disposable_url())
+    report_id = uuid4()
+    with owner_engine.begin() as connection:
+        public_api_rows = insert_public_api_rows(connection)
+        insert_row(
+            connection,
+            "reports",
+            id=report_id,
+            country="us",
+            tax_benefit_model_id=public_api_rows.model_id,
+            inputs="{}",
+        )
+    try:
+        principal = _principal(sessions, "google-oauth2|report-reader")
+        accounts = V2AccountService(
+            AccountDatabaseSession(sessions),
+            auth0_user_deleter_factory=NoOpDeleter,
+        )
+        user_id = accounts.get_account(principal=principal, country_id="us").id
+
+        accounts.delete_account(principal=principal)
+
+        report_columns = {
+            column["name"] for column in inspect(owner_engine).get_columns("reports")
+        }
+        assert "user_id" not in report_columns
+        with sessions() as session:
+            assert session.get(User, user_id) is None
+        with owner_engine.connect() as connection:
+            remaining_reports = connection.execute(
+                text("SELECT count(*) FROM reports WHERE id = :id"), {"id": report_id}
+            ).scalar_one()
+        assert remaining_reports == 1
+    finally:
+        with owner_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM reports WHERE id = :id"), {"id": report_id}
+            )
+            delete_public_api_rows(connection, public_api_rows)
+        owner_engine.dispose()
 
 
 @pytest.mark.usefixtures("sessions")

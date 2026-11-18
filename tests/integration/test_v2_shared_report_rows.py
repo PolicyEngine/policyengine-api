@@ -50,9 +50,9 @@ FIND_OR_CREATE_SIMULATION = (
     "ON CONFLICT (key_version, definition_key) DO NOTHING RETURNING id"
 )
 FIND_OR_CREATE_REPORT = (
-    "INSERT INTO reports (id, label, country, tax_benefit_model_id, year, inputs, "
+    "INSERT INTO reports (id, country, tax_benefit_model_id, year, inputs, "
     "key_version, definition_key, dataset_independent_key) "
-    "VALUES (:id, 'Report', 'us', :model_id, 2026, '{}', 1, :key, "
+    "VALUES (:id, 'us', :model_id, 2026, '{}', 1, :key, "
     ":dataset_independent_key) "
     "ON CONFLICT (key_version, definition_key) DO NOTHING RETURNING id"
 )
@@ -68,17 +68,17 @@ FIND_OR_CREATE_SIMULATION_RUN = (
 )
 FIND_OR_CREATE_REPORT_RUN = (
     "INSERT INTO report_runs (id, report_id, baseline_simulation_run_id, "
-    "country_package_version, policyengine_version, status, trigger, forced) "
+    "country_package_version, policyengine_version, status, forced) "
     "VALUES (:id, :report_id, :baseline_run_id, :country_package_version, "
-    ":policyengine_version, 'pending', 'initial', :forced) "
+    ":policyengine_version, 'pending', :forced) "
     "ON CONFLICT (report_id, country_package_version, policyengine_version) "
     "WHERE budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced "
     "DO NOTHING RETURNING id"
 )
 FIND_OR_CREATE_WINDOW_RUN = (
     "INSERT INTO budget_window_runs (id, report_id, tax_benefit_model_version_id, "
-    "policyengine_version, trigger, recalculate, status) "
-    "VALUES (:id, :report_id, :version_id, :policyengine_version, 'initial', "
+    "policyengine_version, recalculate, status) "
+    "VALUES (:id, :report_id, :version_id, :policyengine_version, "
     ":recalculate, 'pending') "
     "ON CONFLICT (report_id, tax_benefit_model_version_id, policyengine_version) "
     "WHERE status <> 'failed' AND NOT recalculate DO NOTHING RETURNING id"
@@ -189,7 +189,6 @@ def _report(connection: Connection, public_api_rows: PublicApiRows) -> UUID:
         connection,
         "reports",
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -495,7 +494,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             id=window_run_id,
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
-            trigger="initial",
             recalculate=False,
             status="pending",
         )
@@ -508,7 +506,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             year=2026,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 
@@ -568,7 +565,7 @@ def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
 def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
     connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
-    """A report without a label, and runs without a trigger, are stored as such."""
+    """The service stores reports and runs with no label, user or trigger."""
     simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
     _act_as(connection, managed_v2_roles.simulation_service)
     baseline_run_id = _simulation_run(connection, public_api_rows, simulation_id)
@@ -605,14 +602,14 @@ def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
     _act_as(connection, managed_v2_roles.runtime)
     stored = connection.execute(
         text(
-            "SELECT reports.label, report_runs.trigger, budget_window_runs.trigger "
+            "SELECT reports.id, report_runs.id, budget_window_runs.id "
             "FROM reports JOIN report_runs ON report_runs.report_id = reports.id "
             "JOIN budget_window_runs ON budget_window_runs.report_id = reports.id "
             "WHERE reports.id = :report_id"
         ),
         {"report_id": report_id},
     ).one()
-    assert tuple(stored) == (None, None, None)
+    assert tuple(stored) == (report_id, report_run_id, window_run_id)
 
 
 def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(

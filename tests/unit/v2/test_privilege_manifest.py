@@ -76,10 +76,6 @@ WORKER_RESULT_COLUMNS = {
     "simulation_runs": frozenset({"output_uri", "output_sha256", "household_result"}),
     "report_runs": frozenset(
         {
-            "baseline_cliff_gap",
-            "baseline_cliff_share",
-            "reform_cliff_gap",
-            "reform_cliff_share",
             "spm_provenance",
             "data_version",
         }

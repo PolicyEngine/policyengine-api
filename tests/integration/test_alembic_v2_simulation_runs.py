@@ -91,7 +91,6 @@ PUBLIC_API_FOREIGN_KEYS = {
         "RESTRICT",
     ),
     ("simulations", "region_id"): ("regions", "SET NULL"),
-    ("reports", "user_id"): ("users", "SET NULL"),
     ("reports", "tax_benefit_model_id"): ("tax_benefit_models", "RESTRICT"),
     ("reports", "policy_id"): ("policies", "SET NULL"),
     ("reports", "household_id"): ("households", "RESTRICT"),
@@ -276,9 +275,6 @@ def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
     }
 
     assert public_api_keys == PUBLIC_API_FOREIGN_KEYS
-    assert {"ix_reports_user_id"} <= {
-        index["name"] for index in inspector.get_indexes("reports")
-    }
 
 
 def _count(connection: Connection, table: str, column: str, value: object) -> int:
@@ -350,7 +346,6 @@ def _insert_report_run(
         connection,
         "reports",
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         inputs="{}",
@@ -363,7 +358,6 @@ def _insert_report_run(
         baseline_simulation_run_id=baseline_run_id,
         reform_simulation_run_id=reform_run_id,
         status="running",
-        trigger="initial",
         **RUN_VERSIONS,
     )
     return report_run_id
@@ -591,7 +585,7 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         )
 
 
-def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
+def test_a_report_runs_labor_supply_and_spm_receipt_are_typed(
     connection: Connection, public_api_rows: PublicApiRows
 ) -> None:
     report_run_id = _insert_report_run(
@@ -650,16 +644,9 @@ def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
             report_run_id=report_run_id,
             decile=1,
         )
-    with refused(connection, match="ck_report_runs_cliff_impact_complete"):
-        connection.execute(
-            text("UPDATE report_runs SET baseline_cliff_gap = 1.0 WHERE id = :id"),
-            {"id": report_run_id},
-        )
     connection.execute(
         text(
-            "UPDATE report_runs SET baseline_cliff_gap = 1.0, "
-            "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-            "reform_cliff_share = 0.2, data_version = '1.0.0', "
+            "UPDATE report_runs SET data_version = '1.0.0', "
             "spm_provenance = CAST(:receipt AS jsonb) WHERE id = :id"
         ),
         {"id": report_run_id, "receipt": '{"source": "census"}'},
@@ -685,7 +672,6 @@ def _insert_report(
         connection,
         "reports",
         id=report_id,
-        label="Budget window",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         inputs="{}",
@@ -704,7 +690,6 @@ def _insert_budget_window_run(
         id=window_run_id,
         report_id=report_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="initial",
         recalculate=False,
         status="running",
     )
@@ -749,7 +734,6 @@ def test_budget_windows_hold_one_report_run_per_year(
                 year=year or 2026,
             ),
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 

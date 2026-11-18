@@ -246,7 +246,7 @@ def test_a_created_report_is_answered_as_the_tables_hold_it(
     item = response.json()["result"]["item"]
     assert item["id"] == str(catalog.report_ids[0])
     assert item["status"] == "pending"
-    assert item["run"]["trigger"] == "initial"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None
     assert item["current_versions"] == CURRENT_VERSIONS
