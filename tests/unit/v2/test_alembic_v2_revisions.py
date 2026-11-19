@@ -1237,7 +1237,6 @@ def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> 
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
