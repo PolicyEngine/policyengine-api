@@ -2,10 +2,11 @@
 
 Results that compare a report run's baseline and reform belong to the report
 run and name its two simulation runs; each such row is unique within its report
-run. Poverty and inequality, which describe one simulation, belong to a
-simulation run.
+run. Poverty, inequality and cliff impacts, which describe one simulation,
+belong to a simulation run.
 """
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -13,9 +14,16 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import Field, Relationship
 
-from policyengine_api.data.v2.models.base import IdentifiedModel, enum_type
+from policyengine_api.data.v2.models.base import (
+    IdentifiedModel,
+    TimestampedModel,
+    enum_type,
+)
 from policyengine_api.data.v2.models.reports import ReportRun
-from policyengine_api.data.v2.models.simulations import SimulationRun
+from policyengine_api.data.v2.models.simulations import (
+    SimulationRun,
+    SimulationStatus,
+)
 
 
 class OutputStatus(StrEnum):
@@ -399,6 +407,78 @@ class Poverty(IdentifiedModel, table=True):
     rate: float | None = None
 
     simulation_run: SimulationRun = Relationship(back_populates="poverty_results")
+
+
+# The cliff calculations a new request may join, of which a simulation run has
+# at most one: a failed calculation never counts.
+UNFAILED_CLIFF_CALCULATIONS = "status <> 'failed'"
+
+
+class CliffImpact(TimestampedModel, table=True):
+    """One cliff calculation of a simulation run, and its result once it succeeds.
+
+    ``cliff_gap`` is the weighted total of the net income people would lose
+    from a small rise in their earnings, and ``cliff_share`` the weighted
+    number of people on a cliff divided by the weighted number of adults.
+    They need marginal tax rates, which recalculate each household with extra
+    earnings, so a run's cliffs are calculated apart from the run, on its
+    dataset, policy and dynamic, only when a request asks for them, and only
+    for a run on the current versions. The result has no versions of its own:
+    it inherits its run's, and every report naming the run shares it.
+
+    The simulation service inserts a pending calculation and records its
+    Modal call, or fails it when Modal refuses the call; the Modal worker
+    claims it under its call, then writes the two numbers with ``succeeded``,
+    or ``failed`` with its ``code: message`` error. A run has at most one
+    calculation that hasn't failed, which identical requests join; a failed
+    calculation never counts, and the next request starts another. Deleting
+    the run deletes its calculations.
+    """
+
+    __tablename__ = "cliff_impacts"
+    __table_args__ = (
+        sa.CheckConstraint(
+            "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
+            name="ck_cliff_impacts_finished_completion",
+        ),
+        sa.CheckConstraint(
+            "(cliff_gap IS NULL) = (cliff_share IS NULL) "
+            "AND (status = 'succeeded') = (cliff_gap IS NOT NULL)",
+            name="ck_cliff_impacts_result_when_succeeded",
+        ),
+        sa.Index("ix_cliff_impacts_status_started_at", "status", "started_at"),
+        sa.Index(
+            "uq_cliff_impacts_unfailed",
+            "simulation_run_id",
+            unique=True,
+            postgresql_where=sa.text(UNFAILED_CLIFF_CALCULATIONS),
+            sqlite_where=sa.text(UNFAILED_CLIFF_CALCULATIONS),
+        ),
+    )
+
+    simulation_run_id: UUID = Field(
+        foreign_key="simulation_runs.id",
+        ondelete="CASCADE",
+        index=True,
+    )
+    status: SimulationStatus = Field(
+        default=SimulationStatus.PENDING,
+        sa_type=enum_type(SimulationStatus, "v2_simulation_status"),
+    )
+    modal_call_id: str | None = Field(default=None, max_length=255)
+    error_message: str | None = None
+    started_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    completed_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    cliff_gap: float | None = None
+    cliff_share: float | None = None
+
+    simulation_run: SimulationRun = Relationship(back_populates="cliff_impacts")
 
 
 class ProgramStatistics(IdentifiedModel, table=True):

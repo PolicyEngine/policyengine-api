@@ -72,11 +72,12 @@ CHANGED_TABLES = frozenset(
     }
 )
 # The tables the simulation service and its Modal workers write; the Public API
-# writes every other table. withheld_area_codes came in a later revision.
+# writes every other table. withheld_area_codes and cliff_impacts came in later
+# revisions.
 SIMULATION_SIDE_TABLES = (
     CHANGED_TABLES
     | NEW_TABLES
-    | {"aggregates", "change_aggregates", "withheld_area_codes"}
+    | {"aggregates", "change_aggregates", "withheld_area_codes", "cliff_impacts"}
 )
 # The foreign keys from the simulation service's tables to the Public API's
 # rows, with their delete rules.

@@ -45,7 +45,8 @@ SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declared"
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
 TEST_ENVIRONMENT = "staging"
-# The rows the simulation service creates, and the run tables among them.
+# The rows the simulation service creates, and the run tables among them. A
+# simulation run's cliff calculation is started and finished like a run.
 SIMULATION_SERVICE_CREATES = frozenset(
     {
         "simulations",
@@ -54,9 +55,12 @@ SIMULATION_SERVICE_CREATES = frozenset(
         "report_runs",
         "budget_window_runs",
         "household_jobs",
+        "cliff_impacts",
     }
 )
-RUN_STATUS_TABLES = frozenset({"simulation_runs", "report_runs", "household_jobs"})
+RUN_STATUS_TABLES = frozenset(
+    {"simulation_runs", "report_runs", "household_jobs", "cliff_impacts"}
+)
 # The run columns the Modal workers update: a run's state and its results.
 WORKER_RUN_STATE_COLUMNS = frozenset(
     {
@@ -81,6 +85,7 @@ WORKER_RESULT_COLUMNS = {
         }
     ),
     "household_jobs": frozenset({"result"}),
+    "cliff_impacts": frozenset({"cliff_gap", "cliff_share"}),
 }
 # The run columns the simulation service updates: it records a Modal call's ID
 # when Modal accepts the call, and fails the run when Modal refuses it.
@@ -150,6 +155,8 @@ RUN_DEFINITION_COLUMNS = {
             "recalculate",
         }
     ),
+    # A cliff calculation always calculates the run it was inserted for.
+    "cliff_impacts": frozenset({"simulation_run_id"}),
 }
 # The policy, dynamic, household and catalog rows a run needs.
 RUN_INPUT_TABLES = frozenset(
@@ -480,6 +487,28 @@ def test_the_public_api_records_each_users_report_run_requests() -> None:
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_report_run_associations"] == NO_ACCESS, role
+
+
+def test_cliff_calculations_are_started_by_the_service_and_finished_by_workers() -> (
+    None
+):
+    """The simulation service inserts a run's cliff calculation and records its call.
+
+    The Modal worker claims it, writes the cliff gap and share or the failure,
+    and never inserts one; API v1 reads the results. The catalog
+    writer and the Stage 12 role can do neither.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[SIMULATION_SERVICE_ROLE]["cliff_impacts"] == READ_INSERT | {
+        update_columns(*SERVICE_RUN_STATE_COLUMNS)
+    }
+    assert declared[MODAL_WORKER_ROLE]["cliff_impacts"] == READ | {
+        update_columns(*WORKER_RUN_STATE_COLUMNS, "cliff_gap", "cliff_share")
+    }
+    assert declared[RUNTIME_ROLE]["cliff_impacts"] == READ
+    for role in (CATALOG_WRITER_ROLE, stage12_role(TEST_ENVIRONMENT)):
+        assert declared[role]["cliff_impacts"] == NO_ACCESS, role
 
 
 def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:

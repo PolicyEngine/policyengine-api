@@ -21,6 +21,7 @@ V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
         "budget_window_runs",
+        "cliff_impacts",
         "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
@@ -69,16 +70,21 @@ SHARED_REPORTS_REVISION = "94dc43079186"
 # The user invitations revision, on the shared reports revision, and parent
 # of the dynamics revision.
 USER_INVITATIONS_REVISION = "f519a77ba122"
-# The dynamics revision, on the user invitations revision.
+# The dynamics revision, on the user invitations revision, and parent of the
+# cliff impacts revision.
 DYNAMICS_REVISION = "9d1d12a7ac58"
+# The cliff impacts revision, on the dynamics revision.
+CLIFF_IMPACTS_REVISION = "bc334f9877b7"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
+    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
     assert [revision.revision for revision in script.walk_revisions()] == [
-        V2_ALEMBIC_HEAD_REVISION,
+        CLIFF_IMPACTS_REVISION,
+        DYNAMICS_REVISION,
         USER_INVITATIONS_REVISION,
         SHARED_REPORTS_REVISION,
         WITHHELD_AREA_CODES_REVISION,
@@ -1155,7 +1161,6 @@ def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION == DYNAMICS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -1209,3 +1214,57 @@ def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None
     assert 'postgresql_where=sa.text("dynamic_id IS NOT NULL")' in upgrade
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
+
+
+def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> None:
+    """The revision after dynamics adds ``cliff_impacts``.
+
+    It is generated, creates the table with its two indexes and its partial
+    unique index, and writes no data. Its one post-generation correction makes
+    ``status`` reuse the ``v2_simulation_status`` type the baseline created,
+    which the generated ``create_table`` would create again and fail on; so
+    the downgrade, which drops only the table, leaves the type to
+    ``simulation_runs``.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{CLIFF_IMPACTS_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{DYNAMICS_REVISION}["']""",
+        revision,
+    )
+    assert revision.count("Dialect correction:") == 1
+    assert re.search(
+        r"""name=["']v2_simulation_status["'],\s*create_type=False""", upgrade
+    )
+    assert re.findall(r"""op\.create_table\(\s*["'](\w+)["']""", upgrade) == [
+        "cliff_impacts"
+    ]
+    assert sorted(
+        re.findall(r"""op\.create_index\(\s*(?:op\.f\()?["'](\w+)["']""", upgrade)
+    ) == [
+        "ix_cliff_impacts_simulation_run_id",
+        "ix_cliff_impacts_status_started_at",
+        "uq_cliff_impacts_unfailed",
+    ]
+    assert re.search(
+        r"""postgresql_where=sa\.text\(["']status <> 'failed'["']\)""", upgrade
+    )
+    assert re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade) == [
+        "cliff_impacts"
+    ]
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert ".drop(op.get_bind())" not in body
+    assert "op.alter_column(" not in upgrade
+    assert "op.add_column(" not in upgrade
