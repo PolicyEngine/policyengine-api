@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from policyengine_api.services.v2.user_dynamics.types import UserDynamicRead
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
 from policyengine_api.fastapi_routes.v2.errors_support import (
@@ -61,6 +62,8 @@ SAVED_POLICY_ID = UUID("00000000-0000-0000-0000-000000000083")
 SAVED_HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000084")
 SAVED_SIMULATION_ID = UUID("00000000-0000-0000-0000-000000000085")
 SAVED_REPORT_ID = UUID("00000000-0000-0000-0000-000000000086")
+SAVED_DYNAMIC_ID = UUID("00000000-0000-0000-0000-000000000087")
+DYNAMIC_ID = UUID("00000000-0000-0000-0000-000000000088")
 LAST_SEEN_AT = datetime(2026, 2, 1, tzinfo=UTC)
 SAVED_ITEMS_PATH = f"/v2/admin/users/{TARGET_ID}/saved-items"
 
@@ -116,6 +119,18 @@ def _saved_items() -> AccountExport:
                 description=None,
                 baseline="current-law",
                 provenance=None,
+                created_at=CREATED_AT,
+                updated_at=CREATED_AT,
+            ),
+        ),
+        dynamics=(
+            UserDynamicRead(
+                id=SAVED_DYNAMIC_ID,
+                country_id="us",
+                user_id=TARGET_ID,
+                dynamic_id=DYNAMIC_ID,
+                name="Bob's assumptions",
+                description=None,
                 created_at=CREATED_AT,
                 updated_at=CREATED_AT,
             ),
@@ -300,10 +315,11 @@ def test_admins_read_a_users_saved_items_as_its_own_export_returns_them() -> Non
     assert result["user"]["id"] == str(TARGET_ID)
     assert [
         (kind, item["id"], item["country_id"])
-        for kind in ("policies", "households", "simulations", "reports")
+        for kind in ("policies", "dynamics", "households", "simulations", "reports")
         for item in result[kind]
     ] == [
         ("policies", str(SAVED_POLICY_ID), "uk"),
+        ("dynamics", str(SAVED_DYNAMIC_ID), "us"),
         ("households", str(SAVED_HOUSEHOLD_ID), "us"),
         ("simulations", str(SAVED_SIMULATION_ID), "us"),
         ("reports", str(SAVED_REPORT_ID), "uk"),
