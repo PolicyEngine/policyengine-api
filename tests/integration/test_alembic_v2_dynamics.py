@@ -323,7 +323,10 @@ def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
     engine: Engine,
 ) -> None:
     config = alembic_v2_config()
-    command.upgrade(config, DYNAMICS_REVISION)
+    # The fixture leaves the database at the head, which a later revision may
+    # be, so a downgrade reaches the dynamics revision; an upgrade to an older
+    # revision does nothing.
+    command.downgrade(config, DYNAMICS_REVISION)
     with engine.begin() as connection:
         rows = insert_public_api_rows(connection)
         dynamic_id = _insert_dynamic(connection, rows)
