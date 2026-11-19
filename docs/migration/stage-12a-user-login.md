@@ -120,7 +120,7 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
-| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
+| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, dynamic, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
 | `DELETE /v2/admin/users/{user_id}` | Deletes the user's account and saved records, and the Auth0 users of its sign-in identities, as `DELETE /v2/me` deletes the caller's own (see [Admins' account deletions](#admins-account-deletions)). 204. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
@@ -587,7 +587,7 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 | `GET /v2/me/export` | The user and every association, all countries | The same; `user: null` and empty lists before the first saved record |
 | `POST /v2/me/upgrade?country_id=` | Requires the header too (422 without it); `{"item": MeItem, "outcome": ...}` | 401 (a bearer token is required) |
 | `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured; 409 for the last admin, deleting nothing | 204; deletes data, never calls Auth0 |
-| `/v2/user-policies`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
+| `/v2/user-policies`, `/v2/user-dynamics`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
 | `GET /v2/shared-reports/{id}?country_id=` | No credential: any user's saved report in that country, without its owner (404 when none) | The same |
 
 ### Shared reports

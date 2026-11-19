@@ -97,7 +97,7 @@ def test_user_routes_record_signed_in_and_signed_out_contracts() -> None:
         if headers == ("PolicyEngine-Unauthenticated-User",)
     }
 
-    for resource in ("policies", "households", "simulations", "reports"):
+    for resource in ("policies", "dynamics", "households", "simulations", "reports"):
         collection = f"/v2/user-{resource}"
         detail = f"{collection}/{{association_id}}"
         assert {
