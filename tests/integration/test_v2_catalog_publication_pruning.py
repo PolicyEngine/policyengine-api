@@ -75,7 +75,6 @@ INSTALLED_VERSION = "5.0.4"
 US_MODEL = "policyengine-us"
 UK_MODEL = "policyengine-uk"
 MODEL_NAMES = (US_MODEL, UK_MODEL)
-PROBE_DYNAMIC_NAME = "catalog-pruning-probe"
 # Each fixture catalog version holds, per country, two current-law values,
 # three parameter tree rows and one search file.
 FIXTURE_PRUNED_ROWS = {"parameter_values": 2, "tree_rows": 3, "search_files": 1}
@@ -99,12 +98,9 @@ def _disposable_url() -> str:
 
 
 def _clear_catalog(engine: Engine) -> None:
+    # Policies and dynamics name a model, so the truncation removes them too.
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-        connection.execute(
-            text("DELETE FROM dynamics WHERE name = :name"),
-            {"name": PROBE_DYNAMIC_NAME},
-        )
 
 
 @pytest.fixture
@@ -267,7 +263,13 @@ def _add_saved_reform_and_dynamic(engine: Engine, version: str) -> None:
             canonicalization_version=1,
             content_hash=uuid4().hex * 2,
         )
-        dynamic = Dynamic(name=PROBE_DYNAMIC_NAME)
+        dynamic = Dynamic(
+            country_id="us",
+            tax_benefit_model_id=model.id,
+            tax_benefit_model_version_id=model_version.id,
+            canonicalization_version=1,
+            content_hash=uuid4().hex * 2,
+        )
         session.add_all([policy, dynamic])
         session.flush()
         session.add_all(

@@ -67,11 +67,14 @@ WITHHELD_AREA_CODES_REVISION = "1e1e3f079f2c"
 # The shared reports revision, on the withheld area codes revision, and parent
 # of the user invitations revision.
 SHARED_REPORTS_REVISION = "94dc43079186"
-# The user invitations revision, on the shared reports revision, and parent of
-# the cliff impacts revision.
+# The user invitations revision, on the shared reports revision, and parent
+# of the dynamics revision.
 USER_INVITATIONS_REVISION = "f519a77ba122"
-# The cliff impacts revision, on the user invitations revision, and parent of
-# the report column drops revision.
+# The dynamics revision, on the user invitations revision, and parent of the
+# cliff impacts revision.
+DYNAMICS_REVISION = "9d1d12a7ac58"
+# The cliff impacts revision, on the dynamics revision, and parent of the
+# report column drops revision.
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
 # The report column drops revision, on the cliff impacts revision.
 REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
@@ -85,6 +88,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert [revision.revision for revision in script.walk_revisions()] == [
         REPORT_COLUMN_DROPS_REVISION,
         CLIFF_IMPACTS_REVISION,
+        DYNAMICS_REVISION,
         USER_INVITATIONS_REVISION,
         SHARED_REPORTS_REVISION,
         WITHHELD_AREA_CODES_REVISION,
@@ -1144,8 +1148,80 @@ def test_user_invitations_revision_adds_its_table_and_the_dismissal_column() -> 
     assert "source IN ('admin_route', 'script', 'invitation')" in upgrade
 
 
+def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None:
+    """The revision after user invitations stores dynamics as policies are stored.
+
+    It is generated with no corrections: ``dynamics`` gains policies' five
+    columns, their two indexes, two unique constraints, three foreign keys
+    and two checks, and loses ``name`` and ``description``;
+    ``legacy_policy_mappings`` gains ``dynamic_id`` with its index and key;
+    ``parameter_values`` gains the partial unique index on dynamics' values.
+    The downgrade undoes each, and neither writes data.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{DYNAMICS_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert (
+        f'down_revision: Union[str, None] = "{USER_INVITATIONS_REVISION}"' in revision
+    )
+    assert "correction" not in revision.lower()
+    assert sorted(re.findall(r"op\.\w+", upgrade)) == sorted(
+        [
+            *["op.add_column"] * 6,
+            *["op.create_index"] * 4,
+            *["op.create_unique_constraint"] * 2,
+            *["op.create_foreign_key"] * 4,
+            *["op.create_check_constraint"] * 2,
+            *["op.drop_column"] * 2,
+            # Two generated index names, three key names and two check names.
+            *["op.f"] * 7,
+        ]
+    )
+    assert sorted(re.findall(r"op\.\w+", downgrade)) == sorted(
+        [
+            *["op.drop_index"] * 4,
+            *["op.drop_constraint"] * 8,
+            *["op.drop_column"] * 6,
+            *["op.add_column"] * 2,
+            *["op.f"] * 7,
+        ]
+    )
+    for column_name in (
+        "country_id",
+        "tax_benefit_model_id",
+        "tax_benefit_model_version_id",
+        "canonicalization_version",
+        "content_hash",
+    ):
+        assert re.search(
+            rf'op\.add_column\(\s*"dynamics",\s*sa\.Column\(\s*"{column_name}",'
+            r"[^)]*\)?[^)]*nullable=False",
+            upgrade,
+        )
+    assert re.search(r'op\.drop_column\("dynamics", "name"\)', upgrade)
+    assert re.search(r'op\.drop_column\("dynamics", "description"\)', upgrade)
+    assert re.search(
+        r'op\.add_column\(\s*"legacy_policy_mappings",\s*'
+        r'sa\.Column\("dynamic_id", sa\.Uuid\(\), nullable=True\)',
+        upgrade,
+    )
+    assert "fk_legacy_policy_mappings_dynamic_country" in upgrade
+    assert "uq_parameter_values_dynamic_parameter_start_date" in upgrade
+    assert 'postgresql_where=sa.text("dynamic_id IS NOT NULL")' in upgrade
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
 def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> None:
-    """The revision after user invitations adds ``cliff_impacts``.
+    """The revision after dynamics adds ``cliff_impacts``.
 
     It is generated, creates the table with its two indexes and its partial
     unique index, and writes no data. Its one post-generation correction makes
@@ -1161,12 +1237,13 @@ def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> 
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
+    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
     assert re.search(
-        rf"""down_revision: Union\[str, None\] = ["']{USER_INVITATIONS_REVISION}["']""",
+        rf"""down_revision: Union\[str, None\] = ["']{DYNAMICS_REVISION}["']""",
         revision,
     )
     assert revision.count("Dialect correction:") == 1

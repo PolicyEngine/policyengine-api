@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
@@ -31,7 +32,12 @@ from policyengine_api.services.v2.simulation_service.types import (
 from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
 )
-from tests.unit.v2.test_simulation_submissions import UnreadHouseholds
+from tests.unit.v2.test_simulation_submissions import (
+    STORED_DYNAMIC_ID,
+    UK_DYNAMIC_ID,
+    StoredDynamics,
+    UnreadHouseholds,
+)
 
 STORED_POLICY_ID = UUID("00000000-0000-0000-0000-00000000c101")
 OUTDATED_POLICY_ID = UUID("00000000-0000-0000-0000-00000000c102")
@@ -111,6 +117,7 @@ def submissions(
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=policies,
+        dynamics=StoredDynamics(),
         client_factory=lambda: client,
     )
 
@@ -188,3 +195,21 @@ def test_a_window_may_end_in_2200() -> None:
     window = window_input(year=2191, budget_window_size=10)
 
     assert (window.year, window.budget_window_size) == (2191, 10)
+
+
+def test_a_budget_window_s_dynamics_are_checked_in_its_country() -> None:
+    client = RecordingSimulationService()
+    stored_dynamic = {
+        "policy_id": str(STORED_POLICY_ID),
+        "dynamic_id": str(STORED_DYNAMIC_ID),
+    }
+
+    submissions(client, StoredPolicies()).submit_budget_window(
+        window_input(baseline=stored_dynamic, reform=stored_dynamic)
+    )
+    with pytest.raises(DynamicNotFoundError, match=str(UK_DYNAMIC_ID)):
+        submissions(client, StoredPolicies()).submit_budget_window(
+            window_input(reform={"dynamic_id": str(UK_DYNAMIC_ID)})
+        )
+
+    assert len(client.windows) == 1

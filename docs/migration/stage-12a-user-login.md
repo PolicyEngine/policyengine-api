@@ -772,7 +772,8 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   first deletes users' saved work. From the head, the later revisions'
   downgrades run first: the report column drops revision (`4e30076d4b9f`) adds
   the dropped report columns back empty, the cliff impacts revision (`bc334f9877b7`) drops
-  every simulation run's cliff results, the user invitations revision
+  every simulation run's cliff results, the dynamics revision
+  (`9d1d12a7ac58`) needs `dynamics` empty, the user invitations revision
   (`f519a77ba122`) drops
   every invitation and dismissal and needs no change with source
   `invitation`, the shared reports revision (`94dc43079186`) drops

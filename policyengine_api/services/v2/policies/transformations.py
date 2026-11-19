@@ -13,10 +13,16 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
 
+from policyengine_api.dynamic_parameters import (
+    ConflictingParameterSpellingsError,
+    LegacyPolicySplit,
+    split_legacy_policy_json,
+)
 from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
     CheckedPolicyRead,
     LegacyPolicySnapshot,
+    LegacyPolicyTranslation,
     LegacyPolicyTranslationReason,
     PolicyCreationInput,
     PolicyPage,
@@ -40,11 +46,13 @@ if TYPE_CHECKING:
         SelectedCatalog,
     )
     from policyengine_api.data.v2.models import (
+        Dynamic,
         Parameter,
         ParameterValue,
         Policy,
         TaxBenefitModelVersion,
     )
+    from policyengine_api.supported_countries import SupportedCountryId
 
 POLICY_CANONICALIZATION_VERSION = 1
 # A v1 date-range period key is "start.end": two dates joined by one dot.
@@ -139,11 +147,11 @@ def canonicalize_policy(
 
 
 def stored_policy_creation_input(
-    policy: Policy,
+    policy: Policy | Dynamic,
     model_version: TaxBenefitModelVersion,
     values: list[ParameterValue],
 ) -> ResolvedPolicyCreationInput:
-    """Rebuild a stored policy's input so its canonical bytes can be compared."""
+    """Rebuild a stored policy's or dynamic's input to compare its canonical bytes."""
     return ResolvedPolicyCreationInput.model_validate(
         {
             "country_id": policy.country_id,
@@ -296,36 +304,43 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
     return start_date, end_date
 
 
-def translate_legacy_policy(
-    snapshot: LegacyPolicySnapshot,
-    *,
-    selected: SelectedCatalog,
-    parameters: Mapping[str, Parameter],
-) -> ResolvedPolicyCreationInput:
-    """Translate a v1 policy into policy content bound to the running catalog.
+def split_legacy_policy(snapshot: LegacyPolicySnapshot) -> LegacyPolicySplit:
+    """Split a v1 policy's values into the policy's and its model assumptions.
 
-    The country package version the v1 policy was saved under is not compared:
-    the Public API simulates an old policy with the running package, so the copy
-    binds it to the running catalog the same way.
-
-    ``parameters`` holds the running catalog's parameters with the policy's
-    parameter paths, keyed by path. Raise LegacyPolicyTranslationError, with a
-    fixed reason, if the v1 policy sets a parameter the catalog lacks, sets no
-    value for a parameter, or has invalid or conflicting periods.
+    The split is ``split_legacy_policy_json``'s, which also rewrites the UK's
+    old labour-supply spelling. Raise LegacyPolicyTranslationError, with
+    reason ``conflicting_values``, when a UK policy sets one parameter under
+    both spellings and they disagree.
     """
     policy_json = snapshot.policy_json
     if not isinstance(policy_json, dict):
         msg = "legacy policy_json must be an object"
         raise TypeError(msg)
-    if parameters_missing_from_model(policy_json, parameters):
-        msg = "every legacy parameter path must exist in the running catalog"
+    try:
+        return split_legacy_policy_json(snapshot.country_id, policy_json)
+    except ConflictingParameterSpellingsError as error:
+        msg = "legacy parameter spellings conflict"
         raise LegacyPolicyTranslationError(
-            msg, reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS
-        )
+            msg, reason=LegacyPolicyTranslationReason.CONFLICTING_VALUES
+        ) from error
 
+
+def _translate_legacy_values(
+    country_id: SupportedCountryId,
+    values_by_name: Mapping[str, object],
+    *,
+    selected: SelectedCatalog,
+    parameters: Mapping[str, Parameter],
+) -> ResolvedPolicyCreationInput:
+    """Translate one part of a v1 policy's values into content bound to the catalog.
+
+    Every name in ``values_by_name`` is in ``parameters``. Raise
+    LegacyPolicyTranslationError for values that are not period objects,
+    invalid or conflicting periods, or more values than v2 content may hold.
+    """
     parameter_values: list[PolicyParameterValueInput] = []
-    for parameter_name in sorted(policy_json):
-        period_values = policy_json[parameter_name]
+    for parameter_name in sorted(values_by_name):
+        period_values = values_by_name[parameter_name]
         if type(period_values) is not dict:
             msg = (
                 f"legacy parameter {parameter_name!r} must contain period/value entries"
@@ -354,13 +369,13 @@ def translate_legacy_policy(
                 )
             )
     if len(parameter_values) > MAXIMUM_POLICY_PARAMETER_VALUES:
-        msg = "legacy policy has more values than a v2 policy may hold"
+        msg = "legacy policy has more values than a v2 policy or dynamic may hold"
         raise LegacyPolicyTranslationError(
             msg, reason=LegacyPolicyTranslationReason.TOO_MANY_VALUES
         )
     try:
-        policy_input = PolicyCreationInput(
-            country_id=snapshot.country_id,
+        content = PolicyCreationInput(
+            country_id=country_id,
             tax_benefit_model_id=selected.model.id,
             parameter_values=parameter_values,
         )
@@ -372,7 +387,56 @@ def translate_legacy_policy(
             msg, reason=LegacyPolicyTranslationReason.CONFLICTING_VALUES
         ) from error
     return validate_policy_catalog(
-        policy_input,
+        content,
         selected=selected,
-        resolved_parameter_ids={parameter.id for parameter in parameters.values()},
+        resolved_parameter_ids={parameters[name].id for name in values_by_name},
     )
+
+
+def translate_legacy_policy(
+    snapshot: LegacyPolicySnapshot,
+    *,
+    selected: SelectedCatalog,
+    parameters: Mapping[str, Parameter],
+) -> LegacyPolicyTranslation:
+    """Translate a v1 policy into a policy and a dynamic bound to the running catalog.
+
+    The v1 policy's model assumptions (``policyengine_api.dynamic_parameters``)
+    become the dynamic's content, None when it sets none, and the rest the
+    policy's, which may be empty. The UK's old labour-supply spelling is
+    rewritten first (``split_legacy_policy``).
+
+    The country package version the v1 policy was saved under is not compared:
+    API v1 simulates an old policy with the running package, so the copy
+    binds it to the running catalog the same way.
+
+    ``parameters`` holds the running catalog's parameters with the split's
+    parameter names, keyed by name. Raise LegacyPolicyTranslationError, with a
+    fixed reason, if the v1 policy sets a parameter the catalog lacks, sets no
+    value for a parameter, or has invalid or conflicting periods or spellings.
+    """
+    split = split_legacy_policy(snapshot)
+    if parameters_missing_from_model(
+        [*split.policy_values, *split.dynamic_values], parameters
+    ):
+        msg = "every legacy parameter path must exist in the running catalog"
+        raise LegacyPolicyTranslationError(
+            msg, reason=LegacyPolicyTranslationReason.MISSING_PARAMETERS
+        )
+    policy = _translate_legacy_values(
+        snapshot.country_id,
+        split.policy_values,
+        selected=selected,
+        parameters=parameters,
+    )
+    dynamic = (
+        _translate_legacy_values(
+            snapshot.country_id,
+            split.dynamic_values,
+            selected=selected,
+            parameters=parameters,
+        )
+        if split.dynamic_values
+        else None
+    )
+    return LegacyPolicyTranslation(policy=policy, dynamic=dynamic)
