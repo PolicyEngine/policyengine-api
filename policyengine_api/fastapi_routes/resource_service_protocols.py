@@ -10,6 +10,11 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.dynamics.types import (
+        CheckedDynamicRead,
+        NativeDynamicCreation,
+        NativeDynamicCreationInput,
+    )
     from policyengine_api.services.v2.household_calculations.types import (
         HouseholdCalculationInput,
         HouseholdCalculationRead,
@@ -127,6 +132,20 @@ class V2PolicyResourceService(Protocol):
         limit: int = 100,
     ) -> CheckedPolicyPage:
         """Return a page of the country's policies, optionally for one model."""
+        ...
+
+
+class V2DynamicResourceService(Protocol):
+    """Route-independent native dynamic operations, stored as policies are."""
+
+    def create_dynamic(
+        self, dynamic_input: NativeDynamicCreationInput
+    ) -> NativeDynamicCreation:
+        """Store the dynamic, or return the identical one; ``created`` says which."""
+        ...
+
+    def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
+        """Return the country's dynamic, or raise ``DynamicNotFoundError``."""
         ...
 
 
@@ -268,10 +287,10 @@ class V2StoredReportResourceService(Protocol):
         country without household calculations, ``HouseholdNotFoundError``
         for a household the country does not store,
         ``HouseholdCalculationYearError`` for one with no default year,
-        ``PolicyNotFoundError``
-        for a policy the country does not store,
-        ``PolicyParametersMissingError`` for a policy that sets parameters the
-        running catalog version lacks, ``SubmissionStorageError`` when the
+        ``PolicyNotFoundError`` or ``DynamicNotFoundError`` for a policy or
+        dynamic the country does not store, ``PolicyParametersMissingError``
+        (``DynamicParametersMissingError`` for a dynamic) for one setting
+        parameters the running catalog lacks, ``SubmissionStorageError`` when the
         database or its catalog cannot be read for those checks, the
         simulation service's errors, ``ReportRunNotRecordedError`` when the
         request could not be recorded, and ``CreatedReportUnreadableError``
@@ -338,7 +357,7 @@ class V2StoredSimulationResourceService(Protocol):
 
         Raise the checks' and the simulation service's errors as
         ``V2StoredReportResourceService.create_report`` does, for the
-        simulation's one policy, and ``CreatedSimulationUnreadableError`` when
+        simulation's policy and dynamic, and ``CreatedSimulationUnreadableError`` when
         the simulation it created cannot be read back.
         """
         ...

@@ -45,6 +45,7 @@ from policyengine_api.services.v2.user_policies.types import (
 )
 
 DESTINATION_ID = UUID("00000000-0000-0000-0000-000000000010")
+DESTINATION_DYNAMIC_ID = UUID("00000000-0000-0000-0000-000000000011")
 ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000060")
 DATABASE_ERROR = OperationalError("statement", {}, Exception("database"))
 
@@ -324,6 +325,8 @@ def test_policy_mirror_success_logs_one_complete_record() -> None:
         policy_id=DESTINATION_ID,
         policy_created=False,
         mapping_created=True,
+        dynamic_id=DESTINATION_DYNAMIC_ID,
+        dynamic_created=True,
     )
 
     with patch("policyengine_api.services.policy_mirroring.logger") as logger:
@@ -340,10 +343,12 @@ def test_policy_mirror_success_logs_one_complete_record() -> None:
         "country_id": "uk",
         "legacy_policy_id": 5,
         "destination_policy_id": str(DESTINATION_ID),
+        "destination_dynamic_id": str(DESTINATION_DYNAMIC_ID),
         "outcome": "ok",
         "failure_category": None,
         "failure_reason": None,
         "policy_created": False,
+        "dynamic_created": True,
         "mapping_created": True,
     }
     assert list(payload) == list(expected)
@@ -372,10 +377,12 @@ def test_policy_mirror_failure_logs_one_complete_record() -> None:
         "country_id": "uk",
         "legacy_policy_id": 5,
         "destination_policy_id": None,
+        "destination_dynamic_id": None,
         "outcome": "error",
         "failure_category": "database",
         "failure_reason": "database_error",
         "policy_created": None,
+        "dynamic_created": None,
         "mapping_created": None,
     }
     assert list(payload) == list(expected)

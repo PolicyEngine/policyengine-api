@@ -8,6 +8,9 @@ from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
 )
+from policyengine_api.services.v2.dynamics.transformations import (
+    dynamic_creation_input,
+)
 from policyengine_api.services.v2.policies.database_connectors.creates import (
     create_legacy_policy_mapping,
     create_parameter_values,
@@ -23,7 +26,7 @@ from policyengine_api.services.v2.policies.database_connectors.reads import (
     read_policy_catalog,
     read_policy_row,
     read_policy_rows,
-    read_version_parameter_ids,
+    read_version_parameter_names,
 )
 from policyengine_api.services.v2.policies.transformations import (
     canonical_policy_document,
@@ -33,6 +36,7 @@ from policyengine_api.services.v2.policies.transformations import (
     policy_page,
     policy_parameter_values_by_policy,
     policy_read,
+    split_legacy_policy,
     stored_policy_creation_input,
     translate_legacy_policy,
 )
@@ -40,6 +44,7 @@ from policyengine_api.services.v2.policies.types import (
     CanonicalPolicyContent,
     CheckedPolicyPage,
     CheckedPolicyRead,
+    LegacyPolicyMappingInput,
     LegacyPolicyPersistenceResult,
     LegacyPolicySnapshot,
     NativePolicyCreation,
@@ -55,6 +60,7 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
     PolicyNotFoundError,
+    refuse_dynamic_parameters,
     validate_policy_catalog,
     verify_legacy_policy_mapping,
 )
@@ -80,7 +86,8 @@ def resolve_policy_creation_input(
     """Bind policy content to the selected catalog's model version.
 
     Raise PolicyCatalogValidationError if the model or any parameter id is not
-    part of the selected catalog.
+    part of the selected catalog, and PolicySetsDynamicParametersError if any
+    parameter is one only a dynamic may hold.
     """
     selected = read_policy_catalog(
         session,
@@ -91,16 +98,18 @@ def resolve_policy_creation_input(
     requested_parameter_ids = {
         value.parameter_id for value in policy_input.parameter_values
     }
-    resolved_parameter_ids = read_version_parameter_ids(
+    parameter_names = read_version_parameter_names(
         session,
         model_version_id=selected.model_version.id,
         requested_ids=requested_parameter_ids,
     )
-    return validate_policy_catalog(
+    resolved = validate_policy_catalog(
         policy_input,
         selected=selected,
-        resolved_parameter_ids=resolved_parameter_ids,
+        resolved_parameter_ids=set(parameter_names),
     )
+    refuse_dynamic_parameters(policy_input.country_id, parameter_names.values())
+    return resolved
 
 
 def create_resolved_policy(
@@ -245,12 +254,22 @@ def mirror_legacy_policy_in_session(
     """Copy one committed v1 policy into v2 and map its v1 id to the result.
 
     The policy is translated against the running catalog, whichever country
-    package version it was saved under. A v1 policy that already has a v2 copy
-    returns that copy without being translated again, so writing it again after
-    a PolicyEngine.py or country package upgrade still succeeds. Raise
+    package version it was saved under. Its model assumptions (every
+    ``gov.simulation.`` value, and the US's ``simulation.``) are copied into
+    a dynamic, with the UK's old labour-supply spelling rewritten, and the
+    rest into the policy, which is empty when nothing else remains; the
+    mapping names both. A v1 policy that sets no assumptions maps to no
+    dynamic. A v1 policy that already has a v2 copy returns that copy without
+    being translated again, so writing it again after a PolicyEngine.py or
+    country package upgrade still succeeds; a copy made before the split
+    existed keeps its assumptions in its policy and maps to no dynamic. Raise
     LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
     different source hash.
     """
+    from policyengine_api.services.v2.dynamics.services import (
+        create_resolved_dynamic,
+    )
+
     existing = read_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
@@ -267,6 +286,7 @@ def mirror_legacy_policy_in_session(
             policy_id=existing.policy_id,
             policy_created=False,
             mapping_created=False,
+            dynamic_id=existing.dynamic_id,
         )
 
     selected = read_policy_catalog(
@@ -274,33 +294,43 @@ def mirror_legacy_policy_in_session(
         snapshot.country_id,
         running_policyengine_version=running_policyengine_version,
     )
-    policy_json = snapshot.policy_json
-    if not isinstance(policy_json, dict):
-        msg = "legacy policy_json must be an object"
-        raise TypeError(msg)
+    split = split_legacy_policy(snapshot)
     parameters = read_parameters_by_name(
         session,
         model_version_id=selected.model_version.id,
-        names=set(policy_json),
+        names={*split.policy_values, *split.dynamic_values},
     )
-    policy_input = translate_legacy_policy(
+    translation = translate_legacy_policy(
         snapshot,
         selected=selected,
         parameters=parameters,
     )
-    policy_result = create_resolved_policy(session, policy_input)
+    policy_result = create_resolved_policy(session, translation.policy)
+    dynamic_result = (
+        None
+        if translation.dynamic is None
+        else create_resolved_dynamic(
+            session, dynamic_creation_input(translation.dynamic)
+        )
+    )
+    dynamic_id = None if dynamic_result is None else dynamic_result.dynamic_id
     mapping_id = create_legacy_policy_mapping(
         session,
-        country_id=snapshot.country_id,
-        legacy_policy_id=snapshot.legacy_policy_id,
-        source_policy_hash=snapshot.source_policy_hash,
-        policy_id=policy_result.policy_id,
+        LegacyPolicyMappingInput(
+            country_id=snapshot.country_id,
+            legacy_policy_id=snapshot.legacy_policy_id,
+            source_policy_hash=snapshot.source_policy_hash,
+            policy_id=policy_result.policy_id,
+            dynamic_id=dynamic_id,
+        ),
     )
     if mapping_id is not None:
         return LegacyPolicyPersistenceResult(
             policy_id=policy_result.policy_id,
             policy_created=policy_result.created,
             mapping_created=True,
+            dynamic_id=dynamic_id,
+            dynamic_created=dynamic_result is not None and dynamic_result.created,
         )
     concurrent = read_legacy_policy_mapping(
         session,
@@ -314,9 +344,9 @@ def mirror_legacy_policy_in_session(
     # A concurrent copy mapped the policy first. As with a mapping found at the
     # start, the same source hash makes its v2 policy the copy, even when it was
     # translated with another catalog version than this one. If this copy's
-    # translation differed, the v2 policy it inserted commits without a mapping,
-    # and the result's policy_created is false because it reports the mapped
-    # policy, not that one.
+    # translation differed, the v2 policy and dynamic it inserted commit
+    # without a mapping, and the result's policy_created and dynamic_created
+    # are false because it reports the mapped ones, not those.
     verify_legacy_policy_mapping(
         concurrent, source_policy_hash=snapshot.source_policy_hash
     )
@@ -324,6 +354,7 @@ def mirror_legacy_policy_in_session(
         policy_id=concurrent.policy_id,
         policy_created=False,
         mapping_created=False,
+        dynamic_id=concurrent.dynamic_id,
     )
 
 

@@ -6,6 +6,8 @@ import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from policyengine_api.dynamic_parameters import is_dynamic_parameter
+
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable
     from uuid import UUID
@@ -19,6 +21,7 @@ if TYPE_CHECKING:
         PolicyCreationInput,
         ResolvedPolicyCreationInput,
     )
+    from policyengine_api.supported_countries import SupportedCountryId
 
 
 MAXIMUM_POLICY_PARAMETER_VALUES = 1_000
@@ -56,6 +59,43 @@ class LegacyPolicyTranslationError(ValueError):
         """Keep the message for debugging and the fixed reason for logs."""
         super().__init__(message)
         self.reason = reason
+
+
+class PolicySetsDynamicParametersError(ValueError):
+    """Raised when a policy sets parameters only a dynamic may hold.
+
+    These are the model's assumptions, every parameter under
+    ``gov.simulation.`` plus the US's ``simulation.``
+    (``policyengine_api.dynamic_parameters``), sent as a dynamic through
+    ``POST /v2/dynamics``. ``parameter_names`` lists them, sorted.
+    """
+
+    def __init__(self, parameter_names: tuple[str, ...]) -> None:
+        """Name each parameter the policy may not set."""
+        self.parameter_names = parameter_names
+        super().__init__(parameter_names)
+
+    def __str__(self) -> str:
+        """Say which parameters to send as a dynamic, and where."""
+        return (
+            "A policy cannot set the model's assumptions, the parameters under "
+            "gov.simulation (and, in the US, simulation): send them as a "
+            "dynamic through POST /v2/dynamics. This policy sets: "
+            + ", ".join(self.parameter_names)
+        )
+
+
+def refuse_dynamic_parameters(
+    country_id: SupportedCountryId, parameter_names: Iterable[str]
+) -> None:
+    """Raise PolicySetsDynamicParametersError if any parameter belongs in a dynamic."""
+    dynamic_parameter_names = tuple(
+        sorted(
+            {name for name in parameter_names if is_dynamic_parameter(country_id, name)}
+        )
+    )
+    if dynamic_parameter_names:
+        raise PolicySetsDynamicParametersError(dynamic_parameter_names)
 
 
 class PolicyParametersMissingError(ValueError):

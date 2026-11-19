@@ -247,8 +247,10 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Custom totals, unused until they return.
     "aggregates": _access(),
     "change_aggregates": _access(),
-    # A simulation's or household job's dynamic, which a run reads.
-    "dynamics": _access(**_RUN_INPUT_READS),
+    # A simulation's or household job's dynamic, which a run reads. API v1
+    # creates them, as it does policies, through /v2/dynamics and the v1-to-v2
+    # policy copy; a dynamic never changes once stored.
+    "dynamics": _access(runtime=READ_INSERT, **_RUN_INPUT_READS),
     # Simulations, reports, their runs and household jobs. The catalog writer
     # checks that publication leaves the rows of three of them untouched.
     "budget_window_runs": _access(
@@ -306,9 +308,9 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "parameter_tree_children": _access(
         runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
     ),
-    # The Public API also inserts a v2 policy's own parameter values. Catalog
-    # pruning deletes an older version's current-law values (those with no
-    # policy or dynamic), never a policy's or a dynamic's.
+    # API v1 also inserts a v2 policy's or dynamic's own parameter
+    # values. Catalog pruning deletes an older version's current-law values
+    # (those with no policy or dynamic), never a policy's or a dynamic's.
     "parameter_values": _access(
         runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS
     ),

@@ -8,10 +8,14 @@ country's ``countries`` row allows economy calculations (a household-only
 country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
 none), and that none of those policies sets a parameter the running catalog
-version lacks (``require_runnable_policies``, which re-runs call too).
-Only then is the simulation service asked. The dynamics a submission names
-and its region are checked by the simulation service, which reads them, and
-the region's dataset, in the catalog version its default worker runs.
+version lacks (``require_runnable_policies``, which re-runs call too). An
+economy simulation, economy report or budget window then has each dynamic it
+names checked the same way, through the same service as ``/v2/dynamics``
+(none means no assumptions beyond the model's defaults):
+``require_runnable_dynamics``.
+Only then is the simulation service asked. The submission's region is
+checked by the simulation service, which reads it, and the region's dataset,
+in the catalog version its default worker runs.
 
 A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),
@@ -22,7 +26,9 @@ checks ``/v2/household-calculations`` makes, with the same errors.
 
 Running a stored report again (``POST /reports/{report_id}/runs``) checks
 its country as a new report of its kind is checked, then the policies its
-simulations name.
+simulations name. Its dynamics are not checked again: each was checked to be
+the country's when the report was created, and the simulation service refuses
+a re-run whose dynamic sets parameters its catalog version lacks.
 """
 
 from __future__ import annotations
@@ -34,6 +40,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
+)
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicStorageError,
+    require_dynamic_parameters_present,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     require_default_year,
@@ -58,6 +68,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_service.types import (
         BudgetWindowReportCreationInput,
         CountrySource,
+        DynamicSource,
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
         HouseholdReportCreationInput,
@@ -79,12 +90,17 @@ if TYPE_CHECKING:
 def _storage_failures() -> Iterator[None]:
     """Raise SubmissionStorageError for a read that failed.
 
-    That includes the policy check's catalog query, which the policy service
-    reports as MetadataCatalogUnavailableError.
+    That includes the policy and dynamic checks' catalog query, which their
+    services report as MetadataCatalogUnavailableError, and the dynamic
+    service's DynamicStorageError.
     """
     try:
         yield
-    except (SQLAlchemyError, MetadataCatalogUnavailableError) as error:
+    except (
+        SQLAlchemyError,
+        MetadataCatalogUnavailableError,
+        DynamicStorageError,
+    ) as error:
         msg = "V2 storage is unavailable to check the submission"
         raise SubmissionStorageError(msg) from error
 
@@ -113,6 +129,28 @@ def require_runnable_policies(
         require_policy_parameters_present(policy.id, policy.missing_parameters)
 
 
+def require_runnable_dynamics(
+    dynamics: DynamicSource, *, country_id: str, dynamic_ids: Iterable[UUID | None]
+) -> None:
+    """Raise unless each named dynamic is the country's and its parameters all exist.
+
+    As for policies, every dynamic is read before any is checked, so
+    DynamicNotFoundError for a dynamic the country does not store comes
+    before DynamicParametersMissingError for one that sets parameters the
+    running catalog version lacks. None names no dynamic, and a dynamic the
+    running catalog could not check passes. Raise SubmissionStorageError when
+    the database or its catalog cannot be read.
+    """
+    with _storage_failures():
+        stored_dynamics = [
+            dynamics.get_dynamic(country_id=country_id, dynamic_id=dynamic_id)
+            for dynamic_id in dict.fromkeys(dynamic_ids)
+            if dynamic_id is not None
+        ]
+    for dynamic in stored_dynamics:
+        require_dynamic_parameters_present(dynamic.id, dynamic.missing_parameters)
+
+
 class SimulationSubmissionService:
     """Check submissions, then send them to the simulation service."""
 
@@ -122,39 +160,46 @@ class SimulationSubmissionService:
         countries: CountrySource,
         households: HouseholdSource,
         policies: PolicySource,
+        dynamics: DynamicSource,
         client_factory: Callable[[], SimulationServiceClient],
     ) -> None:
         """Check through these sources; send through ``client_factory``'s client.
 
-        ``households`` is read only for a household report. The client is
-        built only once a submission passes the checks, so a refused
-        submission gets its own answer even when the simulation service is
-        not configured.
+        ``households`` is read only for a household report, and ``dynamics``
+        only for a submission that names a dynamic. The client is built only
+        once a submission passes the checks, so a refused submission gets its
+        own answer even when the simulation service is not configured.
         """
         self._countries = countries
         self._households = households
         self._policies = policies
+        self._dynamics = dynamics
         self._client_factory = client_factory
 
     def _check(
         self,
         country_id: str,
         policy_ids: Iterable[UUID | None],
+        dynamic_ids: Iterable[UUID | None] = (),
         *,
         require_country: CountryCheck = require_economy_country,
     ) -> None:
-        """Raise unless the country passes ``require_country`` and the policies can run.
+        """Raise unless the country passes ``require_country`` and all can run.
 
         By default the country must have economy calculations. Raise the
         country check's error (EconomyCalculationsUnsupportedError by
         default), then PolicyNotFoundError, then PolicyParametersMissingError,
-        and SubmissionStorageError when the database or its catalog cannot be
+        then DynamicNotFoundError, then DynamicParametersMissingError, and
+        SubmissionStorageError when the database or its catalog cannot be
         read.
         """
         with _storage_failures():
             require_country(self._countries.list_countries(), country_id)
         require_runnable_policies(
             self._policies, country_id=country_id, policy_ids=policy_ids
+        )
+        require_runnable_dynamics(
+            self._dynamics, country_id=country_id, dynamic_ids=dynamic_ids
         )
 
     def submit_simulation(
@@ -164,18 +209,22 @@ class SimulationSubmissionService:
 
         Raise the checks' errors, then the simulation service's.
         """
-        self._check(simulation.country_id, (simulation.policy_id,))
+        self._check(
+            simulation.country_id, (simulation.policy_id,), (simulation.dynamic_id,)
+        )
         return self._client_factory().submit_simulation(simulation)
 
     def submit_report(self, report: EconomyReportCreationInput) -> SubmittedReport:
         """Check the report, then have the simulation service create and start it.
 
         Both the baseline's and the reform's policies are checked, the
-        baseline's first. Raise the checks' errors, then the simulation
-        service's.
+        baseline's first, then their dynamics in the same order. Raise the
+        checks' errors, then the simulation service's.
         """
         self._check(
-            report.country_id, (report.baseline.policy_id, report.reform.policy_id)
+            report.country_id,
+            (report.baseline.policy_id, report.reform.policy_id),
+            (report.baseline.dynamic_id, report.reform.dynamic_id),
         )
         return self._client_factory().submit_report(report)
 
@@ -218,7 +267,9 @@ class SimulationSubmissionService:
         simulation service's.
         """
         self._check(
-            report.country_id, (report.baseline.policy_id, report.reform.policy_id)
+            report.country_id,
+            (report.baseline.policy_id, report.reform.policy_id),
+            (report.baseline.dynamic_id, report.reform.dynamic_id),
         )
         return self._client_factory().submit_budget_window(report)
 

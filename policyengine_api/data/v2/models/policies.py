@@ -96,16 +96,60 @@ class Policy(TimestampedModel, table=True):
 
 
 class Dynamic(TimestampedModel, table=True):
-    """Named parameter values, separate from any policy, that a simulation can apply.
+    """Immutable model assumptions, stored once per canonicalization version and hash.
 
-    Its parameter values are deleted with it.
+    A dynamic holds parameter values a simulation applies alongside its
+    policy: every parameter under ``gov.simulation.``, plus the US's
+    top-level ``simulation.`` (``policyengine_api.dynamic_parameters``). It
+    is stored and hashed as a policy is, bound to one catalog version, with
+    no name or description: a user's saved dynamics name it. Its parameter
+    values are deleted with it.
     """
 
     __tablename__ = "dynamics"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "id",
+            "country_id",
+            name="uq_dynamics_id_country",
+        ),
+        sa.UniqueConstraint(
+            "canonicalization_version",
+            "content_hash",
+            name="uq_dynamics_canonicalization_content_hash",
+        ),
+        sa.CheckConstraint(
+            "canonicalization_version > 0",
+            name="ck_dynamics_canonicalization_version",
+        ),
+        sa.CheckConstraint(
+            "length(content_hash) = 64",
+            name="ck_dynamics_content_hash_length",
+        ),
+    )
 
-    name: str = Field(max_length=255)
-    description: str | None = None
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
+    tax_benefit_model_id: UUID = Field(
+        foreign_key="tax_benefit_models.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    canonicalization_version: int
+    content_hash: str = Field(max_length=64)
 
+    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="dynamics")
+    tax_benefit_model_version: "TaxBenefitModelVersion" = Relationship(
+        back_populates="dynamics"
+    )
     parameter_values: list["ParameterValue"] = Relationship(
         back_populates="dynamic",
         cascade_delete=True,
