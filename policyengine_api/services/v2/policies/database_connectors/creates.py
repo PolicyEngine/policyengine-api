@@ -11,7 +11,10 @@ from sqlmodel import Session, col
 from policyengine_api.data.v2.models import LegacyPolicyMapping, ParameterValue, Policy
 
 if TYPE_CHECKING:
-    from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
+    from policyengine_api.services.v2.policies.types import (
+        LegacyPolicyMappingInput,
+        ResolvedPolicyCreationInput,
+    )
 
 
 def create_policy(
@@ -68,14 +71,9 @@ def create_parameter_values(
 
 
 def create_legacy_policy_mapping(
-    session: Session,
-    *,
-    country_id: str,
-    legacy_policy_id: int,
-    source_policy_hash: str,
-    policy_id: UUID,
+    session: Session, mapping: LegacyPolicyMappingInput
 ) -> UUID | None:
-    """Insert the mapping from a v1 policy id to its v2 policy.
+    """Insert the mapping from a v1 policy id to its v2 policy and dynamic.
 
     Return the new mapping id, or None when a mapping for this country and v1 id
     already exists (for example, a concurrent copy won the race).
@@ -83,10 +81,11 @@ def create_legacy_policy_mapping(
     return session.execute(
         insert(LegacyPolicyMapping)
         .values(
-            country_id=country_id,
-            legacy_policy_id=legacy_policy_id,
-            policy_id=policy_id,
-            source_policy_hash=source_policy_hash,
+            country_id=mapping.country_id,
+            legacy_policy_id=mapping.legacy_policy_id,
+            policy_id=mapping.policy_id,
+            dynamic_id=mapping.dynamic_id,
+            source_policy_hash=mapping.source_policy_hash,
         )
         .on_conflict_do_nothing(constraint="uq_legacy_policy_mappings_country_legacy")
         .returning(col(LegacyPolicyMapping.id))

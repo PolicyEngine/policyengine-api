@@ -18,6 +18,7 @@ from policyengine_api.fastapi_routes.metadata_protocols import (
 from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2AccountResourceService,
     V2CountryResourceService,
+    V2DynamicResourceService,
     V2HouseholdCalculationResourceService,
     V2HouseholdResourceService,
     V2PolicyResourceService,
@@ -71,6 +72,7 @@ __all__ = [
     "SimulationGatewayProbe",
     "V2AccountResourceService",
     "V2CountryResourceService",
+    "V2DynamicResourceService",
     "V2HouseholdCalculationResourceService",
     "V2HouseholdResourceService",
     "V2MetadataResourceReader",
@@ -174,6 +176,21 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     )
 
 
+def _default_v2_dynamic_service_factory() -> V2DynamicResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.dynamics.database_session import (
+        DynamicDatabaseSession,
+    )
+    from policyengine_api.services.v2.dynamics.services import V2DynamicService
+
+    return V2DynamicService(
+        DynamicDatabaseSession(get_v2_session_factory()),
+        running_policyengine_version=_running_policyengine_version(),
+    )
+
+
 def _default_v2_household_service_factory() -> V2HouseholdResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -234,6 +251,7 @@ def _default_simulation_submissions() -> SimulationServiceClient:
         countries=_default_v2_country_service_factory(),
         households=_default_v2_household_service_factory(),
         policies=_default_v2_policy_service_factory(),
+        dynamics=_default_v2_dynamic_service_factory(),
         client_factory=process_simulation_service_client,
     )
 
@@ -545,6 +563,7 @@ class NativeRouteDependencies:
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
     v2_country_service_factory: Callable[[], V2CountryResourceService] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
+    v2_dynamic_service_factory: Callable[[], V2DynamicResourceService] | None = None
     v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_household_calculation_service_factory: (
         Callable[[], V2HouseholdCalculationResourceService] | None

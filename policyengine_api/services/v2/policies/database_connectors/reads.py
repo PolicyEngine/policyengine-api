@@ -46,15 +46,15 @@ def read_policy_catalog(
     )
 
 
-def read_version_parameter_ids(
+def read_version_parameter_names(
     session: Session, *, model_version_id: UUID, requested_ids: set[UUID]
-) -> set[UUID]:
-    """Return the requested parameter ids that exist in this model version."""
+) -> dict[UUID, str]:
+    """Return the names of the requested parameters this model version has, by id."""
     if not requested_ids:
-        return set()
-    return set(
+        return {}
+    return dict(
         session.exec(
-            select(Parameter.id).where(
+            select(Parameter.id, Parameter.name).where(
                 Parameter.tax_benefit_model_version_id == model_version_id,
                 col(Parameter.id).in_(requested_ids),
             )

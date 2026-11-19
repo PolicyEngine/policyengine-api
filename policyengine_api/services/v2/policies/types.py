@@ -66,15 +66,22 @@ class PolicyParameterValueInput(StrictPolicyInput):
         return self
 
 
+# A policy's or a dynamic's values, at most MAXIMUM_POLICY_PARAMETER_VALUES.
+ParameterValueInputs = Annotated[
+    list[PolicyParameterValueInput],
+    Field(max_length=MAXIMUM_POLICY_PARAMETER_VALUES),
+]
+
+
 class PolicyCreationInput(StrictPolicyInput):
-    """Complete immutable policy content accepted from any source."""
+    """Complete immutable policy content accepted from any source.
+
+    A dynamic's content has the same fields (``dynamics.types``).
+    """
 
     country_id: CountryId
     tax_benefit_model_id: UUID
-    parameter_values: Annotated[
-        list[PolicyParameterValueInput],
-        Field(max_length=MAXIMUM_POLICY_PARAMETER_VALUES),
-    ]
+    parameter_values: ParameterValueInputs
 
     @field_validator("parameter_values")
     @classmethod
@@ -144,12 +151,43 @@ class PolicyCreationResult:
 
 
 @dataclass(frozen=True)
+class LegacyPolicyTranslation:
+    """A v1 policy translated against the running catalog, split in two.
+
+    ``policy`` holds the values that stay in the policy, possibly none.
+    ``dynamic`` holds the model's assumptions, the content of the dynamic
+    the copy stores, or is None when the v1 policy sets none.
+    """
+
+    policy: ResolvedPolicyCreationInput
+    dynamic: ResolvedPolicyCreationInput | None
+
+
+@dataclass(frozen=True)
+class LegacyPolicyMappingInput:
+    """The mapping a copy records from a v1 policy to its v2 policy and dynamic."""
+
+    country_id: CountryId
+    legacy_policy_id: int
+    source_policy_hash: str
+    policy_id: UUID
+    dynamic_id: UUID | None
+
+
+@dataclass(frozen=True)
 class LegacyPolicyPersistenceResult:
-    """Destination identity and insertion outcomes for one mirror attempt."""
+    """Destination identity and insertion outcomes for one mirror attempt.
+
+    ``dynamic_id`` is the dynamic the v1 policy's model assumptions were
+    copied into, None when it sets none or was copied before the split
+    existed; ``dynamic_created`` says whether this attempt inserted it.
+    """
 
     policy_id: UUID
     policy_created: bool
     mapping_created: bool
+    dynamic_id: UUID | None = None
+    dynamic_created: bool = False
 
 
 @dataclass(frozen=True)

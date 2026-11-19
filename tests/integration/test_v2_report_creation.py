@@ -33,6 +33,10 @@ from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import V2DynamicService
 from policyengine_api.services.v2.households.database_session import (
     HouseholdDatabaseSession,
 )
@@ -190,6 +194,9 @@ def client_for(
         households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
         policies=V2PolicyService(
             PolicyDatabaseSession(sessions), running_policyengine_version="4.2.0"
+        ),
+        dynamics=V2DynamicService(
+            DynamicDatabaseSession(sessions), running_policyengine_version="4.2.0"
         ),
         client_factory=lambda: simulation_service,
     )
