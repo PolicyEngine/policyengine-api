@@ -1,6 +1,6 @@
 """Check the cliff impacts revision against disposable Postgres.
 
-Revision bc334f9877b7, on the user invitations revision f519a77ba122, adds
+Revision bc334f9877b7, on the dynamics revision 9d1d12a7ac58, adds
 ``cliff_impacts``: one row per cliff calculation of a simulation run, with its
 state and, once it succeeds, the run's cliff gap and cliff share. Its status
 reuses the ``v2_simulation_status`` type, and it changes no other table. The
@@ -29,7 +29,7 @@ from tests.integration.simulation_rows import (
     refused,
 )
 
-USER_INVITATIONS_REVISION = "f519a77ba122"
+DYNAMICS_REVISION = "9d1d12a7ac58"
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
 # What a request starting a run's cliff calculation inserts: the conflict
 # target names the partial unique index's whole condition.
@@ -122,7 +122,7 @@ def test_cliff_impacts_revision_adds_only_its_table(engine: Engine) -> None:
     config = alembic_v2_config()
 
     command.upgrade(config, "head")
-    command.downgrade(config, USER_INVITATIONS_REVISION)
+    command.downgrade(config, DYNAMICS_REVISION)
     parent_shape = _schema_shape(engine)
     parent_enums = _enum_labels(engine)
     command.upgrade(config, CLIFF_IMPACTS_REVISION)
@@ -188,7 +188,7 @@ def test_cliff_impacts_downgrade_drops_the_table_and_keeps_the_status_type(
     config = alembic_v2_config()
 
     command.upgrade(config, "head")
-    command.downgrade(config, USER_INVITATIONS_REVISION)
+    command.downgrade(config, DYNAMICS_REVISION)
 
     assert "cliff_impacts" not in inspect(engine).get_table_names()
     # ``simulation_runs.status`` still uses the type.

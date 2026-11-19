@@ -30,6 +30,7 @@ from policyengine_api.services.v2.simulation_service.validators import (
     EconomyCalculationsUnsupportedError,
     SubmissionStorageError,
 )
+from tests.unit.v2.test_simulation_submissions import StoredDynamics
 
 REPORT_ID = UUID("00000000-0000-0000-0000-00000000e001")
 STORED_POLICY_ID = UUID("00000000-0000-0000-0000-00000000e002")
@@ -138,6 +139,7 @@ def test_a_rerun_is_sent_once_its_country_and_policies_are_checked() -> None:
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=policies,
+        dynamics=StoredDynamics(),
         client_factory=lambda: client,
     )
     rerun = rerun_input(None, STORED_POLICY_ID)
@@ -153,6 +155,7 @@ def test_a_rerun_in_a_household_only_country_is_refused_before_sending() -> None
         countries=StoredCountries(society_wide_enabled=False),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -166,6 +169,7 @@ def test_a_rerun_naming_a_policy_no_longer_stored_is_refused() -> None:
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -178,6 +182,7 @@ def test_a_rerun_whose_policy_sets_parameters_the_catalog_lacks_is_refused() -> 
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -195,6 +200,7 @@ def test_a_rerun_whose_policy_check_cannot_read_storage_is_storage_unavailable()
         countries=StoredCountries(),
         households=UnreadHouseholds(),
         policies=StoredPolicies(error=error),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -212,6 +218,7 @@ def test_a_rerun_where_only_households_are_calculated_is_refused_for_economy_kin
         countries=StoredCountries(society_wide_enabled=False),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -228,6 +235,7 @@ def test_a_household_reports_rerun_is_sent_where_only_households_are_calculated(
         countries=StoredCountries(society_wide_enabled=False),
         households=UnreadHouseholds(),
         policies=policies,
+        dynamics=StoredDynamics(),
         client_factory=lambda: client,
     )
     rerun = rerun_input(None, STORED_POLICY_ID, kind="household")
@@ -245,6 +253,7 @@ def test_a_household_report_of_the_baseline_alone_checks_the_baseline_policy() -
         countries=StoredCountries(society_wide_enabled=False),
         households=UnreadHouseholds(),
         policies=policies,
+        dynamics=StoredDynamics(),
         client_factory=lambda: client,
     )
     rerun = rerun_input(STORED_POLICY_ID, None, kind="household")
@@ -261,6 +270,7 @@ def test_a_household_reports_rerun_without_household_calculations_is_refused() -
         countries=StoredCountries(household_enabled=False),
         households=UnreadHouseholds(),
         policies=policies,
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -275,6 +285,7 @@ def test_a_household_reports_rerun_checks_its_policies_as_a_new_one_does() -> No
         countries=StoredCountries(society_wide_enabled=False),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 
@@ -292,6 +303,7 @@ def test_a_household_reports_rerun_whose_countries_cannot_be_read_is_unavailable
         countries=UnreadableCountries(error),
         households=UnreadHouseholds(),
         policies=StoredPolicies(),
+        dynamics=StoredDynamics(),
         client_factory=unconfigured_client,
     )
 

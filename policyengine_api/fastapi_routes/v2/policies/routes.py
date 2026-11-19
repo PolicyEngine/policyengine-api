@@ -35,6 +35,7 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     PolicyItem,
     PolicyPageResponse,
     PolicyPageResult,
+    V2DynamicParametersErrorResponse,
 )
 from policyengine_api.query_parameters import (
     PolicyCollectionQuery,
@@ -47,6 +48,7 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
     PolicyNotFoundError,
+    PolicySetsDynamicParametersError,
 )
 
 if TYPE_CHECKING:
@@ -116,11 +118,27 @@ POLICY_ERROR_MAPPINGS = (
 )
 
 
+def _dynamic_parameters_response(
+    error: PolicySetsDynamicParametersError,
+) -> JSONResponse:
+    """Serialize the 422 refusing a policy that sets a dynamic's parameters."""
+    refusal = V2DynamicParametersErrorResponse(
+        message=str(error), dynamic_parameters=list(error.parameter_names)
+    )
+    return JSONResponse(status_code=422, content=refusal.model_dump(mode="json"))
+
+
 def _policy_operation(
     operation: Callable[[], OperationT],
 ) -> OperationT | JSONResponse:
+    def refused() -> OperationT | JSONResponse:
+        try:
+            return operation()
+        except PolicySetsDynamicParametersError as error:
+            return _dynamic_parameters_response(error)
+
     return run_v2_operation(
-        operation,
+        refused,
         POLICY_ERROR_MAPPINGS,
         fallback_message="V2 policy operation failed",
     )
@@ -144,6 +162,16 @@ def build_v2_policy_router(
             }
         },
         summary="Create or find an immutable policy",
+        description=(
+            "Binds the policy to the catalog of policyengine_version, or of the "
+            "running PolicyEngine.py version when it names none, and stores it "
+            "once per content hash. A policy may not set the model's "
+            "assumptions, the parameters under gov.simulation (and in the US "
+            "simulation): those answer 422 with code dynamic_parameters, and "
+            "go in a dynamic through POST /v2/dynamics. Answers 201 when it "
+            "creates the policy and 200 when identical content is already "
+            "stored."
+        ),
     )
     def create_policy(
         body: PolicyCreateRequest,

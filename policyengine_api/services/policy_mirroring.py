@@ -17,6 +17,10 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.gcp_logging import logger
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicContentHashCollisionError,
+    DynamicCreationIntegrityError,
+)
 from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
@@ -91,6 +95,7 @@ class PolicyCopyFailureReason(StrEnum):
     MAPPING_CONFLICT = "mapping_conflict"
     CONTENT_HASH_COLLISION = "content_hash_collision"
     STORED_POLICY_INTEGRITY = "stored_policy_integrity"
+    STORED_DYNAMIC_INTEGRITY = "stored_dynamic_integrity"
     SAVED_POLICY_INTEGRITY = "saved_policy_integrity"
     MISSING_REFORM_POLICY = "missing_reform_policy"
     MISSING_MIRROR_SNAPSHOT = "missing_mirror_snapshot"
@@ -121,7 +126,7 @@ UNEXPECTED_FAILURE = PolicyCopyFailure(
 )
 
 
-# Checked in order, so the hash collision is matched before its integrity base
+# Checked in order, so each hash collision is matched before its integrity base
 # class.
 _FAILURES_BY_ERROR_TYPE: tuple[tuple[type[Exception], PolicyCopyFailure], ...] = (
     (
@@ -167,6 +172,20 @@ _FAILURES_BY_ERROR_TYPE: tuple[tuple[type[Exception], PolicyCopyFailure], ...] =
         ),
     ),
     (
+        DynamicContentHashCollisionError,
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.CONTENT_HASH_COLLISION,
+        ),
+    ),
+    (
+        DynamicCreationIntegrityError,
+        PolicyCopyFailure(
+            PolicyCopyFailureCategory.INTEGRITY,
+            PolicyCopyFailureReason.STORED_DYNAMIC_INTEGRITY,
+        ),
+    ),
+    (
         SQLAlchemyError,
         PolicyCopyFailure(
             PolicyCopyFailureCategory.DATABASE, PolicyCopyFailureReason.DATABASE_ERROR
@@ -207,8 +226,10 @@ class _MirrorOutcome:
     outcome: str
     actual_write_sources: list[str]
     destination_policy_id: object | None = None
+    destination_dynamic_id: object | None = None
     failure: PolicyCopyFailure | None = None
     policy_created: bool | None = None
+    dynamic_created: bool | None = None
     mapping_created: bool | None = None
 
 
@@ -219,6 +240,7 @@ def _log_mirror_event(
     mirror_outcome: _MirrorOutcome,
 ) -> None:
     destination_policy_id = mirror_outcome.destination_policy_id
+    destination_dynamic_id = mirror_outcome.destination_dynamic_id
     failure = mirror_outcome.failure
     # Metric logging must not change the mirror outcome.
     with contextlib.suppress(Exception):
@@ -237,10 +259,16 @@ def _log_mirror_event(
                     if destination_policy_id is not None
                     else None
                 ),
+                "destination_dynamic_id": (
+                    str(destination_dynamic_id)
+                    if destination_dynamic_id is not None
+                    else None
+                ),
                 "outcome": mirror_outcome.outcome,
                 "failure_category": failure.category.value if failure else None,
                 "failure_reason": failure.reason.value if failure else None,
                 "policy_created": mirror_outcome.policy_created,
+                "dynamic_created": mirror_outcome.dynamic_created,
                 "mapping_created": mirror_outcome.mapping_created,
                 "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
             },
@@ -253,7 +281,7 @@ def mirror_policy_after_commit(
     *,
     mirror_factory: Callable[[], LegacyPolicyMirror] | None = None,
 ) -> LegacyPolicyPersistenceResult:
-    """Copy a committed v1 policy and its mapping into v2 in one Supabase transaction.
+    """Copy a committed v1 policy, its dynamic and its mapping into v2 at once.
 
     Log the outcome. On failure, raise PolicyMirrorUnavailableError after
     logging it; the v1 route still returns its normal response.
@@ -283,7 +311,9 @@ def mirror_policy_after_commit(
             outcome="ok",
             actual_write_sources=["cloud_sql", "supabase"],
             destination_policy_id=result.policy_id,
+            destination_dynamic_id=result.dynamic_id,
             policy_created=result.policy_created,
+            dynamic_created=result.dynamic_created,
             mapping_created=result.mapping_created,
         ),
     )

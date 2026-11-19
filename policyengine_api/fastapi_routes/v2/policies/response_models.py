@@ -123,6 +123,18 @@ class PolicyPageResponse(PolicySuccessResponse[PolicyPageResult]):
     """Success response holding one page of policies."""
 
 
+class V2DynamicParametersErrorResponse(V2ErrorResponse):
+    """A refused policy that sets parameters only a dynamic may hold.
+
+    ``dynamic_parameters`` names each of the model's assumptions the policy
+    sets, sorted: parameters under ``gov.simulation``, and in the US also
+    ``simulation``. Send them as a dynamic through ``POST /v2/dynamics``.
+    """
+
+    code: Literal["dynamic_parameters"] = "dynamic_parameters"
+    dynamic_parameters: list[str]
+
+
 POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": V2ErrorResponse,
@@ -141,8 +153,12 @@ POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": "The policy request body exceeds 1 MiB.",
     },
     422: {
-        "model": V2ErrorResponse,
-        "description": "The request does not match the policy schema.",
+        "model": V2DynamicParametersErrorResponse | V2ErrorResponse,
+        "description": (
+            "The request does not match the policy schema, or the policy sets "
+            "parameters only a dynamic may hold (code dynamic_parameters, "
+            "naming them)."
+        ),
     },
     500: {
         "model": V2ErrorResponse,

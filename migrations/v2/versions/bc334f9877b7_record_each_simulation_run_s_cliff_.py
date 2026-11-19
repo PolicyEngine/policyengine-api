@@ -1,9 +1,13 @@
 """record each simulation run's cliff calculations
 
 Revision ID: bc334f9877b7
-Revises: f519a77ba122
+Revises: 9d1d12a7ac58
 Create Date: 2026-11-17 17:38:09.806260
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate --rev-id bc334f9877b7
+
+Generated on f519a77ba122; its down_revision moved to 9d1d12a7ac58 when the
+dynamics revision reached master first. Generating it again from
+9d1d12a7ac58 gives the same operations.
 
 One post-generation correction, commented where it is made:
 cliff_impacts.status reuses the existing v2_simulation_status type instead of
@@ -33,7 +37,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision: str = 'bc334f9877b7'
-down_revision: Union[str, None] = 'f519a77ba122'
+down_revision: Union[str, None] = '9d1d12a7ac58'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

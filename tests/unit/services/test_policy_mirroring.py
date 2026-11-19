@@ -22,6 +22,10 @@ from policyengine_api.services.policy_mirroring import (
     classify_policy_copy_failure,
     mirror_policy_after_commit,
 )
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicContentHashCollisionError,
+    DynamicCreationIntegrityError,
+)
 from policyengine_api.services.v2.policies.types import (
     LegacyPolicyPersistenceResult,
     LegacyPolicySnapshot,
@@ -213,6 +217,18 @@ def _translation_failure(
             "integrity",
             "stored_policy_integrity",
             id="stored-policy-integrity",
+        ),
+        pytest.param(
+            DynamicContentHashCollisionError("secret"),
+            "integrity",
+            "content_hash_collision",
+            id="dynamic-content-hash-collision",
+        ),
+        pytest.param(
+            DynamicCreationIntegrityError("secret"),
+            "integrity",
+            "stored_dynamic_integrity",
+            id="stored-dynamic-integrity",
         ),
         pytest.param(
             PoolTimeoutError("pool timeout secret"),

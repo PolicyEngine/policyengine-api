@@ -24,6 +24,10 @@ pair v1 records with their v2 copies (``legacy_policy_mappings``,
 v1 ``household_mirror_events`` table, which the v1 household insert writes
 in its own transaction.
 
+A new country also needs its dynamic parameter prefixes, the parameters
+only a dynamic may hold (``DYNAMIC_PARAMETER_PREFIXES`` in
+``policyengine_api.dynamic_parameters``); a unit test fails until it has them.
+
 Catalog publication also needs the country's checked-in region reference file
 (``policyengine_api/data/v2/catalog/region_reference_files``) and its region
 scoping rules (``REGION_SCOPING_RULES`` in

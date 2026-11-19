@@ -356,6 +356,14 @@ class PolicyDetailQuery(CountryQuery):
     """Query contract for country-scoped policy detail reads."""
 
 
+class DynamicCreateQuery(CatalogQuery):
+    """Query contract for native immutable dynamic creation."""
+
+
+class DynamicDetailQuery(CountryQuery):
+    """Query contract for country-scoped dynamic detail reads."""
+
+
 class PolicyCollectionQuery(CountryQuery, PaginationQuery):
     """Query contract for an exact-filtered policy collection."""
 
