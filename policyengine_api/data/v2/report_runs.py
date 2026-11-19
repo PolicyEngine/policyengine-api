@@ -20,7 +20,6 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     ReportRunStatus,
-    ReportRunTrigger,
 )
 from policyengine_api.data.v2.models.base import utc_now
 
@@ -113,7 +112,6 @@ def create_report_run(
     *,
     report_id: UUID,
     inputs: ReportRunInputs,
-    trigger: ReportRunTrigger,
     idempotency_key: UUID | None = None,
 ) -> ReportRun:
     """Create one run, or return the run for a retried idempotent request.
@@ -122,9 +120,6 @@ def create_report_run(
     simulation runs that attempt named.
     """
     _locked_report(session, report_id)
-    if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
-        msg = "manual report reruns require an idempotency key"
-        raise ValueError(msg)
     versions = inputs.versions
     if not versions.country_package_version or not versions.policyengine_version:
         msg = "report run package versions must be non-empty"
@@ -136,7 +131,6 @@ def create_report_run(
         reform_simulation_run_id=inputs.simulation_runs.reform_simulation_run_id,
         country_package_version=versions.country_package_version,
         policyengine_version=versions.policyengine_version,
-        trigger=trigger,
         idempotency_key=idempotency_key,
     )
     if idempotency_key is None:

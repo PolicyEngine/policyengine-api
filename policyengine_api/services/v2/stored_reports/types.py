@@ -52,7 +52,6 @@ ReportKind = Literal["economy", "household", "budget_window"]
 # The kinds whose runs are their report runs; a budget window's are its
 # budget-window runs.
 ReportRunsKind = Literal["economy", "household"]
-ReportRunTriggerName = Literal["initial", "manual", "system"]
 # How far a side's cliff calculation has got: not_calculated while its
 # simulation run has none, else its calculation's status (failed once its
 # newest calculation failed and none is pending, running or succeeded).
@@ -65,15 +64,12 @@ CliffCalculationStatusName = Literal[
 class ReportRunRead:
     """One calculation of a report, and the package versions it ran on.
 
-    ``trigger`` is ``initial`` for the run the report's creation started, and
-    null for a run the simulation service shares between requests. A user's
-    trigger is on their record of the run. ``error_message`` says why a failed
-    run failed.
+    ``error_message`` says why a failed run failed. A run is shared between
+    requests, so each user's trigger is on their record of the run.
     """
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName | None
     country_package_version: str
     policyengine_version: str
     baseline_simulation_run_id: UUID
@@ -237,7 +233,6 @@ class BudgetWindowRunRead:
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName | None
     recalculate: bool
     country_package_version: str | None
     policyengine_version: str | None

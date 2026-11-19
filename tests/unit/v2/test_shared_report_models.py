@@ -413,8 +413,8 @@ def test_sqlite_lets_a_budget_window_name_one_report_run_per_year(
         sqlite_session.commit()
 
 
-def test_stored_runs_without_a_trigger_read_as_null() -> None:
-    """The run lists pass on a missing trigger as null (the route tests a label)."""
+def test_stored_runs_are_read_without_a_trigger() -> None:
+    """A shared run has no one trigger: each user's is on their record of it."""
     window_run_id = uuid4()
     run = ReportRun(
         report_id=uuid4(),
@@ -422,7 +422,6 @@ def test_stored_runs_without_a_trigger_read_as_null() -> None:
         country_package_version="1.5.0",
         policyengine_version="4.2.0",
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
     year_run = ReportRun(
         report_id=run.report_id,
@@ -432,19 +431,17 @@ def test_stored_runs_without_a_trigger_read_as_null() -> None:
         country_package_version="1.5.0",
         policyengine_version="4.2.0",
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
     window_run = BudgetWindowRun(
         id=window_run_id,
         report_id=run.report_id,
         tax_benefit_model_version_id=uuid4(),
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
 
-    assert stored_report_transformations.report_run_read(run).trigger is None
+    assert not hasattr(stored_report_transformations.report_run_read(run), "trigger")
     window_read = stored_report_transformations.budget_window_run_read(
         window_run, [year_run]
     )
-    assert window_read.trigger is None
-    assert [year.trigger for year in window_read.years] == [None]
+    assert not hasattr(window_read, "trigger")
+    assert not any(hasattr(year, "trigger") for year in window_read.years)

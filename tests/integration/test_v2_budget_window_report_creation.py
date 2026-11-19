@@ -215,7 +215,7 @@ def test_a_created_budget_window_is_answered_as_the_tables_hold_it(
     assert (item["id"], item["kind"]) == (str(catalog.report_ids[0]), "budget_window")
     assert (item["year"], item["budget_window_size"]) == (2026, 3)
     assert item["status"] == "pending"
-    assert item["run"]["trigger"] == "initial"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert [(year["year"], year["status"]) for year in item["run"]["years"]] == [
         (2026, "pending"),

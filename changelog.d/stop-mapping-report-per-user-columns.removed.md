@@ -1,0 +1,1 @@
+`/v2/reports` run items and budget-window run items no longer have a `trigger` field: a run is shared between requests, and each user's trigger is on their record of it. API v1 no longer selects or writes the per-user columns of reports, report runs and budget-window runs, which a later database revision drops.

@@ -20,7 +20,6 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     ReportRunStatus,
-    ReportRunTrigger,
     Simulation,
     SimulationType,
     TaxBenefitModel,
@@ -67,7 +66,6 @@ def _create_report(session: Session, *, report_type: str | None = None) -> Repor
     session.add(model)
     session.flush()
     report = Report(
-        label="Distributional report",
         country="us",
         type=report_type,
         tax_benefit_model_id=model.id,
@@ -96,7 +94,6 @@ def _create_run(
             ),
             simulation_runs=SIMULATION_RUNS,
         ),
-        trigger=ReportRunTrigger.MANUAL,
         idempotency_key=key if key is not None else uuid4(),
     )
 
@@ -113,7 +110,6 @@ def _create_forced_run(session: Session, report: Report) -> ReportRun:
         reform_simulation_run_id=SIMULATION_RUNS.reform_simulation_run_id,
         country_package_version="1.2.3",
         policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
-        trigger=ReportRunTrigger.MANUAL,
         idempotency_key=uuid4(),
         forced=True,
     )
@@ -159,7 +155,7 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
             )
 
 
-def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
+def test_new_keys_create_a_same_version_run_once_the_last_one_failed(
     engine,
 ) -> None:
     with Session(engine) as session:
@@ -177,25 +173,6 @@ def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
         assert first.country_package_version == second.country_package_version
         assert first.policyengine_version == second.policyengine_version
         assert len(session.exec(select(ReportRun)).all()) == 2
-
-
-def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
-    with Session(engine) as session:
-        report = _create_report(session)
-
-        with pytest.raises(ValueError, match="require an idempotency key"):
-            create_report_run(
-                session,
-                report_id=report.id,
-                inputs=ReportRunInputs(
-                    versions=ReportRunPackageVersions(
-                        country_package_version="1.2.3",
-                        policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
-                    ),
-                    simulation_runs=SIMULATION_RUNS,
-                ),
-                trigger=ReportRunTrigger.MANUAL,
-            )
 
 
 def test_idempotency_key_round_trips_as_a_python_uuid(engine) -> None:
@@ -259,7 +236,6 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
                     ),
                     simulation_runs=SIMULATION_RUNS,
                 ),
-                trigger=ReportRunTrigger.MANUAL,
                 idempotency_key=request_key,
             )
             run_id = run.id

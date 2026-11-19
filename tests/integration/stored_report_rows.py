@@ -299,12 +299,12 @@ def store_report(  # noqa: PLR0913  # the connection and catalog, then each colu
     )
     connection.execute(
         text(
-            "INSERT INTO reports (id, label, description, country, type, "
+            "INSERT INTO reports (id, country, type, "
             "tax_benefit_model_id, policy_id, baseline_simulation_id, "
             "reform_simulation_id, household_id, dataset_id, region_id, year, "
             "budget_window_size, inputs, key_version, definition_key, "
-            "dataset_independent_key, created_at) VALUES (:id, :label, "
-            ":description, :country, :type, :model_id, :policy_id, :baseline, "
+            "dataset_independent_key, created_at) VALUES (:id, "
+            ":country, :type, :model_id, :policy_id, :baseline, "
             ":reform, :household_id, :dataset_id, :region_id, :year, "
             ":budget_window_size, CAST(:inputs AS JSON), :key_version, "
             ":definition_key, :dataset_independent_key, "
@@ -312,8 +312,6 @@ def store_report(  # noqa: PLR0913  # the connection and catalog, then each colu
         ),
         {
             "id": report.report_id,
-            "label": f"{catalog.country} reform",
-            "description": "A stored report",
             "country": catalog.country,
             "type": "economy",
             "model_id": catalog.model_id,
@@ -387,13 +385,13 @@ def store_report_run(
             "INSERT INTO report_runs (id, created_at, report_id, "
             "baseline_simulation_run_id, reform_simulation_run_id, "
             "budget_window_run_id, year, "
-            "country_package_version, policyengine_version, status, trigger, "
+            "country_package_version, policyengine_version, status, "
             "started_at, completed_at, error_message, spm_provenance, forced"
             + "".join(f", {column}" for column in result_columns)
             + ") VALUES (:id, :created_at, :report_id, :baseline_run, "
             ":reform_run, :budget_window_run_id, :year, "
             ":country_package_version, :policyengine_version, "
-            ":status, 'initial', :started_at, :completed_at, :error_message, "
+            ":status, :started_at, :completed_at, :error_message, "
             ":spm_provenance, :forced"
             + "".join(f", :{column}" for column in result_columns)
             + ")"
@@ -485,7 +483,6 @@ def store_budget_window_run(
         created_at=created_at,
         report_id=report.report_id,
         tax_benefit_model_version_id=catalog.version_id,
-        trigger="initial",
         recalculate=False,
         status=settings.status,
         error_message=settings.error_message,

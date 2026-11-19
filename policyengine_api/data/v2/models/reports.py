@@ -28,7 +28,6 @@ from policyengine_api.data.v2.models.metadata import (
 )
 from policyengine_api.data.v2.models.policies import Policy
 from policyengine_api.data.v2.models.simulations import Simulation
-from policyengine_api.data.v2.models.users import User
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.run_results import (
@@ -61,7 +60,10 @@ class ReportRunStatus(StrEnum):
 
 
 class ReportRunTrigger(StrEnum):
-    """Why a report run started: the report's first run, a manual or a system rerun."""
+    """Why a user asked for a report run: the report's creation or a re-run.
+
+    ``system`` remains in the database type; no user's record may hold it.
+    """
 
     INITIAL = "initial"
     MANUAL = "manual"
@@ -71,12 +73,17 @@ class ReportRunTrigger(StrEnum):
 class Report(TimestampedModel, table=True):
     """Stable report definition; execution state belongs to ReportRun.
 
-    The simulation service writes reports, and the Public API the user, model,
-    policy, household, dataset and region a report names; each service writes
-    only its own tables, and the foreign keys between them stay. Deleting the
-    user, policy, dataset or region clears the reference, which for the user
-    is found through ``user_id``'s index; the model and household can't be
+    The simulation service writes reports, and API v1 the model, policy,
+    household, dataset and region a report names; each service writes only its
+    own tables, and the foreign keys between them stay. Deleting the policy,
+    dataset or region clears the reference; the model and household can't be
     deleted while a report names them.
+
+    A report is shared by everyone who asks for it, so it describes no one
+    caller: a report's name and description are on each user's saved report.
+    The table's ``label``, ``description`` and ``user_id`` are left out of this
+    model, so API v1 neither loads nor writes them and a release keeps working
+    while a later revision drops them.
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
@@ -89,7 +96,19 @@ class Report(TimestampedModel, table=True):
     """
 
     __tablename__ = "reports"
+    __mapper_args__: ClassVar[dict[str, Any]] = {
+        "exclude_properties": ("label", "description", "user_id")
+    }
     __table_args__ = (
+        # Kept in the table, unmapped, until a revision drops them.
+        sa.Column("label", sa.String(255)),
+        sa.Column("description", sa.String),
+        sa.Column(
+            "user_id",
+            sa.Uuid,
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            index=True,
+        ),
         sa.CheckConstraint(
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_reports_year",
@@ -117,18 +136,8 @@ class Report(TimestampedModel, table=True):
         sa.Index("ix_reports_dataset_independent_key", "dataset_independent_key"),
     )
 
-    # Per-user: nullable until a later revision drops it, since a shared report
-    # describes no one caller.
-    label: str | None = Field(default=None, max_length=255)
-    description: str | None = None
     country: str = Field(max_length=16)
     type: str | None = Field(default=None, max_length=128)
-    user_id: UUID | None = Field(
-        default=None,
-        foreign_key="users.id",
-        ondelete="SET NULL",
-        index=True,
-    )
     tax_benefit_model_id: UUID = Field(
         foreign_key="tax_benefit_models.id",
         ondelete="RESTRICT",
@@ -171,7 +180,6 @@ class Report(TimestampedModel, table=True):
     definition_key: str | None = Field(default=None, max_length=64)
     dataset_independent_key: str | None = Field(default=None, max_length=64)
 
-    user: User | None = Relationship(back_populates="reports")
     tax_benefit_model: TaxBenefitModel = Relationship(back_populates="reports")
     policy: Policy | None = Relationship(back_populates="reports")
     baseline_simulation: Simulation | None = Relationship(
@@ -217,7 +225,12 @@ class BudgetWindowRun(TimestampedModel, table=True):
     """
 
     __tablename__ = "budget_window_runs"
+    __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("trigger",)}
     __table_args__ = (
+        # Kept in the table, unmapped, until a revision drops it: a shared run
+        # answers more than one request, and each user's trigger is on their
+        # record of it.
+        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
         sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
         sa.CheckConstraint(
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
@@ -247,12 +260,6 @@ class BudgetWindowRun(TimestampedModel, table=True):
         index=True,
     )
     policyengine_version: str | None = Field(default=None, max_length=128)
-    # Per-user: nullable until a later revision drops it, since a shared run
-    # answers more than one request; each user's trigger is on their record.
-    trigger: ReportRunTrigger | None = Field(
-        default=None,
-        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
-    )
     recalculate: bool = False
     status: ReportRunStatus = Field(
         default=ReportRunStatus.PENDING,
@@ -280,11 +287,11 @@ class ReportRun(TimestampedModel, table=True):
     and ``year``, at most one report run per year of a window run.
     ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
     it used. Its labour supply response has its own two tables. Its cliff impact
-    is its two simulation runs' (``CliffImpact``). The table's four older cliff
-    columns are declared in ``__table_args__`` and left out of the mapper, so API
-    v1 neither loads nor writes them. This covers only those four: ``trigger`` is
-    still mapped, so it must stop being mapped in an earlier release before a
-    revision drops it.
+    is its two simulation runs' (``CliffImpact``), and each user's trigger is on
+    their record of the run. The table's four older cliff columns and
+    ``trigger`` are declared in ``__table_args__`` and left out of the mapper, so
+    API v1 neither loads nor writes them and a release keeps working while a
+    later revision drops them.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -295,6 +302,7 @@ class ReportRun(TimestampedModel, table=True):
     __tablename__ = "report_runs"
     __mapper_args__: ClassVar[dict[str, Any]] = {
         "exclude_properties": (
+            "trigger",
             "baseline_cliff_gap",
             "baseline_cliff_share",
             "reform_cliff_gap",
@@ -303,6 +311,7 @@ class ReportRun(TimestampedModel, table=True):
     }
     __table_args__ = (
         # Kept in the table, unmapped, until a revision drops them.
+        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
         sa.Column("baseline_cliff_gap", sa.Float),
         sa.Column("baseline_cliff_share", sa.Float),
         sa.Column("reform_cliff_gap", sa.Float),
@@ -390,12 +399,6 @@ class ReportRun(TimestampedModel, table=True):
     status: ReportRunStatus = Field(
         default=ReportRunStatus.PENDING,
         sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
-    )
-    # Per-user: nullable until a later revision drops it, since a shared run
-    # answers more than one request; each user's trigger is on their record.
-    trigger: ReportRunTrigger | None = Field(
-        default=None,
-        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
     idempotency_key: UUID | None = Field(default=None)
     modal_call_id: str | None = Field(default=None, max_length=255)

@@ -103,23 +103,12 @@ def current_versions(country_id: str) -> PackageVersions:
     return PackageVersions(**CURRENT_VERSIONS)
 
 
-def mark_manual(connection: Connection, run_id: UUID) -> None:
-    """Record the report run as a re-run, as the simulation service creates one."""
-    connection.execute(
-        text("UPDATE report_runs SET trigger = 'manual' WHERE id = :id"),
-        {"id": run_id},
-    )
-
-
-def mark_window_manual(
+def set_window_recalculate(
     connection: Connection, window_run_id: UUID, *, recalculate: bool
 ) -> None:
-    """Record the window run as a re-run, as the simulation service creates one."""
+    """Record whether the window run is forced, as the simulation service does."""
     connection.execute(
-        text(
-            "UPDATE budget_window_runs SET trigger = 'manual', recalculate = "
-            ":recalculate WHERE id = :id"
-        ),
+        text("UPDATE budget_window_runs SET recalculate = :recalculate WHERE id = :id"),
         {"id": window_run_id, "recalculate": recalculate},
     )
 
@@ -201,7 +190,9 @@ class RerunningSimulationService:
                 window_run_id = store_window_run(
                     connection, self.catalog, report, settings, self.window_years
                 )
-                mark_window_manual(connection, window_run_id, recalculate=rerun.force)
+                set_window_recalculate(
+                    connection, window_run_id, recalculate=rerun.force
+                )
                 self.new_run_ids.append(window_run_id)
                 started = StartedReportRun(
                     report_run_id=connection.execute(
@@ -215,7 +206,6 @@ class RerunningSimulationService:
                 )
             else:
                 run_ids = store_report_run(connection, self.catalog, report, settings)
-                mark_manual(connection, run_ids.report_run_id)
                 if rerun.include_cliffs:
                     for simulation_run_id in (
                         run_ids.baseline_simulation_run_id,
@@ -357,7 +347,6 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
                 error_message="The reform simulation failed",
             ),
         )
-        mark_manual(connection, failed.report_run_id)
         newest = store_report_run(
             connection,
             catalog,
@@ -368,7 +357,6 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
                 created_at=STARTED_AT + timedelta(days=2),
             ),
         )
-        mark_manual(connection, newest.report_run_id)
         other_report = store_report(connection, catalog)
         store_report_run(
             connection,
@@ -393,11 +381,8 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
         str(failed.report_run_id),
         str(first.report_run_id),
     ]
-    assert [(item["status"], item["trigger"]) for item in items] == [
-        ("running", "manual"),
-        ("failed", "manual"),
-        ("succeeded", "initial"),
-    ]
+    assert [item["status"] for item in items] == ["running", "failed", "succeeded"]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == [
         "4.2.0",
         "4.2.0",
@@ -492,7 +477,6 @@ def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
                 created_at=STARTED_AT + timedelta(days=1),
             ),
         )
-        mark_manual(connection, newest.report_run_id)
     client = client_for(
         runtime_sessions, RerunningSimulationService(owner_engine, catalog)
     )
@@ -509,10 +493,8 @@ def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
         str(newest.report_run_id),
         str(first.report_run_id),
     ]
-    assert [(item["status"], item["trigger"]) for item in items] == [
-        ("pending", "manual"),
-        ("succeeded", "initial"),
-    ]
+    assert [item["status"] for item in items] == ["pending", "succeeded"]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
 
 
@@ -551,7 +533,7 @@ def test_a_household_report_runs_again_where_households_are_calculated(
     assert item["kind"] == "household"
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None
     runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=uk").json()
@@ -599,7 +581,7 @@ def test_running_a_report_again_answers_it_with_its_new_run(
     assert item["id"] == str(report.report_id)
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["current_versions"] == CURRENT_VERSIONS
     assert item["result"] is None
@@ -799,7 +781,7 @@ def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
             ),
             (2026, 2027),
         )
-        mark_window_manual(connection, newest_run_id, recalculate=True)
+        set_window_recalculate(connection, newest_run_id, recalculate=True)
     client = client_for(
         runtime_sessions, RerunningSimulationService(owner_engine, catalog)
     )
@@ -813,9 +795,11 @@ def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
     assert result["current_versions"] == CURRENT_VERSIONS
     items = result["items"]
     assert [item["id"] for item in items] == [str(newest_run_id), str(first_run_id)]
-    assert [
-        (item["status"], item["trigger"], item["recalculate"]) for item in items
-    ] == [("running", "manual", True), ("succeeded", "initial", False)]
+    assert [(item["status"], item["recalculate"]) for item in items] == [
+        ("running", True),
+        ("succeeded", False),
+    ]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
     assert [[year["year"] for year in item["years"]] for item in items] == [
         [2026, 2027],
@@ -867,7 +851,7 @@ def test_running_a_budget_window_again_answers_it_with_its_new_run(
     assert item["kind"] == "budget_window"
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["recalculate"] is force
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None
