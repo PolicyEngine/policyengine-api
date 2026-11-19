@@ -489,7 +489,7 @@ def test_cliff_calculations_are_started_by_the_service_and_finished_by_workers()
     """The simulation service inserts a run's cliff calculation and records its call.
 
     The Modal worker claims it, writes the cliff gap and share or the failure,
-    and never inserts one; the Public API reads the results. The catalog
+    and never inserts one; API v1 reads the results. The catalog
     writer and the Stage 12 role can do neither.
     """
     declared = declared_privileges(TEST_ENVIRONMENT)

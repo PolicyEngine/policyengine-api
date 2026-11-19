@@ -18,8 +18,8 @@ identical requests join it; a failed calculation never counts. Deleting a run
 deletes its calculations. A result has no versions of its own: it inherits its
 run's.
 
-It writes no data and changes no other table, and the previous Public API
-revision, which doesn't map the table, keeps working at it. The downgrade
+It writes no data and changes no other table, and API v1's previous
+release, which doesn't map the table, keeps working at it. The downgrade
 drops the table with every calculation and result, and leaves the type,
 which simulation_runs still uses.
 """
