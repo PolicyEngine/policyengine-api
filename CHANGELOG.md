@@ -1,3 +1,10 @@
+## [5.53.0] - 2026-11-19
+
+### Added
+
+- Store dynamics, a simulation's model assumptions, as policies are stored: once per country, catalog version and content hash, with no name or description. `POST /v2/dynamics` finds or creates one (201 or 200) from parameters under `gov.simulation`, and in the US also `simulation`, refusing other parameters and an empty dynamic with 422, and `GET /v2/dynamics/{dynamic_id}` reads one in its country. `POST /v2/policies` refuses those parameters with 422 (code `dynamic_parameters`, naming them). `/v2/simulations` and `/v2/reports` refuse a dynamic the country does not store (404) or one that sets parameters the running catalog lacks (422 `missing_parameters`). The v1-to-v2 policy copy splits a v1 policy's `gov.simulation` and US `simulation` values into a dynamic, rewriting the UK's old `labor_supply_responses` spelling, and maps each v1 policy to its policy and dynamic (`legacy_policy_mappings.dynamic_id`).
+
+
 ## [5.52.2] - 2026-11-18
 
 ### Changed
