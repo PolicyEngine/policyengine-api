@@ -43,6 +43,7 @@ COUNTRY_REFERENCE_COLUMNS = (
     ("users", "primary_country"),
     ("households", "country_id"),
     ("policies", "country_id"),
+    ("dynamics", "country_id"),
     ("user_household_associations", "country_id"),
     ("user_policies", "country_id"),
     ("user_dynamics", "country_id"),
