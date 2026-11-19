@@ -3,7 +3,7 @@
 The simulation service creates simulations, reports, their runs, budget-window
 runs, household jobs and simulation runs' cliff calculations; its Modal
 workers write their runs' and cliff calculations' status and results and
-their budget-window runs' status; the Public API reads them. Each
+their budget-window runs' status; API v1 reads them. Each
 role holds only its declared privileges
 (``policyengine_api/data/v2/privileges.py``), so a statement outside them
 fails here as it would in staging and production.
@@ -685,10 +685,10 @@ def test_modal_workers_claim_cliff_calculations_and_write_their_results(
         _refused(connection, statement, id=calculation_id)
 
 
-def test_the_public_api_reads_cliff_results_and_other_roles_cannot(
+def test_api_v1_reads_cliff_results_and_other_roles_cannot(
     connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
 ) -> None:
-    """The Public API reads a report run's two cliff results and writes none.
+    """API v1 reads a report run's two cliff results and writes none.
 
     The catalog writer and the Stage 12 role can't read them.
     """

@@ -1066,7 +1066,7 @@ runtime role may read them; neither simulation role may change the run a row
 names or delete a row. The reconcile step after each schema upgrade grants
 them. Until the simulation API writes the table, no run has a cliff
 calculation, and its cliffs stay refused. `report_runs`' four cliff columns
-stay until a later revision drops them, once the Public API reads cliffs from
+stay until a later revision drops them, once API v1 reads cliffs from
 here.
 
 It has one post-generation correction, commented in the revision: `status`
@@ -1076,8 +1076,8 @@ reuses the baseline's `v2_simulation_status` type
 again and fail. So the downgrade, which drops only the table, leaves the type
 to `simulation_runs`.
 
-The revision writes no data and changes no other table, and the previous
-Public API revision, which doesn't map the table, keeps working at it. The
+The revision writes no data and changes no other table, and API v1's
+previous release, which doesn't map the table, keeps working at it. The
 downgrade drops the table with every calculation and result; a later
 calculation of the same runs on the same versions gives the same numbers.
 `tests/integration/test_alembic_v2_cliff_impacts.py` checks that nothing
