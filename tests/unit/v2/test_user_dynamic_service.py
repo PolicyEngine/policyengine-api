@@ -6,6 +6,16 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
+
+from policyengine_api.data.v2.models import Dynamic, User, UserDynamic, UserType
+from policyengine_api.services.v2.identity.types import AccountConversionOutcome
+from policyengine_api.services.v2.user_accounts.database_session import (
+    AccountDatabaseSession,
+)
+from policyengine_api.services.v2.user_accounts.services import V2AccountService
 from policyengine_api.services.v2.user_dynamics.database_session import (
     UserDynamicDatabaseSession,
 )
@@ -24,16 +34,6 @@ from policyengine_api.services.v2.user_dynamics.validators import (
     AssociationDynamicNotFoundError,
     UserDynamicNotFoundError,
 )
-from pydantic import ValidationError
-from sqlalchemy import delete, func, select
-from sqlalchemy.exc import IntegrityError
-
-from policyengine_api.data.v2.models import Dynamic, User, UserDynamic, UserType
-from policyengine_api.services.v2.identity.types import AccountConversionOutcome
-from policyengine_api.services.v2.user_accounts.database_session import (
-    AccountDatabaseSession,
-)
-from policyengine_api.services.v2.user_accounts.services import V2AccountService
 from tests.unit.v2.user_service_support import (
     ALICE,
     BOB,

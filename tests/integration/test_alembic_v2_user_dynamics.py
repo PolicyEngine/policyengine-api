@@ -189,7 +189,10 @@ def test_the_revision_adds_only_the_saved_dynamics_table(engine: Engine) -> None
     assert saved_dynamics["unique"] == [
         ("uq_user_dynamics_id_country", ("id", "country_id"))
     ]
-    assert {name for name, _columns, _unique in saved_dynamics["indexes"]} == {
+    # Postgres also lists the unique constraint's own index, checked above.
+    assert {
+        name for name, _columns, unique in saved_dynamics["indexes"] if not unique
+    } == {
         "ix_user_dynamics_country_user_created_id",
         "ix_user_dynamics_country_dynamic",
         "ix_user_dynamics_user_id",

@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from policyengine_api.services.v2.user_dynamics.types import UserDynamicRead
 
 from policyengine_api.data.v2.models import UserType, UserTypeChangeSource
 from policyengine_api.fastapi_routes.v2.errors_support import (
@@ -24,6 +23,7 @@ from policyengine_api.services.v2.user_accounts.validators import (
     AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
 )
+from policyengine_api.services.v2.user_dynamics.types import UserDynamicRead
 from policyengine_api.services.v2.user_households.types import UserHouseholdRead
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
 from policyengine_api.services.v2.user_reports.types import UserReportRead

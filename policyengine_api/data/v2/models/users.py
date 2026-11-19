@@ -21,6 +21,7 @@ from policyengine_api.data.v2.models.base import IdentifiedModel, utc_now
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import (
+        UserDynamic,
         UserHouseholdAssociation,
         UserPolicy,
         UserReportAssociation,
@@ -125,6 +126,10 @@ class User(IdentifiedModel, table=True):
         cascade_delete=True,
     )
     policy_associations: list["UserPolicy"] = Relationship(
+        back_populates="user",
+        cascade_delete=True,
+    )
+    dynamic_associations: list["UserDynamic"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )

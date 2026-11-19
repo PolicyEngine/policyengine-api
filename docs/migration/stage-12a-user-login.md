@@ -461,7 +461,7 @@ unauthenticated: a signed-in user's row is never locked.
 | State | Outcome | What happens |
 | --- | --- | --- |
 | The identity has no user yet; the browser's unauthenticated user exists | `converted` | The `user_identities` row (issuer, subject, verified email) is inserted pointing at the browser's `users.id`; the user becomes `standard` with `primary_country = country_id`. The ID is unchanged, so every association stays owned. |
-| The identity already belongs to signed-in user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. S keeps its stored type. |
+| The identity already belongs to signed-in user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_dynamics`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. S keeps its stored type. |
 | No unauthenticated user with that ID | `none` | The identity's user is resolved, or provisioned, as on any request. |
 | The ID names a signed-in user (already converted, or anyone else's) | `none` | That user is never touched; the identity's user is resolved as on any request. |
 

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.data.v2.models import UserType
     from policyengine_api.services.v2.identity.types import AccountConversionOutcome
+    from policyengine_api.services.v2.user_dynamics.types import UserDynamicRead
     from policyengine_api.services.v2.user_households.types import UserHouseholdRead
     from policyengine_api.services.v2.user_policies.types import UserPolicyRead
     from policyengine_api.services.v2.user_reports.types import UserReportRead
@@ -88,6 +89,7 @@ class AccountExport:
     # Null when an unauthenticated principal has not saved anything yet.
     user: AccountRead | None
     policies: tuple[UserPolicyRead, ...]
+    dynamics: tuple[UserDynamicRead, ...]
     households: tuple[UserHouseholdRead, ...]
     simulations: tuple[UserSimulationRead, ...]
     reports: tuple[UserReportRead, ...]

@@ -8,6 +8,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from policyengine_api.fastapi_routes.v2.user_dynamics.response_models import (
+    UserDynamicItem,
+)
 from policyengine_api.fastapi_routes.v2.user_households.response_models import (
     UserHouseholdItem,
 )
@@ -148,7 +151,7 @@ class InvitationAcceptanceResult(StrictAccountAPIModel):
 
 
 class MeExportResult(StrictAccountAPIModel):
-    """A user and every policy, household, simulation and report it saved.
+    """A user and every policy, dynamic, household, simulation and report it saved.
 
     The export covers every country, not only the requested one.
     ``GET /v2/me/export`` returns the current user's, and
@@ -158,6 +161,7 @@ class MeExportResult(StrictAccountAPIModel):
     # Null when an unauthenticated user has not saved anything yet.
     user: MeItem | None
     policies: list[UserPolicyItem]
+    dynamics: list[UserDynamicItem]
     households: list[UserHouseholdItem]
     simulations: list[UserSimulationItem]
     reports: list[UserReportItem]
@@ -168,6 +172,7 @@ class MeExportResult(StrictAccountAPIModel):
         return cls(
             user=None if export.user is None else MeItem.from_read(export.user),
             policies=[UserPolicyItem.from_read(item) for item in export.policies],
+            dynamics=[UserDynamicItem.from_read(item) for item in export.dynamics],
             households=[
                 UserHouseholdItem.from_read(item) for item in export.households
             ],

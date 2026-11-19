@@ -18,14 +18,6 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from policyengine_api.services.v2.user_dynamics.database_session import (
-    UserDynamicDatabaseSession,
-)
-from policyengine_api.services.v2.user_dynamics.services import V2UserDynamicService
-from policyengine_api.services.v2.user_dynamics.types import (
-    UserDynamicCreateFields,
-    UserDynamicUpdateInput,
-)
 from pydantic import ValidationError
 from sqlalchemy import create_engine, delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -69,6 +61,14 @@ from policyengine_api.services.v2.user_accounts.database_session import (
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
 from policyengine_api.services.v2.user_accounts.types import AccountUpdateInput
+from policyengine_api.services.v2.user_dynamics.database_session import (
+    UserDynamicDatabaseSession,
+)
+from policyengine_api.services.v2.user_dynamics.services import V2UserDynamicService
+from policyengine_api.services.v2.user_dynamics.types import (
+    UserDynamicCreateFields,
+    UserDynamicUpdateInput,
+)
 from policyengine_api.services.v2.user_households.database_session import (
     UserHouseholdDatabaseSession,
 )

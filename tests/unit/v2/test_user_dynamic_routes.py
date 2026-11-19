@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.v2.user_dynamics.types import (
     UserDynamicFilter,
     UserDynamicPage,
@@ -17,9 +20,6 @@ from policyengine_api.services.v2.user_dynamics.validators import (
     AssociationDynamicNotFoundError,
     UserDynamicNotFoundError,
 )
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
-from policyengine_api.data.v2.settings import V2ConfigurationError
 from tests.unit.v2.user_route_support import (
     CREATED_AT,
     OWNER_ID,
