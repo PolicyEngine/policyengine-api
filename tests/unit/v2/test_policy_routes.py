@@ -33,6 +33,7 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
     PolicyNotFoundError,
+    PolicySetsDynamicParametersError,
 )
 
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -392,6 +393,30 @@ def test_policy_failures_map_to_secret_safe_typed_errors(
     assert message in response.json()["message"].lower()
     assert "secret" not in response.text
     assert "credential" not in response.text
+
+
+def test_create_refuses_dynamic_parameters_naming_them() -> None:
+    service = FakePolicyService()
+    service.error = PolicySetsDynamicParametersError(
+        (
+            "gov.simulation.labor_supply_responses.elasticities.income",
+            "simulation.marginal_tax_rate_delta",
+        )
+    )
+    client, _flask_calls = _client(service)
+
+    response = client.post("/v2/policies?country_id=us", json=_body())
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["code"] == "dynamic_parameters"
+    assert body["dynamic_parameters"] == [
+        "gov.simulation.labor_supply_responses.elasticities.income",
+        "simulation.marginal_tax_rate_delta",
+    ]
+    assert "POST /v2/dynamics" in body["message"]
+    assert "simulation.marginal_tax_rate_delta" in body["message"]
 
 
 @pytest.mark.parametrize("method", ["put", "patch", "delete"])

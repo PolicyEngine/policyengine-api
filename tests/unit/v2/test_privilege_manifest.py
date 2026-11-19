@@ -480,3 +480,19 @@ def test_the_public_api_records_each_users_report_run_requests() -> None:
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_report_run_associations"] == NO_ACCESS, role
+
+
+def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
+    """``POST /v2/dynamics`` and the v1-to-v2 copy create dynamics, as policies.
+
+    A dynamic is immutable once stored, so API v1 reads and inserts
+    them and never updates or deletes one. The simulation service and its
+    Modal workers read them for a run; no other role has access.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["dynamics"] == READ_INSERT
+    assert declared[RUNTIME_ROLE]["dynamics"] == declared[RUNTIME_ROLE]["policies"]
+    assert declared[SIMULATION_SERVICE_ROLE]["dynamics"] == READ
+    assert declared[MODAL_WORKER_ROLE]["dynamics"] == READ
+    assert declared[CATALOG_WRITER_ROLE]["dynamics"] == NO_ACCESS

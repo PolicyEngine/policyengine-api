@@ -465,8 +465,8 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
         summary="Create an economy report, a household report or a budget window",
         description=(
             "Checks that the country has economy reports and stores each named "
-            "policy, and that the running catalog version has every parameter "
-            "those policies set, then has the simulation service create the "
+            "policy and dynamic, and that the running catalog version has every "
+            "parameter they set, then has the simulation service create the "
             "report, its two "
             "simulations and their runs on its default worker's PolicyEngine.py "
             "version, and start the run. With data_source local_area_dataset, "

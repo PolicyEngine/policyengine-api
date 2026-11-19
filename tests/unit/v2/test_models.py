@@ -281,9 +281,15 @@ def test_legacy_policy_mapping_is_many_to_one_by_destination() -> None:
     assert ("country_id", "legacy_policy_id") in unique_columns
     assert ("policy_id",) not in unique_columns
     assert mappings.c.source_policy_hash.type.length == 255
-    policy_country = next(iter(mappings.foreign_key_constraints))
-    assert policy_country.name == "fk_legacy_policy_mappings_policy_country"
-    assert policy_country.ondelete == "RESTRICT"
+    foreign_keys = {
+        constraint.name: constraint for constraint in mappings.foreign_key_constraints
+    }
+    assert foreign_keys["fk_legacy_policy_mappings_policy_country"].ondelete == (
+        "RESTRICT"
+    )
+    assert foreign_keys["fk_legacy_policy_mappings_dynamic_country"].ondelete == (
+        "RESTRICT"
+    )
 
 
 def test_legacy_user_policy_mapping_is_one_to_one_by_destination() -> None:

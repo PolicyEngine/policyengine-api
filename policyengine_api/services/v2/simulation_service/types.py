@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.services.v2.countries.types import CountryRead
+    from policyengine_api.services.v2.dynamics.types import CheckedDynamicRead
     from policyengine_api.services.v2.policies.types import CheckedPolicyRead
 
 # The bounds the simulation service and the tables accept.
@@ -470,7 +471,8 @@ class SimulationServiceClient(Protocol):
     it through a client, also raises EconomyCalculationsUnsupportedError,
     HouseholdCalculationCountryError, HouseholdNotFoundError,
     HouseholdCalculationYearError, PolicyNotFoundError,
-    PolicyParametersMissingError and
+    PolicyParametersMissingError, DynamicNotFoundError,
+    DynamicParametersMissingError and
     SubmissionStorageError from its checks.
     """
 
@@ -526,4 +528,12 @@ class PolicySource(Protocol):
 
     def get_policy(self, *, country_id: str, policy_id: UUID) -> CheckedPolicyRead:
         """Return the country's policy, or raise ``PolicyNotFoundError``."""
+        ...
+
+
+class DynamicSource(Protocol):
+    """The stored dynamics a submission names."""
+
+    def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
+        """Return the country's dynamic, or raise ``DynamicNotFoundError``."""
         ...

@@ -106,7 +106,7 @@ def _translate(
         snapshot,
         selected=selected,
         parameters=parameters,
-    )
+    ).policy
 
 
 def test_year_day_and_explicit_range_periods_are_inclusive_utc() -> None:

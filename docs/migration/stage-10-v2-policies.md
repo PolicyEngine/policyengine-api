@@ -134,7 +134,26 @@ the running catalog whatever country package version the v1 row was saved
 under (its stored `api_version`), the same way the Public API simulates an old
 policy with the running country package. A policy is copied when every
 parameter path it sets exists in the running catalog and its periods and values
-are valid. A saved-policy mutation commits
+are valid.
+
+The copy splits off the v1 policy's model assumptions: every value under
+`gov.simulation.`, and in the US also `simulation.`
+(`policyengine_api/dynamic_parameters.py`). It stores them as a v2 dynamic,
+hashed and deduplicated as a policy is, and keeps the rest in the v2 policy,
+which is empty when the v1 policy set nothing else. Before looking up the
+parameters it rewrites the UK's old spelling
+`gov.simulation.labor_supply_responses.` to
+`gov.simulation.labour_supply_responses.`, the only one the UK catalog has; a
+v1 policy that sets one parameter under both spellings with different values
+fails as `conflicting_values`. The mapping in `legacy_policy_mappings` names the
+policy and the dynamic (`dynamic_id`), or no dynamic when the v1 policy sets no
+assumptions. A v1 policy copied before the split existed keeps its copy: its
+assumptions stay policy values and its mapping names no dynamic, until the
+one-time migration splits it again. Native `POST /v2/policies` refuses such
+values with 422 instead (code `dynamic_parameters`), and they are created
+through `POST /v2/dynamics`.
+
+A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
 transaction. The same request then processes that source's pending events in
 revision order and records `processed_at` only after the corresponding
@@ -206,14 +225,16 @@ Monitor structured events with metric names `v1_policy_mirror_operations` and
 | `failure_category` | `failure_reason` |
 | --- | --- |
 | `catalog_or_translation` | `missing_parameters` (the policy sets a parameter the running catalog lacks), `invalid_parameter_values`, `empty_parameter_values`, `invalid_period`, `conflicting_values`, `too_many_values` (more than 1,000 dated values), `catalog_absent` (no catalog for the running PolicyEngine.py version), `catalog_query_failed`, `catalog_version_not_found`, `catalog_mismatch` |
-| `integrity` | `mapping_conflict`, `content_hash_collision`, `stored_policy_integrity`, `saved_policy_integrity` (any integrity check of a saved-policy copy) |
+| `integrity` | `mapping_conflict`, `content_hash_collision` (of the policy or the dynamic), `stored_policy_integrity`, `stored_dynamic_integrity`, `saved_policy_integrity` (any integrity check of a saved-policy copy) |
 | `database` | `database_error` |
 | `configuration` | `configuration` |
 | `unexpected` | `missing_reform_policy` (a saved policy's v1 reform could not be loaded), `unexpected` |
 | `missing_mirror_snapshot`, `missing_mirror_revision` | the same value as the category |
 
 Events include the legacy integer ID,
-destination UUID when committed, attempted and completed database sources, and
+destination UUID when committed (a policy copy's record also names its
+dynamic's, `destination_dynamic_id`, and whether it created it,
+`dynamic_created`), attempted and completed database sources, and
 duration. They do not include policy JSON, presentation data, database URLs, or
 credentials.
 

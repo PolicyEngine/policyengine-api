@@ -57,11 +57,11 @@ class V2CodedErrorResponse(V2ErrorResponse):
 
 
 class V2MissingParametersErrorResponse(V2ErrorResponse):
-    """A refused calculation whose policy sets parameters the catalog lacks.
+    """A refused calculation whose policy or dynamic sets parameters the catalog lacks.
 
-    ``missing_parameters`` names each parameter the policy sets that the
-    running catalog version does not have, sorted; the calculation would
-    otherwise run without those values.
+    ``missing_parameters`` names each parameter the policy or dynamic sets
+    that the running catalog version does not have, sorted; the calculation
+    would otherwise run without those values.
     """
 
     code: Literal["missing_parameters"] = "missing_parameters"
@@ -102,7 +102,7 @@ def v2_coded_error_response(
 def v2_missing_parameters_response(
     message: str, missing_parameters: Sequence[str]
 ) -> JSONResponse:
-    """Serialize a 422 refusing a policy whose parameters the catalog lacks."""
+    """Serialize a 422 refusing a policy or dynamic the catalog lacks parameters of."""
     error = V2MissingParametersErrorResponse(
         message=message, missing_parameters=list(missing_parameters)
     )
