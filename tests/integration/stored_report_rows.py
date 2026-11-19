@@ -347,8 +347,8 @@ def store_report_run(
 ) -> RunIds:
     """Store a run of the report and its two simulation runs.
 
-    With ``result``, the run's result columns and rows are stored as the
-    simulation service's writer stores that economy result.
+    With ``result``, the run's result columns and rows are stored as
+    ``economy_result_rows`` gives them.
     """
     budget_window_year = settings.budget_window_year
     simulation_run_settings = replace(settings, run_id=None)
@@ -427,6 +427,43 @@ def store_report_run(
             for row in rows:
                 insert_row(connection, table, id=uuid4(), **row)
     return run_ids
+
+
+def store_cliff_calculation(  # noqa: PLR0913  # the connection, the run and its status, then each column a test sets
+    connection: Connection,
+    simulation_run_id: UUID,
+    status: str,
+    *,
+    created_at: datetime = STARTED_AT,
+    error_message: str | None = None,
+    cliff_gap: float | None = None,
+    cliff_share: float | None = None,
+) -> UUID:
+    """Store one cliff calculation of the simulation run, in the state named.
+
+    A finished calculation has a completion time; a succeeded one needs
+    ``cliff_gap`` and ``cliff_share``, a failed one an ``error_message``.
+    """
+    calculation_id = uuid4()
+    insert_row(
+        connection,
+        "cliff_impacts",
+        id=calculation_id,
+        created_at=created_at,
+        updated_at=created_at,
+        simulation_run_id=simulation_run_id,
+        status=status,
+        error_message=error_message,
+        started_at=None if status == "pending" else created_at,
+        completed_at=(
+            created_at + timedelta(minutes=1)
+            if status in {"succeeded", "failed"}
+            else None
+        ),
+        cliff_gap=cliff_gap,
+        cliff_share=cliff_share,
+    )
+    return calculation_id
 
 
 def store_budget_window_run(

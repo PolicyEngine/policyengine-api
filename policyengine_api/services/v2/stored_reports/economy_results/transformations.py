@@ -24,9 +24,12 @@ This reverses the simulation service's writer
   order.
 - ``constituency_withheld_codes`` and ``local_authority_withheld_codes``,
   for a local-area report only, from ``withheld_area_codes``, sorted.
-- ``cliff_impact``, ``spm_provenance``, ``data_version`` and
-  ``model_version`` from the report run's own columns; the SPM receipts are
-  read as ``SPMComparisonProvenance``.
+- ``cliff_impact`` from each simulation run's cliff calculation
+  (``cliff_impacts``), once both have succeeded, and never from the report
+  run's own four cliff columns.
+- ``spm_provenance``, ``data_version`` and ``model_version`` from the report
+  run's own columns; the SPM receipts are read as
+  ``SPMComparisonProvenance``.
 
 An optional part with no rows is null. The writer stores no rows for an empty
 list either, so a UK result whose areas were all withheld reads back with
@@ -41,6 +44,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import ValidationError
 
+from policyengine_api.data.v2.models import SimulationStatus
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     AgePoverty,
     BaselineReformValue,
@@ -77,6 +81,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from policyengine_api.data.v2.models import BudgetSummary as BudgetSummaryRow
+    from policyengine_api.data.v2.models import CliffImpact as CliffImpactRow
     from policyengine_api.data.v2.models import (
         CongressionalDistrictImpact as CongressionalDistrictImpactRow,
     )
@@ -87,7 +92,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models import Poverty as PovertyRow
     from policyengine_api.services.v2.stored_reports.economy_results.types import (
         EconomyResultRows,
-        ReportRunResultColumns,
+        ReportRunCliffRows,
     )
 
 # .py's poverty types behind the result's "poverty" and "deep_poverty".
@@ -253,7 +258,7 @@ def economy_result(rows: EconomyResultRows) -> EconomyResult:
         congressional_district_impact=_districts(rows.congressional_district_impacts),
         constituency_withheld_codes=_withheld_codes(rows, "constituency"),
         local_authority_withheld_codes=_withheld_codes(rows, "local_authority"),
-        cliff_impact=_cliff_impact(report_run),
+        cliff_impact=cliff_impact(rows.cliff_calculations),
     )
 
 
@@ -601,25 +606,30 @@ def _districts(
     )
 
 
-def _cliff_impact(report_run: ReportRunResultColumns) -> CliffImpact | None:
-    """Return the cliff impact, or None when the run stores none.
+def _cliff_result(calculation: CliffImpactRow | None) -> CliffImpactInSimulation | None:
+    """Return a side's cliff result, or None until its calculation has succeeded.
 
-    The database keeps the four columns all set or all null.
+    The table's check keeps both numbers set exactly when it has succeeded.
     """
     if (
-        report_run.baseline_cliff_gap is None
-        or report_run.baseline_cliff_share is None
-        or report_run.reform_cliff_gap is None
-        or report_run.reform_cliff_share is None
+        calculation is None
+        or calculation.status is not SimulationStatus.SUCCEEDED
+        or calculation.cliff_gap is None
+        or calculation.cliff_share is None
     ):
         return None
-    return CliffImpact(
-        baseline=CliffImpactInSimulation(
-            cliff_gap=report_run.baseline_cliff_gap,
-            cliff_share=report_run.baseline_cliff_share,
-        ),
-        reform=CliffImpactInSimulation(
-            cliff_gap=report_run.reform_cliff_gap,
-            cliff_share=report_run.reform_cliff_share,
-        ),
+    return CliffImpactInSimulation(
+        cliff_gap=calculation.cliff_gap, cliff_share=calculation.cliff_share
     )
+
+
+def cliff_impact(cliff_calculations: ReportRunCliffRows) -> CliffImpact | None:
+    """Return the report run's cliff impact, or None until both sides have one.
+
+    Each side's is its simulation run's succeeded cliff calculation.
+    """
+    baseline = _cliff_result(cliff_calculations.baseline)
+    reform = _cliff_result(cliff_calculations.reform)
+    if baseline is None or reform is None:
+        return None
+    return CliffImpact(baseline=baseline, reform=reform)

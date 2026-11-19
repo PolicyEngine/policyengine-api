@@ -67,6 +67,7 @@ from tests.integration.stored_report_rows import (
     RunSettings,
     delete_catalog,
     store_catalog,
+    store_cliff_calculation,
     store_report,
     store_report_run,
     store_simulation,
@@ -97,6 +98,8 @@ class StoringSimulationService:
 
     With ``answer_unstored``, it answers with IDs it stored nothing for, and
     keeps them in ``unstored_ids`` (a report's run in ``unstored_run_ids``).
+    A report with ``include_cliffs`` also gets a pending cliff calculation for
+    each side's simulation run, as a service calculating them per run starts them.
     """
 
     engine: Engine
@@ -124,6 +127,12 @@ class StoringSimulationService:
                 stored,
                 RunSettings(versions=CURRENT_VERSIONS, status="pending"),
             )
+            if report.include_cliffs:
+                for simulation_run_id in (
+                    run_ids.baseline_simulation_run_id,
+                    run_ids.reform_simulation_run_id,
+                ):
+                    store_cliff_calculation(connection, simulation_run_id, "pending")
         return SubmittedReport(
             report_id=stored.report_id, report_run_id=run_ids.report_run_id
         )
@@ -251,6 +260,24 @@ def test_a_created_report_is_answered_as_the_tables_hold_it(
     (sent,) = simulation_service.reports
     assert sent.reform.policy_id == catalog.policy_id
     assert sent.include_cliffs is True
+
+
+def test_a_report_created_with_cliffs_answers_their_pending_calculations(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    simulation_service = StoringSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
+    )
+
+    assert response.status_code == 201, response.text
+    item = response.json()["result"]["item"]
+    assert item["cliffs"] == {
+        "status": "pending",
+        "baseline": {"status": "pending", "error_message": None},
+        "reform": {"status": "pending", "error_message": None},
+    }
 
 
 def test_a_report_naming_a_policy_the_country_does_not_store_is_not_sent(

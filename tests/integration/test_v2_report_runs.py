@@ -77,6 +77,7 @@ from tests.integration.stored_report_rows import (
     household_only_catalog,
     store_budget_window_run,
     store_catalog,
+    store_cliff_calculation,
     store_report,
     store_report_run,
     store_year_simulations,
@@ -157,6 +158,9 @@ class RerunningSimulationService:
     it records how many of the report service's sessions are open when asked.
     With ``window_years``, the report is a budget window, and the new run is
     a budget-window run with a pending report run for each of those years.
+    A report run again with ``include_cliffs`` also gets a pending cliff
+    calculation for each side's new simulation run, as a service calculating
+    them per run starts them.
     """
 
     engine: Engine
@@ -212,6 +216,14 @@ class RerunningSimulationService:
             else:
                 run_ids = store_report_run(connection, self.catalog, report, settings)
                 mark_manual(connection, run_ids.report_run_id)
+                if rerun.include_cliffs:
+                    for simulation_run_id in (
+                        run_ids.baseline_simulation_run_id,
+                        run_ids.reform_simulation_run_id,
+                    ):
+                        store_cliff_calculation(
+                            connection, simulation_run_id, "pending"
+                        )
                 self.new_run_ids.append(run_ids.report_run_id)
                 started = StartedReportRun(report_run_id=run_ids.report_run_id)
             if self.delete_report:
@@ -596,6 +608,75 @@ def test_running_a_report_again_answers_it_with_its_new_run(
         str(new_run_id),
         str(first.report_run_id),
     ]
+
+
+def test_running_a_report_again_with_cliffs_asks_for_them_and_answers_their_progress(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_report(connection, catalog)
+    simulation_service = RerunningSimulationService(owner_engine, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us",
+        json={"include_cliffs": True},
+    )
+
+    assert response.status_code == 201, response.text
+    assert simulation_service.reruns == [
+        ReportRerunInput(
+            country_id="us",
+            report_id=report.report_id,
+            kind="economy",
+            force=False,
+            policy_ids=(None, catalog.policy_id),
+            include_cliffs=True,
+        )
+    ]
+    item = response.json()["result"]["item"]
+    assert item["cliffs"] == {
+        "status": "pending",
+        "baseline": {"status": "pending", "error_message": None},
+        "reform": {"status": "pending", "error_message": None},
+    }
+
+
+def test_a_budget_window_run_again_with_cliffs_is_refused_before_asking(
+    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        window = store_report(connection, catalog, budget_window_size=2)
+    simulation_service = RerunningSimulationService(
+        owner_engine, catalog, window_years=(2026, 2027)
+    )
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{window.report_id}/runs?country_id=us",
+        json={"include_cliffs": True},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "include_cliffs" in response.json()["message"]
+    assert simulation_service.reruns == []
+
+
+def test_a_household_report_run_again_asks_for_no_cliffs(
+    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+) -> None:
+    with owner_engine.begin() as connection:
+        report = store_household_report(connection, household_only_uk)
+    simulation_service = RerunningSimulationService(owner_engine, household_only_uk)
+    client = client_for(runtime_sessions, simulation_service)
+    runs_path = f"/v2/reports/{report.report_id}/runs?country_id=uk"
+
+    refused = client.post(runs_path, json={"include_cliffs": True})
+    not_asked = client.post(runs_path, json={"include_cliffs": False})
+
+    assert refused.status_code == 422, refused.text
+    assert "include_cliffs" in refused.json()["message"]
+    assert not_asked.status_code == 201, not_asked.text
+    (rerun,) = simulation_service.reruns
+    assert rerun.include_cliffs is False
 
 
 def test_a_report_whose_reform_simulation_is_gone_is_left_to_the_service_to_refuse(
