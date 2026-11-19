@@ -255,7 +255,8 @@ def test_saved_dynamics_are_deleted_with_their_user(connection: Connection) -> N
 
 def test_the_downgrade_drops_the_saved_dynamics_with_the_table(engine: Engine) -> None:
     config = alembic_v2_config()
-    command.upgrade(config, USER_DYNAMICS_REVISION)
+    # Step down from head, so the downgrade below runs this revision's step alone.
+    command.downgrade(config, USER_DYNAMICS_REVISION)
     with engine.begin() as connection:
         rows = insert_public_api_rows(connection)
         user_id = _insert_user(connection)

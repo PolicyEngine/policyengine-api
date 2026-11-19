@@ -5,8 +5,9 @@ lists them, and this table must hold exactly one row per listed country. A
 row records the calculations its country supports: a household-only country
 has ``household_enabled`` set and ``society_wide_enabled`` unset.
 
-``users.primary_country`` and the ``country_id`` of households, policies and
-the four user association tables reference ``countries.id``. Other v2 country
+``users.primary_country`` and the ``country_id`` of households, policies,
+dynamics and the five user association tables reference ``countries.id``.
+Other v2 country
 columns do not: the mapping tables that pair v1 records with their v2 copies
 keep their US-and-UK checks, and the simulation-domain tables, the comparison
 run tables and the retired association ``country`` columns store unconstrained

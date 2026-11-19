@@ -344,6 +344,8 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/reports/{report_id}/runs",
         "/v2/simulations",
         "/v2/simulations/{simulation_id}",
+        "/v2/user-dynamics",
+        "/v2/user-dynamics/{association_id}",
         "/v2/user-households",
         "/v2/user-households/{association_id}",
         "/v2/user-policies",

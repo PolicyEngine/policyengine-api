@@ -1101,8 +1101,8 @@ The disposable-Postgres suite proves the following:
 - concurrent upgrades of one browser convert exactly once;
 - two browsers upgrading into a new account at once share it: one converts,
   the other merges;
-- a merge moves all four association kinds with their IDs, keeps report links
-  valid, and deletes the unauthenticated user;
+- a merge moves every association kind, saved dynamics included, with their
+  IDs, keeps report links valid, and deletes the unauthenticated user;
 - a signed-out write waits for a conversion and then gets 401, or, after a
   merge, starts a new unauthenticated user;
 - a signed-out account deletion racing a conversion never deletes the
