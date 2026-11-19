@@ -355,15 +355,39 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
 
 
 @pytest.mark.parametrize(
-    ("table", "key_columns"),
+    ("table", "key_columns", "constraint"),
     [
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY.upper()}),
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY[:63]}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY.upper()},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY[:63]},
+            "ck_simulations_definition_key",
+        ),
         # Lowercase, 64 characters, but not hexadecimal.
-        ("simulations", {"key_version": 1, "definition_key": "g" * 64}),
-        ("simulations", {"key_version": 0, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": None, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": 1, "definition_key": None}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": "g" * 64},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 0, "definition_key": NATIONAL_KEY},
+            "ck_simulations_key_version",
+        ),
+        (
+            "simulations",
+            {"key_version": None, "definition_key": NATIONAL_KEY},
+            "ck_simulations_keys_complete",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": None},
+            "ck_simulations_keys_complete",
+        ),
         (
             "reports",
             {
@@ -371,6 +395,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": None,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -379,6 +404,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": None,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -387,6 +413,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY.upper(),
             },
+            "ck_reports_dataset_independent_key",
         ),
     ],
 )
@@ -395,6 +422,7 @@ def test_a_malformed_or_incomplete_key_is_refused(
     public_api_rows: PublicApiRows,
     table: str,
     key_columns: dict[str, object],
+    constraint: str,
 ) -> None:
     columns: dict[str, object] = (
         {
@@ -404,7 +432,6 @@ def test_a_malformed_or_incomplete_key_is_refused(
         }
         if table == "simulations"
         else {
-            "label": "Report",
             "country": "us",
             "tax_benefit_model_id": public_api_rows.model_id,
             "inputs": "{}",
@@ -412,7 +439,9 @@ def test_a_malformed_or_incomplete_key_is_refused(
     )
     columns |= {"id": uuid4(), "year": 2026, **key_columns}
 
-    with refused(connection, IntegrityError, match="violates check constraint"):
+    with refused(
+        connection, IntegrityError, match=f'violates check constraint "{constraint}"'
+    ):
         insert_row(connection, table, **columns)
 
 
