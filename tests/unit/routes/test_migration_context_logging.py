@@ -523,6 +523,22 @@ _USER_RESOURCE_REQUESTS = (
     _UserResourceRequest("POST", "/v2/me/upgrade", "user_profile", None, "supabase"),
     _UserResourceRequest("GET", "/v2/user-simulations", "simulation", "supabase", None),
     _UserResourceRequest("POST", "/v2/user-households", "household", None, "supabase"),
+    _UserResourceRequest("GET", "/v2/user-dynamics", "policy", "supabase", None),
+    _UserResourceRequest("POST", "/v2/user-dynamics", "policy", None, "supabase"),
+    _UserResourceRequest(
+        "PATCH",
+        "/v2/user-dynamics/00000000-0000-0000-0000-000000000001",
+        "policy",
+        None,
+        "supabase",
+    ),
+    _UserResourceRequest(
+        "DELETE",
+        "/v2/user-dynamics/00000000-0000-0000-0000-000000000001",
+        "policy",
+        None,
+        "supabase",
+    ),
     _UserResourceRequest(
         "POST", "/v2/user-simulations", "simulation", None, "supabase"
     ),
@@ -578,6 +594,8 @@ def test_signed_in_user_resources_log_supabase_sources(
 ):
     method, path, route_group, db_read, db_write = request_case
     for name in (
+        "DB_READ_POLICY",
+        "DB_WRITE_POLICY",
         "DB_READ_SIMULATION",
         "DB_WRITE_SIMULATION",
         "DB_READ_REPORT",

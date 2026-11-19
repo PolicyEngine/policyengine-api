@@ -373,13 +373,14 @@ def build_v2_admin_user_router(dependencies: NativeRouteDependencies) -> APIRout
         "/users/{user_id}/saved-items",
         response_model=AdminUserSavedItemsResponse,
         summary=(
-            "Read a signed-in user's saved policies, households, simulations and "
-            "reports"
+            "Read a signed-in user's saved policies, dynamics, households, "
+            "simulations and reports"
         ),
         description=(
             "Admins only; read-only. Returns what the user's own GET /v2/me/export "
             "returns, in every country: the user, with the email admins see for "
-            "it, and every saved policy, household, simulation and report. An "
+            "it, and every saved policy, dynamic, household, simulation and "
+            "report. An "
             "unauthenticated user's ID is not found (404). Each read is recorded "
             "with the admin's and the user's IDs."
         ),

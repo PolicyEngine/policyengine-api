@@ -335,7 +335,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # Served countries; the migration that creates the table inserts its rows,
     # and the Public API reads them.
     "countries": _access(runtime=READ),
-    # Users and their saved work (Stage 12A).
+    # Users and their saved work (Stage 12A), and their saved dynamics.
+    "user_dynamics": _access(runtime=READ_WRITE),
     "user_household_associations": _access(runtime=READ_WRITE),
     "user_identities": _access(runtime=READ_WRITE),
     "user_policies": _access(runtime=READ_WRITE),

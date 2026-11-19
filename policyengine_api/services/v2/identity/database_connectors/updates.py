@@ -9,6 +9,7 @@ from sqlmodel import Session, col
 
 from policyengine_api.data.v2.models import (
     User,
+    UserDynamic,
     UserHouseholdAssociation,
     UserIdentity,
     UserPolicy,
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
 USER_ASSOCIATION_TABLES = (
     UserPolicy,
+    UserDynamic,
     UserHouseholdAssociation,
     UserSimulationAssociation,
     UserReportAssociation,

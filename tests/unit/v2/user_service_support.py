@@ -14,6 +14,7 @@ from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
     V2_METADATA,
+    Dynamic,
     Household,
     LegacyHouseholdMapping,
     LegacyPolicyMapping,
@@ -108,6 +109,9 @@ class V2Store:
     uk_policy_id: UUID
     household_id: UUID
     uk_household_id: UUID
+    dynamic_id: UUID
+    other_dynamic_id: UUID
+    uk_dynamic_id: UUID
 
 
 @contextmanager
@@ -177,7 +181,21 @@ def v2_store() -> Iterator[V2Store]:
             canonicalization_version=1,
             content_hash="f" * 64,
         )
-        session.add_all([value, uk_policy, household, uk_household])
+        dynamics = {
+            name: Dynamic(
+                country_id=country_id,
+                tax_benefit_model=model,
+                tax_benefit_model_version=version,
+                canonicalization_version=1,
+                content_hash=content_hash * 64,
+            )
+            for name, country_id, content_hash in (
+                ("us", "us", "1"),
+                ("other_us", "us", "2"),
+                ("uk", "uk", "3"),
+            )
+        }
+        session.add_all([value, uk_policy, household, uk_household, *dynamics.values()])
         session.flush()
         session.add_all(
             [
@@ -204,6 +222,9 @@ def v2_store() -> Iterator[V2Store]:
             uk_policy_id=uk_policy.id,
             household_id=household.id,
             uk_household_id=uk_household.id,
+            dynamic_id=dynamics["us"].id,
+            other_dynamic_id=dynamics["other_us"].id,
+            uk_dynamic_id=dynamics["uk"].id,
         )
     try:
         yield store

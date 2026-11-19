@@ -28,6 +28,7 @@ from policyengine_api.data.v2.models import (
     SimulationRun,
     TaxBenefitModelVersion,
     User,
+    UserDynamic,
     UserHouseholdAssociation,
     UserIdentity,
     UserPolicy,
@@ -42,8 +43,10 @@ COUNTRY_REFERENCE_COLUMNS = (
     ("users", "primary_country"),
     ("households", "country_id"),
     ("policies", "country_id"),
+    ("dynamics", "country_id"),
     ("user_household_associations", "country_id"),
     ("user_policies", "country_id"),
+    ("user_dynamics", "country_id"),
     ("user_simulation_associations", "country_id"),
     ("user_report_associations", "country_id"),
 )
@@ -80,6 +83,7 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         SimulationRun: "simulations",
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
+        UserDynamic: "associations",
         LegacyPolicyMapping: "policy_mappings",
         LegacyUserMapping: "policy_mappings",
         LegacyUserPolicyMapping: "policy_mappings",
@@ -153,6 +157,7 @@ def test_user_owned_associations_have_relational_integrity() -> None:
             "simulation_associations",
         ),
         (UserPolicy, "user_policies", "policy_associations"),
+        (UserDynamic, "user_dynamics", "dynamic_associations"),
         (UserReportAssociation, "user_report_associations", "report_associations"),
     )
 

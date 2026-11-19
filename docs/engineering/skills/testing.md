@@ -632,6 +632,8 @@ uv run --frozen pytest \
   tests/unit/v2/test_user_household_routes.py \
   tests/unit/v2/test_user_simulation_report_routes.py \
   tests/unit/v2/test_user_policy_service.py \
+  tests/unit/v2/test_user_dynamic_routes.py \
+  tests/unit/v2/test_user_dynamic_service.py \
   tests/unit/v2/test_user_household_service.py \
   tests/unit/v2/test_user_account_service.py \
   tests/unit/v2/test_unauthenticated_user_service.py \
@@ -658,6 +660,7 @@ V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test
 uv run --frozen pytest \
   tests/integration/test_alembic_v2_lifecycle.py \
   tests/integration/test_alembic_v2_catalog_tables.py \
+  tests/integration/test_alembic_v2_user_dynamics.py \
   tests/integration/test_v2_user_identity_persistence.py \
   tests/integration/test_v2_user_type_persistence.py -q
 ```

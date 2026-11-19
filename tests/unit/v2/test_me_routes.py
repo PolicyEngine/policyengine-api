@@ -76,6 +76,7 @@ def _result(name: str, _kwargs: dict):
         return AccountExport(
             user=_account(),
             policies=(),
+            dynamics=(),
             households=(),
             simulations=(),
             reports=(),
@@ -134,6 +135,7 @@ def test_account_responses_carry_an_author_or_admin_type(user_type: str) -> None
             "export_account": AccountExport(
                 user=account,
                 policies=(),
+                dynamics=(),
                 households=(),
                 simulations=(),
                 reports=(),
@@ -197,6 +199,7 @@ def test_export_and_delete_me() -> None:
     assert exported.json()["result"] == {
         "user": exported.json()["result"]["user"],
         "policies": [],
+        "dynamics": [],
         "households": [],
         "simulations": [],
         "reports": [],
@@ -303,6 +306,7 @@ def test_export_serializes_stored_rows_outside_current_input_bounds() -> None:
             return AccountExport(
                 user=_account(),
                 policies=(odd_policy,),
+                dynamics=(),
                 households=(),
                 simulations=(),
                 reports=(odd_report,),
@@ -370,7 +374,12 @@ def test_absent_unauthenticated_users_read_as_not_found_and_export_empty() -> No
             msg = "The account was not found"
             raise AccountNotFoundError(msg)
         return AccountExport(
-            user=None, policies=(), households=(), simulations=(), reports=()
+            user=None,
+            policies=(),
+            dynamics=(),
+            households=(),
+            simulations=(),
+            reports=(),
         )
 
     client, _service = _client(
@@ -386,6 +395,7 @@ def test_absent_unauthenticated_users_read_as_not_found_and_export_empty() -> No
     assert exported.json()["result"] == {
         "user": None,
         "policies": [],
+        "dynamics": [],
         "households": [],
         "simulations": [],
         "reports": [],

@@ -163,8 +163,8 @@ class AdminUserSavedItemsResponse(StrictAdminUserAPIModel):
     """The response for a signed-in user's saved items, in every country.
 
     ``result`` is what the user's own ``GET /v2/me/export`` returns: the user,
-    with the email admins see for it, and every policy, household, simulation
-    and report it saved.
+    with the email admins see for it, and every policy, dynamic, household,
+    simulation and report it saved.
     """
 
     status: Literal["ok"] = "ok"

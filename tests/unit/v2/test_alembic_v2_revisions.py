@@ -33,6 +33,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
+        "user_dynamics",
         "user_identities",
         "user_invitations",
         "user_report_run_associations",
@@ -69,8 +70,11 @@ SHARED_REPORTS_REVISION = "94dc43079186"
 # The user invitations revision, on the shared reports revision, and parent
 # of the dynamics revision.
 USER_INVITATIONS_REVISION = "f519a77ba122"
-# The dynamics revision, on the user invitations revision.
+# The dynamics revision, on the user invitations revision, and parent of the
+# user dynamics revision.
 DYNAMICS_REVISION = "9d1d12a7ac58"
+# The user dynamics revision, on the dynamics revision.
+USER_DYNAMICS_REVISION = "d417fe8b1b17"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
@@ -79,6 +83,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        DYNAMICS_REVISION,
         USER_INVITATIONS_REVISION,
         SHARED_REPORTS_REVISION,
         WITHHELD_AREA_CODES_REVISION,
@@ -1155,7 +1160,6 @@ def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION == DYNAMICS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -1207,5 +1211,50 @@ def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None
     assert "fk_legacy_policy_mappings_dynamic_country" in upgrade
     assert "uq_parameter_values_dynamic_parameter_start_date" in upgrade
     assert 'postgresql_where=sa.text("dynamic_id IS NOT NULL")' in upgrade
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
+    """The revision after dynamics creates ``user_dynamics`` and nothing else.
+
+    It is generated with no corrections, with its ID chosen through
+    ``--rev-id``: one table, whose keys name its user (``CASCADE``), its
+    country and a dynamic of that country (both ``RESTRICT``), with its
+    three indexes. The downgrade drops them, and neither writes data.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{USER_DYNAMICS_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert f'down_revision: Union[str, None] = "{DYNAMICS_REVISION}"' in revision
+    assert "correction" not in revision.lower()
+    operations = [name for name in re.findall(r"op\.\w+", upgrade) if name != "op.f"]
+    assert sorted(operations) == ["op.create_index"] * 3 + ["op.create_table"]
+    reversals = [name for name in re.findall(r"op\.\w+", downgrade) if name != "op.f"]
+    assert sorted(reversals) == ["op.drop_index"] * 3 + ["op.drop_table"]
+    assert re.search(r'op\.create_table\(\s*"user_dynamics"', upgrade)
+    assert 'op.drop_table("user_dynamics")' in downgrade
+    for constraint_name in (
+        "fk_user_dynamics_dynamic_country",
+        "uq_user_dynamics_id_country",
+        "ix_user_dynamics_country_user_created_id",
+        "ix_user_dynamics_country_dynamic",
+    ):
+        assert constraint_name in upgrade
+    assert re.search(
+        r'\["dynamic_id", "country_id"\],\s*\["dynamics\.id", "dynamics\.country_id"\]',
+        upgrade,
+    )
+    assert upgrade.count('ondelete="RESTRICT"') == 2
+    assert upgrade.count('ondelete="CASCADE"') == 1
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision

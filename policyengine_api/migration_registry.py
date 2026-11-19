@@ -62,6 +62,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
             "dynamics",
             "user-policy",
             "user-policies",
+            "user-dynamics",
         ),
         db_entity="policy",
     ),
