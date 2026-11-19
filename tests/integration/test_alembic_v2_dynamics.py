@@ -323,9 +323,9 @@ def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
     engine: Engine,
 ) -> None:
     config = alembic_v2_config()
-    # The fixture leaves the database at the head, which a later revision may
-    # be, so a downgrade reaches the dynamics revision; an upgrade to an older
-    # revision does nothing.
+    # The fixture upgrades to the head before the test, and the head can be
+    # later than the dynamics revision, so a downgrade reaches it; an upgrade
+    # to an older revision does nothing.
     command.downgrade(config, DYNAMICS_REVISION)
     with engine.begin() as connection:
         rows = insert_public_api_rows(connection)
@@ -334,6 +334,8 @@ def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
         with pytest.raises(IntegrityError, match="name"):
             command.downgrade(config, PREVIOUS_REVISION)
         assert _current_revision(engine) == DYNAMICS_REVISION
+        mapping_columns = inspect(engine).get_columns("legacy_policy_mappings")
+        assert "dynamic_id" in {column["name"] for column in mapping_columns}
     finally:
         with engine.begin() as connection:
             connection.execute(
