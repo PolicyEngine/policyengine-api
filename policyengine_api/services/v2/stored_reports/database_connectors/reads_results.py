@@ -96,8 +96,7 @@ def read_economy_result_rows(  # noqa: PLR0913  # the session, then each part of
     The withheld area codes are read only for a local-area report's run
     (``on_local_area_dataset``), whose writer records them.
     ``cliff_calculations`` are its simulation runs' cliff calculations, as
-    ``read_cliff_calculations`` read them. The report run's own four cliff
-    columns are not read.
+    ``read_cliff_calculations`` read them.
     """
     report_run_id = report_run.id
     simulation_run_ids = (

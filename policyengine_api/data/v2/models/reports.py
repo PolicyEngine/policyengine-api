@@ -7,7 +7,7 @@ results are in ``run_results``.
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -79,11 +79,8 @@ class Report(TimestampedModel, table=True):
     dataset or region clears the reference; the model and household can't be
     deleted while a report names them.
 
-    A report is shared by everyone who asks for it, so it describes no one
-    caller: a report's name and description are on each user's saved report.
-    The table's ``label``, ``description`` and ``user_id`` are left out of this
-    model, so API v1 neither loads nor writes them and a release keeps working
-    while a later revision drops them.
+    A report is shared by everyone who asks for it, so it names no user. A
+    report's name and description are on each user's saved report.
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
@@ -96,19 +93,7 @@ class Report(TimestampedModel, table=True):
     """
 
     __tablename__ = "reports"
-    __mapper_args__: ClassVar[dict[str, Any]] = {
-        "exclude_properties": ("label", "description", "user_id")
-    }
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops them.
-        sa.Column("label", sa.String(255)),
-        sa.Column("description", sa.String),
-        sa.Column(
-            "user_id",
-            sa.Uuid,
-            sa.ForeignKey("users.id", ondelete="SET NULL"),
-            index=True,
-        ),
         sa.CheckConstraint(
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_reports_year",
@@ -225,12 +210,7 @@ class BudgetWindowRun(TimestampedModel, table=True):
     """
 
     __tablename__ = "budget_window_runs"
-    __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("trigger",)}
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops it: a shared run
-        # answers more than one request, and each user's trigger is on their
-        # record of it.
-        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
         sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
         sa.CheckConstraint(
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
@@ -284,14 +264,12 @@ class ReportRun(TimestampedModel, table=True):
     It compares ``baseline_simulation_run_id`` with
     ``reform_simulation_run_id``; a household report with only a baseline has
     no reform run. A year of a budget window names its ``budget_window_run_id``
-    and ``year``, at most one report run per year of a window run.
-    ``spm_provenance`` is the SPM receipt and ``data_version`` the data release
-    it used. Its labour supply response has its own two tables. Its cliff impact
-    is its two simulation runs' (``CliffImpact``), and each user's trigger is on
-    their record of the run. The table's four older cliff columns and
-    ``trigger`` are declared in ``__table_args__`` and left out of the mapper, so
-    API v1 neither loads nor writes them and a release keeps working while a
-    later revision drops them.
+    and ``year``, at most one report run per year of a window run. An economy
+    comparison's cliff impact is its two simulation runs' cliff results
+    (``cliff_impacts``); ``spm_provenance`` is the SPM receipt and
+    ``data_version`` the data release it used. Its labour supply response has
+    its own two tables. A run is shared by every request that joins it, so
+    each user's trigger is on their ``user_report_run_associations`` row.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -300,22 +278,7 @@ class ReportRun(TimestampedModel, table=True):
     """
 
     __tablename__ = "report_runs"
-    __mapper_args__: ClassVar[dict[str, Any]] = {
-        "exclude_properties": (
-            "trigger",
-            "baseline_cliff_gap",
-            "baseline_cliff_share",
-            "reform_cliff_gap",
-            "reform_cliff_share",
-        )
-    }
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops them.
-        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
-        sa.Column("baseline_cliff_gap", sa.Float),
-        sa.Column("baseline_cliff_share", sa.Float),
-        sa.Column("reform_cliff_gap", sa.Float),
-        sa.Column("reform_cliff_share", sa.Float),
         sa.UniqueConstraint(
             "report_id",
             "idempotency_key",
@@ -345,12 +308,6 @@ class ReportRun(TimestampedModel, table=True):
             ["budget_window_runs.id", "budget_window_runs.report_id"],
             name="fk_report_runs_budget_window_run_id_budget_window_runs",
             ondelete="CASCADE",
-        ),
-        sa.CheckConstraint(
-            "(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
-            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
-            "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)",
-            name="ck_report_runs_cliff_impact_complete",
         ),
         sa.Index(
             "ix_report_runs_current_output",

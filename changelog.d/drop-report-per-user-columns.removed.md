@@ -1,0 +1,1 @@
+The v2 database no longer stores a label, description or user on reports, a trigger on report runs or budget-window runs, or cliff results on report runs. A report's name and description are on each user's saved report, each user's trigger is on their record of the run, and cliffs are each simulation run's cliff results.

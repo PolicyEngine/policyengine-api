@@ -363,8 +363,8 @@ class EconomyResult(EconomyResultModel):
 class ReportRunResultColumns:
     """The result columns of the report run itself.
 
-    ``country_package_version`` is the run's. Its four cliff columns are not
-    read: a report run's cliffs are its simulation runs' (``cliff_impacts``).
+    ``country_package_version`` is the run's. A report run's cliffs are its
+    simulation runs' (``cliff_impacts``).
     """
 
     country_package_version: str

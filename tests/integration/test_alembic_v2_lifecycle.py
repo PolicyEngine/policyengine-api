@@ -939,8 +939,8 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
             connection.execute(
                 text(
                     "INSERT INTO reports "
-                    "(id, label, country, tax_benefit_model_id, inputs) "
-                    "VALUES (:id, 'UUID cast report', 'us', :model_id, '{}')"
+                    "(id, country, tax_benefit_model_id, inputs) "
+                    "VALUES (:id, 'us', :model_id, '{}')"
                 ),
                 {"id": report_id, "model_id": public_api_rows.model_id},
             )
@@ -949,9 +949,9 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
                     "INSERT INTO report_runs "
                     "(id, report_id, baseline_simulation_run_id, "
                     "country_package_version, policyengine_version, status, "
-                    "trigger, idempotency_key) "
+                    "idempotency_key) "
                     "VALUES (:id, :report_id, :simulation_run_id, '1.0', '1.0', "
-                    "'pending', 'manual', :request_key)"
+                    "'pending', :request_key)"
                 ),
                 {
                     "id": report_run_id,

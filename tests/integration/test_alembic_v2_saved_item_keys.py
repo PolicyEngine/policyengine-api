@@ -116,7 +116,6 @@ def _insert_report(connection: Connection, rows: PublicApiRows) -> object:
         connection,
         "reports",
         id=report_id,
-        label="Saved report",
         country="us",
         tax_benefit_model_id=rows.model_id,
         inputs="{}",

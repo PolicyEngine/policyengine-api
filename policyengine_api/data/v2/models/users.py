@@ -79,7 +79,7 @@ class User(IdentifiedModel, table=True):
     A signed-in user, of any type but ``unauthenticated``, always has a
     primary country. Deleting a user deletes their sign-in identities, saved
     associations and records of the report runs they asked for; the reports
-    and runs themselves are shared and stay.
+    and runs themselves are shared, name no user and stay.
     """
 
     __tablename__ = "users"

@@ -221,22 +221,21 @@ def test_sqlite_refuses_a_second_unfailed_unrecalculated_window_run(
     ("table_name", "column_name"),
     [
         ("reports", "label"),
+        ("reports", "description"),
+        ("reports", "user_id"),
         ("report_runs", "trigger"),
         ("budget_window_runs", "trigger"),
     ],
 )
-def test_per_user_columns_of_shared_rows_need_no_value(
+def test_shared_rows_hold_no_per_user_columns(
     table_name: str, column_name: str
 ) -> None:
-    """A shared row describes no one caller, so the simulation service may omit them.
+    """A shared row describes no one caller.
 
-    They go in a later revision; until then they are nullable, with no default,
-    so a row written without one holds none.
+    A report's name is on each user's saved report, and a run's trigger on
+    each user's record of the run.
     """
-    column = V2_METADATA.tables[table_name].c[column_name]
-
-    assert column.nullable
-    assert column.server_default is None
+    assert column_name not in V2_METADATA.tables[table_name].c
 
 
 def test_user_report_run_associations_record_each_users_request_for_a_run() -> None:

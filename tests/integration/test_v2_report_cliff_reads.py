@@ -18,7 +18,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session
@@ -166,36 +166,6 @@ def test_a_succeeded_run_reads_its_simulation_runs_cliff_results(
         "baseline": {"status": "succeeded", "error_message": None},
         "reform": {"status": "succeeded", "error_message": None},
     }
-
-
-def test_a_report_runs_own_cliff_columns_are_not_read(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
-) -> None:
-    catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-        run_ids = store_report_run(
-            connection,
-            catalog,
-            report,
-            RunSettings(versions=CURRENT_VERSIONS),
-            result=uk_economy_result(),
-        )
-        # The report run's own columns hold cliffs; its simulation runs have none.
-        connection.execute(
-            text(
-                "UPDATE report_runs SET baseline_cliff_gap = 1.0, "
-                "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-                "reform_cliff_share = 0.2 WHERE id = :id"
-            ),
-            {"id": run_ids.report_run_id},
-        )
-
-    item = read_report(client, report.report_id, "uk")
-
-    assert item["status"] == "succeeded"
-    assert item["result"]["cliff_impact"] is None
-    assert item["cliffs"]["status"] == "not_calculated"
 
 
 def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
