@@ -215,6 +215,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2_withheld_area_codes.py" in lifecycle_script
     assert "test_alembic_v2_shared_report_keys.py" in lifecycle_script
     assert "test_alembic_v2_cliff_impacts.py" in lifecycle_script
+    assert "test_alembic_v2_dynamics.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -249,6 +250,14 @@ def test_reusable_v2_integration_check_runs_the_users_report_run_tests():
         "test_v2_user_report_views.py",
     ):
         assert privileges_applied < workflow.index(module), module
+
+
+def test_reusable_v2_integration_check_runs_the_dynamic_persistence_tests():
+    """Storing dynamics and the v1-to-v2 copy run as the runtime role."""
+    workflow = _workflow("v2-integration-check.yml")
+
+    privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
+    assert privileges_applied < workflow.index("test_v2_dynamic_persistence.py")
 
 
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
