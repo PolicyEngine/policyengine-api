@@ -253,11 +253,17 @@ def test_reusable_v2_integration_check_runs_the_users_report_run_tests():
 
 
 def test_reusable_v2_integration_check_runs_the_dynamic_persistence_tests():
-    """Storing dynamics and the v1-to-v2 copy run as the runtime role."""
+    """The dynamic persistence tests run after the managed roles get their privileges.
+
+    The dynamics revision's migration tests downgrade and upgrade the schema,
+    which would drop tables the job granted privileges on, so they run in the
+    lifecycle job instead.
+    """
     workflow = _workflow("v2-integration-check.yml")
 
     privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
     assert privileges_applied < workflow.index("test_v2_dynamic_persistence.py")
+    assert "test_alembic_v2_dynamics.py" not in workflow
 
 
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():

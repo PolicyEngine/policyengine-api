@@ -40,8 +40,10 @@ CHANGED_TABLES = frozenset({"dynamics", "legacy_policy_mappings", "parameter_val
 @pytest.fixture
 def engine() -> Iterator[Engine]:
     """Yield an engine on a database at head, and leave it at head."""
+    # Check that the target is the disposable database before migrating it.
+    database_url = disposable_v2_url()
     command.upgrade(alembic_v2_config(), "head")
-    database_engine = create_engine(disposable_v2_url())
+    database_engine = create_engine(database_url)
     try:
         yield database_engine
     finally:
