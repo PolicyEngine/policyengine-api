@@ -143,8 +143,8 @@ def test_user_contracts_require_a_signed_in_or_signed_out_credential():
     headers_by_request = Counter(tuple(request["headers"]) for request in user_requests)
 
     assert headers_by_request == {
-        ("Authorization",): 26,
-        ("PolicyEngine-Unauthenticated-User",): 23,
+        ("Authorization",): 31,
+        ("PolicyEngine-Unauthenticated-User",): 28,
         ("Authorization", "PolicyEngine-Unauthenticated-User"): 1,
     }
     assert all("user_id=" not in request["path"] for request in user_requests)
