@@ -403,14 +403,23 @@ class PolicyEngineCountry:
         return parameter_data
 
     def build_entities(self) -> dict:
-        """Describe every entity by key, with its roles (empty when it has none)."""
+        """Describe every entity by key, with its roles (empty when it has none).
+
+        Only the system's person entity is described with ``is_person`` true.
+        policyengine-core also flags a root population with no members (such
+        as the UK ``firm`` entity) as ``is_person``, and takes the first such
+        entity as the person entity. Keys are compared because a cloned system
+        copies its person entity.
+        """
+        entities = self.tax_benefit_system.entities
+        person_key = next((entity.key for entity in entities if entity.is_person), None)
         data = {}
-        for entity in self.tax_benefit_system.entities:
+        for entity in entities:
             entity_data = {
                 "plural": entity.plural,
                 "label": entity.label,
                 "doc": entity.doc,
-                "is_person": entity.is_person,
+                "is_person": entity.key == person_key,
                 "key": entity.key,
             }
             if hasattr(entity, "roles"):

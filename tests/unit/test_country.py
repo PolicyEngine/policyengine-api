@@ -66,6 +66,34 @@ class TestCountryJsonSafety:
         }
 
 
+class TestCountryEntities:
+    def test__build_entities_describes_only_the_person_entity_as_a_person(self):
+        # policyengine-core flags a root population with no members, such as
+        # the UK firm entity, as is_person. Only the first one is the person.
+        def core_entity(key, plural, *, is_person):
+            return SimpleNamespace(
+                key=key, plural=plural, label=key, doc="", is_person=is_person
+            )
+
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        country.tax_benefit_system = SimpleNamespace(
+            entities=[
+                core_entity("person", "people", is_person=True),
+                core_entity("household", "households", is_person=False),
+                core_entity("firm", "firms", is_person=True),
+            ]
+        )
+
+        entities = country.build_entities()
+
+        assert {key: entity["is_person"] for key, entity in entities.items()} == {
+            "person": True,
+            "household": False,
+            "firm": False,
+        }
+        assert entities["firm"]["roles"] == {}
+
+
 class TestHouseholdCalculation:
     def test__calculate_does_not_enable_or_read_simulation_tracing(self, monkeypatch):
         class SimulationWithoutTracing:
