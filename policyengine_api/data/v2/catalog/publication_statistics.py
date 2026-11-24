@@ -35,7 +35,8 @@ from policyengine_api.data.v2.catalog.publication_types import (
 )
 
 if TYPE_CHECKING:
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 CATALOG_STATISTICS_TABLES: Final = (
     "datasets",
@@ -48,13 +49,18 @@ CATALOG_STATISTICS_TABLES: Final = (
 )
 """The catalog tables publication analyzes, in name order."""
 
-_HAS_MAINTAIN = sa.text(
-    "SELECT has_table_privilege(current_user, :qualified_table, 'MAINTAIN')"
-)
+
+def _has_maintain(qualified_table: str) -> sa.Select[tuple[bool]]:
+    """Select whether the current role holds ``MAINTAIN`` on the table."""
+    return sa.select(
+        sa.func.has_table_privilege(
+            sa.func.current_user(), qualified_table, "MAINTAIN", type_=sa.Boolean
+        )
+    )
 
 
-def require_analyze_privilege(connection: Connection) -> None:
-    """Raise unless the connection's role may ``ANALYZE`` every catalog table.
+def require_analyze_privilege(session: Session) -> None:
+    """Raise unless the session's role may ``ANALYZE`` every catalog table.
 
     An owner holds every privilege, so ``has_table_privilege`` answers for
     ownership and a ``MAINTAIN`` grant alike.
@@ -62,9 +68,7 @@ def require_analyze_privilege(connection: Connection) -> None:
     missing = [
         table
         for table in CATALOG_STATISTICS_TABLES
-        if not connection.execute(
-            _HAS_MAINTAIN, {"qualified_table": f"public.{table}"}
-        ).scalar_one()
+        if not session.execute(_has_maintain(f"public.{table}")).scalar_one()
     ]
     if missing:
         msg = (
@@ -90,16 +94,17 @@ class CatalogStatisticsRefresh:
     failure_type: str | None = None
 
 
-def analyze_catalog_tables(engine: Engine) -> CatalogStatisticsRefresh:
+def analyze_catalog_tables(sessions: sessionmaker[Session]) -> CatalogStatisticsRefresh:
     """Run one ``ANALYZE`` over the catalog tables; a failure is returned, not raised.
 
-    It runs after the publication committed, so a failure, of any kind, never
-    undoes it; the next publication analyzes again.
+    It runs in a transaction of its own, after the publication committed, so a
+    failure, of any kind, never undoes it; the next publication analyzes again.
+    ``ANALYZE`` has no ORM form, so it is SQL text (a rule exception).
     """
     tables = ", ".join(f"public.{table}" for table in CATALOG_STATISTICS_TABLES)
     try:
-        with engine.begin() as connection:
-            connection.execute(sa.text(f"ANALYZE {tables}"))
+        with sessions.begin() as session:
+            session.execute(sa.text(f"ANALYZE {tables}"))
     except Exception as error:  # noqa: BLE001  # the publication has committed; the next one analyzes again
         return CatalogStatisticsRefresh(analyzed=(), failure_type=_failure(error))
     return CatalogStatisticsRefresh(analyzed=CATALOG_STATISTICS_TABLES)

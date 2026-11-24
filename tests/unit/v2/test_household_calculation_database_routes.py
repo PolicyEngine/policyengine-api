@@ -9,20 +9,16 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Country,
     Household,
     Parameter,
@@ -59,8 +55,15 @@ from policyengine_api.services.v2.policies.database_session import (
     PolicyDatabaseSession,
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
+from tests.fixtures.database_sessions import drop_tables, sqlite_v2_sessions
 from tests.fixtures.household_calculation_documents import JOB_ID
 from tests.unit.v2.household_calculation_support import FakeSimulation
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 RUNNING_VERSION = "6.10.0"
 EARLIER_VERSION = "6.9.0"
@@ -71,17 +74,11 @@ STORED_AT = datetime(2026, 11, 10, tzinfo=UTC)
 
 
 @pytest.fixture
-def engine():
-    # One connection shared by every thread, so the route's worker thread
-    # reads the same in-memory database.
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
+def sessions() -> Iterator[sessionmaker[Session]]:
+    # Every Session shares one connection, so the route's worker thread reads
+    # the same in-memory database.
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 def _catalog_version(
@@ -126,9 +123,9 @@ def _policy(session: Session, parameters: dict[str, Parameter], hash_seed: str):
 
 
 @pytest.fixture
-def stored(engine) -> dict[str, object]:
+def stored(sessions) -> dict[str, object]:
     """Store the US, a household, and a policy on each of two catalog versions."""
-    with Session(engine, expire_on_commit=False) as session:
+    with sessions() as session:
         session.add(Country(id="us", household_enabled=True, society_wide_enabled=True))
         model = TaxBenefitModel(name="policyengine-us")
         earlier = _catalog_version(
@@ -158,9 +155,7 @@ def simulation() -> FakeSimulation:
 
 
 @pytest.fixture
-def client(engine, simulation) -> TestClient:
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
-
+def client(sessions, simulation) -> TestClient:
     def service() -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
             countries=V2CountryService(CountryDatabaseSession(sessions)),
@@ -234,11 +229,11 @@ def test_an_unknown_household_is_not_found_in_the_database(
 
 
 def test_a_catalog_that_cannot_be_queried_answers_503(
-    engine, client, stored, simulation
+    sessions, client, stored, simulation
 ) -> None:
     # The policy check's catalog query reads this table; nothing else does.
-    with engine.begin() as connection:
-        connection.execute(text("DROP TABLE tax_benefit_model_versions"))
+    with sessions.begin() as session:
+        drop_tables(session, TaxBenefitModelVersion)
 
     response = client.post(CALCULATIONS, json=_body(stored, "running_policy"))
 
@@ -292,9 +287,8 @@ def simulation_recorder(monkeypatch) -> SimulationRecorder:
 
 
 @pytest.fixture
-def client_with_simulation_client(engine, simulation_recorder) -> TestClient:
+def client_with_simulation_client(sessions, simulation_recorder) -> TestClient:
     """Serve the route with the real simulation client over a recording transport."""
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
     transport = httpx.MockTransport(simulation_recorder.answer)
 
     def service() -> V2HouseholdCalculationService:

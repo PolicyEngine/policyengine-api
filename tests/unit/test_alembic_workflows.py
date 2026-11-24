@@ -267,6 +267,22 @@ def test_reusable_v2_integration_check_runs_the_dynamic_persistence_tests():
     assert "test_alembic_v2_dynamics.py" not in workflow
 
 
+def test_reusable_v2_integration_check_runs_the_persistent_migration_target_tests() -> (
+    None
+):
+    """The persistent target checks run after the managed roles get their privileges.
+
+    They act as temporary roles through ``v2_sessions_as_role``, as the other
+    tests in their step act as roles.
+    """
+    workflow = _workflow("v2-integration-check.yml")
+
+    privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
+    assert privileges_applied < workflow.index(
+        "tests/integration/test_v2_migration_target_persistent.py"
+    )
+
+
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     workflow = _workflow("v2-integration-check.yml")
 

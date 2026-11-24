@@ -4,21 +4,16 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import Engine, make_url
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session, select
+from sqlmodel import col, select
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
@@ -29,12 +24,14 @@ from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.models import (
     Dataset,
     Parameter,
+    ParameterSearchFile,
+    ParameterTreeChild,
     ParameterValue,
+    Region,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -45,6 +42,7 @@ from policyengine_api.services.v2.metadata.database_session import (
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.services.v2.metadata.types import ParameterTreeLevel
+from tests.fixtures import database_sessions
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
     bundle,
@@ -53,41 +51,47 @@ from tests.fixtures.v2_catalog import (
     region_references,
     source_models,
 )
+from tests.integration.catalog_publication_support import (
+    clear_format_2_fields,
+    emptied_catalog,
+    row_counts,
+)
 
-REPO = Path(__file__).parents[2]
-DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    url = make_url(database_url)
-    if url.database != DISPOSABLE_DATABASE or url.host not in {
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "postgres",
-    }:
-        pytest.fail("v2 metadata route tests require disposable local PostgreSQL")
-    return database_url
+    from tests.integration.conftest import ManagedV2Roles
+
+# The catalog tables whose rows the read-only routes must leave as they are.
+COUNTED_MODELS = {
+    "variables": Variable,
+    "parameters": Parameter,
+    "parameter_values": ParameterValue,
+    "datasets": Dataset,
+    "regions": Region,
+}
 
 
 @pytest.fixture
-def published_engine() -> Engine:
-    database_url = _disposable_url()
-    command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(database_url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    publish_catalog(engine, normalized_catalog())
-    yield engine
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    engine.dispose()
+def published_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    with emptied_catalog(v2_owner_sessions) as sessions:
+        publish_catalog(sessions, normalized_catalog())
+        yield sessions
 
 
-def _client(engine: Engine) -> TestClient:
+def _republish(sessions: sessionmaker[Session], catalog) -> None:
+    """Replace the published catalog with ``catalog``."""
+    with sessions.begin() as session:
+        database_sessions.truncate(session, TaxBenefitModel)
+    publish_catalog(sessions, catalog)
+
+
+def _client(sessions: sessionmaker[Session]) -> TestClient:
     flask_app = Flask(__name__)
 
     @flask_app.get("/<country_id>/metadata")
@@ -99,7 +103,7 @@ def _client(engine: Engine) -> TestClient:
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
         v2_metadata_reader_factory=lambda: V2MetadataService(
-            MetadataDatabaseSession(Session(engine)),
+            MetadataDatabaseSession(sessions()),
             running_policyengine_version=POLICYENGINE_VERSION,
         ),
     )
@@ -117,22 +121,8 @@ def _client(engine: Engine) -> TestClient:
     )
 
 
-def _catalog_counts(engine: Engine) -> tuple[int, ...]:
-    with engine.connect() as connection:
-        return tuple(
-            connection.execute(
-                text(
-                    """
-                    SELECT
-                        (SELECT count(*) FROM variables),
-                        (SELECT count(*) FROM parameters),
-                        (SELECT count(*) FROM parameter_values),
-                        (SELECT count(*) FROM datasets),
-                        (SELECT count(*) FROM regions)
-                    """
-                )
-            ).one()
-        )
+def _catalog_counts(sessions: sessionmaker[Session]) -> tuple[int, ...]:
+    return tuple(row_counts(sessions, COUNTED_MODELS).values())
 
 
 @pytest.mark.parametrize(
@@ -140,13 +130,13 @@ def _catalog_counts(engine: Engine) -> tuple[int, ...]:
     [("us", 2, "Microcosm"), ("uk", 1, "Microcosm")],
 )
 def test_postgres_resource_collections_are_separate_and_read_only(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
     country_id: str,
     current_law_id: int,
     dataset_label: str,
 ) -> None:
-    client = _client(published_engine)
-    before = _catalog_counts(published_engine)
+    client = _client(published_sessions)
+    before = _catalog_counts(published_sessions)
     query = {"country_id": country_id}
 
     models = client.get("/v2/tax-benefit-models", params=query)
@@ -198,13 +188,13 @@ def test_postgres_resource_collections_are_separate_and_read_only(
         isinstance(period["name"], int) and isinstance(period["label"], str)
         for period in option_result["time_period"]
     )
-    assert _catalog_counts(published_engine) == before
+    assert _catalog_counts(published_sessions) == before
 
 
 def test_postgres_parameter_tree_returns_direct_children_and_leaf_details(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
     query = {"country_id": "us"}
 
     root = client.get("/v2/parameters/children", params=query)
@@ -231,9 +221,9 @@ def test_postgres_parameter_tree_returns_direct_children_and_leaf_details(
 
 
 def test_postgres_collection_ids_resolve_through_detail_routes(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
     query = {"country_id": "us"}
     resources = (
         ("tax-benefit-models", "model_id"),
@@ -261,9 +251,9 @@ def test_postgres_collection_ids_resolve_through_detail_routes(
 
 
 def test_postgres_dataset_collection_excludes_an_existing_output(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    with Session(published_engine) as session:
+    with published_sessions() as session:
         model = session.exec(
             select(TaxBenefitModel).where(TaxBenefitModel.name == "policyengine-us")
         ).one()
@@ -287,7 +277,7 @@ def test_postgres_dataset_collection_excludes_an_existing_output(
         )
         session.commit()
 
-    response = _client(published_engine).get(
+    response = _client(published_sessions).get(
         "/v2/datasets",
         params={"country_id": "us"},
     )
@@ -300,14 +290,14 @@ def test_postgres_dataset_collection_excludes_an_existing_output(
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_postgres_resources_default_to_running_version_and_accept_exact_override(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
     country_id: str,
 ) -> None:
     publish_catalog(
-        published_engine,
+        published_sessions,
         normalized_catalog(policyengine_version="5.0.5"),
     )
-    client = _client(published_engine)
+    client = _client(published_sessions)
 
     default_response = client.get(
         "/v2/variables",
@@ -329,9 +319,9 @@ def test_postgres_resources_default_to_running_version_and_accept_exact_override
 
 
 def test_postgres_resources_distinguish_invalid_and_absent_versions(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
 
     invalid = client.get(
         "/v2/variables",
@@ -351,27 +341,28 @@ def test_postgres_resources_distinguish_invalid_and_absent_versions(
 
 
 def test_postgres_parameter_collection_remains_available_without_values(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    with published_engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                DELETE FROM parameter_values
-                WHERE parameter_id IN (
-                    SELECT parameter.id
-                    FROM parameters AS parameter
-                    JOIN tax_benefit_model_versions AS model_version
-                      ON model_version.id = parameter.tax_benefit_model_version_id
-                    JOIN tax_benefit_models AS model
-                      ON model.id = model_version.model_id
-                    WHERE model.name = 'policyengine-us'
+    with published_sessions.begin() as session:
+        session.execute(
+            sa.delete(ParameterValue).where(
+                col(ParameterValue.parameter_id).in_(
+                    select(col(Parameter.id))
+                    .join(
+                        TaxBenefitModelVersion,
+                        col(TaxBenefitModelVersion.id)
+                        == col(Parameter.tax_benefit_model_version_id),
+                    )
+                    .join(
+                        TaxBenefitModel,
+                        col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+                    )
+                    .where(col(TaxBenefitModel.name) == "policyengine-us")
                 )
-                """
             )
         )
 
-    client = _client(published_engine)
+    client = _client(published_sessions)
     parameters = client.get("/v2/parameters", params={"country_id": "us"})
     values = client.get("/v2/parameter-values", params={"country_id": "us"})
 
@@ -382,10 +373,10 @@ def test_postgres_parameter_collection_remains_available_without_values(
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_postgres_model_catalog_serves_the_small_parts_of_a_version(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
     country_id: str,
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
     country = normalized_catalog().country(country_id)
 
     running = client.get("/v2/model-catalog", params={"country_id": country_id})
@@ -430,8 +421,8 @@ def test_postgres_model_catalog_serves_the_small_parts_of_a_version(
     assert revalidated.status_code == 304
 
 
-def _us_model_version_id(engine: Engine):
-    with Session(engine) as session:
+def _us_model_version_id(sessions: sessionmaker[Session]):
+    with sessions() as session:
         return session.exec(
             select(TaxBenefitModelVersion.id)
             .join(
@@ -442,11 +433,11 @@ def _us_model_version_id(engine: Engine):
 
 
 def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    model_version_id = _us_model_version_id(published_engine)
+    model_version_id = _us_model_version_id(published_sessions)
     parts_id = uuid4()
-    with Session(published_engine) as session:
+    with published_sessions() as session:
         session.add(
             Parameter(
                 id=parts_id,
@@ -485,7 +476,7 @@ def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
             ]
         )
         session.commit()
-    client = _client(published_engine)
+    client = _client(published_sessions)
 
     response = client.get(
         "/v2/model-catalog/variables",
@@ -527,9 +518,9 @@ def test_postgres_catalog_variables_carry_part_parameter_values_by_date(
 
 
 def test_postgres_catalog_parameters_load_values_and_breadcrumb_labels(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
 
     response = client.get(
         "/v2/model-catalog/parameters",
@@ -562,57 +553,53 @@ def test_postgres_catalog_parameters_load_values_and_breadcrumb_labels(
 
 
 def test_postgres_metadata_reads_send_no_transaction_statements(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
+    disposable_v2_database_url: str,
 ) -> None:
     # Each metadata read is one statement on rows a published catalog never
     # changes, so the read session runs in autocommit mode: psycopg then sends
     # no BEGIN before the reads and no ROLLBACK when the session closes. The
     # engine has one pooled connection, so the writer below must get the same
     # connection back in the ordinary, transactional mode.
-    from psycopg.pq import TransactionStatus
-
     from policyengine_api.data.v2.database import build_v2_read_session_factory
 
-    del published_engine  # publishes the catalog this pooled engine reads
-    pooled_engine = create_engine(_disposable_url(), pool_size=1, max_overflow=0)
-    read_connections: list[object] = []
-    autocommit_modes: list[bool] = []
+    del published_sessions  # publishes the catalog these pooled sessions read
+    with database_sessions.single_connection_v2_sessions(
+        disposable_v2_database_url
+    ) as pooled_sessions:
+        with database_sessions.recorded_driver_connection_states(
+            pooled_sessions
+        ) as read_states:
+            service = V2MetadataService(
+                MetadataDatabaseSession(
+                    build_v2_read_session_factory(pooled_sessions)()
+                ),
+                running_policyengine_version=POLICYENGINE_VERSION,
+            )
+            result = service.list_parameters("us")
+            service.close()
 
-    def record_mode(connection, _cursor, _statement, *_args) -> None:
-        dbapi_connection = connection.connection.dbapi_connection
-        read_connections.append(dbapi_connection)
-        autocommit_modes.append(dbapi_connection.autocommit)
-
-    try:
-        event.listen(pooled_engine, "before_cursor_execute", record_mode)
-        service = V2MetadataService(
-            MetadataDatabaseSession(build_v2_read_session_factory(pooled_engine)()),
-            running_policyengine_version=POLICYENGINE_VERSION,
-        )
-        result = service.list_parameters("us")
-        service.close()
-        event.remove(pooled_engine, "before_cursor_execute", record_mode)
-
-        with Session(pooled_engine) as writer:
-            writer_connection = writer.connection().connection.dbapi_connection
-            writer.execute(text("SELECT 1"))
-            writer_status = writer_connection.info.transaction_status
-            writer_autocommit = writer_connection.autocommit
-    finally:
-        pooled_engine.dispose()
+        with (
+            database_sessions.recorded_driver_connection_states(
+                pooled_sessions
+            ) as writer_states,
+            pooled_sessions() as writer_session,
+        ):
+            writer_session.execute(sa.select(sa.literal(1)))
 
     assert [item.name for item in result.items] == ["gov.example.rate"]
-    assert autocommit_modes
-    assert all(autocommit_modes)
-    assert {id(connection) for connection in read_connections} == {
-        id(writer_connection)
+    assert read_states
+    assert all(state.autocommit for state in read_states)
+    [writer_state] = writer_states
+    assert {state.connection_id for state in read_states} == {
+        writer_state.connection_id
     }
-    assert writer_autocommit is False
-    assert writer_status == TransactionStatus.INTRANS
+    assert writer_state.autocommit is False
+    assert writer_state.in_transaction is True
 
 
 def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
     # The production combination: autocommit read sessions, the process's
     # selected catalogs and its whole-version response cache.
@@ -624,12 +611,8 @@ def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
         SelectedCatalogStore,
     )
 
-    read_factory = build_v2_read_session_factory(published_engine)
+    read_factory = build_v2_read_session_factory(published_sessions)
     selected_catalogs = SelectedCatalogStore()
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement)
 
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
@@ -654,8 +637,7 @@ def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
     )
     query = {"country_id": "us", "policyengine_version": POLICYENGINE_VERSION}
 
-    event.listen(published_engine, "before_cursor_execute", record_statement)
-    try:
+    with database_sessions.recorded_statements(published_sessions) as statements:
         first_variables = client.get(
             "/v2/model-catalog/variables", params={"country_id": "us"}
         )
@@ -668,8 +650,6 @@ def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
         statements_for_parameters = (
             len(statements) - statements_for_first - statements_for_repeat
         )
-    finally:
-        event.remove(published_engine, "before_cursor_execute", record_statement)
 
     assert first_variables.status_code == 200
     assert repeated_variables.content == first_variables.content
@@ -712,7 +692,7 @@ def test_postgres_production_metadata_reader_keeps_catalogs_and_responses(
     ],
 )
 def test_postgres_current_values_and_their_lifetime_use_one_instant(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
     case: tuple[datetime, datetime, list[float], str],
 ) -> None:
@@ -722,7 +702,7 @@ def test_postgres_current_values_and_their_lifetime_use_one_instant(
     instants = iter([read_instant, header_instant])
     monkeypatch.setattr(route_support, "utc_now", lambda: next(instants))
 
-    response = _client(published_engine).get(
+    response = _client(published_sessions).get(
         "/v2/parameter-values",
         params={
             "country_id": "us",
@@ -800,12 +780,10 @@ def _items(response) -> list[tuple]:
 
 
 def test_postgres_parameter_tree_nests_schedules_and_filters_reform_changes(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    with published_engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    publish_catalog(published_engine, _catalog_with_a_bracket_schedule())
-    client = _client(published_engine)
+    _republish(published_sessions, _catalog_with_a_bracket_schedule())
+    client = _client(published_sessions)
     query = {"country_id": "uk"}
 
     rates = client.get(
@@ -860,23 +838,20 @@ def test_postgres_parameter_tree_nests_schedules_and_filters_reform_changes(
 
 
 def test_postgres_parameter_tree_reads_as_the_runtime_role(
-    published_engine: Engine,
-    managed_v2_roles,
-    v2_engine_as_role,
+    published_sessions: sessionmaker[Session],
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
-    """The Public API's runtime role can read the tree with its declared privileges."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    try:
-        with Session(runtime_engine) as session:
-            result = V2MetadataService(
-                MetadataDatabaseSession(session),
-                running_policyengine_version=POLICYENGINE_VERSION,
-            ).list_parameter_children(
-                "us",
-                level=ParameterTreeLevel(parent_path="gov", reform_changeable=True),
-            )
-    finally:
-        runtime_engine.dispose()
+    """API v1's runtime role can read the tree with its declared privileges."""
+    runtime_sessions = v2_sessions_as_role(managed_v2_roles.runtime)
+    with runtime_sessions() as session:
+        result = V2MetadataService(
+            MetadataDatabaseSession(session),
+            running_policyengine_version=POLICYENGINE_VERSION,
+        ).list_parameter_children(
+            "us",
+            level=ParameterTreeLevel(parent_path="gov", reform_changeable=True),
+        )
 
     assert [(item.path, item.child_count) for item in result.items] == [
         ("gov.example", 1)
@@ -971,12 +946,10 @@ def _catalog_shaped_like_policyengine_py_output():
 
 
 def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    with published_engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    publish_catalog(published_engine, _catalog_shaped_like_policyengine_py_output())
-    client = _client(published_engine)
+    _republish(published_sessions, _catalog_shaped_like_policyengine_py_output())
+    client = _client(published_sessions)
 
     def level(parent_path: str) -> list[tuple]:
         return _items(
@@ -1024,34 +997,18 @@ def test_postgres_parameter_tree_from_records_shaped_like_policyengine_py(
 
 
 def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
     """A version stored before catalog format 2 gets no tree on republication.
 
     Its parameter tree request returns 503 with the message naming it.
     """
-    with published_engine.begin() as connection:
-        connection.execute(
-            text(
-                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
-                "entities = NULL, basic_inputs = NULL"
-            )
-        )
-        connection.execute(
-            text(
-                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
-                "module_name = NULL, adds_parameter_path = NULL, "
-                "subtracts_parameter_path = NULL, enum_values = NULL, "
-                "unit = NULL, definition_period = NULL"
-            )
-        )
-        connection.execute(
-            text("UPDATE parameters SET economy = NULL, household = NULL")
-        )
-        connection.execute(text("DELETE FROM parameter_tree_children"))
-    evidence = publish_catalog(published_engine, normalized_catalog())
+    with published_sessions.begin() as session:
+        clear_format_2_fields(session)
+        session.execute(sa.delete(ParameterTreeChild))
+    evidence = publish_catalog(published_sessions, normalized_catalog())
 
-    response = _client(published_engine).get(
+    response = _client(published_sessions).get(
         "/v2/parameters/children",
         params={"country_id": "us", "policyengine_version": POLICYENGINE_VERSION},
     )
@@ -1070,9 +1027,9 @@ def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
 
 
 def test_postgres_search_file_is_served_with_its_etag_and_revalidated(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    client = _client(published_engine)
+    client = _client(published_sessions)
     expected = country_search_file(normalized_catalog().country("uk"))
 
     response = client.get(
@@ -1098,12 +1055,12 @@ def test_postgres_search_file_is_served_with_its_etag_and_revalidated(
 
 
 def test_postgres_search_file_of_a_version_without_one_is_unavailable(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    with published_engine.begin() as connection:
-        connection.execute(text("DELETE FROM parameter_search_files"))
+    with published_sessions.begin() as session:
+        session.execute(sa.delete(ParameterSearchFile))
 
-    response = _client(published_engine).get(
+    response = _client(published_sessions).get(
         "/v2/parameters/search-file", params={"country_id": "us"}
     )
 
@@ -1120,22 +1077,19 @@ def test_postgres_search_file_of_a_version_without_one_is_unavailable(
 
 
 def test_postgres_search_file_reads_as_the_runtime_role(
-    published_engine: Engine,
-    managed_v2_roles,
-    v2_engine_as_role,
+    published_sessions: sessionmaker[Session],
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
-    """The Public API's runtime role reads the file with its declared privileges."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    try:
-        with Session(runtime_engine) as session:
-            service = V2MetadataService(
-                MetadataDatabaseSession(session),
-                running_policyengine_version=POLICYENGINE_VERSION,
-            )
-            search_file = service.get_parameter_search_file("us")
-            content_sha256 = service.get_parameter_search_file_hash("us")
-    finally:
-        runtime_engine.dispose()
+    """API v1's runtime role reads the file with its declared privileges."""
+    runtime_sessions = v2_sessions_as_role(managed_v2_roles.runtime)
+    with runtime_sessions() as session:
+        service = V2MetadataService(
+            MetadataDatabaseSession(session),
+            running_policyengine_version=POLICYENGINE_VERSION,
+        )
+        search_file = service.get_parameter_search_file("us")
+        content_sha256 = service.get_parameter_search_file_hash("us")
 
     assert json.loads(gzip.decompress(search_file.compressed_content)) == (
         country_search_file(normalized_catalog().country("us"))
@@ -1144,9 +1098,9 @@ def test_postgres_search_file_reads_as_the_runtime_role(
 
 
 def test_postgres_search_file_of_an_unknown_catalog_version_is_absent(
-    published_engine: Engine,
+    published_sessions: sessionmaker[Session],
 ) -> None:
-    response = _client(published_engine).get(
+    response = _client(published_sessions).get(
         "/v2/parameters/search-file",
         params={"country_id": "us", "policyengine_version": "99.0.0"},
     )

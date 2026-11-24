@@ -1,4 +1,8 @@
-"""Structural contract tests for the complete reviewed v2 SQLModel schema."""
+"""Structural contract tests for the complete reviewed v2 SQLModel schema.
+
+Columns are read from the models' mappers, and keys, constraints and indexes
+from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py).
+"""
 
 from typing import Literal
 from uuid import uuid4
@@ -6,7 +10,6 @@ from uuid import uuid4
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import configure_mappers
-from sqlalchemy.schema import CreateTable
 from sqlmodel.sql.sqltypes import AutoString
 
 from policyengine_api.data.v1_models import V1Base
@@ -34,6 +37,14 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
     UserType,
+)
+from tests.fixtures.database_sessions import v2_schema_statements
+from tests.unit.v2.v2_schema_reading import (
+    declared_index,
+    model_columns,
+    stored_v2_schema,
+    stored_v2_table,
+    v2_mappers,
 )
 
 # Every column that names the country a record belongs to. Each references the
@@ -93,42 +104,36 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     } == expected_modules
 
 
-def _v2_mappers():
-    configure_mappers()
-    return tuple(
-        mapper
-        for mapper in sa.inspect(User).registry.mappers
-        if mapper.local_table is not None and mapper.local_table.metadata is V2_METADATA
-    )
-
-
 def test_every_metadata_table_has_one_mapped_model() -> None:
-    metadata_table_names = set(V2_METADATA.tables)
-    model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
+    # SQLite's copy holds every table of V2_METADATA: create_all made it.
+    metadata_table_names = set(stored_v2_schema())
+    model_table_names = {mapper.class_.__tablename__ for mapper in v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
     assert model_table_names == metadata_table_names
-    assert len(_v2_mappers()) == len(metadata_table_names)
+    assert len(v2_mappers()) == len(metadata_table_names)
 
 
 def test_every_table_has_named_primary_foreign_and_relational_constraints() -> None:
-    for table in V2_METADATA.tables.values():
-        assert table.primary_key.columns
-        assert table.primary_key.name
-        for constraint in table.constraints:
-            assert constraint.name, f"unnamed constraint on {table.name}"
-        for index in table.indexes:
-            assert index.name, f"unnamed index on {table.name}"
+    tables = stored_v2_schema()
+
+    for table in tables.values():
+        assert table.primary_key
+        assert table.primary_key_name
+        for constraint_name in table.constraint_names:
+            assert constraint_name, f"unnamed constraint on {table.name}"
+        for index_name in table.indexes:
+            assert index_name, f"unnamed index on {table.name}"
         for foreign_key in table.foreign_keys:
-            assert foreign_key.constraint.name
+            assert foreign_key.name
             assert foreign_key.ondelete in {"CASCADE", "RESTRICT", "SET NULL"}
-            assert foreign_key.column.table.name in V2_METADATA.tables
+            assert foreign_key.referred_table in tables
 
 
 def test_every_declared_relationship_has_a_complete_back_populates_pair() -> None:
     configure_mappers()
 
-    for mapper in _v2_mappers():
+    for mapper in v2_mappers():
         for relationship in mapper.relationships:
             assert relationship.back_populates, (
                 f"{mapper.class_.__name__}.{relationship.key} lacks back_populates"
@@ -157,10 +162,9 @@ def test_user_owned_associations_have_relational_integrity() -> None:
     )
 
     for model, table_name, user_collection in associations:
-        user_id = V2_METADATA.tables[table_name].c.user_id
-        foreign_keys = list(user_id.foreign_keys)
+        foreign_keys = stored_v2_table(table_name).foreign_keys_of("user_id")
         assert len(foreign_keys) == 1
-        assert foreign_keys[0].target_fullname == "users.id"
+        assert foreign_keys[0].target == "users.id"
         assert foreign_keys[0].ondelete == "CASCADE"
 
         association_user = sa.inspect(model).relationships["user"]
@@ -169,9 +173,10 @@ def test_user_owned_associations_have_relational_integrity() -> None:
 
 
 def test_policy_content_identity_and_catalog_columns_are_explicit() -> None:
-    policies = V2_METADATA.tables["policies"]
+    columns = model_columns("policies")
+    policies = stored_v2_table("policies")
 
-    assert {"name", "description"}.isdisjoint(policies.c.keys())
+    assert {"name", "description"}.isdisjoint(columns.keys())
     assert {
         "country_id",
         "tax_benefit_model_id",
@@ -180,73 +185,50 @@ def test_policy_content_identity_and_catalog_columns_are_explicit() -> None:
         "content_hash",
         "created_at",
         "updated_at",
-    }.issubset(policies.c.keys())
-    assert policies.c.country_id.type.length == 2
-    assert policies.c.content_hash.type.length == 64
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in policies.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("id", "country_id") in unique_columns
-    assert ("canonicalization_version", "content_hash") in unique_columns
+    }.issubset(columns.keys())
+    assert columns.country_id.type.length == 2
+    assert columns.content_hash.type.length == 64
+    assert ("id", "country_id") in policies.unique_column_sets
+    assert ("canonicalization_version", "content_hash") in policies.unique_column_sets
     assert {
         "ix_policies_country_model",
         "ix_policies_country_model_version",
-    } <= {index.name for index in policies.indexes}
+    } <= set(policies.indexes)
 
 
 def test_policy_parameter_values_use_jsonb_and_enforce_period_identity() -> None:
-    values = V2_METADATA.tables["parameter_values"]
+    columns = model_columns("parameter_values")
+    values = stored_v2_table("parameter_values")
 
-    postgres_type = values.c.value_json.type.dialect_impl(postgresql.dialect())
+    postgres_type = columns.value_json.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
     assert {
         "ck_parameter_values_single_owner",
         "ck_parameter_values_effective_period",
-    } <= {constraint.name for constraint in values.constraints}
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in values.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("policy_id", "parameter_id", "start_date") in unique_columns
+    } <= values.constraint_names
+    assert ("policy_id", "parameter_id", "start_date") in values.unique_column_sets
     assert sa.inspect(ParameterValue).relationships["policy"].back_populates == (
         "parameter_values"
     )
 
 
 def test_user_policy_is_an_independent_country_scoped_association() -> None:
-    associations = V2_METADATA.tables["user_policies"]
+    columns = model_columns("user_policies")
+    associations = stored_v2_table("user_policies")
 
-    assert isinstance(associations.c.user_id.type, sa.Uuid)
-    user_foreign_key = next(iter(associations.c.user_id.foreign_keys))
-    assert user_foreign_key.target_fullname == "users.id"
+    assert isinstance(columns.user_id.type, sa.Uuid)
+    user_foreign_key = associations.foreign_keys_of("user_id")[0]
+    assert user_foreign_key.target == "users.id"
     assert user_foreign_key.ondelete == "CASCADE"
-    assert {"country", "label"}.isdisjoint(associations.c.keys())
-    assert {"country_id", "name", "description"}.issubset(associations.c.keys())
-    assert associations.c.name.nullable
-    assert associations.c.description.nullable
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in associations.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("user_id", "policy_id") not in unique_columns
-    assert ("id", "country_id") in unique_columns
-    policy_country = next(
-        constraint
-        for constraint in associations.foreign_key_constraints
-        if constraint.name == "fk_user_policies_policy_country"
-    )
-    assert [column.name for column in policy_country.columns] == [
-        "policy_id",
-        "country_id",
-    ]
-    assert [element.target_fullname for element in policy_country.elements] == [
-        "policies.id",
-        "policies.country_id",
-    ]
+    assert {"country", "label"}.isdisjoint(columns.keys())
+    assert {"country_id", "name", "description"}.issubset(columns.keys())
+    assert columns.name.nullable
+    assert columns.description.nullable
+    assert ("user_id", "policy_id") not in associations.unique_column_sets
+    assert ("id", "country_id") in associations.unique_column_sets
+    policy_country = associations.foreign_key_named("fk_user_policies_policy_country")
+    assert policy_country.columns == ("policy_id", "country_id")
+    assert policy_country.targets == ("policies.id", "policies.country_id")
     assert policy_country.ondelete == "RESTRICT"
     assert sa.inspect(UserPolicy).relationships["user"].back_populates == (
         "policy_associations"
@@ -254,60 +236,47 @@ def test_user_policy_is_an_independent_country_scoped_association() -> None:
 
 
 def test_legacy_user_mapping_is_one_to_one() -> None:
-    mappings = V2_METADATA.tables["legacy_user_mappings"]
+    columns = model_columns("legacy_user_mappings")
+    mappings = stored_v2_table("legacy_user_mappings")
 
-    assert mappings.primary_key.columns.keys() == ["legacy_user_id"]
-    assert mappings.c.legacy_user_id.type.length == 255
-    assert mappings.c.created_at.type.timezone
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in mappings.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("user_id",) in unique_columns
-    user_foreign_key = next(iter(mappings.c.user_id.foreign_keys))
-    assert user_foreign_key.target_fullname == "users.id"
+    assert mappings.primary_key == ("legacy_user_id",)
+    assert columns.legacy_user_id.type.length == 255
+    assert columns.created_at.type.timezone
+    assert ("user_id",) in mappings.unique_column_sets
+    user_foreign_key = mappings.foreign_keys_of("user_id")[0]
+    assert user_foreign_key.target == "users.id"
     assert user_foreign_key.ondelete == "RESTRICT"
 
 
 def test_legacy_policy_mapping_is_many_to_one_by_destination() -> None:
-    mappings = V2_METADATA.tables["legacy_policy_mappings"]
+    columns = model_columns("legacy_policy_mappings")
+    mappings = stored_v2_table("legacy_policy_mappings")
 
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in mappings.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("country_id", "legacy_policy_id") in unique_columns
-    assert ("policy_id",) not in unique_columns
-    assert mappings.c.source_policy_hash.type.length == 255
-    foreign_keys = {
-        constraint.name: constraint for constraint in mappings.foreign_key_constraints
-    }
-    assert foreign_keys["fk_legacy_policy_mappings_policy_country"].ondelete == (
-        "RESTRICT"
+    assert ("country_id", "legacy_policy_id") in mappings.unique_column_sets
+    assert ("policy_id",) not in mappings.unique_column_sets
+    assert columns.source_policy_hash.type.length == 255
+    policy_country = mappings.foreign_key_named(
+        "fk_legacy_policy_mappings_policy_country"
     )
-    assert foreign_keys["fk_legacy_policy_mappings_dynamic_country"].ondelete == (
-        "RESTRICT"
+    assert policy_country.ondelete == "RESTRICT"
+    dynamic_country = mappings.foreign_key_named(
+        "fk_legacy_policy_mappings_dynamic_country"
     )
+    assert dynamic_country.ondelete == "RESTRICT"
 
 
 def test_legacy_user_policy_mapping_is_one_to_one_by_destination() -> None:
-    mappings = V2_METADATA.tables["legacy_user_policy_mappings"]
+    columns = model_columns("legacy_user_policy_mappings")
+    mappings = stored_v2_table("legacy_user_policy_mappings")
 
-    unique_columns = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in mappings.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("country_id", "legacy_user_policy_id") in unique_columns
-    assert ("user_policy_id",) in unique_columns
-    assert mappings.c.fingerprint_sha256.type.length == 64
-    assert mappings.c.last_applied_source_revision.server_default.arg == "0"
-    assert "ck_legacy_user_policy_mappings_source_revision" in {
-        constraint.name for constraint in mappings.constraints
-    }
-    association_country = next(iter(mappings.foreign_key_constraints))
+    assert ("country_id", "legacy_user_policy_id") in mappings.unique_column_sets
+    assert ("user_policy_id",) in mappings.unique_column_sets
+    assert columns.fingerprint_sha256.type.length == 64
+    assert columns.last_applied_source_revision.server_default.arg == "0"
+    assert "ck_legacy_user_policy_mappings_source_revision" in (
+        mappings.constraint_names
+    )
+    association_country = mappings.foreign_keys[0]
     assert (
         association_country.name == "fk_legacy_user_policy_mappings_association_country"
     )
@@ -317,8 +286,8 @@ def test_legacy_user_policy_mapping_is_one_to_one_by_destination() -> None:
 def test_all_datetime_columns_are_timezone_aware() -> None:
     datetime_columns = [
         column
-        for table in V2_METADATA.tables.values()
-        for column in table.columns
+        for mapper in v2_mappers()
+        for column in mapper.columns
         if isinstance(column.type, sa.DateTime)
     ]
 
@@ -327,10 +296,10 @@ def test_all_datetime_columns_are_timezone_aware() -> None:
 
 
 def test_report_definition_and_run_columns_are_separated() -> None:
-    report = V2_METADATA.tables["reports"]
-    report_run = V2_METADATA.tables["report_runs"]
+    report = model_columns("reports")
+    report_run = model_columns("report_runs")
 
-    assert report.c.type.nullable
+    assert report.type.nullable
     assert {
         "country",
         "type",
@@ -343,7 +312,7 @@ def test_report_definition_and_run_columns_are_separated() -> None:
         "region_id",
         "year",
         "inputs",
-    }.issubset(report.c.keys())
+    }.issubset(report.keys())
     assert {
         "country_package_version",
         "policyengine_version",
@@ -353,36 +322,31 @@ def test_report_definition_and_run_columns_are_separated() -> None:
         "completed_at",
         "error_message",
         "markdown",
-    }.issubset(report_run.c.keys())
+    }.issubset(report_run.keys())
     assert {
         "country_package_version",
         "policyengine_version",
         "status",
         "error_message",
         "markdown",
-    }.isdisjoint(report.c.keys())
-    assert not report_run.c.country_package_version.nullable
-    assert not report_run.c.policyengine_version.nullable
-    assert isinstance(report_run.c.idempotency_key.type, sa.Uuid)
-    assert report_run.c.idempotency_key.type.as_uuid
+    }.isdisjoint(report.keys())
+    assert not report_run.country_package_version.nullable
+    assert not report_run.policyengine_version.nullable
+    assert isinstance(report_run.idempotency_key.type, sa.Uuid)
+    assert report_run.idempotency_key.type.as_uuid
 
 
 def test_standard_users_require_a_supported_primary_country() -> None:
-    users = V2_METADATA.tables["users"]
+    users = model_columns("users")
 
     # Nullable only for unauthenticated users; a check requires it otherwise.
-    assert users.c.primary_country.nullable
-    assert users.c.first_name.nullable
-    assert users.c.last_name.nullable
-    assert users.c.email.nullable
-    assert users.c.primary_country.type.length == 2
-    checks = {
-        constraint.name: str(constraint.sqltext)
-        for constraint in users.constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
+    assert users.primary_country.nullable
+    assert users.first_name.nullable
+    assert users.last_name.nullable
+    assert users.email.nullable
+    assert users.primary_country.type.length == 2
     # The countries table, not a check, lists the countries a user may choose.
-    assert checks == {
+    assert stored_v2_table("users").checks == {
         "ck_users_user_type_allowed": (
             "user_type IN ('unauthenticated', 'standard', 'author', 'admin')"
         ),
@@ -393,13 +357,13 @@ def test_standard_users_require_a_supported_primary_country() -> None:
 
 
 def test_user_type_defaults_to_standard_for_every_writer() -> None:
-    users = V2_METADATA.tables["users"]
+    users = model_columns("users")
 
-    assert not users.c.user_type.nullable
-    assert users.c.user_type.type.length == 16
-    # The server default covers inserts by Public API revisions that predate
+    assert not users.user_type.nullable
+    assert users.user_type.type.length == 16
+    # The server default covers inserts by API v1 revisions that predate
     # the column; the Python default covers this revision's ORM inserts.
-    assert users.c.user_type.server_default.arg == "standard"
+    assert users.user_type.server_default.arg == "standard"
     assert User().user_type == "standard"
     assert [member.value for member in UserType] == [
         "unauthenticated",
@@ -410,73 +374,65 @@ def test_user_type_defaults_to_standard_for_every_writer() -> None:
 
 
 def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
-    regions = V2_METADATA.tables["regions"]
-    datasets = V2_METADATA.tables["datasets"]
+    regions = model_columns("regions")
+    datasets = model_columns("datasets")
+    stored_regions = stored_v2_table("regions")
+    stored_datasets = stored_v2_table("datasets")
 
-    assert "region_datasets" not in V2_METADATA.tables
-    assert not regions.c.default_dataset_id.nullable
-    assert regions.c.default_dataset_id.index
-    default_constraint = next(
-        constraint
-        for constraint in regions.foreign_key_constraints
-        if constraint.name == "fk_regions_default_dataset_model_version"
+    assert "region_datasets" not in stored_v2_schema()
+    assert not regions.default_dataset_id.nullable
+    assert regions.default_dataset_id.index
+    default_constraint = stored_regions.foreign_key_named(
+        "fk_regions_default_dataset_model_version"
     )
-    assert [element.parent.name for element in default_constraint.elements] == [
+    assert default_constraint.columns == (
         "default_dataset_id",
         "tax_benefit_model_version_id",
-    ]
-    assert [element.target_fullname for element in default_constraint.elements] == [
+    )
+    assert default_constraint.targets == (
         "datasets.id",
         "datasets.tax_benefit_model_version_id",
-    ]
+    )
     assert default_constraint.ondelete == "RESTRICT"
 
-    unique_column_sets = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in datasets.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
+    unique_column_sets = stored_datasets.unique_column_sets
     assert ("tax_benefit_model_version_id", "name") in unique_column_sets
     assert ("id", "tax_benefit_model_version_id") in unique_column_sets
-    assert "tax_benefit_model_id" not in datasets.c
-    assert "tax_benefit_model_id" not in regions.c
-    assert not datasets.c.tax_benefit_model_version_id.nullable
-    assert not regions.c.tax_benefit_model_version_id.nullable
-    assert datasets.c.storage_path.nullable
-    assert "ck_datasets_output_storage_path" in {
-        constraint.name for constraint in datasets.constraints
-    }
+    assert "tax_benefit_model_id" not in datasets
+    assert "tax_benefit_model_id" not in regions
+    assert not datasets.tax_benefit_model_version_id.nullable
+    assert not regions.tax_benefit_model_version_id.nullable
+    assert datasets.storage_path.nullable
+    assert "ck_datasets_output_storage_path" in stored_datasets.constraint_names
 
 
 def test_reports_and_simulations_snapshot_selected_datasets() -> None:
-    reports = V2_METADATA.tables["reports"]
-    simulations = V2_METADATA.tables["simulations"]
-
-    for table in (reports, simulations):
-        dataset_foreign_key = next(iter(table.c.dataset_id.foreign_keys))
-        assert dataset_foreign_key.target_fullname == "datasets.id"
+    for table_name in ("reports", "simulations"):
+        table = stored_v2_table(table_name)
+        dataset_foreign_key = table.foreign_keys_of("dataset_id")[0]
+        assert dataset_foreign_key.target == "datasets.id"
         assert dataset_foreign_key.ondelete in {"RESTRICT", "SET NULL"}
 
 
 def test_stage9_adds_no_dataset_version_relationship_to_run_tables() -> None:
     for table_name in ("simulations", "reports", "report_runs"):
-        assert "dataset_version_id" not in V2_METADATA.tables[table_name].c
+        assert "dataset_version_id" not in model_columns(table_name)
 
 
 def test_run_outputs_reference_report_runs_not_base_reports() -> None:
     for table_name in RUN_OUTPUT_TABLES:
-        table = V2_METADATA.tables[table_name]
-        assert "report_run_id" in table.c
-        assert not table.c.report_run_id.nullable
-        assert "report_id" not in table.c
-        foreign_key = next(iter(table.c.report_run_id.foreign_keys))
-        assert foreign_key.target_fullname == "report_runs.id"
+        columns = model_columns(table_name)
+        assert "report_run_id" in columns
+        assert not columns.report_run_id.nullable
+        assert "report_id" not in columns
+        foreign_key = stored_v2_table(table_name).foreign_keys_of("report_run_id")[0]
+        assert foreign_key.target == "report_runs.id"
         assert foreign_key.ondelete == "CASCADE"
 
 
 def test_uk_area_impacts_store_no_map_coordinates() -> None:
     for table_name in ("constituency_impacts", "local_authority_impacts"):
-        assert {"x", "y"}.isdisjoint(V2_METADATA.tables[table_name].c.keys())
+        assert {"x", "y"}.isdisjoint(model_columns(table_name).keys())
 
 
 def test_report_reruns_deduplicate_requests_and_keep_failed_or_forced_runs() -> None:
@@ -486,12 +442,8 @@ def test_report_reruns_deduplicate_requests_and_keep_failed_or_forced_runs() -> 
     constraint covers the versions; ``test_shared_report_models.py`` checks the
     partial unique index that does.
     """
-    report_runs = V2_METADATA.tables["report_runs"]
-    unique_column_sets = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in report_runs.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
+    report_runs = stored_v2_table("report_runs")
+    unique_column_sets = report_runs.unique_column_sets
 
     assert ("report_id", "idempotency_key") in unique_column_sets
     assert (
@@ -502,18 +454,17 @@ def test_report_reruns_deduplicate_requests_and_keep_failed_or_forced_runs() -> 
     assert {
         "ix_report_runs_current_output",
         "uq_report_runs_unfailed_unforced_versions",
-    } <= {index.name for index in report_runs.indexes}
+    } <= set(report_runs.indexes)
 
 
 def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
+    tables = stored_v2_schema().values()
     constraint_names = {
-        constraint.name
-        for table in V2_METADATA.tables.values()
-        for constraint in table.constraints
+        constraint_name
+        for table in tables
+        for constraint_name in table.constraint_names
     }
-    index_names = {
-        index.name for table in V2_METADATA.tables.values() for index in table.indexes
-    }
+    index_names = {index_name for table in tables for index_name in table.indexes}
 
     assert {
         "ck_regions_required_filter_values",
@@ -535,8 +486,8 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
 def test_stage9_uses_policyengine_version_as_its_only_catalog_release_identity() -> (
     None
 ):
-    model_version = V2_METADATA.tables[TaxBenefitModelVersion.__tablename__]
-    dataset_version = V2_METADATA.tables[DatasetVersion.__tablename__]
+    model_version = model_columns(TaxBenefitModelVersion)
+    dataset_version = model_columns(DatasetVersion)
     forbidden_columns = {
         "policyengine_version",
         "core_version",
@@ -546,29 +497,24 @@ def test_stage9_uses_policyengine_version_as_its_only_catalog_release_identity()
         "catalog_fingerprint",
     }
 
-    assert set(model_version.c) >= {
-        model_version.c.model_id,
-        model_version.c.version,
-        model_version.c.current_law_id,
-        model_version.c.metadata_time_periods,
+    assert set(model_version) >= {
+        model_version.model_id,
+        model_version.version,
+        model_version.current_law_id,
+        model_version.metadata_time_periods,
     }
-    assert forbidden_columns.isdisjoint(model_version.c.keys())
-    assert forbidden_columns.isdisjoint(dataset_version.c.keys())
+    assert forbidden_columns.isdisjoint(model_version.keys())
+    assert forbidden_columns.isdisjoint(dataset_version.keys())
 
-    unique_column_sets = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in model_version.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
+    unique_column_sets = stored_v2_table(
+        TaxBenefitModelVersion.__tablename__
+    ).unique_column_sets
     assert ("model_id", "version") in unique_column_sets
 
 
 def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> None:
-    parameter_values = V2_METADATA.tables["parameter_values"]
-    index = next(
-        index
-        for index in parameter_values.indexes
-        if index.name == "uq_parameter_values_canonical_parameter_start_date"
+    index = declared_index(
+        ParameterValue, "uq_parameter_values_canonical_parameter_start_date"
     )
 
     assert index.unique
@@ -581,37 +527,32 @@ def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> No
 
 
 def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:
-    dialect = postgresql.dialect()
-
     statements = [
-        str(CreateTable(table).compile(dialect=dialect))
-        for table in V2_METADATA.sorted_tables
+        statement
+        for statement in v2_schema_statements("postgresql")
+        if statement.lstrip().startswith("CREATE TABLE")
     ]
 
-    assert len(statements) == len(V2_METADATA.tables)
-    assert all("CREATE TABLE" in statement for statement in statements)
+    # One CREATE TABLE for each table of V2_METADATA, which SQLite's copy holds.
+    assert len(statements) == len(stored_v2_schema())
 
 
 def test_user_identity_maps_one_issuer_subject_to_one_user() -> None:
-    identities = V2_METADATA.tables["user_identities"]
+    identities = model_columns("user_identities")
+    stored_identities = stored_v2_table("user_identities")
 
-    unique_columns = {
-        constraint.name: tuple(column.name for column in constraint.columns)
-        for constraint in identities.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert unique_columns == {
+    assert stored_identities.unique_constraints == {
         "uq_user_identities_issuer_subject": ("issuer", "subject")
     }
-    assert isinstance(identities.c.issuer.type, sa.Text)
-    assert isinstance(identities.c.subject.type, sa.Text)
-    assert identities.c.email.nullable
-    assert identities.c.email.type.length == 320
-    assert not identities.c.last_seen_at.nullable
-    user_foreign_key = next(iter(identities.c.user_id.foreign_keys))
-    assert user_foreign_key.target_fullname == "users.id"
+    assert isinstance(identities.issuer.type, sa.Text)
+    assert isinstance(identities.subject.type, sa.Text)
+    assert identities.email.nullable
+    assert identities.email.type.length == 320
+    assert not identities.last_seen_at.nullable
+    user_foreign_key = stored_identities.foreign_keys_of("user_id")[0]
+    assert user_foreign_key.target == "users.id"
     assert user_foreign_key.ondelete == "CASCADE"
-    assert "ix_user_identities_user_id" in {index.name for index in identities.indexes}
+    assert "ix_user_identities_user_id" in stored_identities.indexes
     assert sa.inspect(User).relationships["identities"].back_populates == "user"
 
 
@@ -622,25 +563,21 @@ def test_associations_are_v1_anchored_without_client_refs() -> None:
         ("user_simulation_associations", "simulation"),
         ("user_report_associations", "report"),
     ):
-        table = V2_METADATA.tables[table_name]
-        assert table.c[f"{reference}_id"].nullable
-        assert table.c[f"legacy_{reference}_id"].nullable
-        assert isinstance(table.c[f"legacy_{reference}_id"].type, sa.BigInteger)
-        assert "client_ref" not in table.c
-        assert not table.c.country_id.nullable
-        assert table.c.country_id.type.length == 2
-        constraints = {constraint.name: constraint for constraint in table.constraints}
-        reference_check = constraints[f"ck_{table_name}_{reference}_ref"]
-        assert str(reference_check.sqltext) == (
+        columns = model_columns(table_name)
+        table = stored_v2_table(table_name)
+        assert columns[f"{reference}_id"].nullable
+        assert columns[f"legacy_{reference}_id"].nullable
+        assert isinstance(columns[f"legacy_{reference}_id"].type, sa.BigInteger)
+        assert "client_ref" not in columns
+        assert not columns.country_id.nullable
+        assert columns.country_id.type.length == 2
+        reference_check = table.checks[f"ck_{table_name}_{reference}_ref"]
+        assert reference_check == (
             f"{reference}_id IS NOT NULL OR legacy_{reference}_id IS NOT NULL"
         )
         # No uniqueness involves the owner, so a merge at sign-in can move
         # any association to another user unchanged.
-        assert {
-            tuple(column.name for column in constraint.columns)
-            for constraint in table.constraints
-            if isinstance(constraint, sa.UniqueConstraint)
-        } == {("id", "country_id")}
+        assert table.unique_column_sets == {("id", "country_id")}
 
 
 def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
@@ -650,32 +587,37 @@ def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
     ``reports``, with ``RESTRICT``: a saved item can't name a row that doesn't
     exist, and a simulation or report a saved item names can't be deleted.
     """
-    simulations = V2_METADATA.tables["user_simulation_associations"]
-    reports = V2_METADATA.tables["user_report_associations"]
+    simulations = stored_v2_table("user_simulation_associations")
+    reports = stored_v2_table("user_report_associations")
+    report_columns = model_columns("user_report_associations")
 
-    # The retired columns stay, nullable, for the previous Public API revision.
-    for table in (simulations, reports):
-        assert table.c.country.nullable
-        assert table.c.label.nullable
-    assert {
-        foreign_key.target_fullname for foreign_key in simulations.foreign_keys
-    } == {"users.id", "countries.id", "simulations.id"}
-    assert {foreign_key.target_fullname for foreign_key in reports.foreign_keys} == {
+    # The retired columns stay, nullable, for the previous API v1 revision.
+    for table_name in ("user_simulation_associations", "user_report_associations"):
+        columns = model_columns(table_name)
+        assert columns.country.nullable
+        assert columns.label.nullable
+    assert {foreign_key.target for foreign_key in simulations.foreign_key_columns} == {
+        "users.id",
+        "countries.id",
+        "simulations.id",
+    }
+    assert {foreign_key.target for foreign_key in reports.foreign_key_columns} == {
         "users.id",
         "user_policies.id",
         "countries.id",
         "reports.id",
     }
-    (simulation_key,) = simulations.c.simulation_id.foreign_keys
-    assert simulation_key.target_fullname == "simulations.id"
+    simulation_key = simulations.foreign_key("simulation_id")
+    assert simulation_key.target == "simulations.id"
     assert simulation_key.ondelete == "RESTRICT"
-    (report_key,) = reports.c.report_id.foreign_keys
-    assert report_key.target_fullname == "reports.id"
+    report_key = reports.foreign_key("report_id")
+    assert report_key.target == "reports.id"
     assert report_key.ondelete == "RESTRICT"
-    user_policy_key = next(iter(reports.c.user_policy_id.foreign_keys))
+    user_policy_key = reports.foreign_keys_of("user_policy_id")[0]
     assert user_policy_key.ondelete == "SET NULL"
     for column_name in ("provisions", "validation"):
-        postgres_type = reports.c[column_name].type.dialect_impl(postgresql.dialect())
+        column_type = report_columns[column_name].type
+        postgres_type = column_type.dialect_impl(postgresql.dialect())
         assert isinstance(postgres_type, postgresql.JSONB)
     assert set(sa.inspect(UserSimulationAssociation).relationships.keys()) == {"user"}
     assert set(sa.inspect(UserReportAssociation).relationships.keys()) == {"user"}
@@ -683,39 +625,33 @@ def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
 
 
 def test_user_policy_records_v3_reform_fields() -> None:
-    policies = V2_METADATA.tables["user_policies"]
+    policies = model_columns("user_policies")
 
-    assert policies.c.baseline.type.length == 16
-    baseline_check = next(
-        constraint
-        for constraint in policies.constraints
-        if constraint.name == "ck_user_policies_baseline"
-    )
-    assert "current-law" in str(baseline_check.sqltext)
-    assert "current-policy" in str(baseline_check.sqltext)
-    postgres_type = policies.c.provenance.type.dialect_impl(postgresql.dialect())
+    assert policies.baseline.type.length == 16
+    baseline_check = stored_v2_table("user_policies").checks[
+        "ck_user_policies_baseline"
+    ]
+    assert "current-law" in baseline_check
+    assert "current-policy" in baseline_check
+    postgres_type = policies.provenance.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
 
 
 def test_countries_record_household_and_society_wide_capability() -> None:
-    countries = V2_METADATA.tables["countries"]
+    countries = model_columns("countries")
+    stored_countries = stored_v2_table("countries")
 
-    assert countries.c.keys() == ["id", "household_enabled", "society_wide_enabled"]
-    assert countries.primary_key.columns.keys() == ["id"]
-    assert countries.primary_key.name == "pk_countries"
-    assert countries.c.id.type.length == 2
+    assert countries.keys() == ["id", "household_enabled", "society_wide_enabled"]
+    assert stored_countries.primary_key == ("id",)
+    assert stored_countries.primary_key_name == "pk_countries"
+    assert countries.id.type.length == 2
     for flag_name in ("household_enabled", "society_wide_enabled"):
-        assert isinstance(countries.c[flag_name].type, sa.Boolean)
-        assert not countries.c[flag_name].nullable
-        assert countries.c[flag_name].server_default is None
-    checks = {
-        constraint.name: str(constraint.sqltext)
-        for constraint in countries.constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
+        assert isinstance(countries[flag_name].type, sa.Boolean)
+        assert not countries[flag_name].nullable
+        assert countries[flag_name].server_default is None
     # Society-wide reports need household calculations, so a society-wide
     # country is always household capable too.
-    assert checks == {
+    assert stored_countries.checks == {
         "ck_countries_society_wide_requires_household": (
             "household_enabled OR NOT society_wide_enabled"
         ),
@@ -726,23 +662,22 @@ def test_country_columns_reference_the_countries_table_instead_of_a_fixed_list()
     None
 ):
     for table_name, column_name in COUNTRY_REFERENCE_COLUMNS:
-        table = V2_METADATA.tables[table_name]
+        table = stored_v2_table(table_name)
         country_keys = [
             foreign_key
-            for foreign_key in table.c[column_name].foreign_keys
-            if foreign_key.column.table.name == "countries"
+            for foreign_key in table.foreign_keys_of(column_name)
+            if foreign_key.referred_table == "countries"
         ]
         assert len(country_keys) == 1, table_name
-        assert country_keys[0].target_fullname == "countries.id"
+        assert country_keys[0].target == "countries.id"
         assert country_keys[0].ondelete == "RESTRICT"
-        assert country_keys[0].constraint.name == (
+        assert country_keys[0].constraint_name == (
             f"fk_{table_name}_{column_name}_countries"
         )
         fixed_country_checks = [
-            constraint.name
-            for constraint in table.constraints
-            if isinstance(constraint, sa.CheckConstraint)
-            and "'us', 'uk'" in str(constraint.sqltext)
+            check_name
+            for check_name, condition in table.checks.items()
+            if "'us', 'uk'" in condition
         ]
         assert fixed_country_checks == [], table_name
 
@@ -756,18 +691,16 @@ def test_v1_copy_mappings_keep_their_us_and_uk_checks() -> None:
         "legacy_policy_mappings",
         "legacy_user_policy_mappings",
     ):
-        table = V2_METADATA.tables[table_name]
-        assert f"ck_{table_name}_country" in {
-            constraint.name for constraint in table.constraints
-        }
+        table = stored_v2_table(table_name)
+        assert f"ck_{table_name}_country" in table.constraint_names
         assert "countries.id" not in {
-            foreign_key.target_fullname for foreign_key in table.foreign_keys
+            foreign_key.target for foreign_key in table.foreign_key_columns
         }
 
 
 def test_spm_availability_is_nullable_for_versions_not_yet_recorded() -> None:
     """Publication records it after the catalog, so a version may lack it."""
-    column = V2_METADATA.tables["tax_benefit_model_versions"].c["spm_availability"]
+    column = model_columns("tax_benefit_model_versions")["spm_availability"]
 
     assert column.nullable
     assert column.server_default is None
@@ -804,22 +737,22 @@ def test_catalog_format_2_columns_are_nullable_for_earlier_versions() -> None:
     }
 
     for table_name, columns in expected_columns.items():
-        table = V2_METADATA.tables[table_name]
+        mapped_columns = model_columns(table_name)
         for column_name, column_type in columns.items():
-            column = table.c[column_name]
+            column = mapped_columns[column_name]
             assert column.nullable, f"{table_name}.{column_name}"
             assert column.server_default is None, f"{table_name}.{column_name}"
             assert isinstance(column.type, column_type), f"{table_name}.{column_name}"
 
-    variables = V2_METADATA.tables["variables"]
+    variables = model_columns("variables")
     for column_name in (
         "module_name",
         "adds_parameter_path",
         "subtracts_parameter_path",
     ):
-        assert variables.c[column_name].type.length == 512
-    assert variables.c["unit"].type.length == 128
-    assert variables.c["definition_period"].type.length == 32
+        assert variables[column_name].type.length == 512
+    assert variables["unit"].type.length == 128
+    assert variables["definition_period"].type.length == 32
 
 
 def test_catalog_format_2_json_columns_have_typed_shapes() -> None:
@@ -856,9 +789,10 @@ def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> Non
     unique index (version, parent path, position); a parameter row references
     its parameter, and both references are removed with their rows.
     """
-    table = V2_METADATA.tables["parameter_tree_children"]
+    columns = model_columns("parameter_tree_children")
+    table = stored_v2_table("parameter_tree_children")
 
-    assert {column.name for column in table.columns} == {
+    assert set(columns.keys()) == {
         "id",
         "created_at",
         "tax_benefit_model_version_id",
@@ -875,8 +809,8 @@ def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> Non
         "household",
     }
     for column_name in ("parent_path", "path", "label"):
-        assert table.c[column_name].type.length == 512
-        assert not table.c[column_name].nullable
+        assert columns[column_name].type.length == 512
+        assert not columns[column_name].nullable
     for column_name in (
         "child_count",
         "reform_position",
@@ -885,16 +819,11 @@ def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> Non
         "economy",
         "household",
     ):
-        assert table.c[column_name].nullable
-    unique_constraints = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in table.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert ("tax_benefit_model_version_id", "path") in unique_constraints
+        assert columns[column_name].nullable
+    assert ("tax_benefit_model_version_id", "path") in table.unique_column_sets
     indexes = {
-        index.name: (tuple(column.name for column in index.columns), index.unique)
-        for index in table.indexes
+        index_name: (index.columns, index.unique)
+        for index_name, index in table.indexes.items()
     }
     assert indexes["ix_parameter_tree_children_listing"] == (
         ("tax_benefit_model_version_id", "parent_path", "position"),
@@ -908,20 +837,11 @@ def test_parameter_tree_children_have_one_row_per_path_in_listing_order() -> Non
         ("parameter_id",),
         False,
     )
-    foreign_keys = {
-        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
-        for foreign_key in table.foreign_keys
-    }
-    assert foreign_keys == {
+    assert table.references_by_column == {
         "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
         "parameter_id": ("parameters", "CASCADE"),
     }
-    checks = {
-        constraint.name
-        for constraint in table.constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
-    assert checks == {
+    assert set(table.checks) == {
         "ck_parameter_tree_children_child_type",
         "ck_parameter_tree_children_parameter_reference",
     }
@@ -932,7 +852,7 @@ def test_parameter_tree_child_type_is_typed_with_its_two_values() -> None:
     annotation = ParameterTreeChild.model_fields["child_type"].annotation
 
     assert annotation == Literal["node", "parameter"]
-    column = V2_METADATA.tables["parameter_tree_children"].c["child_type"]
+    column = model_columns("parameter_tree_children")["child_type"]
     assert isinstance(column.type, AutoString)
     assert column.type.length == 16
 
@@ -943,9 +863,10 @@ def test_parameter_search_files_hold_one_compressed_file_per_version() -> None:
     The row holds the gzip-compressed JSON, its file format, the SHA-256 of the
     uncompressed JSON (the response's ETag) and both sizes.
     """
-    table = V2_METADATA.tables["parameter_search_files"]
+    columns = model_columns("parameter_search_files")
+    table = stored_v2_table("parameter_search_files")
 
-    assert {column.name for column in table.columns} == {
+    assert set(columns.keys()) == {
         "id",
         "created_at",
         "tax_benefit_model_version_id",
@@ -955,26 +876,17 @@ def test_parameter_search_files_hold_one_compressed_file_per_version() -> None:
         "uncompressed_size",
         "compressed_size",
     }
-    for column in table.columns:
+    for column in columns:
         assert not column.nullable, column.name
-    assert isinstance(table.c["compressed_content"].type, sa.LargeBinary)
-    assert table.c["content_sha256"].type.length == 64
-    unique_constraints = {
-        constraint.name: tuple(column.name for column in constraint.columns)
-        for constraint in table.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert unique_constraints == {
+    assert isinstance(columns["compressed_content"].type, sa.LargeBinary)
+    assert columns["content_sha256"].type.length == 64
+    assert table.unique_constraints == {
         "uq_parameter_search_files_model_version_format": (
             "tax_benefit_model_version_id",
             "file_format",
         )
     }
-    foreign_keys = {
-        foreign_key.parent.name: (foreign_key.column.table.name, foreign_key.ondelete)
-        for foreign_key in table.foreign_keys
-    }
-    assert foreign_keys == {
+    assert table.references_by_column == {
         "tax_benefit_model_version_id": ("tax_benefit_model_versions", "CASCADE"),
     }
 
@@ -986,9 +898,7 @@ def test_catalog_pruning_marker_is_a_nullable_timezone_aware_timestamp() -> None
     and search file are stored, and holds the time pruning removed them. It
     has no default, so a version is published unpruned.
     """
-    column = V2_METADATA.tables["tax_benefit_model_versions"].c[
-        "catalog_values_pruned_at"
-    ]
+    column = model_columns("tax_benefit_model_versions")["catalog_values_pruned_at"]
 
     assert column.nullable
     assert column.server_default is None
@@ -1011,9 +921,7 @@ def test_catalog_publication_time_is_a_nullable_timezone_aware_timestamp() -> No
     keeps the most recently published versions. It is null for a version no
     publication has recorded since the column was added, and has no default.
     """
-    column = V2_METADATA.tables["tax_benefit_model_versions"].c[
-        "catalog_last_published_at"
-    ]
+    column = model_columns("tax_benefit_model_versions")["catalog_last_published_at"]
 
     assert column.nullable
     assert column.server_default is None
@@ -1023,9 +931,10 @@ def test_catalog_publication_time_is_a_nullable_timezone_aware_timestamp() -> No
 
 
 def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> None:
-    changes = V2_METADATA.tables["user_type_changes"]
+    changes = model_columns("user_type_changes")
+    stored_changes = stored_v2_table("user_type_changes")
 
-    assert {column.name for column in changes.columns} == {
+    assert set(changes.keys()) == {
         "id",
         "created_at",
         "user_id",
@@ -1035,28 +944,19 @@ def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> Non
         "source",
         "dismissed_at",
     }
-    assert not changes.c.user_id.nullable
-    assert changes.c.changed_by_user_id.nullable
+    assert not changes.user_id.nullable
+    assert changes.changed_by_user_id.nullable
     # Set when the user dismisses the app's notice of the change.
-    assert changes.c.dismissed_at.nullable
-    assert isinstance(changes.c.dismissed_at.type, sa.DateTime)
-    assert changes.c.dismissed_at.type.timezone is True
-    foreign_keys = {
-        key.parent.name: (key.column.table.name, key.ondelete)
-        for key in changes.foreign_keys
-    }
+    assert changes.dismissed_at.nullable
+    assert isinstance(changes.dismissed_at.type, sa.DateTime)
+    assert changes.dismissed_at.type.timezone is True
     # A user's history goes with the user; an admin's deletion keeps the change.
-    assert foreign_keys == {
+    assert stored_changes.references_by_column == {
         "user_id": ("users", "CASCADE"),
         "changed_by_user_id": ("users", "SET NULL"),
     }
-    checks = {
-        constraint.name: str(constraint.sqltext)
-        for constraint in changes.constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
     signed_in_types = "('standard', 'author', 'admin')"
-    assert checks == {
+    assert stored_changes.checks == {
         "ck_user_type_changes_previous_user_type": (
             f"previous_user_type IN {signed_in_types}"
         ),
@@ -1069,15 +969,17 @@ def test_user_type_changes_record_each_change_of_a_signed_in_users_type() -> Non
         ),
     }
     # The admin's index serves the SET NULL that each user deletion runs.
-    assert {
-        tuple(column.name for column in index.columns) for index in changes.indexes
-    } == {("user_id", "created_at"), ("changed_by_user_id",)}
+    assert set(stored_changes.index_columns.values()) == {
+        ("user_id", "created_at"),
+        ("changed_by_user_id",),
+    }
 
 
 def test_user_invitations_hold_each_invitation_and_only_its_token_hash() -> None:
-    invitations = V2_METADATA.tables["user_invitations"]
+    invitations = model_columns("user_invitations")
+    stored_invitations = stored_v2_table("user_invitations")
 
-    assert {column.name for column in invitations.columns} == {
+    assert set(invitations.keys()) == {
         "id",
         "created_at",
         "email",
@@ -1092,45 +994,30 @@ def test_user_invitations_hold_each_invitation_and_only_its_token_hash() -> None
         "revoked_at",
     }
     required = {"id", "created_at", "email", "user_type", "token_hash", "expires_at"}
-    assert {
-        column.name for column in invitations.columns if not column.nullable
-    } == required
+    assert {column.name for column in invitations if not column.nullable} == required
     for name in ("expires_at", "last_sent_at", "accepted_at", "revoked_at"):
-        column_type = invitations.c[name].type
+        column_type = invitations[name].type
         assert isinstance(column_type, sa.DateTime), name
         assert column_type.timezone is True, name
-    assert invitations.c.email.type.length == 320
+    assert invitations.email.type.length == 320
     # A SHA-256 digest in hexadecimal; the token itself is never stored.
-    assert invitations.c.token_hash.type.length == 64
-    assert invitations.c.last_send_error.type.length == 64
-    foreign_keys = {
-        key.parent.name: (key.column.table.name, key.ondelete)
-        for key in invitations.foreign_keys
-    }
+    assert invitations.token_hash.type.length == 64
+    assert invitations.last_send_error.type.length == 64
     # Deleting the inviting admin keeps the invitation; deleting the user who
     # accepted it deletes it, so the address, theirs, goes with the account.
-    assert foreign_keys == {
+    assert stored_invitations.references_by_column == {
         "invited_by_user_id": ("users", "SET NULL"),
         "accepted_by_user_id": ("users", "CASCADE"),
     }
-    checks = {
-        constraint.name: str(constraint.sqltext)
-        for constraint in invitations.constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
-    assert checks == {
+    assert stored_invitations.checks == {
         "ck_user_invitations_user_type": "user_type IN ('author', 'admin')",
         "ck_user_invitations_accepted_or_revoked": (
             "accepted_at IS NULL OR revoked_at IS NULL"
         ),
     }
-    unique = {
-        tuple(column.name for column in constraint.columns)
-        for constraint in invitations.constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
-    assert unique == {("token_hash",)}
+    assert stored_invitations.unique_column_sets == {("token_hash",)}
     # The users' indexes serve what each user deletion runs on them.
-    assert {
-        tuple(column.name for column in index.columns) for index in invitations.indexes
-    } == {("invited_by_user_id",), ("accepted_by_user_id",)}
+    assert set(stored_invitations.index_columns.values()) == {
+        ("invited_by_user_id",),
+        ("accepted_by_user_id",),
+    }

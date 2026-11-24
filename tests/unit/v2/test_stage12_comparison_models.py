@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
@@ -24,6 +24,13 @@ from policyengine_api.services.v2.comparison_runs.types import (
     ResultComparisonStatus,
 )
 from policyengine_api.services.v2.simulations.types import SimulationRole
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+from tests.unit.v2.v2_schema_reading import stored_v2_table
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlmodel import Session
 
 NOW = datetime(2026, 9, 14, tzinfo=UTC)
 EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000001")
@@ -31,17 +38,14 @@ DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
 
 
-def _engine():
-    engine = create_engine("sqlite://")
-
-    @sa.event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    V2_METADATA.create_all(engine)
-    return engine
+@contextmanager
+def _session() -> Iterator[Session]:
+    """Yield a Session of a SQLite v2 schema that enforces foreign keys."""
+    with (
+        sqlite_v2_sessions(foreign_keys=True) as sessions,
+        sessions(expire_on_commit=True) as session,
+    ):
+        yield session
 
 
 def _report(**changes: object) -> Stage12ComparisonReport:
@@ -91,8 +95,8 @@ def _simulation(**changes: object) -> Stage12ComparisonSimulation:
 
 
 def test_comparison_tables_have_only_the_temporary_parent_child_relationship() -> None:
-    report_table = V2_METADATA.tables["stage12_evaluation_reports"]
-    simulation_table = V2_METADATA.tables["stage12_evaluation_simulations"]
+    report_table = stored_v2_table("stage12_evaluation_reports")
+    simulation_table = stored_v2_table("stage12_evaluation_simulations")
 
     assert set(sa.inspect(Stage12ComparisonReport).relationships.keys()) == {
         "simulations"
@@ -102,7 +106,7 @@ def test_comparison_tables_have_only_the_temporary_parent_child_relationship() -
     }
     assert not report_table.foreign_keys
     assert {
-        foreign_key.target_fullname for foreign_key in simulation_table.foreign_keys
+        foreign_key.target for foreign_key in simulation_table.foreign_key_columns
     } == {"stage12_evaluation_reports.evaluation_id"}
     assert {
         "household_jobs",
@@ -131,8 +135,7 @@ def test_contract_and_table_enum_values_cannot_drift() -> None:
 
 
 def test_parent_identity_is_unique_for_worker_and_manifest() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         session.add(_report())
         session.commit()
         session.add(_report(evaluation_id=None))
@@ -143,12 +146,10 @@ def test_parent_identity_is_unique_for_worker_and_manifest() -> None:
         else:
             msg = "duplicate parent identity was accepted"
             raise AssertionError(msg)
-    engine.dispose()
 
 
 def test_child_identity_is_unique_within_a_parent() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         session.add(_report())
         session.add(_simulation())
         session.commit()
@@ -160,12 +161,10 @@ def test_child_identity_is_unique_within_a_parent() -> None:
         else:
             msg = "duplicate child identity was accepted"
             raise AssertionError(msg)
-    engine.dispose()
 
 
 def test_distinct_child_roles_can_complete_independently() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         report = _report()
         baseline = _simulation(
             status=Stage12RunStatus.SUCCEEDED,
@@ -188,12 +187,10 @@ def test_distinct_child_roles_can_complete_independently() -> None:
 
         assert baseline.status is Stage12RunStatus.SUCCEEDED
         assert reform.status is Stage12RunStatus.PENDING
-    engine.dispose()
 
 
 def test_database_rejects_success_without_complete_output_metadata() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         session.add(
             _report(
                 status=Stage12RunStatus.SUCCEEDED,
@@ -208,12 +205,10 @@ def test_database_rejects_success_without_complete_output_metadata() -> None:
         else:
             msg = "successful report without output was accepted"
             raise AssertionError(msg)
-    engine.dispose()
 
 
 def test_database_rejects_failed_state_without_bounded_error_code() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         session.add(_report(status=Stage12RunStatus.FAILED))
         try:
             session.commit()
@@ -222,12 +217,10 @@ def test_database_rejects_failed_state_without_bounded_error_code() -> None:
         else:
             msg = "failed report without error code was accepted"
             raise AssertionError(msg)
-    engine.dispose()
 
 
 def test_database_accepts_complete_comparison_receipt() -> None:
-    engine = _engine()
-    with Session(engine) as session:
+    with _session() as session:
         report = _report(
             comparison_status=Stage12ResultComparisonStatus.MATCHED,
             comparison_output_uri="gs://private-stage12/reports/comparison.json",
@@ -238,4 +231,3 @@ def test_database_accepts_complete_comparison_receipt() -> None:
         session.add(report)
         session.commit()
         assert report.comparison_status is Stage12ResultComparisonStatus.MATCHED
-    engine.dispose()

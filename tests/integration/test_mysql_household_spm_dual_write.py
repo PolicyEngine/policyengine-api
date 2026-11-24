@@ -11,13 +11,12 @@ import json
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, select, text
+from sqlalchemy import String, delete, literal, select, type_coerce
 from sqlalchemy.exc import DataError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.v1_models import (
@@ -41,7 +40,11 @@ from policyengine_api.services.v2.households.transformations import (
     legacy_household_fingerprint,
 )
 from policyengine_api.utils import hash_object
-from tests.integration.test_mysql_policy_dual_write import _mysql_url, _postgres_url
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 NATIONAL_SPM = {
     "forecast_content_sha256": "a" * 64,
@@ -76,8 +79,8 @@ def _source_document(marker: str, value: float = 40.0) -> dict:
 
 @dataclass
 class HouseholdDatabases:
-    mysql_sessions: sessionmaker
-    postgres_sessions: sessionmaker
+    mysql_sessions: sessionmaker[OrmSession]
+    postgres_sessions: sessionmaker[Session]
     source: HouseholdService
     destination: V2HouseholdService
     marker: str
@@ -117,16 +120,11 @@ class HouseholdDatabases:
 
 
 @pytest.fixture
-def databases(monkeypatch):
-    # Validate both explicit disposable targets before constructing either engine.
-    mysql_url, postgres_url = _mysql_url(), _postgres_url()
-    mysql_engine = create_engine(mysql_url)
-    postgres_engine = create_engine(postgres_url)
-    mysql_sessions = sessionmaker(mysql_engine, expire_on_commit=False)
-    postgres_sessions = sessionmaker(
-        postgres_engine, class_=Session, expire_on_commit=False
-    )
-
+def databases(
+    monkeypatch,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
+):
     def resolved_selection(country_id, selection):
         assert country_id == "us"
         return deepcopy(NATIONAL_SPM if selection is None else selection)
@@ -137,51 +135,39 @@ def databases(monkeypatch):
     marker = f"mysql-household-spm-{uuid4().hex}"
     try:
         yield HouseholdDatabases(
-            mysql_sessions,
-            postgres_sessions,
-            HouseholdService(mysql_sessions),
-            V2HouseholdService(HouseholdDatabaseSession(postgres_sessions)),
+            v1_sessions,
+            v2_owner_sessions,
+            HouseholdService(v1_sessions),
+            V2HouseholdService(HouseholdDatabaseSession(v2_owner_sessions)),
             marker,
         )
     finally:
-        try:
-            with mysql_sessions() as session:
-                source_ids = list(
-                    session.scalars(
-                        select(V1Household.id).where(V1Household.label == marker)
-                    )
+        with v1_sessions() as session:
+            source_ids = list(
+                session.scalars(
+                    select(V1Household.id).where(V1Household.label == marker)
                 )
-            with postgres_engine.begin() as connection:
-                mapping_filter = (
-                    LegacyHouseholdMapping.country_id == "us",
-                    LegacyHouseholdMapping.legacy_household_id.in_(source_ids),
+            )
+        with v2_owner_sessions.begin() as session:
+            mapping_filter = (
+                LegacyHouseholdMapping.country_id == "us",
+                LegacyHouseholdMapping.legacy_household_id.in_(source_ids),
+            )
+            destination_ids = list(
+                session.scalars(
+                    select(LegacyHouseholdMapping.household_id).where(*mapping_filter)
                 )
-                destination_ids = list(
-                    connection.scalars(
-                        select(LegacyHouseholdMapping.household_id).where(
-                            *mapping_filter
-                        )
-                    )
+            )
+            session.execute(delete(LegacyHouseholdMapping).where(*mapping_filter))
+            session.execute(delete(Household).where(Household.id.in_(destination_ids)))
+        with v1_sessions.begin() as session:
+            session.execute(
+                delete(HouseholdMirrorEvent).where(
+                    HouseholdMirrorEvent.legacy_household_id.in_(source_ids),
+                    HouseholdMirrorEvent.country_id == "us",
                 )
-                connection.execute(
-                    delete(LegacyHouseholdMapping).where(*mapping_filter)
-                )
-                connection.execute(
-                    delete(Household).where(Household.id.in_(destination_ids))
-                )
-            with mysql_engine.begin() as connection:
-                connection.execute(
-                    delete(HouseholdMirrorEvent).where(
-                        HouseholdMirrorEvent.legacy_household_id.in_(source_ids),
-                        HouseholdMirrorEvent.country_id == "us",
-                    )
-                )
-                connection.execute(
-                    delete(V1Household).where(V1Household.id.in_(source_ids))
-                )
-        finally:
-            mysql_engine.dispose()
-            postgres_engine.dispose()
+            )
+            session.execute(delete(V1Household).where(V1Household.id.in_(source_ids)))
 
 
 @pytest.mark.parametrize("fail_destination", [False, True], ids=["success", "rollback"])
@@ -204,9 +190,11 @@ def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
     )
     assert before["fingerprint"] == legacy_household_fingerprint(creation.snapshot)
     with databases.mysql_sessions() as session:
+        # MySQL's own text of the stored JSON, which the JSON type would parse.
         raw_json = session.execute(
-            text("SELECT household_json FROM household WHERE id = :id"),
-            {"id": creation.household.id},
+            select(type_coerce(V1Household.household_json, String)).where(
+                V1Household.id == creation.household.id
+            )
         ).scalar_one()
     assert json.loads(raw_json) == before["household_json"]
     stored_value = before["household_json"]["people"]["adult"]["employment_income"][
@@ -227,7 +215,7 @@ def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
             def transaction(self):
                 with super().transaction() as session:
                     yield session
-                    session.execute(text("SELECT 1 / 0"))
+                    session.execute(select(literal(1) / literal(0)))
 
         with pytest.raises(HouseholdMirrorUnavailableError) as failure:
             databases.mirror(

@@ -460,9 +460,11 @@ FORMAT_2_VARIABLE_TEXT_FIELDS = (
 
 
 def _variable_column_length(field_name: str) -> int:
+    from sqlalchemy import inspect
+
     from policyengine_api.data.v2.models import Variable
 
-    return Variable.__table__.c[field_name].type.length
+    return inspect(Variable).columns[field_name].type.length
 
 
 def test_variable_text_limits_are_the_variable_column_lengths() -> None:

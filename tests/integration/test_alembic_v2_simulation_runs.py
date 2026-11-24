@@ -5,43 +5,59 @@ runs, one per simulation and year; has each report run name its baseline and
 reform simulation runs; keys every result table by run; types a report run's
 cliff impact and labour supply; adds the budget-window tables; gives household
 jobs one household, one year and one policy; and adds the economy output's
-fields that had no column. The foreign keys from those tables to the Public
-API's tables stay, and the new columns that name the Public API's rows get
-keys too. It changes no other table. The previous Public API revision keeps
-working while it is deployed: its roles can't read or write any table it
-changes, except the catalog writer, which counts the rows of simulations,
-reports and report_runs.
+fields that had no column. The foreign keys from those tables to API v1's
+tables stay, and the new columns that name API v1's rows get keys too. It
+changes no other table. The previous API v1 revision keeps working while it
+is deployed: its roles can't read or write any table it changes, except the
+catalog writer, which counts the rows of simulations, reports and
+report_runs.
 """
 
 from __future__ import annotations
 
-import os
-from typing import TYPE_CHECKING
-from uuid import uuid4
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql.base import PGInspector
+from sqlmodel import col
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
+from policyengine_api.data.v2.models import (
+    BudgetSummary,
+    BudgetWindowRun,
+    ConstituencyImpact,
+    DecileImpact,
+    HouseholdJob,
+    LaborSupplyDecileResponse,
+    LaborSupplyResponse,
+    Poverty,
+    ProgramStatistics,
+    Report,
+    ReportRun,
+    Simulation,
+    SimulationRun,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import table_columns
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
+    add_row,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.engine import Inspector
+    from sqlalchemy.orm import Mapped, sessionmaker
+    from sqlmodel import Session
 
 # The catalog pruning revision, the simulation runs revision's parent.
 SIMULATION_RUNS_PREVIOUS_REVISION = "334859ef4fec"
@@ -71,7 +87,7 @@ CHANGED_TABLES = frozenset(
         "simulations",
     }
 )
-# The tables the simulation service and its Modal workers write; the Public API
+# The tables the simulation service and its Modal workers write; API v1
 # writes every other table. withheld_area_codes and cliff_impacts came in later
 # revisions.
 SIMULATION_SIDE_TABLES = (
@@ -79,7 +95,7 @@ SIMULATION_SIDE_TABLES = (
     | NEW_TABLES
     | {"aggregates", "change_aggregates", "withheld_area_codes", "cliff_impacts"}
 )
-# The foreign keys from the simulation service's tables to the Public API's
+# The foreign keys from the simulation service's tables to API v1's
 # rows, with their delete rules.
 PUBLIC_API_FOREIGN_KEYS = {
     ("simulations", "dataset_id"): ("datasets", "RESTRICT"),
@@ -128,22 +144,7 @@ LABOR_SUPPLY_RESPONSE_COLUMNS = (
     "weekly_hours_substitution_effect",
 )
 SHA256_HEX = "a" * 64
-COMPLETED_AT = "2026-11-04T00:00:00Z"
-
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("v2 lifecycle tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
+COMPLETED_AT = datetime(2026, 11, 4, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -152,30 +153,29 @@ def config() -> Config:
 
 
 @pytest.fixture
-def engine(config: Config) -> Iterator[Engine]:
-    database_engine = create_engine(_disposable_url())
+def sessions(
+    config: Config, v2_owner_sessions: sessionmaker[Session]
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the disposable database owner's Session factories; leave it at head."""
     try:
-        yield database_engine
+        yield v2_owner_sessions
     finally:
         command.upgrade(config, "head")
-        database_engine.dispose()
 
 
 @pytest.fixture
-def connection(config: Config, engine: Engine) -> Iterator[Connection]:
-    """Yield a connection at head whose writes are rolled back after the test."""
+def session(config: Config, sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Yield a Session at head whose writes are rolled back after the test."""
     command.upgrade(config, "head")
-    with engine.connect() as database_connection:
-        transaction = database_connection.begin()
+    with sessions() as database_session:
         try:
-            yield database_connection
+            yield database_session
         finally:
-            transaction.rollback()
+            database_session.rollback()
 
 
-def _table_shape(engine: Engine, table_name: str) -> dict[str, object]:
+def _table_shape(inspector: Inspector, table_name: str) -> dict[str, object]:
     """Describe one table's columns, keys, indexes and checks for comparison."""
-    inspector = inspect(engine)
     return {
         "columns": [
             (column["name"], str(column["type"]), column["nullable"], column["default"])
@@ -183,69 +183,66 @@ def _table_shape(engine: Engine, table_name: str) -> dict[str, object]:
         ],
         "primary_key": inspector.get_pk_constraint(table_name),
         "foreign_keys": sorted(
-            inspector.get_foreign_keys(table_name), key=lambda key: key["name"]
+            inspector.get_foreign_keys(table_name), key=lambda key: str(key["name"])
         ),
         "indexes": sorted(
-            inspector.get_indexes(table_name), key=lambda index: index["name"]
+            inspector.get_indexes(table_name), key=lambda index: str(index["name"])
         ),
         "unique_constraints": sorted(
             inspector.get_unique_constraints(table_name),
-            key=lambda constraint: constraint["name"],
+            key=lambda constraint: str(constraint["name"]),
         ),
         "check_constraints": sorted(
             inspector.get_check_constraints(table_name),
-            key=lambda constraint: constraint["name"],
+            key=lambda constraint: str(constraint["name"]),
         ),
     }
 
 
-def _shapes(engine: Engine) -> dict[str, dict[str, object]]:
-    return {
-        table_name: _table_shape(engine, table_name)
-        for table_name in inspect(engine).get_table_names(schema="public")
-    }
+def _shapes(sessions: sessionmaker[Session]) -> dict[str, dict[str, object]]:
+    with sessions() as session:
+        inspector = schema_inspector(session)
+        return {
+            table_name: _table_shape(inspector, table_name)
+            for table_name in inspector.get_table_names(schema="public")
+        }
 
 
-def _column_names(engine: Engine, table_name: str) -> set[str]:
-    return {column["name"] for column in inspect(engine).get_columns(table_name)}
+def _column_names(sessions: sessionmaker[Session], table_name: str) -> set[str]:
+    return set(table_columns(sessions, table_name))
 
 
-def _enum_type_names(engine: Engine) -> set[str]:
-    with engine.connect() as type_connection:
-        return set(
-            type_connection.execute(
-                text("SELECT typname FROM pg_type WHERE typtype = 'e'")
-            ).scalars()
-        )
+def _enum_type_names(sessions: sessionmaker[Session]) -> set[str]:
+    """Return the name of every enum type, in every schema."""
+    inspector = schema_inspector(sessions)
+    assert isinstance(inspector, PGInspector)
+    return {enum_type["name"] for enum_type in inspector.get_enums(schema="*")}
 
 
 def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
-    config: Config, engine: Engine
+    config: Config, sessions: sessionmaker[Session]
 ) -> None:
     """The revision adds its tables and changes only simulation-side tables."""
     command.upgrade(config, "head")
 
     command.downgrade(config, SIMULATION_RUNS_PREVIOUS_REVISION)
-    before = _shapes(engine)
+    before = _shapes(sessions)
     assert NEW_TABLES.isdisjoint(before)
     assert {"status", "household_result", "output_dataset_id"} <= _column_names(
-        engine, "simulations"
+        sessions, "simulations"
     )
-    assert {"report_run_id", "simulation_id"} <= _column_names(engine, "poverty")
+    assert {"report_run_id", "simulation_id"} <= _column_names(sessions, "poverty")
     assert {"datasets", "households", "policies"} <= {
-        key["referred_table"] for key in inspect(engine).get_foreign_keys("simulations")
+        key["referred_table"]
+        for key in schema_inspector(sessions).get_foreign_keys("simulations")
     }
-    program_entity = next(
-        column
-        for column in inspect(engine).get_columns("program_statistics")
-        if column["name"] == "entity"
-    )
+    program_entity = table_columns(sessions, "program_statistics")["entity"]
     assert not program_entity["nullable"]
-    assert "v2_simulation_status" in _enum_type_names(engine)
+    assert "v2_simulation_status" in _enum_type_names(sessions)
 
     # Upgrade to this revision alone: later revisions change other tables.
     command.upgrade(config, SIMULATION_RUNS_REVISION)
-    after = _shapes(engine)
+    after = _shapes(sessions)
     command.upgrade(config, "head")
     command.check(config)
     assert set(after) - set(before) == NEW_TABLES
@@ -255,16 +252,16 @@ def test_the_revision_downgrades_to_its_parent_and_upgrades_again(
     }
     assert changed == CHANGED_TABLES
     assert {"baseline_simulation_run_id", "reform_simulation_run_id"} <= (
-        _column_names(engine, "report_runs")
+        _column_names(sessions, "report_runs")
     )
 
 
 def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
-    config: Config, engine: Engine
+    config: Config, sessions: sessionmaker[Session]
 ) -> None:
     """Each service writes only its own tables; the keys between them stay."""
     command.upgrade(config, "head")
-    inspector = inspect(engine)
+    inspector = schema_inspector(sessions)
 
     public_api_keys = {
         (table_name, column_name): (key["referred_table"], key["options"]["ondelete"])
@@ -277,26 +274,22 @@ def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
     assert public_api_keys == PUBLIC_API_FOREIGN_KEYS
 
 
-def _count(connection: Connection, table: str, column: str, value: object) -> int:
-    return connection.execute(
-        text(f"SELECT count(*) FROM {table} WHERE {column} = :value"),
-        {"value": value},
-    ).scalar_one()
+def _count(session: Session, column: Mapped[Any], value: object) -> int:
+    """Count the rows whose ``column`` holds ``value``."""
+    return session.scalars(select(func.count()).where(column == value)).one()
 
 
 @pytest.fixture
-def public_api_rows(connection: Connection) -> PublicApiRows:
-    return insert_public_api_rows(connection)
+def public_api_rows(session: Session) -> PublicApiRows:
+    return insert_public_api_rows(session)
 
 
-def _insert_simulation(
-    connection: Connection, public_api_rows: PublicApiRows
-) -> object:
+def _insert_simulation(session: Session, public_api_rows: PublicApiRows) -> UUID:
     """Store an economy simulation of the stored dataset and catalog version."""
     simulation_id = uuid4()
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=simulation_id,
         simulation_type="economy",
         dataset_id=public_api_rows.dataset_id,
@@ -307,22 +300,23 @@ def _insert_simulation(
 
 
 def _insert_simulation_run(
-    connection: Connection,
-    simulation_id: object,
+    session: Session,
+    simulation_id: UUID,
     *,
     status: str = "pending",
     year: int = 2026,
     **values: object,
-) -> object:
+) -> UUID:
     """Store a run of the simulation for ``year`` on its catalog version."""
     run_id = uuid4()
-    version_id = connection.execute(
-        text("SELECT tax_benefit_model_version_id FROM simulations WHERE id = :id"),
-        {"id": simulation_id},
-    ).scalar_one()
-    insert_row(
-        connection,
-        "simulation_runs",
+    version_id = session.scalars(
+        select(col(Simulation.tax_benefit_model_version_id)).where(
+            col(Simulation.id) == simulation_id
+        )
+    ).one()
+    add_row(
+        session,
+        SimulationRun,
         id=run_id,
         simulation_id=simulation_id,
         tax_benefit_model_version_id=version_id,
@@ -335,24 +329,24 @@ def _insert_simulation_run(
 
 
 def _insert_report_run(
-    connection: Connection,
+    session: Session,
     public_api_rows: PublicApiRows,
-    baseline_run_id: object,
-    reform_run_id: object | None = None,
-) -> object:
+    baseline_run_id: UUID | None,
+    reform_run_id: UUID | None = None,
+) -> UUID:
     """Store a report and one run of it comparing the two simulation runs."""
     report_id, report_run_id = uuid4(), uuid4()
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
-        inputs="{}",
+        inputs={},
     )
-    insert_row(
-        connection,
-        "report_runs",
+    add_row(
+        session,
+        ReportRun,
         id=report_run_id,
         report_id=report_id,
         baseline_simulation_run_id=baseline_run_id,
@@ -363,16 +357,28 @@ def _insert_report_run(
     return report_run_id
 
 
+def _update_simulation_run(session: Session, run_id: UUID, **values: object) -> None:
+    session.execute(
+        update(SimulationRun).where(col(SimulationRun.id) == run_id).values(**values)
+    )
+
+
+def _update_report_run(session: Session, report_run_id: UUID, **values: object) -> None:
+    session.execute(
+        update(ReportRun).where(col(ReportRun.id) == report_run_id).values(**values)
+    )
+
+
 def test_rows_naming_a_missing_public_api_row_are_refused(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     """PostgreSQL checks each row a simulation-side row names when it is written."""
-    simulation_id = _insert_simulation(connection, public_api_rows)
+    simulation_id = _insert_simulation(session, public_api_rows)
 
-    with refused(connection, match="foreign key constraint"):
-        insert_row(
-            connection,
-            "simulation_runs",
+    with refused(session, match="foreign key constraint"):
+        add_row(
+            session,
+            SimulationRun,
             id=uuid4(),
             simulation_id=simulation_id,
             tax_benefit_model_version_id=uuid4(),
@@ -380,15 +386,15 @@ def test_rows_naming_a_missing_public_api_row_are_refused(
             year=2026,
             **RUN_VERSIONS,
         )
-    with refused(connection, match="foreign key constraint"):
-        insert_row(
-            connection,
-            "household_jobs",
+    with refused(session, match="foreign key constraint"):
+        add_row(
+            session,
+            HouseholdJob,
             id=uuid4(),
             country="us",
             household_id=uuid4(),
             year=2026,
-            request_data="{}",
+            request_data={},
             tax_benefit_model_version_id=public_api_rows.version_id,
             status="pending",
             **RUN_VERSIONS,
@@ -396,104 +402,97 @@ def test_rows_naming_a_missing_public_api_row_are_refused(
 
 
 def test_simulation_runs_need_a_completion_time_and_a_whole_output(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _insert_simulation(connection, public_api_rows)
-    run_id = _insert_simulation_run(connection, simulation_id)
+    simulation_id = _insert_simulation(session, public_api_rows)
+    run_id = _insert_simulation_run(session, simulation_id)
 
-    with refused(connection):
-        connection.execute(
-            text("UPDATE simulation_runs SET status = 'succeeded' WHERE id = :id"),
-            {"id": run_id},
-        )
+    with refused(session):
+        _update_simulation_run(session, run_id, status="succeeded")
     # Named, since a second unfailed run on the same versions is refused too.
-    with refused(connection, match="ck_simulation_runs_output_pair"):
+    with refused(session, match="ck_simulation_runs_output_pair"):
         _insert_simulation_run(
-            connection, simulation_id, output_uri="gs://bucket/run.parquet"
+            session, simulation_id, output_uri="gs://bucket/run.parquet"
         )
-    with refused(connection, match="ck_simulation_runs_output_sha256_length"):
+    with refused(session, match="ck_simulation_runs_output_sha256_length"):
         _insert_simulation_run(
-            connection,
+            session,
             simulation_id,
             output_uri="gs://bucket/run.parquet",
             output_sha256="short",
         )
     # A simulation has one unfailed run per version set, so the run finishes.
-    connection.execute(
-        text(
-            "UPDATE simulation_runs SET status = 'succeeded', "
-            "completed_at = :completed_at, output_uri = 'gs://bucket/run.parquet', "
-            "output_sha256 = :output_sha256 WHERE id = :id"
-        ),
-        {"id": run_id, "completed_at": COMPLETED_AT, "output_sha256": SHA256_HEX},
+    _update_simulation_run(
+        session,
+        run_id,
+        status="succeeded",
+        completed_at=COMPLETED_AT,
+        output_uri="gs://bucket/run.parquet",
+        output_sha256=SHA256_HEX,
     )
-    insert_row(
-        connection,
-        "poverty",
+    add_row(
+        session,
+        Poverty,
         id=uuid4(),
         simulation_run_id=run_id,
         poverty_type="spm",
         entity="person",
     )
 
-    connection.execute(
-        text("DELETE FROM simulations WHERE id = :id"), {"id": simulation_id}
-    )
-    assert _count(connection, "simulation_runs", "simulation_id", simulation_id) == 0
-    assert _count(connection, "poverty", "simulation_run_id", run_id) == 0
+    session.execute(delete(Simulation).where(col(Simulation.id) == simulation_id))
+    assert _count(session, col(SimulationRun.simulation_id), simulation_id) == 0
+    assert _count(session, col(Poverty.simulation_run_id), run_id) == 0
 
 
 def test_report_runs_name_a_baseline_run_and_keep_their_simulation_runs(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     baseline_run_id = _insert_simulation_run(
-        connection, _insert_simulation(connection, public_api_rows)
+        session, _insert_simulation(session, public_api_rows)
     )
     reform_run_id = _insert_simulation_run(
-        connection, _insert_simulation(connection, public_api_rows)
+        session, _insert_simulation(session, public_api_rows)
     )
 
-    with refused(connection, match="baseline_simulation_run_id"):
-        _insert_report_run(connection, public_api_rows, None)
-    with refused(connection, match="foreign key constraint"):
-        _insert_report_run(connection, public_api_rows, uuid4())
+    with refused(session, match="baseline_simulation_run_id"):
+        _insert_report_run(session, public_api_rows, None)
+    with refused(session, match="foreign key constraint"):
+        _insert_report_run(session, public_api_rows, uuid4())
     # A household report with only a baseline names no reform run.
-    _insert_report_run(connection, public_api_rows, baseline_run_id)
+    _insert_report_run(session, public_api_rows, baseline_run_id)
     report_run_id = _insert_report_run(
-        connection, public_api_rows, baseline_run_id, reform_run_id
+        session, public_api_rows, baseline_run_id, reform_run_id
     )
     for run_id in (baseline_run_id, reform_run_id):
-        with refused(connection, match="foreign key constraint"):
-            connection.execute(
-                text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
+        with refused(session, match="foreign key constraint"):
+            session.execute(
+                delete(SimulationRun).where(col(SimulationRun.id) == run_id)
             )
-    connection.execute(
-        text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
-    )
-    assert _count(connection, "simulation_runs", "id", reform_run_id) == 1
+    session.execute(delete(ReportRun).where(col(ReportRun.id) == report_run_id))
+    assert _count(session, col(SimulationRun.id), reform_run_id) == 1
 
 
 def test_results_are_unique_per_run_and_name_runs_that_exist(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     baseline_run_id = _insert_simulation_run(
-        connection, _insert_simulation(connection, public_api_rows)
+        session, _insert_simulation(session, public_api_rows)
     )
     reform_run_id = _insert_simulation_run(
-        connection, _insert_simulation(connection, public_api_rows)
+        session, _insert_simulation(session, public_api_rows)
     )
     comparison_runs = {
         "report_run_id": _insert_report_run(
-            connection, public_api_rows, baseline_run_id, reform_run_id
+            session, public_api_rows, baseline_run_id, reform_run_id
         ),
         "baseline_simulation_run_id": baseline_run_id,
         "reform_simulation_run_id": reform_run_id,
     }
 
-    with refused(connection):
-        insert_row(
-            connection,
-            "budget_summary",
+    with refused(session):
+        add_row(
+            session,
+            BudgetSummary,
             id=uuid4(),
             variable_name="household_net_income",
             entity="household",
@@ -504,13 +503,13 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "poverty_type": "spm",
         "entity": "person",
     }
-    insert_row(connection, "poverty", id=uuid4(), **poverty)
-    with refused(connection):
-        insert_row(connection, "poverty", id=uuid4(), **poverty)
+    add_row(session, Poverty, id=uuid4(), **poverty)
+    with refused(session):
+        add_row(session, Poverty, id=uuid4(), **poverty)
     for group in ("child", "adult"):
-        insert_row(
-            connection,
-            "poverty",
+        add_row(
+            session,
+            Poverty,
             id=uuid4(),
             filter_variable="age",
             filter_group=group,
@@ -523,38 +522,38 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "quantiles": 10,
         **comparison_runs,
     }
-    insert_row(connection, "decile_impacts", id=uuid4(), **decile)
-    insert_row(
-        connection,
-        "decile_impacts",
+    add_row(session, DecileImpact, id=uuid4(), **decile)
+    add_row(
+        session,
+        DecileImpact,
         id=uuid4(),
         decile_variable="household_wealth_decile",
         **decile,
     )
-    with refused(connection):
-        insert_row(connection, "decile_impacts", id=uuid4(), **decile)
+    with refused(session):
+        add_row(session, DecileImpact, id=uuid4(), **decile)
     budget = {"variable_name": "household_tax", "entity": "household"}
-    insert_row(connection, "budget_summary", id=uuid4(), **budget, **comparison_runs)
+    add_row(session, BudgetSummary, id=uuid4(), **budget, **comparison_runs)
     # A report run compares one pair, so its rows are unique within it.
-    with refused(connection):
-        insert_row(
-            connection,
-            "budget_summary",
+    with refused(session):
+        add_row(
+            session,
+            BudgetSummary,
             id=uuid4(),
             **budget,
             **{**comparison_runs, "reform_simulation_run_id": baseline_run_id},
         )
-    insert_row(
-        connection,
-        "program_statistics",
+    add_row(
+        session,
+        ProgramStatistics,
         id=uuid4(),
         program_name="income_tax",
         **comparison_runs,
     )
-    with refused(connection):
-        insert_row(
-            connection,
-            "program_statistics",
+    with refused(session):
+        add_row(
+            session,
+            ProgramStatistics,
             id=uuid4(),
             program_name="income_tax",
             **comparison_runs,
@@ -566,18 +565,18 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         "population": 100.0,
         **comparison_runs,
     }
-    insert_row(
-        connection,
-        "constituency_impacts",
+    add_row(
+        session,
+        ConstituencyImpact,
         id=uuid4(),
         constituency_code="E14000530",
         disclosure_tier="approximate",
         **constituency,
     )
-    with refused(connection):
-        insert_row(
-            connection,
-            "constituency_impacts",
+    with refused(session):
+        add_row(
+            session,
+            ConstituencyImpact,
             id=uuid4(),
             constituency_code="E14000531",
             disclosure_tier="withheld",
@@ -586,48 +585,44 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
 
 
 def test_a_report_runs_labor_supply_and_spm_receipt_are_typed(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     report_run_id = _insert_report_run(
-        connection,
+        session,
         public_api_rows,
-        _insert_simulation_run(
-            connection, _insert_simulation(connection, public_api_rows)
-        ),
-        _insert_simulation_run(
-            connection, _insert_simulation(connection, public_api_rows)
-        ),
+        _insert_simulation_run(session, _insert_simulation(session, public_api_rows)),
+        _insert_simulation_run(session, _insert_simulation(session, public_api_rows)),
     )
     response = dict.fromkeys(LABOR_SUPPLY_RESPONSE_COLUMNS, 1.0)
 
-    insert_row(
-        connection,
-        "labor_supply_responses",
+    add_row(
+        session,
+        LaborSupplyResponse,
         id=uuid4(),
         report_run_id=report_run_id,
         **response,
     )
-    with refused(connection):
-        insert_row(
-            connection,
-            "labor_supply_responses",
+    with refused(session):
+        add_row(
+            session,
+            LaborSupplyResponse,
             id=uuid4(),
             report_run_id=report_run_id,
             **response,
         )
     # .py reports a relative response only for deciles above zero.
-    insert_row(
-        connection,
-        "labor_supply_decile_responses",
+    add_row(
+        session,
+        LaborSupplyDecileResponse,
         id=uuid4(),
         report_run_id=report_run_id,
         decile=0,
         average_income_effect=-1.0,
         average_substitution_effect=2.0,
     )
-    insert_row(
-        connection,
-        "labor_supply_decile_responses",
+    add_row(
+        session,
+        LaborSupplyDecileResponse,
         id=uuid4(),
         report_run_id=report_run_id,
         decile=1,
@@ -636,57 +631,58 @@ def test_a_report_runs_labor_supply_and_spm_receipt_are_typed(
         relative_income_effect=-0.01,
         relative_substitution_effect=0.02,
     )
-    with refused(connection):
-        insert_row(
-            connection,
-            "labor_supply_decile_responses",
+    with refused(session):
+        add_row(
+            session,
+            LaborSupplyDecileResponse,
             id=uuid4(),
             report_run_id=report_run_id,
             decile=1,
         )
-    connection.execute(
-        text(
-            "UPDATE report_runs SET data_version = '1.0.0', "
-            "spm_provenance = CAST(:receipt AS jsonb) WHERE id = :id"
-        ),
-        {"id": report_run_id, "receipt": '{"source": "census"}'},
+    _update_report_run(
+        session,
+        report_run_id,
+        data_version="1.0.0",
+        spm_provenance={"source": "census"},
     )
-    receipt_type = connection.execute(
-        text("SELECT jsonb_typeof(spm_provenance) FROM report_runs WHERE id = :id"),
-        {"id": report_run_id},
-    ).scalar_one()
+    receipt_type = session.scalars(
+        select(func.jsonb_typeof(col(ReportRun.spm_provenance))).where(
+            col(ReportRun.id) == report_run_id
+        )
+    ).one()
     assert receipt_type == "object"
 
-    connection.execute(
-        text("DELETE FROM report_runs WHERE id = :id"), {"id": report_run_id}
-    )
-    for table in ("labor_supply_responses", "labor_supply_decile_responses"):
-        assert _count(connection, table, "report_run_id", report_run_id) == 0
+    session.execute(delete(ReportRun).where(col(ReportRun.id) == report_run_id))
+    for report_run_column in (
+        col(LaborSupplyResponse.report_run_id),
+        col(LaborSupplyDecileResponse.report_run_id),
+    ):
+        assert _count(session, report_run_column, report_run_id) == 0
 
 
 def _insert_report(
-    connection: Connection, public_api_rows: PublicApiRows, **values: object
-) -> object:
+    session: Session, public_api_rows: PublicApiRows, **values: object
+) -> UUID:
     report_id = uuid4()
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
-        inputs="{}",
+        inputs={},
         **values,
     )
     return report_id
 
 
 def _insert_budget_window_run(
-    connection: Connection, public_api_rows: PublicApiRows, report_id: object
-) -> object:
+    session: Session, public_api_rows: PublicApiRows, report_id: UUID
+) -> UUID:
     window_run_id = uuid4()
-    insert_row(
-        connection,
-        "budget_window_runs",
+    add_row(
+        session,
+        BudgetWindowRun,
         id=window_run_id,
         report_id=report_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
@@ -697,7 +693,7 @@ def _insert_budget_window_run(
 
 
 def test_budget_windows_hold_one_report_run_per_year(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     for refused_values in (
         {"year": 2026, "budget_window_size": 0},
@@ -706,22 +702,22 @@ def test_budget_windows_hold_one_report_run_per_year(
         {"budget_window_size": 3},
         {"year": 2026, "budget_window_size": 3, "household_id": None},
     ):
-        values = dict(refused_values)
+        values: dict[str, object] = dict(refused_values)
         if "household_id" in values:
             values["household_id"] = public_api_rows.household_id
-        with refused(connection, match="ck_reports_budget_window_size"):
-            _insert_report(connection, public_api_rows, **values)
+        with refused(session, match="ck_reports_budget_window_size"):
+            _insert_report(session, public_api_rows, **values)
     report_id = _insert_report(
-        connection, public_api_rows, year=2026, budget_window_size=3
+        session, public_api_rows, year=2026, budget_window_size=3
     )
-    other_report_id = _insert_report(connection, public_api_rows, year=2026)
-    window_run_id = _insert_budget_window_run(connection, public_api_rows, report_id)
-    simulation_id = _insert_simulation(connection, public_api_rows)
+    other_report_id = _insert_report(session, public_api_rows, year=2026)
+    window_run_id = _insert_budget_window_run(session, public_api_rows, report_id)
+    simulation_id = _insert_simulation(session, public_api_rows)
 
-    def insert_year(year: int | None, *, of_report: object = report_id) -> None:
-        insert_row(
-            connection,
-            "report_runs",
+    def insert_year(year: int | None, *, of_report: UUID = report_id) -> None:
+        add_row(
+            session,
+            ReportRun,
             id=uuid4(),
             report_id=of_report,
             budget_window_run_id=window_run_id,
@@ -729,8 +725,8 @@ def test_budget_windows_hold_one_report_run_per_year(
             # Each year of a window has simulations of its own, as the
             # simulation service gives it.
             baseline_simulation_run_id=_insert_simulation_run(
-                connection,
-                _insert_simulation(connection, public_api_rows),
+                session,
+                _insert_simulation(session, public_api_rows),
                 year=year or 2026,
             ),
             status="pending",
@@ -739,61 +735,60 @@ def test_budget_windows_hold_one_report_run_per_year(
 
     insert_year(2026)
     insert_year(2027)
-    with refused(connection, match="uq_report_runs_budget_window_run_id_year"):
+    with refused(session, match="uq_report_runs_budget_window_run_id_year"):
         insert_year(2027)
-    with refused(connection, match="ck_report_runs_budget_window_year"):
+    with refused(session, match="ck_report_runs_budget_window_year"):
         insert_year(None)
-    with refused(connection, match="foreign key constraint"):
+    with refused(session, match="foreign key constraint"):
         insert_year(2028, of_report=other_report_id)
-    with refused(connection, match="ck_simulation_runs_year"):
-        _insert_simulation_run(connection, simulation_id, year=1800)
+    with refused(session, match="ck_simulation_runs_year"):
+        _insert_simulation_run(session, simulation_id, year=1800)
     # A window run owns its years, as the report owns its runs.
     second_window_run_id = _insert_budget_window_run(
-        connection, public_api_rows, report_id
+        session, public_api_rows, report_id
     )
-    connection.execute(
-        text("DELETE FROM budget_window_runs WHERE id = :id"),
-        {"id": window_run_id},
+    session.execute(
+        delete(BudgetWindowRun).where(col(BudgetWindowRun.id) == window_run_id)
     )
-    assert _count(connection, "report_runs", "budget_window_run_id", window_run_id) == 0
+    assert _count(session, col(ReportRun.budget_window_run_id), window_run_id) == 0
 
-    connection.execute(text("DELETE FROM reports WHERE id = :id"), {"id": report_id})
-    assert _count(connection, "budget_window_runs", "id", second_window_run_id) == 0
-    assert _count(connection, "report_runs", "report_id", report_id) == 0
+    session.execute(delete(Report).where(col(Report.id) == report_id))
+    assert _count(session, col(BudgetWindowRun.id), second_window_run_id) == 0
+    assert _count(session, col(ReportRun.report_id), report_id) == 0
 
 
 def test_household_jobs_take_a_valid_year_and_record_when_they_end(
-    connection: Connection, public_api_rows: PublicApiRows
+    session: Session, public_api_rows: PublicApiRows
 ) -> None:
     household_job = {
         "country": "us",
         "household_id": public_api_rows.household_id,
-        "request_data": "{}",
+        "request_data": {},
         "tax_benefit_model_version_id": public_api_rows.version_id,
         **RUN_VERSIONS,
     }
-    insert_row(
-        connection,
-        "household_jobs",
+    add_row(
+        session,
+        HouseholdJob,
         id=uuid4(),
         year=2026,
         status="pending",
         **household_job,
     )
 
-    with refused(connection):
-        insert_row(
-            connection,
-            "household_jobs",
+    with refused(session):
+        add_row(
+            session,
+            HouseholdJob,
             id=uuid4(),
             year=1800,
             status="pending",
             **household_job,
         )
-    with refused(connection):
-        insert_row(
-            connection,
-            "household_jobs",
+    with refused(session):
+        add_row(
+            session,
+            HouseholdJob,
             id=uuid4(),
             year=2026,
             status="failed",

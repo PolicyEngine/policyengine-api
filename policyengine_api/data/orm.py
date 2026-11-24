@@ -1,4 +1,9 @@
-"""Canonical SQLAlchemy engine and Session configuration for API v1."""
+"""Canonical SQLAlchemy engine and Session configuration for API v1.
+
+Importing this module loads a ``.env`` file. Commands that must run with only
+the environment they are given take their Session factories from
+``policyengine_api.data.v1_sessions``, which has no import side effects.
+"""
 
 from __future__ import annotations
 
@@ -10,12 +15,13 @@ from typing import TYPE_CHECKING
 from dotenv import load_dotenv
 from google.cloud.sql.connector import Connector, IPTypes
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.orm_pool_events import record_pool_events
+from policyengine_api.data.v1_sessions import build_session_factory
 
 if TYPE_CHECKING:
     from sqlalchemy.engine.interfaces import DBAPIConnection
+    from sqlalchemy.orm import Session, sessionmaker
 
 load_dotenv()
 
@@ -65,11 +71,6 @@ def get_remote_database_config() -> dict[str, str]:
     }
 
 
-def build_session_factory(engine: Engine) -> sessionmaker[Session]:
-    """Return SQLAlchemy's standard configurable Session factory."""
-    return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
-
-
 def _build_remote_engine() -> Engine:
     config = get_remote_database_config()
     connector = Connector(
@@ -103,7 +104,7 @@ def _build_remote_engine() -> Engine:
     return engine
 
 
-def get_v1_engine() -> Engine:
+def _v1_engine() -> Engine:
     """Return the process-owned Cloud SQL engine; never select SQLite."""
     if _cloud_sql_state.engine is None:
         _cloud_sql_state.engine = _build_remote_engine()
@@ -113,7 +114,7 @@ def get_v1_engine() -> Engine:
 def get_v1_session_factory() -> sessionmaker[Session]:
     """Return one configured Session factory for the Cloud SQL engine."""
     if _cloud_sql_state.session_factory is None:
-        _cloud_sql_state.session_factory = build_session_factory(get_v1_engine())
+        _cloud_sql_state.session_factory = build_session_factory(_v1_engine())
     return _cloud_sql_state.session_factory
 
 

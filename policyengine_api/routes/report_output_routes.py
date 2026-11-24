@@ -26,8 +26,8 @@ def _serialize_v1_report_output(view: ReportOutputView) -> dict:
     """Project mapped report state onto the historical v1 response shape."""
     report_output = view.report_output
     result = {
-        column.name: getattr(report_output, column.name)
-        for column in ReportOutput.__table__.columns
+        attribute.key: getattr(report_output, attribute.key)
+        for attribute in ReportOutput.__mapper__.column_attrs
     }
     if view.response_id is not None:
         result["id"] = view.response_id

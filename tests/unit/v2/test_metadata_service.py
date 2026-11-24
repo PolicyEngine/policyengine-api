@@ -8,7 +8,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event
 from sqlmodel import Session, select
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
@@ -48,6 +47,7 @@ from policyengine_api.services.v2.metadata.validators import (
     MetadataResourceNotFoundError,
     ParameterSearchFileUnavailableError,
 )
+from tests.fixtures import database_sessions
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
 from tests.fixtures.v2_metadata_service_helpers import (
     add_country_version,
@@ -79,17 +79,10 @@ def test_resource_collection_uses_bounded_pagination_without_counting(
         )
     )
     catalog_session.commit()
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement.lower())
-
-    bind = catalog_session.get_bind()
-    event.listen(bind, "before_cursor_execute", record_statement)
-    try:
-        result = catalog_service(catalog_session).list_variables("us", limit=1)
-    finally:
-        event.remove(bind, "before_cursor_execute", record_statement)
+    result, statements = recorded_statements(
+        catalog_session,
+        lambda: catalog_service(catalog_session).list_variables("us", limit=1),
+    )
 
     assert [item.name for item in result.items] == ["employment_income"]
     assert result.policyengine_version == POLICYENGINE_VERSION
@@ -110,22 +103,15 @@ def test_resource_collection_rejects_out_of_range_pages_before_querying(
     offset: int,
     limit: int,
 ) -> None:
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement)
-
-    bind = catalog_session.get_bind()
-    event.listen(bind, "before_cursor_execute", record_statement)
-    try:
-        with pytest.raises(InvalidMetadataPageError):
-            catalog_service(catalog_session).list_variables(
-                "us",
-                offset=offset,
-                limit=limit,
-            )
-    finally:
-        event.remove(bind, "before_cursor_execute", record_statement)
+    with (
+        database_sessions.recorded_statements(catalog_session) as statements,
+        pytest.raises(InvalidMetadataPageError),
+    ):
+        catalog_service(catalog_session).list_variables(
+            "us",
+            offset=offset,
+            limit=limit,
+        )
 
     assert statements == []
 
@@ -133,17 +119,9 @@ def test_resource_collection_rejects_out_of_range_pages_before_querying(
 def test_parameter_collection_does_not_query_or_embed_values(
     catalog_session: Session,
 ) -> None:
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement.lower())
-
-    bind = catalog_session.get_bind()
-    event.listen(bind, "before_cursor_execute", record_statement)
-    try:
-        result = catalog_service(catalog_session).list_parameters("us")
-    finally:
-        event.remove(bind, "before_cursor_execute", record_statement)
+    result, statements = recorded_statements(
+        catalog_session, lambda: catalog_service(catalog_session).list_parameters("us")
+    )
 
     assert [item.name for item in result.items] == ["gov.example.rate"]
     assert "values" not in result.items[0].model_dump()
@@ -327,17 +305,10 @@ def test_dataset_collection_excludes_outputs_and_storage_references(
 def test_economy_options_read_only_regions_and_the_national_dataset(
     catalog_session: Session,
 ) -> None:
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement.lower())
-
-    bind = catalog_session.get_bind()
-    event.listen(bind, "before_cursor_execute", record_statement)
-    try:
-        result = catalog_service(catalog_session).get_economy_options("us")
-    finally:
-        event.remove(bind, "before_cursor_execute", record_statement)
+    result, statements = recorded_statements(
+        catalog_session,
+        lambda: catalog_service(catalog_session).get_economy_options("us"),
+    )
 
     assert len(statements) == 3
     assert all("variables" not in statement for statement in statements)

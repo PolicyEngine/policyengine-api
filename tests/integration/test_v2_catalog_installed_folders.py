@@ -25,18 +25,19 @@ from typing import TYPE_CHECKING
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.catalog.region_references import load_region_references
+from policyengine_api.data.v2.models import TaxBenefitModel
+from tests.fixtures.database_sessions import truncate
 from tests.integration.catalog_rows import assert_catalog_stored_unchanged
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
 
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.records import (
         NormalizedCatalog,
@@ -164,16 +165,16 @@ def selected_catalog(installed_models: Mapping[str, object]) -> NormalizedCatalo
 
 
 @pytest.fixture
-def publication_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
-    """Return an engine for the disposable v2 database, with no catalog in it."""
+def publication_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of the disposable v2 database, with no catalog."""
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    yield engine
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    engine.dispose()
+    with v2_owner_sessions.begin() as session:
+        truncate(session, TaxBenefitModel)
+    yield v2_owner_sessions
+    with v2_owner_sessions.begin() as session:
+        truncate(session, TaxBenefitModel)
 
 
 def _values(catalog: NormalizedCatalog) -> list[ParameterValueRecord]:
@@ -243,11 +244,11 @@ def test_selected_folders_hold_every_value_shape_the_installed_models_hold(
 
 def test_selected_folders_publish_and_come_back_unchanged(
     selected_catalog: NormalizedCatalog,
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
-    publish_catalog(publication_engine, selected_catalog)
+    publish_catalog(publication_sessions, selected_catalog)
     # Publishing the same version again compares every stored row with the
     # catalog in both directions and fails on any difference.
-    publish_catalog(publication_engine, selected_catalog)
+    publish_catalog(publication_sessions, selected_catalog)
 
-    assert_catalog_stored_unchanged(publication_engine, selected_catalog)
+    assert_catalog_stored_unchanged(publication_sessions, selected_catalog)

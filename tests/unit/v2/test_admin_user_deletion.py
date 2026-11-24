@@ -12,7 +12,6 @@ from uuid import UUID
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, select
 
 from policyengine_api import observability
@@ -618,23 +617,24 @@ def test_a_failed_commit_records_no_deletion_and_deletes_no_auth0_user(
 ) -> None:
     _sign_in(store, ALICE, UserType.ADMIN)
     bob_id = _sign_in(store, BOB)
-    refusing_sessions = sessionmaker(
-        store.sessions.kw["bind"], class_=Session, expire_on_commit=False
-    )
 
-    @sa.event.listens_for(refusing_sessions, "before_commit")
     def refuse_commit(_session: Session) -> None:
         msg = "COMMIT"
         raise OperationalError(msg, {}, Exception("the connection was lost"))
 
     auth0_users = RecordingAuth0Users()
     accounts = V2AccountService(
-        AccountDatabaseSession(refusing_sessions),
+        AccountDatabaseSession(store.sessions),
         auth0_user_deleter_factory=lambda: auth0_users,
     )
 
-    with pytest.raises(OperationalError):
-        accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
+    # Every commit of the store's sessions fails until the deletion returns.
+    sa.event.listen(store.sessions, "before_commit", refuse_commit)
+    try:
+        with pytest.raises(OperationalError):
+            accounts.delete_user_account_as_admin(principal=ALICE, user_id=bob_id)
+    finally:
+        sa.event.remove(store.sessions, "before_commit", refuse_commit)
 
     assert _user_type_of(store, bob_id) == "standard"
     assert auth0_users.preparations == 1

@@ -7,15 +7,33 @@ apart, so a value PostgreSQL stores in another form fails the comparison.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import text
+from sqlalchemy import select
+from sqlmodel import col
+
+from policyengine_api.data.v2.models import (
+    Parameter,
+    ParameterNode,
+    ParameterValue,
+    Region,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
+)
 
 if TYPE_CHECKING:
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session, sessionmaker
 
     from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
+# The mapped class of each catalog table, by the table's name.
+CATALOG_MODELS: dict[str, Any] = {
+    "variables": Variable,
+    "parameter_nodes": ParameterNode,
+    "parameters": Parameter,
+    "regions": Region,
+}
 # The columns each catalog table stores, named as on the catalog's records:
 # each table's key column first. Each country catalog names its records after
 # the table that stores them.
@@ -54,20 +72,22 @@ def strict_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, default=str)
 
 
-def stored_catalog_rows(engine: Engine, table_name: str) -> dict[tuple, str]:
+def stored_catalog_rows(
+    sessions: sessionmaker[Session], table_name: str
+) -> dict[tuple, str]:
     """Return each row of a catalog table, keyed by model and name or code."""
-    key_column, *columns = CATALOG_COLUMNS[table_name]
-    selected = ", ".join(f"catalog_row.{column}" for column in (key_column, *columns))
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                f"""
-                SELECT model.name, {selected}
-                FROM {table_name} AS catalog_row
-                JOIN tax_benefit_model_versions AS version
-                  ON version.id = catalog_row.tax_benefit_model_version_id
-                JOIN tax_benefit_models AS model ON model.id = version.model_id
-                """
+    model = CATALOG_MODELS[table_name]
+    selected = [getattr(model, column) for column in CATALOG_COLUMNS[table_name]]
+    with sessions.begin() as session:
+        rows = session.execute(
+            select(col(TaxBenefitModel.name), *selected)
+            .join(
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id) == model.tax_benefit_model_version_id,
+            )
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == TaxBenefitModelVersion.model_id,
             )
         ).all()
     return {(row[0], row[1]): strict_json(row[2:]) for row in rows}
@@ -85,21 +105,26 @@ def catalog_rows(catalog: NormalizedCatalog, table_name: str) -> dict[tuple, str
     }
 
 
-def stored_parameter_values(engine: Engine) -> dict[tuple, tuple]:
+def stored_parameter_values(sessions: sessionmaker[Session]) -> dict[tuple, tuple]:
     """Return each parameter value's JSON and end date, by model, name and start."""
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                """
-                SELECT model.name, parameter.name, parameter_value.start_date,
-                       parameter_value.value_json, parameter_value.end_date
-                FROM parameter_values AS parameter_value
-                JOIN parameters AS parameter
-                  ON parameter.id = parameter_value.parameter_id
-                JOIN tax_benefit_model_versions AS version
-                  ON version.id = parameter.tax_benefit_model_version_id
-                JOIN tax_benefit_models AS model ON model.id = version.model_id
-                """
+    with sessions.begin() as session:
+        rows = session.execute(
+            select(
+                col(TaxBenefitModel.name),
+                col(Parameter.name),
+                col(ParameterValue.start_date),
+                col(ParameterValue.value_json),
+                col(ParameterValue.end_date),
+            )
+            .join(Parameter, col(Parameter.id) == ParameterValue.parameter_id)
+            .join(
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id)
+                == Parameter.tax_benefit_model_version_id,
+            )
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == TaxBenefitModelVersion.model_id,
             )
         ).all()
     return {
@@ -121,10 +146,12 @@ def catalog_parameter_values(catalog: NormalizedCatalog) -> dict[tuple, tuple]:
     }
 
 
-def assert_catalog_stored_unchanged(engine: Engine, catalog: NormalizedCatalog) -> None:
+def assert_catalog_stored_unchanged(
+    sessions: sessionmaker[Session], catalog: NormalizedCatalog
+) -> None:
     """Assert that the database holds exactly ``catalog``'s values and records."""
-    assert stored_parameter_values(engine) == catalog_parameter_values(catalog)
+    assert stored_parameter_values(sessions) == catalog_parameter_values(catalog)
     for table_name in CATALOG_COLUMNS:
-        assert stored_catalog_rows(engine, table_name) == catalog_rows(
+        assert stored_catalog_rows(sessions, table_name) == catalog_rows(
             catalog, table_name
         ), table_name
