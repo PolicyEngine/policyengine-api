@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
+from sqlalchemy import delete, func, select
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     LegacyUserMapping,
@@ -29,7 +23,6 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.services import (
     mirror_legacy_user_policy_in_session,
@@ -40,27 +33,13 @@ from policyengine_api.services.v2.user_policies.transformations import (
 )
 from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(
-                V2_ALEMBIC_DISPOSABLE_TEST,
-                "",
-            ),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("saved-policy mirror tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
+if TYPE_CHECKING:
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
-def _seed_catalog(sessions):
-    with sessions.begin() as session:
+def _seed_catalog(v2_owner_sessions: sessionmaker[Session]):
+    with v2_owner_sessions.begin() as session:
         model = TaxBenefitModel(name="policyengine-us")
         version = TaxBenefitModelVersion(
             model=model,
@@ -111,21 +90,17 @@ def _saved(*, legacy_id: int, reform_id: int, reform_label="Reform", **changes):
     return LegacyUserPolicySnapshot.model_validate(values)
 
 
-def _cleanup(engine, model_id) -> None:
+def _cleanup(v2_owner_sessions: sessionmaker[Session], model_id) -> None:
     if model_id is None:
         return
-    with engine.begin() as connection:
+    with v2_owner_sessions.begin() as session:
         legacy_user_ids = ("auth0|one", "legacy-user-two")
-        user_ids = (
-            connection.execute(
-                select(LegacyUserMapping.user_id).where(
-                    LegacyUserMapping.legacy_user_id.in_(legacy_user_ids)
-                )
+        user_ids = session.scalars(
+            select(LegacyUserMapping.user_id).where(
+                LegacyUserMapping.legacy_user_id.in_(legacy_user_ids)
             )
-            .scalars()
-            .all()
-        )
-        connection.execute(
+        ).all()
+        session.execute(
             delete(LegacyUserMapping).where(
                 LegacyUserMapping.legacy_user_id.in_(legacy_user_ids)
             )
@@ -134,51 +109,45 @@ def _cleanup(engine, model_id) -> None:
         association_ids = select(UserPolicy.id).where(
             UserPolicy.policy_id.in_(policy_ids)
         )
-        connection.execute(
+        session.execute(
             delete(LegacyUserPolicyMapping).where(
                 LegacyUserPolicyMapping.user_policy_id.in_(association_ids)
             )
         )
-        connection.execute(
-            delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids))
-        )
+        session.execute(delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids)))
         if user_ids:
-            connection.execute(delete(User).where(User.id.in_(user_ids)))
-        connection.execute(
+            session.execute(delete(User).where(User.id.in_(user_ids)))
+        session.execute(
             delete(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.policy_id.in_(policy_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(ParameterValue).where(ParameterValue.policy_id.in_(policy_ids))
         )
-        connection.execute(
-            delete(Policy).where(Policy.tax_benefit_model_id == model_id)
-        )
+        session.execute(delete(Policy).where(Policy.tax_benefit_model_id == model_id))
         version_ids = select(TaxBenefitModelVersion.id).where(
             TaxBenefitModelVersion.model_id == model_id
         )
-        connection.execute(
+        session.execute(
             delete(Parameter).where(
                 Parameter.tax_benefit_model_version_id.in_(version_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(TaxBenefitModelVersion).where(
                 TaxBenefitModelVersion.model_id == model_id
             )
         )
-        connection.execute(
-            delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id)
-        )
+        session.execute(delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id))
 
 
-def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
-    engine = create_engine(_disposable_url())
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(sessions)
+        model_id, parameter_name = _seed_catalog(v2_owner_sessions)
         first_reform = _reform(parameter_name, legacy_id=101, source_hash="first")
         second_reform = _reform(parameter_name, legacy_id=102, source_hash="second")
         first_saved = _saved(legacy_id=201, reform_id=101)
@@ -194,7 +163,7 @@ def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
             user_id="legacy-user-two",
         )
 
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             first = mirror_legacy_user_policy_in_session(
                 session,
                 first_saved,
@@ -213,7 +182,7 @@ def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
                 first_reform,
                 source_revision=1,
             )
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             retry = mirror_legacy_user_policy_in_session(
                 session,
                 first_saved,
@@ -226,7 +195,7 @@ def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
         assert third.policy_id == first.policy_id
         assert retry.association_id == first.association_id
         assert retry.association_created is False
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             associations = session.scalars(
                 select(UserPolicy).order_by(UserPolicy.created_at, UserPolicy.id)
             ).all()
@@ -261,18 +230,17 @@ def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
                 == 3
             )
     finally:
-        _cleanup(engine, model_id)
-        engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)
 
 
-def test_concurrent_first_use_resolves_one_legacy_user_mapping() -> None:
-    engine = create_engine(_disposable_url())
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def test_concurrent_first_use_resolves_one_legacy_user_mapping(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     legacy_user_id = f"phase10-concurrent-{uuid4()}"
     barrier = Barrier(2)
 
     def resolve() -> UUID:
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             barrier.wait()
             return resolve_legacy_user_id(
                 session,
@@ -285,7 +253,7 @@ def test_concurrent_first_use_resolves_one_legacy_user_mapping() -> None:
             user_ids = list(executor.map(lambda _index: resolve(), range(2)))
 
         assert user_ids[0] == user_ids[1]
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             mappings = session.scalars(
                 select(LegacyUserMapping).where(
                     LegacyUserMapping.legacy_user_id == legacy_user_id
@@ -294,7 +262,7 @@ def test_concurrent_first_use_resolves_one_legacy_user_mapping() -> None:
             assert len(mappings) == 1
             assert session.get(User, user_ids[0]) is not None
     finally:
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             mapping = session.get(LegacyUserMapping, legacy_user_id)
             if mapping is not None:
                 user_id = mapping.user_id
@@ -303,18 +271,17 @@ def test_concurrent_first_use_resolves_one_legacy_user_mapping() -> None:
                 user = session.get(User, user_id)
                 if user is not None:
                     session.delete(user)
-        engine.dispose()
 
 
-def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> None:
-    engine = create_engine(_disposable_url())
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(sessions)
+        model_id, parameter_name = _seed_catalog(v2_owner_sessions)
         reform = _reform(parameter_name, legacy_id=301, source_hash="reform")
         original = _saved(legacy_id=401, reform_id=301)
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             created = mirror_legacy_user_policy_in_session(
                 session,
                 original,
@@ -325,10 +292,10 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
         renamed = original.model_copy(
             update={"reform_label": "Renamed", "updated_date": 3}
         )
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             association = session.get(UserPolicy, created.association_id)
             association.description = "Native description"
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             rename_result = mirror_legacy_user_policy_in_session(
                 session,
                 renamed,
@@ -336,7 +303,7 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
                 source_revision=2,
                 changed_fields=frozenset({"reform_label", "updated_date"}),
             )
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             after_rename = session.get(UserPolicy, created.association_id)
             mapping = session.scalar(
                 select(LegacyUserPolicyMapping).where(
@@ -348,15 +315,15 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
             assert mapping.fingerprint_sha256 == fingerprint_legacy_user_policy(renamed)
 
         v1_only = renamed.model_copy(update={"year": "2027", "updated_date": 4})
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             association = session.get(UserPolicy, created.association_id)
             association.name = "Native name"
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             native_timestamp = session.get(
                 UserPolicy,
                 created.association_id,
             ).updated_at
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             v1_only_result = mirror_legacy_user_policy_in_session(
                 session,
                 v1_only,
@@ -364,7 +331,7 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
                 source_revision=3,
                 changed_fields=frozenset({"year", "updated_date"}),
             )
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             association = session.get(UserPolicy, created.association_id)
             mapping = session.scalar(
                 select(LegacyUserPolicyMapping).where(
@@ -379,21 +346,20 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
         assert association.updated_at == native_timestamp
         assert mapping.fingerprint_sha256 == fingerprint_legacy_user_policy(v1_only)
     finally:
-        _cleanup(engine, model_id)
-        engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)
 
 
-def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None:
-    engine = create_engine(_disposable_url())
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def test_complete_transaction_rolls_back_and_native_delete_is_isolated(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(sessions)
+        model_id, parameter_name = _seed_catalog(v2_owner_sessions)
         reform = _reform(parameter_name, legacy_id=501, source_hash="rollback")
         saved = _saved(legacy_id=601, reform_id=501)
 
         def mirror_then_fail() -> None:
-            with sessions.begin() as session:
+            with v2_owner_sessions.begin() as session:
                 mirror_legacy_user_policy_in_session(
                     session,
                     saved,
@@ -406,7 +372,7 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
         with pytest.raises(RuntimeError, match="forced rollback"):
             mirror_then_fail()
 
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.scalar(select(func.count()).select_from(Policy)) == 0
             assert session.scalar(select(func.count()).select_from(UserPolicy)) == 0
             assert session.scalar(select(func.count()).select_from(User)) == 0
@@ -424,18 +390,18 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
                 == 0
             )
 
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             created = mirror_legacy_user_policy_in_session(
                 session,
                 saved,
                 reform,
                 source_revision=1,
             )
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             association = session.get(UserPolicy, created.association_id)
             session.delete(association)
 
-        with sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.get(UserPolicy, created.association_id) is None
             assert (
                 session.scalar(
@@ -457,5 +423,4 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
                 == 1
             )
     finally:
-        _cleanup(engine, model_id)
-        engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)

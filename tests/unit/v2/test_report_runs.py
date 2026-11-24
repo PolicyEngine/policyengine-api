@@ -1,19 +1,18 @@
 """Report definition, rerun, idempotency, worker, and selector tests."""
 
 import threading
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, select
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     AggregateOutput,
     AggregateType,
     Dataset,
@@ -39,6 +38,11 @@ from policyengine_api.data.v2.report_runs import (
     select_current_report_run,
     set_report_type,
 )
+from tests.fixtures.database_sessions import (
+    sqlite_v2_file_sessions,
+    sqlite_v2_sessions,
+)
+from tests.unit.v2.v2_schema_reading import model_columns
 
 DEPLOYED_COUNTRY_VERSIONS = {"us": "1.2.3"}
 DEPLOYED_POLICYENGINE_VERSION = "4.5.6"
@@ -51,15 +55,9 @@ SIMULATION_RUNS = ReportRunSimulationRuns(
 
 
 @pytest.fixture
-def engine():
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(test_engine)
-    yield test_engine
-    test_engine.dispose()
+def sessions() -> Iterator[sessionmaker[Session]]:
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 def _create_report(session: Session, *, report_type: str | None = None) -> Report:
@@ -123,20 +121,20 @@ def _create_forced_run(session: Session, report: Report) -> ReportRun:
 
 
 def test_untyped_and_typed_report_definitions_store_no_execution_versions(
-    engine,
+    sessions,
 ) -> None:
-    with Session(engine) as session:
+    with sessions(expire_on_commit=True) as session:
         untyped = _create_report(session)
         typed = _create_report(session, report_type="marginal_tax_rate")
 
         assert untyped.type is None
         assert typed.type == "marginal_tax_rate"
-        assert "country_package_version" not in Report.__table__.c
-        assert "policyengine_version" not in Report.__table__.c
+        assert "country_package_version" not in model_columns(Report)
+        assert "policyengine_version" not in model_columns(Report)
 
 
-def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
-    with Session(engine) as session:
+def test_report_type_can_change_before_first_run_but_not_after(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         set_report_type(
             session,
@@ -160,9 +158,9 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
 
 
 def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
-    engine,
+    sessions,
 ) -> None:
-    with Session(engine) as session:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         first = _create_run(session, report)
         # A report has one unfailed, unforced run per version set.
@@ -179,8 +177,8 @@ def test_new_manual_keys_create_a_same_version_run_once_the_last_one_failed(
         assert len(session.exec(select(ReportRun)).all()) == 2
 
 
-def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
-    with Session(engine) as session:
+def test_manual_rerun_requires_an_idempotency_key(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
 
         with pytest.raises(ValueError, match="require an idempotency key"):
@@ -198,8 +196,8 @@ def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
             )
 
 
-def test_idempotency_key_round_trips_as_a_python_uuid(engine) -> None:
-    with Session(engine) as session:
+def test_idempotency_key_round_trips_as_a_python_uuid(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         request_key = uuid4()
         run = _create_run(session, report, key=request_key)
@@ -210,8 +208,8 @@ def test_idempotency_key_round_trips_as_a_python_uuid(engine) -> None:
         assert isinstance(run.idempotency_key, UUID)
 
 
-def test_transport_retry_returns_the_existing_report_scoped_run(engine) -> None:
-    with Session(engine) as session:
+def test_transport_retry_returns_the_existing_report_scoped_run(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         request_key = uuid4()
         first = _create_run(session, report, key=request_key)
@@ -221,25 +219,19 @@ def test_transport_retry_returns_the_existing_report_scoped_run(engine) -> None:
         assert len(session.exec(select(ReportRun)).all()) == 1
 
 
-def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> None:
-    sqlite_path = tmp_path / "report-rerun-concurrency.db"
-    test_engine = create_engine(
-        f"sqlite:///{sqlite_path}",
-        connect_args={"check_same_thread": False, "timeout": 10},
-    )
+@pytest.fixture
+def file_sessions(tmp_path: Path) -> Iterator[sessionmaker[Session]]:
+    # Each transaction begins with BEGIN IMMEDIATE, which gives this explicit
+    # SQLite-only test fixture the same serialization point that SELECT FOR
+    # UPDATE provides in Postgres.
+    with sqlite_v2_file_sessions(tmp_path / "report-rerun-concurrency.db") as sessions:
+        yield sessions
 
-    # BEGIN IMMEDIATE gives this explicit SQLite-only test fixture the same
-    # serialization point that SELECT FOR UPDATE provides in Postgres.
-    @sa.event.listens_for(test_engine, "connect")
-    def _set_sqlite_transaction_mode(dbapi_connection, _record) -> None:
-        dbapi_connection.isolation_level = None
 
-    @sa.event.listens_for(test_engine, "begin")
-    def _begin_immediate(connection) -> None:
-        connection.exec_driver_sql("BEGIN IMMEDIATE")
-
-    V2_METADATA.create_all(test_engine)
-    with Session(test_engine) as session:
+def test_concurrent_idempotent_requests_resolve_to_one_run(
+    file_sessions: sessionmaker[Session],
+) -> None:
+    with file_sessions(expire_on_commit=True) as session:
         report_id = _create_report(session).id
         session.commit()
 
@@ -247,7 +239,7 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
     request_key = uuid4()
 
     def request_rerun() -> UUID:
-        with Session(test_engine) as session:
+        with file_sessions(expire_on_commit=True) as session:
             barrier.wait()
             run = create_report_run(
                 session,
@@ -269,16 +261,15 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
     with ThreadPoolExecutor(max_workers=2) as executor:
         run_ids = set(executor.map(lambda _: request_rerun(), range(2)))
 
-    with Session(test_engine) as session:
+    with file_sessions(expire_on_commit=True) as session:
         assert len(run_ids) == 1
         assert len(session.exec(select(ReportRun)).all()) == 1
-    test_engine.dispose()
 
 
 def test_worker_retry_resumes_the_same_run_and_terminal_runs_stay_terminal(
-    engine,
+    sessions,
 ) -> None:
-    with Session(engine) as session:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         run = _create_run(session, report)
         started = begin_report_run(session, report_run_id=run.id, started_at=NOW)
@@ -294,8 +285,8 @@ def test_worker_retry_resumes_the_same_run_and_terminal_runs_stay_terminal(
             begin_report_run(session, report_run_id=run.id)
 
 
-def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
-    with Session(engine) as session:
+def test_outputs_from_repeated_runs_are_preserved(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         version = TaxBenefitModelVersion(
             model_id=report.tax_benefit_model_id,
@@ -349,8 +340,8 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
         assert outputs[0].report_run_id != outputs[1].report_run_id
 
 
-def test_selector_uses_versions_success_completion_time_and_stable_id(engine) -> None:
-    with Session(engine) as session:
+def test_selector_uses_versions_success_completion_time_and_stable_id(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         # Runs 1 and 4 share run 2's versions, so each is a forced re-run.
         candidates = [
@@ -406,8 +397,8 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
         assert current.id == UUID(int=2)
 
 
-def test_pending_and_failed_reruns_do_not_displace_success(engine) -> None:
-    with Session(engine) as session:
+def test_pending_and_failed_reruns_do_not_displace_success(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         successful = _create_run(session, report)
         complete_report_run(session, report_run_id=successful.id, completed_at=NOW)
@@ -432,8 +423,8 @@ def test_pending_and_failed_reruns_do_not_displace_success(engine) -> None:
         assert current.id == successful.id
 
 
-def test_new_successful_rerun_becomes_current_without_cache_state(engine) -> None:
-    with Session(engine) as session:
+def test_new_successful_rerun_becomes_current_without_cache_state(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         first = _create_run(session, report)
         complete_report_run(session, report_run_id=first.id, completed_at=NOW)
@@ -458,8 +449,8 @@ def test_new_successful_rerun_becomes_current_without_cache_state(engine) -> Non
         assert len(session.exec(select(ReportRun)).all()) == 2
 
 
-def test_selector_returns_none_without_a_matching_success(engine) -> None:
-    with Session(engine) as session:
+def test_selector_returns_none_without_a_matching_success(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         mismatched = _create_run(
             session,

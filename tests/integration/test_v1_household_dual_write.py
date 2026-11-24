@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
 
 from policyengine_api.data.v1_models import (
     Household as V1Household,
@@ -33,20 +32,21 @@ from policyengine_api.services.v2.households.services import (
     mirror_legacy_household_in_session,
 )
 
-
-def _v1_service(database_url: str):
-    engine = create_engine(database_url)
-    with engine.begin() as connection:
-        connection.execute(delete(HouseholdMirrorEvent))
-        connection.execute(delete(V1Household))
-    sessions = sessionmaker(engine, expire_on_commit=False)
-    return engine, sessions, HouseholdService(sessions)
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
-def _cleanup_v1(engine) -> None:
-    with engine.begin() as connection:
-        connection.execute(delete(HouseholdMirrorEvent))
-        connection.execute(delete(V1Household))
+def _v1_service(v1_sessions: sessionmaker[OrmSession]) -> HouseholdService:
+    _cleanup_v1(v1_sessions)
+    return HouseholdService(v1_sessions)
+
+
+def _cleanup_v1(v1_sessions: sessionmaker[OrmSession]) -> None:
+    with v1_sessions.begin() as session:
+        session.execute(delete(HouseholdMirrorEvent))
+        session.execute(delete(V1Household))
 
 
 def _source_document() -> dict[str, object]:
@@ -71,21 +71,19 @@ def _create_v1(service: HouseholdService):
     )
 
 
-def _cleanup_v2(v2_engine) -> None:
-    with v2_engine.begin() as connection:
-        connection.execute(delete(LegacyHouseholdMapping))
-        connection.execute(delete(Household))
+def _cleanup_v2(v2_owner_sessions: sessionmaker[Session]) -> None:
+    with v2_owner_sessions.begin() as session:
+        session.execute(delete(LegacyHouseholdMapping))
+        session.execute(delete(Household))
 
 
 def test_both_commits_and_client_retry_create_distinct_sources_one_content_row(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
-        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_sessions))
+        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_owner_sessions))
         first = _create_v1(v1_service)
         first_result = process_household_event_after_commit(
             "us",
@@ -117,32 +115,28 @@ def test_both_commits_and_client_retry_create_distinct_sources_one_content_row(
                 )
                 == 2
             )
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.scalar(select(func.count()).select_from(Household)) == 1
             assert (
                 session.scalar(select(func.count()).select_from(LegacyHouseholdMapping))
                 == 2
             )
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)
 
 
 def test_destination_failure_leaves_source_and_event_pending_for_exact_replay(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         creation = _create_v1(v1_service)
 
         class FailingMirror:
             def mirror_legacy_household(self, snapshot):
-                with v2_sessions.begin() as session:
+                with v2_owner_sessions.begin() as session:
                     mirror_legacy_household_in_session(session, snapshot)
                     msg = "forced transaction failure"
                     raise OperationalError(
@@ -164,7 +158,7 @@ def test_destination_failure_leaves_source_and_event_pending_for_exact_replay(
             assert event is not None
             assert event.processed_at is None
             assert session.get(V1Household, creation.household.id) is not None
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.scalar(select(func.count()).select_from(Household)) == 0
 
         replay = process_household_event_after_commit(
@@ -172,29 +166,25 @@ def test_destination_failure_leaves_source_and_event_pending_for_exact_replay(
             creation.household.id,
             event_service=v1_service,
             mirror_factory=lambda: V2HouseholdService(
-                HouseholdDatabaseSession(v2_sessions)
+                HouseholdDatabaseSession(v2_owner_sessions)
             ),
             require_pending=True,
         )
         assert replay.mapping_created is True
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)
 
 
 def test_replay_after_destination_commit_verifies_mapping_then_completes_event(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         creation = _create_v1(v1_service)
         assert creation.snapshot is not None
-        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_sessions))
+        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_owner_sessions))
 
         committed = mirror_service.mirror_legacy_household(creation.snapshot)
         with v1_sessions() as session:
@@ -218,16 +208,14 @@ def test_replay_after_destination_commit_verifies_mapping_then_completes_event(
             assert event is not None
             assert event.processed_at is not None
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)
 
 
 def test_source_event_failure_rolls_back_the_source_household(
-    disposable_v1_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
 ) -> None:
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         with (
             patch.object(
@@ -246,17 +234,14 @@ def test_source_event_failure_rolls_back_the_source_household(
                 == 0
             )
     finally:
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
+        _cleanup_v1(v1_sessions)
 
 
 def test_translation_failure_retains_one_pending_event_until_explicit_replay(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         creation = v1_service.create_household(
             "us",
@@ -270,7 +255,7 @@ def test_translation_failure_retains_one_pending_event_until_explicit_replay(
                 creation.household.id,
                 event_service=v1_service,
                 mirror_factory=lambda: V2HouseholdService(
-                    HouseholdDatabaseSession(v2_sessions)
+                    HouseholdDatabaseSession(v2_owner_sessions)
                 ),
             )
 
@@ -278,7 +263,7 @@ def test_translation_failure_retains_one_pending_event_until_explicit_replay(
             event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
             assert event is not None
             assert event.processed_at is None
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert (
                 session.scalar(
                     select(func.count())
@@ -292,22 +277,18 @@ def test_translation_failure_retains_one_pending_event_until_explicit_replay(
                 == 0
             )
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)
 
 
 def test_changed_retained_event_fingerprint_cannot_mutate_destination(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         creation = _create_v1(v1_service)
-        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_sessions))
+        mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_owner_sessions))
         committed = process_household_event_after_commit(
             "us",
             creation.household.id,
@@ -331,7 +312,7 @@ def test_changed_retained_event_fingerprint_cannot_mutate_destination(
                 mirror_factory=lambda: mirror_service,
             )
 
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             mappings = session.scalars(
                 select(LegacyHouseholdMapping).where(
                     LegacyHouseholdMapping.country_id == "us",
@@ -341,21 +322,17 @@ def test_changed_retained_event_fingerprint_cannot_mutate_destination(
             assert len(mappings) == 1
             assert mappings[0].household_id == committed.household_id
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)
 
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_cloud_sql_only_writes_create_no_event_or_destination_mapping(
     country_id: str,
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
+    v1_service = _v1_service(v1_sessions)
     try:
         creation = v1_service.create_household(
             country_id,
@@ -371,7 +348,7 @@ def test_cloud_sql_only_writes_create_no_event_or_destination_mapping(
                 session.scalar(select(func.count()).select_from(HouseholdMirrorEvent))
                 == 0
             )
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert (
                 session.scalar(
                     select(func.count())
@@ -385,7 +362,5 @@ def test_cloud_sql_only_writes_create_no_event_or_destination_mapping(
                 == 0
             )
     finally:
-        _cleanup_v2(v2_engine)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup_v2(v2_owner_sessions)
+        _cleanup_v1(v1_sessions)

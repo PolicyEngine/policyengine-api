@@ -108,7 +108,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Runtime persistence and route boundaries
 
-- Checked: `api.data.runtime-sql-confined`, `api.data.sqlalchemy-and-alembic-only`, `api.legacy.removed-layers-stay-removed`, `api.routes.flask-blueprints-own-urls`, `api.routes.no-domain-logic-in-http`, `api.routes.no-inline-json-errors`, `api.services.no-direct-queries`, `api.services.session-ownership`
+- Checked: `api.data.orm-only`, `api.data.runtime-sql-confined`, `api.data.sqlalchemy-and-alembic-only`, `api.legacy.removed-layers-stay-removed`, `api.routes.flask-blueprints-own-urls`, `api.routes.no-domain-logic-in-http`, `api.routes.no-inline-json-errors`, `api.services.no-direct-queries`, `api.services.session-ownership`
 
 ### Import and startup side effects
 

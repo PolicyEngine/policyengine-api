@@ -9,26 +9,20 @@ deletion.
 
 from __future__ import annotations
 
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from threading import Barrier
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, delete, func, select, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
 
 from policyengine_api.data.v2 import user_association_migration_qualification
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
@@ -42,6 +36,7 @@ from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
+    PostgresConnectionSettings,
 )
 from policyengine_api.services.v2.identity.services import (
     convert_unauthenticated_user_in_session,
@@ -91,7 +86,14 @@ from policyengine_api.services.v2.user_simulations.types import (
 from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+    from contextlib import AbstractContextManager
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+    from policyengine_api.data.v2.settings import V2DatabaseSettings
+    from tests.integration.conftest import ManagedV2Roles
 
 # Long enough for a write that is not blocked by a held row lock to finish.
 LOCK_WAIT_SECONDS = 1.0
@@ -103,54 +105,38 @@ ASSOCIATION_MODELS = (
 )
 
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("identity persistence tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
 @pytest.fixture
-def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Session]]:
-    """Open sessions as the Public API's runtime role; clean up as the superuser.
+def sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Open sessions as API v1's runtime role; clean up as the database's owner.
 
     Running the services as ``policyengine_v2_runtime`` proves its declared
     privileges cover them (rule
-    ``api.v2.runtime-privileges-tested-as-runtime-role``).
+    ``api.v2.runtime-privileges-tested-as-runtime-role``). The factory is this
+    test's own, and each of its Sessions opens its own connection.
     """
-    runtime_engine = v2_engine_as_role(
-        managed_v2_roles.runtime, pool_size=10, max_overflow=10
-    )
-    cleanup_engine = create_engine(_disposable_url())
-    factory = sessionmaker(runtime_engine, class_=Session, expire_on_commit=False)
+    factory = v2_sessions_as_role(managed_v2_roles.runtime)
     issuer = f"https://stage12a-{uuid4().hex[:12]}.example.test/"
     factory.kw["info"] = {"issuer": issuer, "browser_user_ids": []}
     try:
         yield factory
     finally:
-        with cleanup_engine.begin() as connection:
+        with v2_owner_sessions.begin() as session:
             owned = select(UserIdentity.user_id).where(UserIdentity.issuer == issuer)
             user_ids = [
-                *connection.execute(owned).scalars(),
+                *session.scalars(owned),
                 *factory.kw["info"]["browser_user_ids"],
             ]
             if user_ids:
-                connection.execute(
+                session.execute(
                     delete(LegacyUserMapping).where(
                         LegacyUserMapping.user_id.in_(user_ids)
                     )
                 )
-                connection.execute(delete(User).where(User.id.in_(user_ids)))
-        runtime_engine.dispose()
-        cleanup_engine.dispose()
+                session.execute(delete(User).where(User.id.in_(user_ids)))
 
 
 def _principal(sessions, subject: str) -> UserPrincipal:
@@ -244,27 +230,25 @@ def _save_policy(services: Services, principal) -> UUID:
     ).id
 
 
-def _set_stored_user_type(user_id: UUID, user_type: str) -> None:
-    """Change a user's type as the superuser; the runtime role never changes one."""
-    engine = create_engine(_disposable_url())
-    try:
-        with engine.begin() as connection:
-            connection.execute(
-                update(User).where(User.id == user_id).values(user_type=user_type)
-            )
-    finally:
-        engine.dispose()
+def _set_stored_user_type(
+    v2_owner_sessions: sessionmaker[Session], user_id: UUID, user_type: str
+) -> None:
+    """Change a user's type as the database's owner; the runtime role never does."""
+    with v2_owner_sessions.begin() as session:
+        session.execute(
+            update(User).where(User.id == user_id).values(user_type=user_type)
+        )
 
 
 @pytest.mark.parametrize("user_type", ["author", "admin"])
 def test_an_author_or_admin_keeps_its_type_at_sign_in_and_upgrade(
-    sessions, user_type: str
+    sessions, v2_owner_sessions: sessionmaker[Session], user_type: str
 ) -> None:
     signed_in = _principal(sessions, f"google-oauth2|{user_type}")
     browser = _browser(sessions)
     services = _services(sessions)
     account_id = services.accounts.get_account(principal=signed_in, country_id="us").id
-    _set_stored_user_type(account_id, user_type)
+    _set_stored_user_type(v2_owner_sessions, account_id, user_type)
     _save_policy(services, browser)
 
     again = services.accounts.get_account(principal=signed_in, country_id="uk")
@@ -286,7 +270,9 @@ def test_an_author_or_admin_keeps_its_type_at_sign_in_and_upgrade(
     assert stored.user_type == user_type
 
 
-def test_sessions_act_as_the_runtime_role(sessions, managed_v2_roles) -> None:
+def test_sessions_act_as_the_runtime_role(
+    sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
+) -> None:
     with sessions() as session:
         current_role = session.execute(select(func.current_user())).scalar_one()
 
@@ -763,10 +749,12 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
 
 
 @pytest.mark.usefixtures("sessions")
-def test_qualification_reads_counts_in_a_read_only_transaction() -> None:
-    disposable_url = _disposable_url()
-    # The settings loader requires a persistent-looking target; the engine
-    # builder substitutes the disposable database, which is all that is read.
+def test_qualification_reads_counts_in_a_read_only_transaction(
+    disposable_v2_database_url: str,
+) -> None:
+    # The settings loader requires a persistent-looking target. The
+    # qualification's own Session factories then open the disposable database
+    # in its place, which is all that is read.
     environ = {
         V2_MIGRATION_DATABASE_URL: (
             "postgresql+psycopg://migration:unused@db.abcdefghijklmnopqrst."
@@ -776,15 +764,28 @@ def test_qualification_reads_counts_in_a_read_only_transaction() -> None:
         V2_SUPABASE_ENVIRONMENT: "test",
     }
     qualification = user_association_migration_qualification
-    observed_read_only: list[object] = []
+    observed_read_only: list[bool] = []
 
-    def pending_checker(connection) -> bool:
-        observed_read_only.append(connection.connection.dbapi_connection.read_only)
-        return qualification.user_association_migration_is_pending(connection)
+    def pending_checker(session: Session) -> bool:
+        transaction_read_only = session.execute(
+            select(func.current_setting("transaction_read_only"))
+        ).scalar_one()
+        observed_read_only.append(transaction_read_only == "on")
+        return qualification.user_association_migration_is_pending(session)
+
+    def disposable_qualification_sessions(
+        settings: V2DatabaseSettings,
+    ) -> AbstractContextManager[sessionmaker[Session]]:
+        disposable_connection = PostgresConnectionSettings(
+            make_url(disposable_v2_database_url)
+        )
+        return qualification.open_qualification_sessions(
+            replace(settings, connection=disposable_connection)
+        )
 
     evidence = qualification.qualify_user_association_migration(
         environ,
-        engine_builder=lambda _settings: create_engine(disposable_url),
+        session_factories=disposable_qualification_sessions,
         pending_checker=pending_checker,
     )
 

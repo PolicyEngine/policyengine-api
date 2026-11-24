@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-import sqlalchemy as sa
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.v1_models import (
     Household,
@@ -23,83 +21,69 @@ from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
+from tests.fixtures.database_sessions import recorded_statements, sqlite_v1_sessions
 
 
 @pytest.fixture
 def v1_sessions():
-    engine = sa.create_engine("sqlite://")
-    # SQLite cannot autoincrement inside v1's composite policy key, so the
-    # physical test tables come from detached copies without that option.
-    sqlite_metadata = sa.MetaData()
-    for model in (Policy, Household, Simulation, ReportOutput):
-        copy = model.__table__.to_metadata(sqlite_metadata)
-        copy.c.id.autoincrement = False
-    sqlite_metadata.create_all(engine)
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
-    with sessions.begin() as session:
-        session.add_all(
-            [
-                Policy(
-                    id=1,
-                    country_id="us",
-                    api_version="1",
-                    policy_json={},
-                    policy_hash="a",
-                ),
-                Policy(
-                    id=2,
-                    country_id="uk",
-                    api_version="1",
-                    policy_json={},
-                    policy_hash="b",
-                ),
-                Household(
-                    id=10,
-                    country_id="us",
-                    api_version="1",
-                    household_json={},
-                    household_hash="h",
-                ),
-                Simulation(
-                    id=613,
-                    country_id="us",
-                    api_version="1",
-                    population_id="us",
-                    population_type="geography",
-                    policy_id=1,
-                ),
-                ReportOutput(
-                    id=615,
-                    country_id="us",
-                    simulation_1_id=613,
-                    api_version="1",
-                ),
-            ]
-        )
-    yield sessions
-    engine.dispose()
+    with sqlite_v1_sessions() as sessions:
+        with sessions.begin() as session:
+            session.add_all(
+                [
+                    Policy(
+                        id=1,
+                        country_id="us",
+                        api_version="1",
+                        policy_json={},
+                        policy_hash="a",
+                    ),
+                    Policy(
+                        id=2,
+                        country_id="uk",
+                        api_version="1",
+                        policy_json={},
+                        policy_hash="b",
+                    ),
+                    Household(
+                        id=10,
+                        country_id="us",
+                        api_version="1",
+                        household_json={},
+                        household_hash="h",
+                    ),
+                    Simulation(
+                        id=613,
+                        country_id="us",
+                        api_version="1",
+                        population_id="us",
+                        population_type="geography",
+                        policy_id=1,
+                    ),
+                    ReportOutput(
+                        id=615,
+                        country_id="us",
+                        simulation_1_id=613,
+                        api_version="1",
+                    ),
+                ]
+            )
+        yield sessions
 
 
 def test_existing_ids_are_country_scoped_and_batched(v1_sessions, monkeypatch) -> None:
     monkeypatch.setattr(reads, "READ_BATCH_SIZE", 1)
-    statements: list[str] = []
-    engine = v1_sessions.kw["bind"]
-
-    def record(_conn, _cursor, statement, _parameters, _context, _many) -> None:
-        statements.append(statement)
-
-    sa.event.listen(engine, "before_cursor_execute", record)
     service = V1LegacyReferenceService(LegacyReferenceDatabaseSession(v1_sessions))
 
-    existing = service.existing_ids(
-        country_id="us",
-        requested={
-            LegacyRecordKind.POLICY: [1, 2, 3],
-            LegacyRecordKind.HOUSEHOLD: [10],
-            LegacyRecordKind.SIMULATION: [613, 613],
-            LegacyRecordKind.REPORT: [],
-        },
-    )
+    with recorded_statements(v1_sessions) as statements:
+        existing = service.existing_ids(
+            country_id="us",
+            requested={
+                LegacyRecordKind.POLICY: [1, 2, 3],
+                LegacyRecordKind.HOUSEHOLD: [10],
+                LegacyRecordKind.SIMULATION: [613, 613],
+                LegacyRecordKind.REPORT: [],
+            },
+        )
 
     assert existing == {
         LegacyRecordKind.POLICY: frozenset({1}),

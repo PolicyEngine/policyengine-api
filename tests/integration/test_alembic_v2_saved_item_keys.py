@@ -10,26 +10,37 @@ unaffected. The downgrade drops both keys and nothing else.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import col
 
-from tests.fixtures.integration.alembic_v2 import alembic_v2_config, disposable_v2_url
+from policyengine_api.data.v2.models import (
+    Report,
+    Simulation,
+    User,
+    UserReportAssociation,
+    UserSimulationAssociation,
+)
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import alembic_v2_config
+from tests.integration.alembic_version_rows import current_revision
 from tests.integration.simulation_rows import (
     PublicApiRows,
+    add_row,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 SAVED_ITEM_KEYS_PREVIOUS_REVISION = "1356f658347d"
 SAVED_ITEM_KEYS_REVISION = "81b728a088e7"
@@ -45,37 +56,41 @@ SAVED_ITEM_KEYS = {
         "simulations",
     ),
 }
+# Each association table's mapped class. Neither table's columns change between
+# the previous revision and the head.
+SAVED_ITEM_MODELS: dict[str, type[Any]] = {
+    "user_report_associations": UserReportAssociation,
+    "user_simulation_associations": UserSimulationAssociation,
+}
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    """Yield an engine on a database at head, and leave it at head."""
+def sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the owner's Session factories on a database at head; leave it at head."""
     command.upgrade(alembic_v2_config(), "head")
-    database_engine = create_engine(disposable_v2_url())
     try:
-        yield database_engine
+        yield v2_owner_sessions
     finally:
         command.upgrade(alembic_v2_config(), "head")
-        database_engine.dispose()
 
 
 @pytest.fixture
-def connection(engine: Engine) -> Iterator[Connection]:
-    """Yield a connection at head whose writes are rolled back after the test."""
-    command.upgrade(alembic_v2_config(), "head")
-    with engine.connect() as database_connection:
-        transaction = database_connection.begin()
+def session(sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Yield a Session at head whose writes are rolled back after the test."""
+    with sessions() as database_session:
         try:
-            yield database_connection
+            yield database_session
         finally:
-            transaction.rollback()
+            database_session.rollback()
 
 
 def _saved_item_keys(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> dict[str, tuple[str | None, list[str], str, str | None]]:
     """Return each association table's keys to ``reports`` or ``simulations``."""
-    inspector = inspect(engine)
+    inspector = schema_inspector(sessions)
     return {
         table_name: (
             key["name"],
@@ -89,18 +104,18 @@ def _saved_item_keys(
     }
 
 
-def _insert_user(connection: Connection) -> object:
+def _insert_user(session: Session) -> UUID:
     """Store a standard user, which needs a primary country."""
     user_id = uuid4()
-    insert_row(connection, "users", id=user_id, primary_country="us")
+    add_row(session, User, id=user_id, primary_country="us")
     return user_id
 
 
-def _insert_simulation(connection: Connection, rows: PublicApiRows) -> object:
+def _insert_simulation(session: Session, rows: PublicApiRows) -> UUID:
     simulation_id = uuid4()
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=simulation_id,
         simulation_type="economy",
         dataset_id=rows.dataset_id,
@@ -110,86 +125,78 @@ def _insert_simulation(connection: Connection, rows: PublicApiRows) -> object:
     return simulation_id
 
 
-def _insert_report(connection: Connection, rows: PublicApiRows) -> object:
+def _insert_report(session: Session, rows: PublicApiRows) -> UUID:
     report_id = uuid4()
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
         label="Saved report",
         country="us",
         tax_benefit_model_id=rows.model_id,
-        inputs="{}",
+        inputs={},
     )
     return report_id
 
 
 def _save(
-    connection: Connection, table_name: str, user_id: object, **reference: object
-) -> None:
-    insert_row(
-        connection,
-        table_name,
-        id=uuid4(),
+    session: Session, model: type[Any], user_id: UUID, **reference: object
+) -> UUID:
+    saved_item_id = uuid4()
+    add_row(
+        session,
+        model,
+        id=saved_item_id,
         user_id=user_id,
         country_id="us",
         **reference,
     )
+    return saved_item_id
 
 
 def test_a_saved_item_must_name_a_stored_report_or_simulation(
-    connection: Connection,
+    session: Session,
 ) -> None:
-    rows = insert_public_api_rows(connection)
-    user_id = _insert_user(connection)
-    report_id = _insert_report(connection, rows)
-    simulation_id = _insert_simulation(connection, rows)
+    rows = insert_public_api_rows(session)
+    user_id = _insert_user(session)
+    report_id = _insert_report(session, rows)
+    simulation_id = _insert_simulation(session, rows)
 
-    with refused(connection, IntegrityError, match="fk_user_report_associations"):
-        _save(connection, "user_report_associations", user_id, report_id=uuid4())
-    with refused(connection, IntegrityError, match="fk_user_simulation_associations"):
-        _save(
-            connection, "user_simulation_associations", user_id, simulation_id=uuid4()
-        )
+    with refused(session, IntegrityError, match="fk_user_report_associations"):
+        _save(session, UserReportAssociation, user_id, report_id=uuid4())
+    with refused(session, IntegrityError, match="fk_user_simulation_associations"):
+        _save(session, UserSimulationAssociation, user_id, simulation_id=uuid4())
 
-    _save(connection, "user_report_associations", user_id, report_id=report_id)
-    _save(
-        connection, "user_simulation_associations", user_id, simulation_id=simulation_id
-    )
+    _save(session, UserReportAssociation, user_id, report_id=report_id)
+    _save(session, UserSimulationAssociation, user_id, simulation_id=simulation_id)
     # A saved item that names only its v1 report or simulation is unaffected.
-    _save(connection, "user_report_associations", user_id, legacy_report_id=42)
-    _save(connection, "user_simulation_associations", user_id, legacy_simulation_id=42)
+    _save(session, UserReportAssociation, user_id, legacy_report_id=42)
+    _save(session, UserSimulationAssociation, user_id, legacy_simulation_id=42)
 
 
 def test_a_report_or_simulation_a_saved_item_names_cannot_be_deleted(
-    connection: Connection,
+    session: Session,
 ) -> None:
-    rows = insert_public_api_rows(connection)
-    user_id = _insert_user(connection)
-    report_id = _insert_report(connection, rows)
-    simulation_id = _insert_simulation(connection, rows)
-    _save(connection, "user_report_associations", user_id, report_id=report_id)
-    _save(
-        connection, "user_simulation_associations", user_id, simulation_id=simulation_id
-    )
+    rows = insert_public_api_rows(session)
+    user_id = _insert_user(session)
+    report_id = _insert_report(session, rows)
+    simulation_id = _insert_simulation(session, rows)
+    _save(session, UserReportAssociation, user_id, report_id=report_id)
+    _save(session, UserSimulationAssociation, user_id, simulation_id=simulation_id)
 
-    with refused(connection, IntegrityError, match="fk_user_report_associations"):
-        connection.execute(
-            text("DELETE FROM reports WHERE id = :id"), {"id": report_id}
-        )
-    with refused(connection, IntegrityError, match="fk_user_simulation_associations"):
-        connection.execute(
-            text("DELETE FROM simulations WHERE id = :id"), {"id": simulation_id}
-        )
+    with refused(session, IntegrityError, match="fk_user_report_associations"):
+        session.execute(delete(Report).where(col(Report.id) == report_id))
+    with refused(session, IntegrityError, match="fk_user_simulation_associations"):
+        session.execute(delete(Simulation).where(col(Simulation.id) == simulation_id))
 
 
 def test_the_revision_adds_the_keys_and_drops_them_on_downgrade(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     config = alembic_v2_config()
     command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
     command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
-    assert _saved_item_keys(engine) == {
+    assert _saved_item_keys(sessions) == {
         table_name: (key_name, [column_name], referred_table, "RESTRICT")
         for table_name, (
             key_name,
@@ -199,21 +206,12 @@ def test_the_revision_adds_the_keys_and_drops_them_on_downgrade(
     }
 
     command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
-    assert _saved_item_keys(engine) == {}
+    assert _saved_item_keys(sessions) == {}
 
     command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
-    assert set(_saved_item_keys(engine)) == set(SAVED_ITEM_KEYS)
+    assert set(_saved_item_keys(sessions)) == set(SAVED_ITEM_KEYS)
     command.upgrade(config, "head")
     command.check(config)
-
-
-def _current_revision(engine: Engine) -> str:
-    with engine.connect() as connection:
-        return str(
-            connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one()
-        )
 
 
 @pytest.mark.parametrize(
@@ -224,7 +222,7 @@ def _current_revision(engine: Engine) -> str:
     ],
 )
 def test_the_upgrade_fails_changing_nothing_while_a_saved_item_names_a_missing_row(
-    engine: Engine, table_name: str, reference: dict[str, object]
+    sessions: sessionmaker[Session], table_name: str, reference: dict[str, object]
 ) -> None:
     """Adding a key checks every existing row, so the upgrade fails and stays put.
 
@@ -233,28 +231,17 @@ def test_the_upgrade_fails_changing_nothing_while_a_saved_item_names_a_missing_r
     leaving the database at the parent revision with no new key.
     """
     config = alembic_v2_config()
+    model = SAVED_ITEM_MODELS[table_name]
     command.downgrade(config, SAVED_ITEM_KEYS_PREVIOUS_REVISION)
-    saved_item_id = uuid4()
-    with engine.begin() as connection:
-        user_id = _insert_user(connection)
-        insert_row(
-            connection,
-            table_name,
-            id=saved_item_id,
-            user_id=user_id,
-            country_id="us",
-            **reference,
-        )
+    with sessions.begin() as session:
+        user_id = _insert_user(session)
+        saved_item_id = _save(session, model, user_id, **reference)
     try:
         with pytest.raises(IntegrityError, match=SAVED_ITEM_KEYS[table_name][0]):
             command.upgrade(config, SAVED_ITEM_KEYS_REVISION)
-        assert _current_revision(engine) == SAVED_ITEM_KEYS_PREVIOUS_REVISION
-        assert _saved_item_keys(engine) == {}
+        assert current_revision(sessions) == SAVED_ITEM_KEYS_PREVIOUS_REVISION
+        assert _saved_item_keys(sessions) == {}
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text(f"DELETE FROM {table_name} WHERE id = :id"), {"id": saved_item_id}
-            )
-            connection.execute(
-                text("DELETE FROM users WHERE id = :id"), {"id": user_id}
-            )
+        with sessions.begin() as session:
+            session.execute(delete(model).where(col(model.id) == saved_item_id))
+            session.execute(delete(User).where(col(User.id) == user_id))

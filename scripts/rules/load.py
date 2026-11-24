@@ -296,7 +296,19 @@ def _baseline(
     return None
 
 
-_EXCEPTION_KEYS = {"path", "reason", "expires", "match", "category", "removal", "issue"}
+# The rules whose checkers read an exception's function. Only their exceptions
+# may give one; on any other rule's, it would narrow nothing.
+FUNCTION_EXCEPTION_RULES = frozenset({"api.data.orm-only"})
+_EXCEPTION_KEYS = {
+    "path",
+    "reason",
+    "expires",
+    "match",
+    "function",
+    "category",
+    "removal",
+    "issue",
+}
 
 
 def _optional_string(
@@ -326,6 +338,15 @@ def _exception(
         expires = (
             collector.day(rule_id, entry.get("expires"), f"{where}.expires") or date.max
         )
+    function = _optional_string(collector, rule_id, entry, "function", where)
+    if function is not None and rule_id not in FUNCTION_EXCEPTION_RULES:
+        collector.add(
+            rule_id,
+            f"{where}.function is read only for "
+            f"{', '.join(sorted(FUNCTION_EXCEPTION_RULES))}",
+            "remove function",
+        )
+        function = None
     issue = entry.get("issue")
     if issue is not None and (not isinstance(issue, int) or isinstance(issue, bool)):
         collector.add(
@@ -340,6 +361,7 @@ def _exception(
         category,
         removal,
         issue,
+        function,
     )
 
 

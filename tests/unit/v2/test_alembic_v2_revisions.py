@@ -13,10 +13,7 @@ from alembic.script import ScriptDirectory
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from policyengine_api.data.v2.models import V2_METADATA
-
-V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
-
+from policyengine_api.data.v2.models import V2_TABLE_NAMES
 
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
@@ -403,7 +400,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert "Post-generation" not in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
-    # The previous Public API revision still maps the retired country and label
+    # The previous API v1 revision still maps the retired country and label
     # columns, so the upgrade relaxes them instead of dropping anything.
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")

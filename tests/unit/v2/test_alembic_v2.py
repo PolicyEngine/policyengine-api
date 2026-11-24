@@ -23,10 +23,10 @@ from policyengine_api.data.v2.migration_target import (
     V2AlembicSettings,
     V2MigrationTargetError,
     load_v2_alembic_settings,
-    qualify_v2_connection,
+    qualify_v2_target,
     validate_v2_head_schema,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import V2_METADATA, V2_TABLE_NAMES
 from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
@@ -35,7 +35,6 @@ from policyengine_api.data.v2.settings import (
 
 PROJECT_REF = "abcdefghijklmnopqrst"
 TARGET_ENVIRONMENT = "test-foundation"
-V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 POOLER_URL = (
     "postgresql+psycopg://policyengine_v2_migrator."
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
@@ -249,25 +248,27 @@ def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -
         divergent_script.get_revision("bbbbbbbbbbbb")
 
 
-def _persistent_connection(
+def _persistent_session(
     monkeypatch: pytest.MonkeyPatch,
     *,
     public_tables: set[str],
 ):
-    import policyengine_api.data.v2.migration_target as module
+    from policyengine_api.data.v2 import database
 
-    connection = MagicMock()
-    connection.dialect.name = "postgresql"
-    connection.execute.side_effect = [
+    session = MagicMock()
+    session.execute.side_effect = [
         SimpleNamespace(one=lambda: ("postgres", MIGRATION_ROLE)),
         SimpleNamespace(scalar_one=lambda: True),
     ]
     monkeypatch.setattr(
-        module,
-        "inspect",
-        lambda _: SimpleNamespace(get_table_names=lambda schema: list(public_tables)),
+        database,
+        "v2_schema_inspector",
+        lambda _session: SimpleNamespace(
+            dialect=SimpleNamespace(name="postgresql"),
+            get_table_names=lambda schema: list(public_tables),
+        ),
     )
-    return connection
+    return session
 
 
 def test_persistent_first_use_requires_configured_successful_freshness_audit(
@@ -296,8 +297,8 @@ def test_persistent_first_use_requires_configured_successful_freshness_audit(
     )
 
     with pytest.raises(V2MigrationTargetError, match="freshness audit"):
-        qualify_v2_connection(
-            _persistent_connection(monkeypatch, public_tables=set()),
+        qualify_v2_target(
+            _persistent_session(monkeypatch, public_tables=set()),
             settings,
         )
 
@@ -314,8 +315,8 @@ def test_persistent_target_rejects_unstamped_nonfresh_inventory(
     )
 
     with pytest.raises(V2MigrationTargetError):
-        qualify_v2_connection(
-            _persistent_connection(
+        qualify_v2_target(
+            _persistent_session(
                 monkeypatch,
                 public_tables={"unreviewed_predecessor"},
             ),
@@ -334,8 +335,8 @@ def test_persistent_target_allows_stamped_previous_revision_inventory(
         }
     )
 
-    qualify_v2_connection(
-        _persistent_connection(
+    qualify_v2_target(
+        _persistent_session(
             monkeypatch,
             public_tables={"alembic_version", "reports"},
         ),
@@ -354,24 +355,24 @@ def test_v2_head_rejects_schema_divergent_from_metadata(
     monkeypatch: pytest.MonkeyPatch,
     public_tables: set[str],
 ) -> None:
-    connection = _persistent_connection(
+    session = _persistent_session(
         monkeypatch,
         public_tables=public_tables,
     )
 
     with pytest.raises(V2MigrationTargetError, match="v2 head schema"):
-        validate_v2_head_schema(connection, V2_METADATA)
+        validate_v2_head_schema(session, V2_TABLE_NAMES)
 
 
 def test_v2_head_accepts_schema_matching_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    connection = _persistent_connection(
+    session = _persistent_session(
         monkeypatch,
         public_tables={"alembic_version", *V2_TABLE_NAMES},
     )
 
-    validate_v2_head_schema(connection, V2_METADATA)
+    validate_v2_head_schema(session, V2_TABLE_NAMES)
 
 
 def test_v2_environment_contains_no_reset_adopt_or_restamp_path() -> None:
@@ -389,4 +390,4 @@ def test_v2_environment_commits_after_persistent_target_qualification() -> None:
     assert "with engine.connect() as connection:" not in env_source
     assert "current_heads != previous_heads" in env_source
     assert "current_heads == script_heads" in env_source
-    assert "validate_v2_head_schema(connection, target_metadata)" in env_source
+    assert "validate_v2_head_schema(session, V2_TABLE_NAMES)" in env_source

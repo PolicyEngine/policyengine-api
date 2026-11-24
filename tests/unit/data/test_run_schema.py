@@ -1,12 +1,23 @@
-from sqlalchemy import inspect
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tests.fixtures.database_sessions import schema_inspector
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session, sessionmaker
 
 
-def _column_names(test_engine, table_name: str) -> set[str]:
-    return {column["name"] for column in inspect(test_engine).get_columns(table_name)}
+def _column_names(sessions: sessionmaker[Session], table_name: str) -> set[str]:
+    return {
+        column["name"] for column in schema_inspector(sessions).get_columns(table_name)
+    }
 
 
-def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
-    report_output_columns = _column_names(test_engine, "report_outputs")
+def test_stage_one_run_schema_is_initialized_in_local_test_db(
+    v1_test_sessions: sessionmaker[Session],
+) -> None:
+    report_output_columns = _column_names(v1_test_sessions, "report_outputs")
     assert {
         "report_kind",
         "report_spec_json",
@@ -16,7 +27,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
         "latest_successful_run_id",
     }.issubset(report_output_columns)
 
-    simulation_columns = _column_names(test_engine, "simulations")
+    simulation_columns = _column_names(v1_test_sessions, "simulations")
     assert {
         "simulation_spec_json",
         "simulation_spec_schema_version",
@@ -24,7 +35,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
         "latest_successful_run_id",
     }.issubset(simulation_columns)
 
-    report_run_columns = _column_names(test_engine, "report_output_runs")
+    report_run_columns = _column_names(v1_test_sessions, "report_output_runs")
     assert {
         "id",
         "report_output_id",
@@ -42,7 +53,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
         "resolved_options_hash",
     }.issubset(report_run_columns)
 
-    simulation_run_columns = _column_names(test_engine, "simulation_runs")
+    simulation_run_columns = _column_names(v1_test_sessions, "simulation_runs")
     assert {
         "id",
         "simulation_id",
@@ -58,5 +69,5 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
         "simulation_cache_version",
     }.issubset(simulation_run_columns)
 
-    alias_columns = _column_names(test_engine, "legacy_report_output_aliases")
+    alias_columns = _column_names(v1_test_sessions, "legacy_report_output_aliases")
     assert {"legacy_report_output_id", "canonical_report_output_id"} == alias_columns
