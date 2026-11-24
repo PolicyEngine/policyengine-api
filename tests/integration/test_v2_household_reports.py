@@ -809,7 +809,7 @@ def test_a_household_reports_dynamic_the_country_does_not_store_is_not_sent(
     assert simulation_service.household_reports == []
 
 
-def test_a_household_reports_rerun_keeps_each_sides_dynamic(
+def test_a_household_reports_rerun_answers_each_sides_stored_dynamic(
     owner_sessions: sessionmaker[Session],
     household_only_uk: CatalogRows,
     stored_dynamic_ids: list[UUID],
@@ -827,6 +827,9 @@ def test_a_household_reports_rerun_keeps_each_sides_dynamic(
         )
     simulation_service = StoringHouseholdReportService(owner_sessions, catalog)
 
+    # API v1 sends only the report: the simulation service reads and applies
+    # each side's stored dynamic itself, which its own tests check. This
+    # checks the re-run is sent, and its answer reads both sides' dynamics.
     response = client_for(runtime_sessions, simulation_service).post(
         f"/v2/reports/{stored.report_id}/runs?country_id=uk", json={}
     )

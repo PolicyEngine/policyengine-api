@@ -521,5 +521,12 @@ def test_openapi_documents_the_dynamic_a_calculation_names(client) -> None:
     for item in ("HouseholdCalculationSubmittedItem", "HouseholdCalculationItem"):
         assert "dynamic_id" in components[item]["required"]
     submit = schema["paths"][CALCULATIONS]["post"]
-    assert "dynamic" in submit["responses"]["404"]["description"]
+    read = schema["paths"][f"{CALCULATIONS}/{{calculation_id}}"]["get"]
+    # Reading a calculation takes no country, so only the stored records a
+    # submission names are looked up in one.
+    for route in (submit, read):
+        assert route["responses"]["404"]["description"] == (
+            "The household, policy or dynamic a submission names is not stored "
+            "in its country, or the calculation does not exist."
+        )
     assert "dynamic" in submit["responses"]["422"]["description"]

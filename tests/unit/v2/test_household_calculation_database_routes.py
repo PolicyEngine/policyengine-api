@@ -107,10 +107,16 @@ def _catalog_version(
     return parameters
 
 
-def _dynamic(session: Session, parameters: dict[str, Parameter], hash_seed: str):
+def _dynamic(
+    session: Session,
+    parameters: dict[str, Parameter],
+    hash_seed: str,
+    *,
+    country_id: str = "us",
+):
     model_version = next(iter(parameters.values())).tax_benefit_model_version
     dynamic = Dynamic(
-        country_id="us",
+        country_id=country_id,
         tax_benefit_model_id=model_version.model_id,
         tax_benefit_model_version_id=model_version.id,
         canonicalization_version=1,
@@ -159,6 +165,14 @@ def _policy(session: Session, parameters: dict[str, Parameter], hash_seed: str):
     return policy
 
 
+def _uk_dynamic(session: Session) -> Dynamic:
+    """Store the UK, a UK catalog version and a dynamic of it."""
+    session.add(Country(id="uk", household_enabled=True, society_wide_enabled=True))
+    model = TaxBenefitModel(name="policyengine-uk")
+    parameters = _catalog_version(session, model, RUNNING_VERSION, [KEPT_ASSUMPTION])
+    return _dynamic(session, parameters, "e", country_id="uk")
+
+
 @pytest.fixture
 def stored(sessions) -> dict[str, object]:
     """Store the US, a household, and a policy and a dynamic on two catalog versions."""
@@ -188,6 +202,7 @@ def stored(sessions) -> dict[str, object]:
             "running_policy": _policy(session, running, "b"),
             "earlier_dynamic": _dynamic(session, earlier, "c"),
             "running_dynamic": _dynamic(session, running, "d"),
+            "uk_dynamic": _uk_dynamic(session),
         }
         session.commit()
     return {name: row.id for name, row in rows.items()}
@@ -303,6 +318,18 @@ def test_a_dynamic_setting_parameters_the_running_catalog_lacks_is_refused(
     assert response.json()["message"].startswith(
         f"Dynamic {stored['earlier_dynamic']} sets"
     )
+    assert simulation.submissions == []
+
+
+def test_another_countrys_dynamic_is_not_found_in_the_database(
+    client, stored, simulation
+) -> None:
+    body = {**_body(stored, "running_policy"), "dynamic_id": str(stored["uk_dynamic"])}
+
+    response = client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 404
+    assert str(stored["uk_dynamic"]) in response.json()["message"]
     assert simulation.submissions == []
 
 

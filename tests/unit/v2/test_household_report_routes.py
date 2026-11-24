@@ -416,6 +416,18 @@ def test_a_list_answers_household_and_economy_reports_by_kind_without_results() 
     assert "result" not in economy_item
 
 
+def test_the_create_routes_refusal_names_a_dynamic_the_service_cannot_find() -> None:
+    # A household report's side, like an economy report's, may name a dynamic
+    # the simulation service answers 400 unknown_dynamic for.
+    schema = report_route_client(reports=FakeReportService()).get("/v2/openapi.json")
+
+    create = schema.json()["paths"]["/v2/reports"]["post"]
+    assert (
+        "its 400 for a region, dynamic or dataset it does not have"
+        in (create["responses"]["422"]["description"])
+    )
+
+
 def test_the_create_routes_schema_offers_the_household_kind() -> None:
     schema = report_route_client(reports=FakeReportService()).get("/v2/openapi.json")
 
