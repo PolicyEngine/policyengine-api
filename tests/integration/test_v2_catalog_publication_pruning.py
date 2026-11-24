@@ -64,13 +64,18 @@ from policyengine_api.services.v2.metadata.process_state import (
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from tests.fixtures.v2_catalog import normalized_catalog
-from tests.integration.catalog_publication_support import emptied_catalog
+from tests.integration.catalog_publication_support import (
+    clear_version_format_2_fields,
+    emptied_catalog,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 OLD_VERSION = "5.0.1"
 # The earlier of the two other versions pruning keeps, with the previous one.
@@ -378,7 +383,7 @@ def _fixture_pruned(country_id: str, version: str) -> PrunedCatalogVersion:
 
 def test_publication_prunes_versions_older_than_the_kept_ones_as_the_writer(
     publication_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """Pruning deletes exactly the old version's current-law data, as the writer.
@@ -438,7 +443,7 @@ def test_publication_prunes_versions_older_than_the_kept_ones_as_the_writer(
 
 def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
     publication_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """A rollback that installs a pruned version restores its rows and marker.
@@ -668,10 +673,10 @@ def _pruned_message(country_id: str, version: str) -> str:
 
 def test_routes_answer_404_for_a_pruned_version_and_serve_its_kept_rows(
     publication_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
-    """Read as the Public API's runtime role, with its declared privileges."""
+    """Read as API v1's runtime role, with its declared privileges."""
     for version in (
         OLD_VERSION,
         EARLIER_KEPT_VERSION,
@@ -742,7 +747,7 @@ def test_routes_answer_404_for_a_pruned_version_and_serve_its_kept_rows(
 
 def test_a_process_that_selected_a_version_before_its_pruning_answers_404(
     publication_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """The production reader keeps selections and whole-version responses.
@@ -808,7 +813,7 @@ def test_a_process_that_selected_a_version_before_its_pruning_answers_404(
 
 def test_a_process_that_selected_a_pruned_version_serves_it_once_restored(
     publication_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """A selection kept while the version was pruned doesn't outlive restoration.
@@ -1271,11 +1276,10 @@ def test_restoring_a_version_stored_before_catalog_format_2_writes_values_only(
     with publication_sessions.begin() as session:
         for model_name in MODEL_NAMES:
             version_id = _version_id(publication_sessions, model_name, OLD_VERSION)
-            # The JSON columns get SQL NULL (sa.null()), not JSON's null.
             session.execute(
-                sa.update(TaxBenefitModelVersion)
-                .where(col(TaxBenefitModelVersion.id) == version_id)
-                .values(catalog_format=None, entities=sa.null(), basic_inputs=sa.null())
+                clear_version_format_2_fields(
+                    col(TaxBenefitModelVersion.id) == version_id
+                )
             )
             _delete_tree_and_search_file(session, version_id)
     before = {

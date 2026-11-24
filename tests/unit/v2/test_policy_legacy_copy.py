@@ -146,7 +146,7 @@ class ReusedProductionPolicy:
 
 # The two production copies that failed after dual-write was turned on: each
 # POST matched an existing v1 row saved under a country package release many
-# versions older than the one the Public API ran (us 2.2.1, uk 2.130.1).
+# versions older than the one API v1 ran (us 2.2.1, uk 2.130.1).
 PRODUCTION_REUSED_POLICIES = [
     pytest.param(
         ReusedProductionPolicy("us", 96567, "1.633.2", "gov.dol.minimum_wage", 9),
@@ -208,7 +208,7 @@ def test_policy_with_a_country_package_the_api_does_not_run_is_copied(
     catalog_session: Session,
     recorded_writes: RecordedCopyWrites,
 ) -> None:
-    # The copy binds content to the running catalog, as the Public API binds an
+    # The copy binds content to the running catalog, as API v1 binds an
     # old policy to the running country package when it simulates one.
     _add_running_catalog(
         catalog_session, country_id="us", parameter_names=["gov.example.rate"]

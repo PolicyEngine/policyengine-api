@@ -1108,18 +1108,12 @@ def test_a_name_assigned_a_mapped_class_or_its_table_name_is_not_a_table() -> No
 def _finding(
     file: str, source: str, line: int = 1, *, function: str | None = None
 ) -> Finding:
-    if function is None:
-        return Finding(file, line, RAW_SQL, source)
     return Finding(file, line, RAW_SQL, source, function=function)
 
 
 def _construct_exception(
     path: str, match: str | None, *, function: str | None = None
 ) -> RuleException:
-    if function is None:
-        return RuleException(
-            path=path, reason="no ORM form", match=match, category=NO_ORM_FORM
-        )
     return RuleException(
         path=path,
         reason="no ORM form",

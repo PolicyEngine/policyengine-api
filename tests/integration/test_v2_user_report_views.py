@@ -5,7 +5,7 @@ user's newest recorded run of the report, else its newest succeeded run that
 wasn't forced, else its newest run that wasn't forced; a forced run is never
 the default. A report's label and description are the requesting user's
 saved report's name and description, and null without one. The routes run as
-the Public API's runtime role.
+API v1's runtime role.
 """
 
 from __future__ import annotations
@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows, StoredReport
 
 NEWER_VERSIONS = {**CURRENT_VERSIONS, "policyengine_version": "4.3.0"}
@@ -74,7 +75,8 @@ def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
 
 @pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> sessionmaker[Session]:
     return v2_sessions_as_role(managed_v2_roles.runtime)
 

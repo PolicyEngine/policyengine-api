@@ -37,7 +37,7 @@ from tests.unit.v2.comparison_run_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
@@ -46,12 +46,13 @@ if TYPE_CHECKING:
         ComparisonReportRecord,
         ComparisonSimulationRecord,
     )
+    from tests.integration.conftest import ManagedV2Roles
 
 
 @pytest.fixture
 def stage12_sessions(
-    managed_v2_roles,
-    v2_sessions_as_role,
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
     v2_owner_sessions: sessionmaker[Session],
 ) -> Iterator[sessionmaker[Session]]:
     """Open sessions as the Stage 12 role; remove this test's rows as the superuser."""
@@ -101,7 +102,7 @@ def _baseline_simulation(report: ComparisonReportRecord) -> ComparisonSimulation
 
 
 def test_stage12_sessions_act_as_the_stage12_role(
-    stage12_sessions, managed_v2_roles
+    stage12_sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
 ) -> None:
     with stage12_sessions() as session:
         current_role = session.execute(select(func.current_user())).scalar_one()

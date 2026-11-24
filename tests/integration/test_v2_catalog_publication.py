@@ -59,6 +59,7 @@ from tests.fixtures.v2_catalog_value_shapes import (
     value_shape_catalog,
 )
 from tests.integration.catalog_publication_support import (
+    clear_format_2_fields,
     emptied_catalog,
     row_counts,
     stored_identifiers,
@@ -671,32 +672,6 @@ def _format_2_values(sessions: sessionmaker[Session]) -> dict[str, object]:
     }
 
 
-def _clear_format_2_fields(sessions: sessionmaker[Session]) -> None:
-    """Make every stored version look as if published before catalog format 2.
-
-    The JSON columns get SQL NULL (``sa.null()``), not JSON's null.
-    """
-    with sessions.begin() as session:
-        session.execute(
-            sa.update(TaxBenefitModelVersion).values(
-                catalog_format=None, entities=sa.null(), basic_inputs=sa.null()
-            )
-        )
-        session.execute(
-            sa.update(Variable).values(
-                is_input_variable=None,
-                hidden_input=None,
-                module_name=None,
-                adds_parameter_path=None,
-                subtracts_parameter_path=None,
-                enum_values=sa.null(),
-                unit=None,
-                definition_period=None,
-            )
-        )
-        session.execute(sa.update(Parameter).values(economy=None, household=None))
-
-
 def test_publication_stores_catalog_format_2_fields(
     publication_sessions: sessionmaker[Session],
 ) -> None:
@@ -730,7 +705,8 @@ def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
 ) -> None:
     catalog = normalized_catalog()
     publish_catalog(publication_sessions, catalog)
-    _clear_format_2_fields(publication_sessions)
+    with publication_sessions.begin() as session:
+        clear_format_2_fields(session)
     before_ids = _identifiers(publication_sessions)
 
     result = publish_catalog(publication_sessions, catalog)
@@ -1070,7 +1046,8 @@ def test_an_installed_version_stored_before_format_2_gets_no_tree(
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
     publish_catalog(publication_sessions, catalog)
-    _clear_format_2_fields(publication_sessions)
+    with publication_sessions.begin() as session:
+        clear_format_2_fields(session)
     _delete_tree(publication_sessions, current_version)
 
     evidence = publish_catalog(publication_sessions, catalog)

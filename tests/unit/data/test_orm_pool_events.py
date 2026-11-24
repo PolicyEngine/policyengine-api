@@ -14,7 +14,7 @@ import logging
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, event, exc, literal, select
+from sqlalchemy import Engine, create_engine, event, exc, literal, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import QueuePool
 
@@ -57,7 +57,7 @@ class MissingRow(_MissingTableBase):
     id: Mapped[int] = mapped_column(primary_key=True)
 
 
-def _select_one(engine):
+def _select_one(engine: Engine) -> int:
     """Check a connection out of the pool, pinging it, and select 1 in a Session."""
     with Session(engine) as session:
         return session.execute(select(literal(1))).scalar_one()

@@ -19,16 +19,30 @@ from policyengine_api.data.v2.migration_target import V2_ALEMBIC_DISPOSABLE_TEST
 from policyengine_api.data.v2.models import Region
 from policyengine_api.data.v2.privilege_reconciliation import (
     DEPLOYMENT_ENVIRONMENT,
+    DefaultPrivilege,
     PrivilegeEntry,
     apply_declared_privileges,
     check_declared_privileges,
     check_table_wide_overrides,
+    read_default_privileges,
+    read_granted_column_privileges,
+    read_granted_privileges,
     run,
     skipped_roles,
 )
 from policyengine_api.data.v2.privileges import READ, TablePrivilege, update_columns
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from tests.fixtures.database_sessions import create_role, drop_role, grant
+from tests.fixtures.database_sessions import act_as, create_role, drop_role, grant
+from tests.integration.catalog_privilege_objects import (
+    PUBLIC_GRANTEE,
+    SCHEMA,
+    PrivilegeTestMaterializedView,
+    PrivilegeTestView,
+    alter_default_privileges,
+    create_sequence,
+    create_view,
+    grant_on_schema_object,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -360,3 +374,105 @@ def test_verify_fails_once_a_role_awaiting_creation_exists_without_its_privilege
         f"`{absent_role}`"
     ) in summary
     assert summary.count("## v2 table privileges") == 1
+
+
+def test_default_privileges_are_read_for_tables_and_sequences_including_public(
+    v2_owner_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    temporary_role: Callable[[], str],
+) -> None:
+    """Each default privilege is read with its creating role, schema and grantee.
+
+    A default privilege given to PUBLIC names no grantee role, so it is read
+    only for its creating role.
+    """
+    creator = temporary_role()
+    reader = temporary_role()
+    with v2_owner_sessions.begin() as session:
+        alter_default_privileges(
+            session,
+            creating_role=creator,
+            privileges="SELECT",
+            object_type="TABLES",
+            to=reader,
+        )
+        alter_default_privileges(
+            session,
+            creating_role=creator,
+            privileges="USAGE",
+            object_type="SEQUENCES",
+            to=PUBLIC_GRANTEE,
+        )
+
+    with v2_sessions_as_role(creator)() as session:
+        for_both_roles = read_default_privileges(session, [creator, reader])
+        for_the_reader = read_default_privileges(session, [reader])
+
+    readers_tables = DefaultPrivilege(
+        creating_role=creator,
+        schema=SCHEMA,
+        object_type="tables",
+        grantee=reader,
+        privileges=("SELECT",),
+    )
+    assert for_both_roles == [
+        DefaultPrivilege(
+            creating_role=creator,
+            schema=SCHEMA,
+            object_type="sequences",
+            grantee=PUBLIC_GRANTEE,
+            privileges=("USAGE",),
+        ),
+        readers_tables,
+    ]
+    assert for_the_reader == [readers_tables]
+
+
+def test_grants_on_sequences_views_and_materialized_views_are_read(
+    v2_owner_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    temporary_role: Callable[[], str],
+) -> None:
+    """The reads return each grant a role holds, on whole relations and columns.
+
+    A temporary role creates the objects and reads the grants, as the migration
+    role owns the tables and runs the reconciliation.
+    """
+    creator = temporary_role()
+    reader = temporary_role()
+    sequence = f"privilege_test_sequence_{uuid4().hex[:12]}"
+    view = PrivilegeTestView.__tablename__
+    materialized_view = PrivilegeTestMaterializedView.__tablename__
+    with v2_owner_sessions.begin() as session:
+        grant_on_schema_object(
+            session, "CREATE", object_kind="SCHEMA", name=SCHEMA, to=creator
+        )
+        act_as(session, creator)
+        create_sequence(session, sequence)
+        create_view(session, PrivilegeTestView)
+        create_view(session, PrivilegeTestMaterializedView)
+        grant_on_schema_object(
+            session, "USAGE, SELECT", object_kind="SEQUENCE", name=sequence, to=reader
+        )
+        grant(session, "SELECT", on=PrivilegeTestView, to=reader)
+        grant(session, "UPDATE (label)", on=PrivilegeTestView, to=reader)
+        grant(session, "SELECT", on=PrivilegeTestMaterializedView, to=reader)
+        grant(session, "SELECT (label)", on=PrivilegeTestMaterializedView, to=reader)
+
+    with v2_sessions_as_role(creator)() as session:
+        granted = read_granted_privileges(session, [reader])
+        granted_columns = read_granted_column_privileges(session, [reader])
+
+    assert granted == {
+        reader: {
+            sequence: {"SELECT", "USAGE"},
+            view: {"SELECT"},
+            materialized_view: {"SELECT"},
+        }
+    }
+    assert granted_columns == {
+        reader: {
+            view: {"label": {"UPDATE"}},
+            materialized_view: {"label": {"SELECT"}},
+        }
+    }

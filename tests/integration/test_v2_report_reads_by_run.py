@@ -3,7 +3,7 @@
 ``GET /v2/reports/{report_id}?run_id=`` answers that run of the report, its
 status, versions and result, whichever run is the newest: a report run of an
 economy or household report, or a budget-window run of a budget window. The
-routes run as the Public API's runtime role.
+routes run as API v1's runtime role.
 """
 
 from __future__ import annotations

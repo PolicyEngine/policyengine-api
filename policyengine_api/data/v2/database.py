@@ -7,9 +7,10 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import event, inspect
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
@@ -21,7 +22,7 @@ from policyengine_api.data.v2.settings import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from sqlalchemy import Engine
     from sqlalchemy.engine import URL, Inspector
@@ -134,6 +135,22 @@ def _read_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 
 @contextmanager
+def _unpooled_sessions(
+    url: str | URL, build_factory: Callable[[Engine], sessionmaker[Session]]
+) -> Iterator[sessionmaker[Session]]:
+    """Yield ``build_factory``'s Session factories on a new engine for ``url``.
+
+    The engine keeps no connection pool, so no connection outlives its
+    Session, and is disposed of on exit.
+    """
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        yield build_factory(engine)
+    finally:
+        engine.dispose()
+
+
+@contextmanager
 def unpooled_v2_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
     """Yield v2 Session factories for one command's work on the database at ``url``.
 
@@ -142,11 +159,12 @@ def unpooled_v2_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
     ``V2AlembicSettings.url``. Their engine keeps no connection pool, so no
     connection outlives its Session, and is disposed of on exit.
     """
-    engine = create_engine(url, poolclass=NullPool)
-    try:
-        yield build_v2_session_factory(engine)
-    finally:
-        engine.dispose()
+    with _unpooled_sessions(url, build_v2_session_factory) as sessions:
+        yield sessions
+
+
+def _build_read_only_session_factory(engine: Engine) -> sessionmaker[Session]:
+    return build_v2_session_factory(engine.execution_options(postgresql_readonly=True))
 
 
 @contextmanager
@@ -158,22 +176,18 @@ def unpooled_v2_read_only_sessions(url: str | URL) -> Iterator[sessionmaker[Sess
     through SQLAlchemy's ``postgresql_readonly`` option). Like
     ``unpooled_v2_sessions``, the engine keeps no pool.
     """
-    engine = create_engine(url, poolclass=NullPool)
-    try:
-        yield build_v2_session_factory(
-            engine.execution_options(postgresql_readonly=True)
-        )
-    finally:
-        engine.dispose()
+    with _unpooled_sessions(url, _build_read_only_session_factory) as sessions:
+        yield sessions
 
 
-def v2_schema_inspector(source: Session | sessionmaker[Session]) -> Inspector:
+def v2_schema_inspector(source: OrmSession | sessionmaker[Any]) -> Inspector:
     """Return SQLAlchemy's Inspector of the v2 database a Session or factory uses.
 
-    A Session's Inspector reads the schema inside the Session's transaction,
-    as the migration target checks need.
+    Any SQLAlchemy ORM Session counts as a Session, SQLModel's included. A
+    Session's Inspector reads the schema inside the Session's transaction, as
+    the migration target checks need.
     """
-    bind = source.connection() if isinstance(source, Session) else source.kw["bind"]
+    bind = source.connection() if isinstance(source, OrmSession) else source.kw["bind"]
     inspector: Inspector = inspect(bind)
     return inspector
 

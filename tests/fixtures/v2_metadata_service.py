@@ -29,6 +29,10 @@ def catalog_sessions() -> Iterator[sessionmaker[Session]]:
 
 @pytest.fixture
 def catalog_session(catalog_sessions: sessionmaker[Session]) -> Iterator[Session]:
-    """Return a Session of the catalog database, closed after the test."""
-    with catalog_sessions() as session:
+    """Return a Session of the catalog database, closed after the test.
+
+    A commit expires its rows, as a plain SQLModel ``Session`` does, so a read
+    after a commit sees the stored values, not the ones the Session held.
+    """
+    with catalog_sessions(expire_on_commit=True) as session:
         yield session

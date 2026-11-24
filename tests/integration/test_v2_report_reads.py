@@ -1,6 +1,6 @@
 """Read v2 reports, their results and simulations from migrated PostgreSQL.
 
-The routes run as the Public API's runtime role, so the tests prove the
+The routes run as API v1's runtime role, so the tests prove the
 role's declared privileges cover every read (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``). The rows are stored as
 the simulation service and its Modal workers store them, committed, and

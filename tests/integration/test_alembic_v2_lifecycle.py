@@ -24,13 +24,13 @@ from sqlalchemy.dialects.postgresql.base import PGInspector
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlmodel import col
-from sqlmodel.main import default_registry
 
 from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_HEAD_REVISION,
     V2MigrationTargetError,
 )
 from policyengine_api.data.v2.models import (
+    V2_TABLE_NAMES,
     Country,
     Household,
     Report,
@@ -54,6 +54,7 @@ from tests.integration.alembic_v2_previous_revision import (
     ALEMBIC_VERSION_TABLE,
     assert_revision_serves_previous_revision,
 )
+from tests.integration.alembic_version_rows import current_revision
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -79,10 +80,6 @@ COUNTRIES_REVISION = "fb1a3e40d3d6"
 # The catalog format 2 revision, the parent of the area impact coordinate removal.
 CATALOG_FORMAT_2_REVISION = "f5c1d9b4685b"
 AREA_IMPACT_COORDINATE_REVISION = "e86f19a6c4da"
-# Every table the v2 models map, which are the tables of V2_METADATA.
-V2_TABLE_NAMES = frozenset(
-    mapper.class_.__tablename__ for mapper in default_registry.mappers
-)
 AREA_IMPACT_TABLES = ("constituency_impacts", "local_authority_impacts")
 MAP_COORDINATE_COLUMNS = ("x", "y")
 
@@ -93,18 +90,6 @@ def _existing_enum(type_name: str) -> postgresql.ENUM:
     Rows name its values as text, which PostgreSQL checks against the type.
     """
     return postgresql.ENUM(name=type_name, create_type=False)
-
-
-class AlembicVersionBase(DeclarativeBase):
-    """The declarative base of Alembic's version table."""
-
-
-class AlembicVersion(AlembicVersionBase):
-    """The row in which Alembic records the database's revision."""
-
-    __tablename__ = ALEMBIC_VERSION_TABLE
-
-    version_num: Mapped[str] = mapped_column(sa.String(32), primary_key=True)
 
 
 class BaselineBase(DeclarativeBase):
@@ -262,22 +247,6 @@ class UnreviewedRuntimeTable(UnreviewedTableBase):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
 
 
-def _current_revision(sessions: sessionmaker[Session]) -> str | None:
-    """Return the revision Alembic records, or ``None`` when it records none.
-
-    As Alembic's ``MigrationContext.get_current_revision`` does, a database
-    with no version table, or an empty one, is at no revision.
-    """
-    if ALEMBIC_VERSION_TABLE not in schema_inspector(sessions).get_table_names(
-        schema="public"
-    ):
-        return None
-    with sessions() as session:
-        revisions = session.scalars(select(AlembicVersion.version_num)).all()
-    assert len(revisions) <= 1, revisions
-    return revisions[0] if revisions else None
-
-
 def _assert_head(sessions: sessionmaker[Session]) -> None:
     """Check the database is at head with exactly the v2 tables and its indexes.
 
@@ -287,7 +256,7 @@ def _assert_head(sessions: sessionmaker[Session]) -> None:
     assert set(schema_inspector(sessions).get_table_names(schema="public")) == (
         V2_TABLE_NAMES | {ALEMBIC_VERSION_TABLE}
     )
-    assert _current_revision(sessions) == V2_ALEMBIC_HEAD_REVISION
+    assert current_revision(sessions) == V2_ALEMBIC_HEAD_REVISION
     with sessions() as session:
         model_count = session.scalar(
             select(func.count())
@@ -455,7 +424,7 @@ def _upgrade_and_assert_head(config: Config, sessions: sessionmaker[Session]) ->
 
 
 def _assert_revision(sessions: sessionmaker[Session], revision: str) -> None:
-    assert _current_revision(sessions) == revision
+    assert current_revision(sessions) == revision
 
 
 def _enum_type_names(sessions: sessionmaker[Session]) -> set[str]:
@@ -472,7 +441,7 @@ def _assert_revision_without_enum_types(
 
     ``enum_name_pattern`` is a regular expression the whole name must match.
     """
-    assert _current_revision(sessions) == revision
+    assert current_revision(sessions) == revision
     matching_enum_types = sorted(
         type_name
         for type_name in _enum_type_names(sessions)
@@ -817,7 +786,7 @@ def test_upgrade_to_head_validates_the_resulting_schema_against_metadata(
         ):
             command.upgrade(config, "head")
 
-        assert _current_revision(v2_owner_sessions) is None
+        assert current_revision(v2_owner_sessions) is None
     finally:
         with v2_owner_sessions.begin() as session:
             drop_registry_tables(session, UnreviewedTableBase.registry)

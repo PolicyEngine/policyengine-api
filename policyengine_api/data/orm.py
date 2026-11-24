@@ -1,26 +1,27 @@
-"""Canonical SQLAlchemy engine and Session configuration for API v1."""
+"""Canonical SQLAlchemy engine and Session configuration for API v1.
+
+Importing this module loads a ``.env`` file. Commands that must run with only
+the environment they are given take their Session factories from
+``policyengine_api.data.v1_sessions``, which has no import side effects.
+"""
 
 from __future__ import annotations
 
 import atexit
 import os
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from google.cloud.sql.connector import Connector, IPTypes
-from sqlalchemy import Engine, create_engine, inspect
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy import Engine, create_engine
 
 from policyengine_api.data.orm_pool_events import record_pool_events
+from policyengine_api.data.v1_sessions import build_session_factory
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from sqlalchemy.engine import URL, Inspector
     from sqlalchemy.engine.interfaces import DBAPIConnection
+    from sqlalchemy.orm import Session, sessionmaker
 
 load_dotenv()
 
@@ -68,36 +69,6 @@ def get_remote_database_config() -> dict[str, str]:
         "db_user": os.environ.get("POLICYENGINE_DB_USER", DEFAULT_REMOTE_DB_USER),
         "db_name": os.environ.get("POLICYENGINE_DB_NAME", DEFAULT_REMOTE_DB_NAME),
     }
-
-
-def build_session_factory(engine: Engine) -> sessionmaker[Session]:
-    """Return SQLAlchemy's standard configurable Session factory."""
-    return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
-
-
-@contextmanager
-def unpooled_v1_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
-    """Yield v1 Session factories for one command's work on the database at ``url``.
-
-    For commands and scripts that run once, such as the household mirror
-    command and the v1 schema migration. Their engine keeps no connection
-    pool, so no connection outlives its Session, and is disposed of on exit.
-    """
-    engine = create_engine(url, poolclass=NullPool)
-    try:
-        yield build_session_factory(engine)
-    finally:
-        engine.dispose()
-
-
-def v1_schema_inspector(source: Session | sessionmaker[Session]) -> Inspector:
-    """Return SQLAlchemy's Inspector of the v1 database a Session or factory uses.
-
-    A Session's Inspector reads the schema inside the Session's transaction.
-    """
-    bind = source.connection() if isinstance(source, Session) else source.kw["bind"]
-    inspector: Inspector = inspect(bind)
-    return inspector
 
 
 def _build_remote_engine() -> Engine:

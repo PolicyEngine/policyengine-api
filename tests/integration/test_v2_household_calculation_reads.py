@@ -1,7 +1,7 @@
-"""Read household calculations from ``household_jobs`` as the Public API's runtime role.
+"""Read household calculations from ``household_jobs`` as API v1's runtime role.
 
 The simulation service inserts the jobs and its Modal workers record their
-results; the Public API only reads them, through the household calculation
+results; API v1 only reads them, through the household calculation
 service, as ``policyengine_v2_runtime``. Its declared privileges must cover
 the read, so a statement they don't allow fails here as it would in staging
 and production (rule ``api.v2.runtime-privileges-tested-as-runtime-role``).
@@ -63,10 +63,12 @@ from tests.integration.simulation_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 COMPLETED_AT = datetime(2026, 11, 10, 12, 0, 9, tzinfo=UTC)
 
@@ -106,7 +108,7 @@ def _insert_job(
 
 @pytest.fixture
 def stored_jobs(
-    v2_owner_sessions: sessionmaker[Session], managed_v2_roles
+    v2_owner_sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
 ) -> Iterator[StoredJobs]:
     """Commit, as the superuser, one job of each outcome; delete them afterwards.
 
@@ -168,7 +170,10 @@ def _no_simulation_service():
 
 
 @pytest.fixture
-def runtime_service(managed_v2_roles, v2_sessions_as_role):
+def runtime_service(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> V2HouseholdCalculationService:
     """Return the household calculation service, reading as the runtime role."""
     sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     return V2HouseholdCalculationService(

@@ -11,12 +11,12 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column, registry
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.orm import v1_schema_inspector
 from policyengine_api.data.v1_models import (
     Household,
     HouseholdMirrorEvent,
     Policy,
 )
+from policyengine_api.data.v1_sessions import v1_schema_inspector
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
 from scripts.v1_database_migration import (

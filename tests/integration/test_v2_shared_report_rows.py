@@ -3,7 +3,7 @@
 The simulation service finds each simulation and report by its key, and joins
 a run on the same versions that hasn't failed, with ``INSERT ... ON CONFLICT
 DO NOTHING`` against the indexes the shared-report revision adds; a forced
-re-run is an extra run that nothing joins. The Public API records each user's
+re-run is an extra run that nothing joins. API v1 records each user's
 request for a report run. Each statement runs as the role that runs it in
 staging and production, holding only its declared privileges
 (``policyengine_api/data/v2/privileges.py``).
@@ -25,14 +25,12 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import (
     and_,
-    bindparam,
     delete,
     func,
     insert,
     not_,
     select,
     true,
-    update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -51,6 +49,12 @@ from policyengine_api.data.v2.models import (
     UserReportRunAssociation,
 )
 from tests.fixtures.database_sessions import act_as, act_as_owner, query_plan
+from tests.integration.privilege_statements import (
+    ReportColumns,
+    SimulationColumns,
+    unfailed,
+    update_row,
+)
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -62,7 +66,7 @@ from tests.integration.simulation_rows import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Executable, Update
+    from sqlalchemy import Executable
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
@@ -78,11 +82,6 @@ KEYED_MODELS: dict[str, type[Any]] = {
     "simulations": Simulation,
     "reports": Report,
 }
-
-
-def _unfailed(status: Any, failed_status: str) -> Any:
-    """Return ``status <> 'failed'``, with the failed status sent as a literal."""
-    return status != bindparam("failed_status", failed_status, literal_execute=True)
 
 
 # What the simulation service will send: a new row, or nothing when one with
@@ -155,7 +154,7 @@ def _find_or_create_simulation_run(
                 col(SimulationRun.policyengine_version),
             ],
             index_where=and_(
-                _unfailed(col(SimulationRun.status), SimulationStatus.FAILED),
+                unfailed(col(SimulationRun.status), SimulationStatus.FAILED),
                 not_(col(SimulationRun.forced)),
             ),
         )
@@ -189,7 +188,7 @@ def _find_or_create_report_run(
             ],
             index_where=and_(
                 col(ReportRun.budget_window_run_id).is_(None),
-                _unfailed(col(ReportRun.status), ReportRunStatus.FAILED),
+                unfailed(col(ReportRun.status), ReportRunStatus.FAILED),
                 not_(col(ReportRun.forced)),
             ),
         )
@@ -222,7 +221,7 @@ def _find_or_create_window_run(
                 col(BudgetWindowRun.policyengine_version),
             ],
             index_where=and_(
-                _unfailed(col(BudgetWindowRun.status), ReportRunStatus.FAILED),
+                unfailed(col(BudgetWindowRun.status), ReportRunStatus.FAILED),
                 not_(col(BudgetWindowRun.recalculate)),
             ),
         )
@@ -283,11 +282,6 @@ def _refused(
 ) -> None:
     with refused(session, error, match=match):
         session.execute(statement)
-
-
-def _update_row(model: type[Any], row_id: object, **values: object) -> Update:
-    """Build an UPDATE of the model's row with ID ``row_id``, setting ``values``."""
-    return update(model).where(model.id == row_id).values(**values)
 
 
 def _simulation(
@@ -361,7 +355,7 @@ def _report_run(
 
 def _fail(session: Session, model: type[Any], run_id: UUID | None) -> None:
     session.execute(
-        _update_row(
+        update_row(
             model,
             run_id,
             status="failed",
@@ -571,7 +565,7 @@ def test_a_simulation_has_one_unfailed_unforced_run_per_version_set(
     act_as(session, managed_v2_roles.modal_worker)
     _refused(
         session,
-        _update_row(SimulationRun, first_run, status="running"),
+        update_row(SimulationRun, first_run, status="running"),
         match="uq_simulation_runs_unfailed_unforced_versions",
     )
 
@@ -662,7 +656,7 @@ def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
     assert window_run() not in {None, first_run}
     _refused(
         session,
-        _update_row(BudgetWindowRun, first_run, policyengine_version="4.9.9"),
+        update_row(BudgetWindowRun, first_run, policyengine_version="4.9.9"),
         ProgrammingError,
         match="permission denied",
     )
@@ -731,11 +725,14 @@ def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(
         managed_v2_roles.modal_worker,
     ):
         act_as(session, role)
+        # The keys' UPDATEs set only the key column: neither role may update
+        # ``updated_at`` on simulations or reports, which the models' UPDATE
+        # also sets. Both roles may update it on the run tables.
         for statement in (
-            _update_row(Simulation, simulation_id, definition_key=None),
-            _update_row(Report, report_id, key_version=1),
-            _update_row(SimulationRun, run_id, forced=True),
-            _update_row(ReportRun, report_run_id, forced=True),
+            update_row(SimulationColumns, simulation_id, definition_key=None),
+            update_row(ReportColumns, report_id, key_version=1),
+            update_row(SimulationRun, run_id, forced=True),
+            update_row(ReportRun, report_run_id, forced=True),
         ):
             _refused(session, statement, ProgrammingError, match="permission denied")
 
@@ -778,7 +775,7 @@ def test_the_public_api_records_each_users_request_for_a_report_run(
     )
     _refused(
         session,
-        _update_row(UserReportRunAssociation, first_record, requested_at=func.now()),
+        update_row(UserReportRunAssociation, first_record, requested_at=func.now()),
         ProgrammingError,
         match="permission denied",
     )

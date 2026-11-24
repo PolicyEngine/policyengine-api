@@ -296,7 +296,16 @@ def _baseline(
     return None
 
 
-_EXCEPTION_KEYS = {"path", "reason", "expires", "match", "category", "removal", "issue"}
+_EXCEPTION_KEYS = {
+    "path",
+    "reason",
+    "expires",
+    "match",
+    "function",
+    "category",
+    "removal",
+    "issue",
+}
 
 
 def _optional_string(
@@ -340,6 +349,7 @@ def _exception(
         category,
         removal,
         issue,
+        _optional_string(collector, rule_id, entry, "function", where),
     )
 
 

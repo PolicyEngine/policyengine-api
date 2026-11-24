@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy.engine import URL
 
-from policyengine_api.data.orm import unpooled_v1_sessions
+from policyengine_api.data.v1_sessions import unpooled_v1_sessions
 from policyengine_api.gcp_logging import logger
 from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,

@@ -5,12 +5,12 @@ runs, one per simulation and year; has each report run name its baseline and
 reform simulation runs; keys every result table by run; types a report run's
 cliff impact and labour supply; adds the budget-window tables; gives household
 jobs one household, one year and one policy; and adds the economy output's
-fields that had no column. The foreign keys from those tables to the Public
-API's tables stay, and the new columns that name the Public API's rows get
-keys too. It changes no other table. The previous Public API revision keeps
-working while it is deployed: its roles can't read or write any table it
-changes, except the catalog writer, which counts the rows of simulations,
-reports and report_runs.
+fields that had no column. The foreign keys from those tables to API v1's
+tables stay, and the new columns that name API v1's rows get keys too. It
+changes no other table. The previous API v1 revision keeps working while it
+is deployed: its roles can't read or write any table it changes, except the
+catalog writer, which counts the rows of simulations, reports and
+report_runs.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ CHANGED_TABLES = frozenset(
         "simulations",
     }
 )
-# The tables the simulation service and its Modal workers write; the Public API
+# The tables the simulation service and its Modal workers write; API v1
 # writes every other table. withheld_area_codes and cliff_impacts came in later
 # revisions.
 SIMULATION_SIDE_TABLES = (
@@ -95,7 +95,7 @@ SIMULATION_SIDE_TABLES = (
     | NEW_TABLES
     | {"aggregates", "change_aggregates", "withheld_area_codes", "cliff_impacts"}
 )
-# The foreign keys from the simulation service's tables to the Public API's
+# The foreign keys from the simulation service's tables to API v1's
 # rows, with their delete rules.
 PUBLIC_API_FOREIGN_KEYS = {
     ("simulations", "dataset_id"): ("datasets", "RESTRICT"),

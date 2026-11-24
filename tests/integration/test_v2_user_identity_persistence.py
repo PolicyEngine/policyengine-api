@@ -270,7 +270,9 @@ def test_an_author_or_admin_keeps_its_type_at_sign_in_and_upgrade(
     assert stored.user_type == user_type
 
 
-def test_sessions_act_as_the_runtime_role(sessions, managed_v2_roles) -> None:
+def test_sessions_act_as_the_runtime_role(
+    sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
+) -> None:
     with sessions() as session:
         current_role = session.execute(select(func.current_user())).scalar_one()
 

@@ -8,12 +8,12 @@ Session on mapped classes. docs/engineering/skills/alembic-migrations.md shows
 how to write each kind of statement, under "Database statements through the
 ORM".
 
-The statements here that the ORM can't express (``TRUNCATE``, ``CREATE ROLE``,
-``DROP OWNED BY``, ``DROP ROLE``, ``GRANT`` and SQLite's ``foreign_keys``
-setting) are each a ``no-orm-form`` exception of the rule in
-rules/registry.toml. Roles and settings inside a transaction need none:
-``act_as`` and ``act_as_owner`` call Postgres's ``set_config``, which is what
-``SET LOCAL ROLE`` does.
+The statements here that the ORM can't express (``TRUNCATE``, ``DROP TABLE``,
+``EXPLAIN``, ``CREATE ROLE``, ``DROP OWNED BY``, ``DROP ROLE``, ``GRANT``,
+SQLite's ``foreign_keys`` setting and ``BEGIN IMMEDIATE``) are each a
+``no-orm-form`` exception of the rule in rules/registry.toml. Roles and
+settings inside a transaction need none: ``act_as`` and ``act_as_owner`` call
+Postgres's ``set_config``, which is what ``SET LOCAL ROLE`` does.
 """
 
 from __future__ import annotations
@@ -40,14 +40,14 @@ from sqlalchemy import (
     text,
     true,
 )
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.pool import NullPool, StaticPool
+from sqlalchemy.sql.compiler import SQLCompiler
 
-from policyengine_api.data.orm import build_session_factory
 from policyengine_api.data.v1_models import Policy, V1Base
+from policyengine_api.data.v1_sessions import build_session_factory
 from policyengine_api.data.v2.database import build_v2_session_factory
 from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.privilege_reconciliation import (
@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import URL, Connection, Inspector
     from sqlalchemy.orm import registry
     from sqlalchemy.sql import ClauseElement
+    from sqlalchemy.sql.compiler import ExpandedState
     from sqlmodel import Session
 
     from policyengine_api.data.v2.privilege_plans import ReconciliationPlan
@@ -70,7 +71,8 @@ if TYPE_CHECKING:
 
 # A role name SET ROLE and a connection's startup options take as it is.
 PLAIN_ROLE_NAME = re.compile(r"[a-z_][a-z0-9_]*")
-# The role that means "no role": the session acts as the user it logged in as.
+# The role that means "no role" (SET ROLE NONE): the session acts as the user it
+# logged in as, whatever role its connection started with.
 NO_ROLE = "none"
 IN_MEMORY_SQLITE_URL = "sqlite://"
 
@@ -119,8 +121,9 @@ def v2_role_sessions(database_url: str, role: str) -> Iterator[sessionmaker[Sess
     Each connection starts with ``role`` as its role (PostgreSQL's ``role``
     startup option), so every statement is checked against that role's
     privileges, as in staging and production. ``act_as_owner`` would still
-    switch a transaction to the database's owner, so a test acting as a role
-    uses these factories, or ``act_as`` on the owner's.
+    switch a transaction to the user the connection logged in as, the
+    database's owner, so a test acting as a role uses these factories, or
+    ``act_as`` on the owner's.
     """
     engine = create_engine(
         database_url,
@@ -288,13 +291,15 @@ def serve_v1_sessions(
     """Make API v1's own Session factory open ``sessions``' connections.
 
     ``policyengine_api.data.orm.get_v1_session_factory`` then builds its
-    factory on ``sessions``' engine; ``monkeypatch`` undoes it after the test.
+    factory on ``sessions``' engine and keeps it. ``monkeypatch`` restores
+    both the engine and the kept factory after the test, so the factory the
+    test built doesn't outlive it.
     """
     from policyengine_api.data import orm
 
     engine = sessions.kw["bind"]
     monkeypatch.setattr(orm, "_v1_engine", lambda: engine)
-    orm.clear_v1_session_factories()
+    monkeypatch.setattr(orm._cloud_sql_state, "session_factory", None)
 
 
 class _LocalMySqlConnector:
@@ -369,24 +374,47 @@ def act_as(session: OrmSession, role: str) -> None:
 
 
 def act_as_owner(session: OrmSession) -> None:
-    """Act as the database's owner again, for the rest of the transaction."""
+    """Act as the user the session logged in as, for the rest of the transaction.
+
+    It sets the role to ``none`` (``SET LOCAL ROLE NONE``), not back to the
+    connection's starting role as ``RESET ROLE`` would. Every test connection
+    logs in as the database's owner, so even a role's Session acts as the
+    owner afterwards.
+    """
     _set_transaction_role(session, NO_ROLE)
 
 
 def schema_inspector(source: OrmSession | sessionmaker[Any]) -> Inspector:
     """Return SQLAlchemy's Inspector of the database a Session or factory uses.
 
-    A Session's Inspector reads the schema inside its transaction. Anything
-    else, such as the Engine a test not yet moved to Sessions holds, is
-    inspected as it is.
+    A Session's Inspector reads the schema inside its transaction; a factory's
+    reads it on a connection of its own.
     """
-    bind: Any = source
-    if isinstance(source, OrmSession):
-        bind = source.connection()
-    elif isinstance(source, sessionmaker):
-        bind = source.kw["bind"]
+    bind = source.connection() if isinstance(source, OrmSession) else source.kw["bind"]
     inspector: Inspector = inspect(bind)
     return inspector
+
+
+def _parameters_as_sent(
+    compiled: SQLCompiler, expanded: ExpandedState
+) -> dict[str, Any]:
+    """Return a statement's parameters as executing it would send them.
+
+    Each value goes through its type's bind processor for the dialect, as a
+    JSON value becomes the driver's JSON. ``expanded`` gives the processors of
+    the parameters an ``in_()`` list expands into.
+    """
+    dialect = compiled.dialect
+    processors = {
+        compiled.escaped_bind_names.get(name, name): processor
+        for name, bind in compiled.binds.items()
+        if (processor := bind.type.dialect_impl(dialect).bind_processor(dialect))
+    }
+    processors.update(expanded.processors)
+    return {
+        name: processors[name](value) if name in processors else value
+        for name, value in expanded.parameters.items()
+    }
 
 
 def query_plan(session: OrmSession, statement: ClauseElement) -> str:
@@ -394,11 +422,23 @@ def query_plan(session: OrmSession, statement: ClauseElement) -> str:
 
     A test that checks an index serves a lookup reads the plan of the ORM
     statement that does the lookup, in the session's transaction and as the
-    session's role.
+    session's role. The statement is compiled for the session's own dialect
+    and sent as executing it would send it: an ``in_()`` list and a
+    ``literal_execute`` value are written into the SQL, and each parameter
+    goes through its type's bind processor, such as JSON's.
     """
-    # The named paramstyle gives text() the :name parameters it parses.
-    compiled = statement.compile(dialect=postgresql.dialect(paramstyle="named"))
-    plan_rows = session.execute(text(f"EXPLAIN {compiled}"), compiled.params).scalars()
+    compiled = statement.compile(dialect=session.get_bind().dialect)
+    if not isinstance(compiled, SQLCompiler):
+        msg = f"EXPLAIN needs a SQL statement, not {type(statement).__name__}"
+        raise TypeError(msg)
+    expanded = compiled.construct_expanded_state()
+    plan_rows = (
+        session.connection()
+        .exec_driver_sql(
+            f"EXPLAIN {expanded.statement}", _parameters_as_sent(compiled, expanded)
+        )
+        .scalars()
+    )
     return "\n".join(plan_rows)
 
 
@@ -464,7 +504,11 @@ def recorded_driver_connection_states(
 
 
 def delete_all_rows(session: OrmSession, mapped_classes: registry) -> None:
-    """Delete every row of every table the registry's mapped classes map."""
+    """Delete every row of every table the registry's mapped classes map.
+
+    It deletes the tables in no set order, so it suits a registry whose
+    tables have no foreign keys between them, such as API v1's.
+    """
     for mapper in mapped_classes.mappers:
         session.execute(delete(mapper.class_))
 

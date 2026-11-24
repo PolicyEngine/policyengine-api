@@ -51,13 +51,19 @@ from tests.fixtures.v2_catalog import (
     region_references,
     source_models,
 )
-from tests.integration.catalog_publication_support import emptied_catalog, row_counts
+from tests.integration.catalog_publication_support import (
+    clear_format_2_fields,
+    emptied_catalog,
+    row_counts,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 # The catalog tables whose rows the read-only routes must leave as they are.
 COUNTED_MODELS = {
@@ -833,10 +839,10 @@ def test_postgres_parameter_tree_nests_schedules_and_filters_reform_changes(
 
 def test_postgres_parameter_tree_reads_as_the_runtime_role(
     published_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
-    """The Public API's runtime role can read the tree with its declared privileges."""
+    """API v1's runtime role can read the tree with its declared privileges."""
     runtime_sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     with runtime_sessions() as session:
         result = V2MetadataService(
@@ -997,26 +1003,8 @@ def test_postgres_a_version_stored_before_format_2_returns_the_tree_503(
 
     Its parameter tree request returns 503 with the message naming it.
     """
-    # The JSON columns get SQL NULL (sa.null()), not JSON's null.
     with published_sessions.begin() as session:
-        session.execute(
-            sa.update(TaxBenefitModelVersion).values(
-                catalog_format=None, entities=sa.null(), basic_inputs=sa.null()
-            )
-        )
-        session.execute(
-            sa.update(Variable).values(
-                is_input_variable=None,
-                hidden_input=None,
-                module_name=None,
-                adds_parameter_path=None,
-                subtracts_parameter_path=None,
-                enum_values=sa.null(),
-                unit=None,
-                definition_period=None,
-            )
-        )
-        session.execute(sa.update(Parameter).values(economy=None, household=None))
+        clear_format_2_fields(session)
         session.execute(sa.delete(ParameterTreeChild))
     evidence = publish_catalog(published_sessions, normalized_catalog())
 
@@ -1090,10 +1078,10 @@ def test_postgres_search_file_of_a_version_without_one_is_unavailable(
 
 def test_postgres_search_file_reads_as_the_runtime_role(
     published_sessions: sessionmaker[Session],
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
-    """The Public API's runtime role reads the file with its declared privileges."""
+    """API v1's runtime role reads the file with its declared privileges."""
     runtime_sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     with runtime_sessions() as session:
         service = V2MetadataService(

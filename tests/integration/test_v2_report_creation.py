@@ -2,7 +2,7 @@
 
 A stand-in for the simulation service's client stores the rows the
 simulation service would create and answers with their IDs; the routes run
-as the Public API's runtime role, checking the country and policies and
+as API v1's runtime role, checking the country and policies and
 reading the created records back.
 """
 

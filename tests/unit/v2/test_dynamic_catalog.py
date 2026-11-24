@@ -18,6 +18,7 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.data.v2.models import (
+    V2_REGISTRY,
     Dynamic,
     Parameter,
     TaxBenefitModel,
@@ -84,10 +85,6 @@ class Catalog:
         session.commit()
 
 
-# The registry every v2 model is mapped on, SQLModel's own.
-V2_REGISTRY = TaxBenefitModel._sa_registry
-
-
 @pytest.fixture
 def sessions() -> Iterator[sessionmaker[Session]]:
     """Return Session factories of an in-memory SQLite copy of the v2 schema."""
@@ -97,7 +94,7 @@ def sessions() -> Iterator[sessionmaker[Session]]:
 
 @pytest.fixture
 def session(sessions: sessionmaker[Session]) -> Iterator[Session]:
-    with sessions() as database_session:
+    with sessions(expire_on_commit=True) as database_session:
         yield database_session
 
 

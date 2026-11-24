@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from scripts.rules.model import (
     Category,
@@ -12,6 +13,7 @@ from scripts.rules.model import (
     Kind,
     Registry,
     Rule,
+    RuleException,
     Status,
     Tier,
 )
@@ -203,6 +205,54 @@ class MermaidTest(unittest.TestCase):
             [
                 [rule_node(number) for number in range(15)],
                 [rule_node(number) for number in range(15, 20)],
+            ],
+        )
+
+
+class ExceptionSummaryTest(unittest.TestCase):
+    def _exception_lines(self, exceptions: tuple[RuleException, ...]) -> list[str]:
+        rule = make_rule("ex.checks.orm-only", Enforcer(Kind.NONE))
+        registry = Registry(
+            schema_version=1,
+            repo="example",
+            categories=(Category("checks", "Checks"),),
+            discovery=Discovery(),
+            rules=(replace(rule, exceptions=exceptions),),
+        )
+        return [
+            line
+            for line in render_rules_md(registry).splitlines()
+            if line.startswith("- `ex.checks.orm-only`: exception")
+        ]
+
+    def test_an_exception_names_its_match_and_function(self) -> None:
+        lines = self._exception_lines(
+            (
+                RuleException(
+                    path="pkg/store.py",
+                    reason="GRANT has no ORM form",
+                    match="text(statement)",
+                    category="no-orm-form",
+                    function="apply_declared_privileges",
+                ),
+                RuleException(
+                    path="pkg/rows.py",
+                    reason="TRUNCATE has no ORM form",
+                    match="text('TRUNCATE reports')",
+                    category="no-orm-form",
+                ),
+            )
+        )
+
+        self.assertEqual(
+            lines,
+            [
+                "- `ex.checks.orm-only`: exception for `pkg/rows.py` "
+                "(`text('TRUNCATE reports')`) allowed as a no-orm-form "
+                "(TRUNCATE has no ORM form)",
+                "- `ex.checks.orm-only`: exception for `pkg/store.py` "
+                "(`text(statement)` in `apply_declared_privileges`) allowed as a "
+                "no-orm-form (GRANT has no ORM form)",
             ],
         )
 

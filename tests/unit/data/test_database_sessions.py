@@ -26,6 +26,7 @@ from tests.fixtures.database_sessions import (
     sqlite_v2_sessions,
     v2_role_sessions,
 )
+from tests.integration.alembic_version_rows import current_revision
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -154,6 +155,14 @@ def test_the_schema_inspector_reads_a_session_or_its_factory() -> None:
 
     assert "reports" in from_factory
     assert from_session == from_factory
+
+
+def test_a_database_without_a_version_table_is_at_no_revision() -> None:
+    """As Alembic's MigrationContext.get_current_revision reads it."""
+    with sqlite_v2_sessions() as sessions:
+        revision = current_revision(sessions)
+
+    assert revision is None
 
 
 def test_recorded_statements_are_the_sql_sent_inside() -> None:

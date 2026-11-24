@@ -47,7 +47,10 @@ class StoredCatalog:
 
 @pytest.fixture
 def stored_catalog() -> Iterator[StoredCatalog]:
-    with sqlite_v2_sessions() as sessions, sessions() as session:
+    with (
+        sqlite_v2_sessions() as sessions,
+        sessions(expire_on_commit=True) as session,
+    ):
         us_model = TaxBenefitModel(name="policyengine-us")
         current = TaxBenefitModelVersion(
             model=us_model,

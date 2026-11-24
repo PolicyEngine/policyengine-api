@@ -15,7 +15,7 @@ from sqlalchemy import bindparam, delete, func, select
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import col
 
-from policyengine_api.data.orm import unpooled_v1_sessions, v1_schema_inspector
+from policyengine_api.data.v1_sessions import unpooled_v1_sessions, v1_schema_inspector
 from policyengine_api.data.v2.database import (
     unpooled_v2_read_only_sessions,
     unpooled_v2_sessions,

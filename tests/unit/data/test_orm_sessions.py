@@ -1,9 +1,6 @@
-from unittest.mock import Mock
-
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import NullPool
 
 import policyengine_api.data.orm as orm_module
 from policyengine_api.data.orm import get_v1_session_factory
@@ -77,17 +74,3 @@ def test_runtime_factory_is_cached_and_has_no_local_selector(monkeypatch):
                 assert _stored_household_hashes(session) == ["served"]
         finally:
             orm_module.clear_v1_session_factories()
-
-
-def test_unpooled_sessions_keep_no_pool_and_dispose_of_their_engine(monkeypatch):
-    engine = Mock()
-    engine_factory = Mock(return_value=engine)
-    monkeypatch.setattr(orm_module, "create_engine", engine_factory)
-    url = "mysql+pymysql://migrator:password@127.0.0.1:3307/policyengine"
-
-    with orm_module.unpooled_v1_sessions(url) as sessions:
-        assert sessions.kw["expire_on_commit"] is False
-        engine.dispose.assert_not_called()
-
-    engine_factory.assert_called_once_with(url, poolclass=NullPool)
-    engine.dispose.assert_called_once_with()

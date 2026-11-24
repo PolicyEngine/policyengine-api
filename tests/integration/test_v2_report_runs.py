@@ -2,7 +2,7 @@
 
 A stand-in for the simulation service's client stores the new run the
 simulation service would create and records what it was asked; the routes
-run as the Public API's runtime role, reading the report, checking its
+run as API v1's runtime role, reading the report, checking its
 country and policies, and reading the report and its runs back.
 """
 
@@ -613,7 +613,7 @@ def test_a_report_whose_reform_simulation_is_gone_is_left_to_the_service_to_refu
     catalog: CatalogRows,
     runtime_sessions: sessionmaker[Session],
 ) -> None:
-    # The Public API checks the policies that remain and asks the simulation
+    # API v1 checks the policies that remain and asks the simulation
     # service, which refuses a report missing a simulation.
     with owner_sessions.begin() as session:
         report = store_report(session, catalog)

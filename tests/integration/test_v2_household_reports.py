@@ -1,6 +1,6 @@
 """Create, read and list household reports through /v2/reports on migrated PostgreSQL.
 
-The routes run as the Public API's runtime role, so the tests prove its
+The routes run as API v1's runtime role, so the tests prove its
 declared privileges cover every read: the countries row, the stored household
 and policies the checks read, and the reports, simulations, runs and
 calculated households the reads return (rule
@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.simulation_service.types import (
         HouseholdReportCreationInput,
     )
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -335,7 +336,8 @@ def household_only_uk(owner_sessions: sessionmaker[Session]) -> Iterator[Catalog
 
 @pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> sessionmaker[Session]:
     return v2_sessions_as_role(managed_v2_roles.runtime)
 

@@ -293,7 +293,10 @@ def _exception_summary(exception: RuleException) -> str:
     """Describe where an exception applies, why, and when it ends."""
     site = f"`{exception.path}`"
     if exception.match is not None:
-        site += f" (`{exception.match}`)"
+        site += f" (`{exception.match}`"
+        if exception.function is not None:
+            site += f" in `{exception.function}`"
+        site += ")"
     if exception.category is not None:
         ends = f"allowed as a {exception.category}"
     elif exception.removal is not None:

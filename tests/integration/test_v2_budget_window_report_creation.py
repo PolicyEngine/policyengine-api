@@ -4,7 +4,7 @@ A stand-in for the simulation service's client stores the rows the
 simulation service creates for a budget window (the report with its first
 year's simulations, its budget-window run, and a pending report run per
 year under that year's simulations) and answers with the report's and
-window run's IDs. The routes run as the Public API's runtime
+window run's IDs. The routes run as API v1's runtime
 role, checking the country and policies and reading the window back.
 """
 

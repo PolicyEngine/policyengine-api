@@ -43,8 +43,10 @@ def _include_application_object(
 
 
 def _configure(connection: Connection) -> None:
-    # Each Session joins the connection's transaction, and closing it leaves
-    # that transaction to the environment.
+    # Inside run_migrations_online's engine.begin(), each Session joins that
+    # transaction, and closing it leaves the transaction to the environment.
+    # On a connection passed in with no transaction open, a Session begins
+    # its own, and closing it rolls that transaction back.
     with Session(bind=connection) as session:
         qualify_v2_target(session, settings)
     context.configure(

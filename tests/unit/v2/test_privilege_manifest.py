@@ -481,7 +481,7 @@ def test_the_public_api_revokes_and_accepts_invitations_but_never_deletes_them()
 
 
 def test_the_public_api_records_each_users_report_run_requests() -> None:
-    """The Public API writes a user's record of each report run they asked for.
+    """API v1 writes a user's record of each report run they asked for.
 
     It reads, adds and deletes them, but never changes one: a later request
     for the same run is the same record. No other role reads them.

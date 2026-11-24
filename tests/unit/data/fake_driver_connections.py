@@ -13,37 +13,61 @@ from __future__ import annotations
 import errno
 import socket
 import sqlite3
+from typing import TYPE_CHECKING, Any, TypeVar, overload
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+CursorType = TypeVar("CursorType", bound=sqlite3.Cursor)
 
 
 class SocketCarryingConnection(sqlite3.Connection):
     """A SQLite connection that keeps a socket in ``_sock``, as pymysql's does."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock: socket.socket | None = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
         self._sock.bind(("127.0.0.1", 0))
-        self.socket_fields = {
+        self.ping_error: Exception | None = None
+        self.socket_fields: dict[str, int] = {
             "database_connection.fd": self._sock.fileno(),
             "database_connection.local_port": self._sock.getsockname()[1],
         }
 
-    def break_like_pymysql(self, error=None):
+    def break_like_pymysql(self, error: Exception | None = None) -> None:
         """Lose the connection: drop the socket, as pymysql's _force_close does.
 
         With ``error``, the next ping raises it instead of finding a closed
         SQLite database.
         """
-        self._sock.close()
+        if self._sock is not None:
+            self._sock.close()
         self._sock = None
         self.ping_error = error
         super().close()
 
-    def cursor(self, *args, **kwargs):
-        if getattr(self, "ping_error", None) is not None:
-            raise self.ping_error
-        return super().cursor(*args, **kwargs)
+    @overload
+    def cursor(self, factory: None = None) -> sqlite3.Cursor: ...
 
-    def close(self):
+    @overload
+    def cursor(
+        self, factory: Callable[[sqlite3.Connection], CursorType]
+    ) -> CursorType: ...
+
+    def cursor(
+        self, factory: Callable[[sqlite3.Connection], sqlite3.Cursor] | None = None
+    ) -> sqlite3.Cursor:
+        """Raise the error ``break_like_pymysql`` was given, else open a cursor."""
+        if self.ping_error is not None:
+            raise self.ping_error
+        if factory is None:
+            return super().cursor()
+        return super().cursor(factory)
+
+    def close(self) -> None:
+        """Close the socket, then the SQLite connection."""
         if self._sock is not None:
             self._sock.close()
             self._sock = None
@@ -71,7 +95,7 @@ class OperationalError(sqlite3.OperationalError):
     """
 
 
-def pymysql_lost_connection_error():
+def pymysql_lost_connection_error() -> OperationalError:
     """Return OperationalError(2013, ...) caused by a ConnectionResetError.
 
     This is how pymysql raises a lost connection: its socket read fails, and
@@ -85,7 +109,7 @@ def pymysql_lost_connection_error():
     return driver_error
 
 
-def lost_connection_error():
+def lost_connection_error() -> LostConnectionError:
     """Return a driver error caused by a ConnectionResetError, as pymysql raises it."""
     os_error = ConnectionResetError(errno.ECONNRESET, "Connection reset by peer")
     driver_error = LostConnectionError(2013, "Lost connection to MySQL server")

@@ -642,11 +642,14 @@ invocation = "make test"
 bad_fixture = "rules/fixtures/api.data.orm-only/bad_simulation_rows.py"
 good_fixture = "rules/fixtures/api.data.orm-only/good_simulation_rows.py"
 test = "tests/unit/data/test_orm_only.py::test_rule_proof_orm_only"
-# Each exception names a module and, in match, the source of the one finding
-# there that SQLAlchemy's ORM has no form for (category no-orm-form), or a path
-# pattern the rule test doesn't read (category migration-revision). The rule
-# test fails on a finding no exception names and on an exception that names
-# nothing.
+# Each exception names a module, in match the source of a finding there that
+# SQLAlchemy's ORM has no form for and, in function, the function it is in
+# (category no-orm-form), or a path pattern the rule test doesn't read
+# (category migration-revision). Without a function, an entry allows its source
+# anywhere in the module. Every entry outside tests/, and every entry whose
+# match holds no SQL text (a bare call, a call on variables or an attribute
+# read), names its function. The rule test fails on a finding no exception
+# names and on an exception that names nothing.
 [[rule.exception]]
 path = "migrations/**/*.py"
 category = "migration-revision"
@@ -655,74 +658,106 @@ reason = "migrations/ holds the Alembic environments and the revisions Alembic g
 [[rule.exception]]
 path = "tests/unit/data/orm_access_support.py"
 match = "mapper.local_table"
+function = "_unmapped_findings"
 category = "no-orm-form"
 reason = "The rule's check for tables without a mapped class reads which table each mapped class maps. It runs no statement."
 
 [[rule.exception]]
 path = "tests/unit/data/orm_access_support.py"
 match = "class_registry.metadata.tables"
+function = "_unmapped_findings"
 category = "no-orm-form"
 reason = "The rule's check for tables without a mapped class reads the tables a declarative base's metadata holds, to find those no class maps. It runs no statement."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/catalog/publication_staging.py"
 match = "session.connection()"
+function = "create_staging_tables"
 category = "no-orm-form"
-reason = "Catalog publication creates its TEMPORARY staging tables with MetaData.create_all, which takes a Connection, and streams rows with COPY ... FROM STDIN through the psycopg connection beneath the Connection. Both run on the Connection the publishing Session holds, in its transaction."
+reason = "Catalog publication creates its TEMPORARY staging tables with MetaData.create_all, which takes a Connection: the Connection the publishing Session holds, in its transaction."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "session.connection()"
+function = "copy_rows"
+category = "no-orm-form"
+reason = "Catalog publication streams rows with COPY ... FROM STDIN through the psycopg connection beneath the Connection the publishing Session holds, in its transaction."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/catalog/publication_staging.py"
 match = "driver_connection.cursor()"
+function = "copy_rows"
 category = "no-orm-form"
 reason = "COPY ... FROM STDIN has no SQLAlchemy form. Publication runs it through psycopg's Cursor.copy, on a cursor of the driver connection beneath the publishing Session's Connection."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/catalog/publication_statistics.py"
 match = "sa.text(f'ANALYZE {tables}')"
+function = "analyze_catalog_tables"
 category = "no-orm-form"
 reason = "ANALYZE has no ORM form. After a publication commits, one ANALYZE refreshes the planner statistics of the catalog tables it wrote."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/privilege_reconciliation.py"
 match = "text(f'CREATE ROLE {quote(safe_identifier(role))} NOLOGIN')"
+function = "create_missing_roles"
 category = "no-orm-form"
 reason = "CREATE ROLE has no SQLAlchemy form. reconcile_v2_privileges.py apply --create-missing-roles creates each missing managed role as NOLOGIN, only in the disposable test database, in the reconciliation's one transaction. The role name is checked by safe_identifier and quoted by the session's dialect."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/privilege_reconciliation.py"
 match = "text(statement)"
+function = "apply_declared_privileges"
 category = "no-orm-form"
 reason = "GRANT and REVOKE have no SQLAlchemy form. apply runs the REVOKEs and GRANTs that privilege_plans' revoke_statements and grant_statements build from the declared privileges, with identifiers checked by safe_identifier and quoted by the session's dialect, in the reconciliation's one transaction."
 
 [[rule.exception]]
 path = "policyengine_api/data/v2/pending_revisions.py"
 match = "session.connection()"
+function = "v2_revision_is_pending"
 category = "no-orm-form"
 reason = "Alembic's MigrationContext reads the database's current heads from its version table through a Connection. The migration qualification commands give it the Connection their Session holds, so the read runs inside the Session's READ ONLY transaction."
 
 [[rule.exception]]
 path = "scripts/v1_database_migration.py"
 match = "session.connection()"
+function = "_config"
 category = "no-orm-form"
-reason = "Alembic's MigrationContext, compare_metadata and command.upgrade take a Connection. The v1 schema migration gives them the Connection its Session holds, so the version reads, the schema comparison and the upgrade run in the Session's transaction, under the MySQL named lock the Session took."
+reason = "Alembic's command.upgrade takes a Connection, through the Alembic config's connection attribute. The v1 schema migration gives it the Connection its Session holds, so the upgrade runs in the Session's transaction, under the MySQL named lock the Session took."
+
+[[rule.exception]]
+path = "scripts/v1_database_migration.py"
+match = "session.connection()"
+function = "database_state"
+category = "no-orm-form"
+reason = "Alembic's MigrationContext reads the database's current heads from its version table through a Connection. The v1 schema migration gives it the Connection its Session holds, so the read runs in the Session's transaction, under the MySQL named lock the Session took."
+
+[[rule.exception]]
+path = "scripts/v1_database_migration.py"
+match = "session.connection()"
+function = "metadata_differences"
+category = "no-orm-form"
+reason = "Alembic's compare_metadata compares the schema through a MigrationContext on a Connection. The v1 schema migration gives it the Connection its Session holds, so the comparison runs in the Session's transaction, under the MySQL named lock the Session took."
 
 [[rule.exception]]
 path = "policyengine_api/services/v2/user_types/database_connectors/reads.py"
 match = "session.get_bind()"
+function = "acquire_user_type_change_lock"
 category = "no-orm-form"
 reason = "Reads the dialect's name, to skip PostgreSQL's advisory lock on the SQLite test databases, which have none. It runs no statement on the engine."
 
 [[rule.exception]]
 path = "tests/fixtures/database_sessions.py"
-match = "sqlite_connection.execute(...)"
+match = "sqlite_connection.execute('PRAGMA foreign_keys = ON')"
 category = "no-orm-form"
 reason = "SQLite enforces foreign keys only once a connection sets PRAGMA foreign_keys, a connection setting SQLAlchemy has no API for. The in-memory SQLite test databases set it on each connection before its first transaction."
 
 [[rule.exception]]
 path = "tests/fixtures/database_sessions.py"
-match = "text(f'EXPLAIN {compiled}')"
+match = "session.connection().exec_driver_sql(f'EXPLAIN {expanded.statement}', ...)"
+function = "query_plan"
 category = "no-orm-form"
-reason = "EXPLAIN has no SQLAlchemy form. A test that checks an index serves a lookup reads PostgreSQL's plan for the ORM statement that does the lookup."
+reason = "EXPLAIN has no SQLAlchemy form. A test that checks an index serves a lookup reads PostgreSQL's plan for the ORM statement that does the lookup, compiled for the session's dialect with its in_() lists and literal_execute values written out and its parameters processed by their types. text() can't take that SQL: the psycopg dialect writes each parameter as %(name)s with a cast such as ::JSONB, and text() reads only :name parameters. So the plan is read on the Session's own Connection, in its transaction and as its role."
 
 [[rule.exception]]
 path = "tests/fixtures/database_sessions.py"
@@ -734,7 +769,7 @@ reason = "SQLite takes its write lock at the start of a transaction only with BE
 path = "tests/fixtures/database_sessions.py"
 match = "text(f'DROP TABLE {tables}')"
 category = "no-orm-form"
-reason = "Dropping a table has no ORM form. Route tests drop a catalog table so the route's real catalog query fails with the database's own error."
+reason = "Dropping a table has no ORM form. Route tests drop a catalog table so the route's real catalog query fails with the database's own error, and the MySQL lifecycle test drops a table a revision creates, to check the migration notices it is missing."
 
 [[rule.exception]]
 path = "tests/fixtures/database_sessions.py"
@@ -765,6 +800,27 @@ path = "tests/fixtures/database_sessions.py"
 match = "text(f'GRANT {privileges} ON TABLE {table} TO {quoted_role}')"
 category = "no-orm-form"
 reason = "Grants have no ORM form. Privilege tests grant a temporary role privileges the manifest doesn't declare, to check that verification reports them."
+
+[[rule.exception]]
+path = "tests/integration/catalog_privilege_objects.py"
+match = "text(f'GRANT {_privileges(privileges)} ON {on_object} TO {grantee}')"
+function = "grant_on_schema_object"
+category = "no-orm-form"
+reason = "Grants have no ORM form. The privilege reconciliation tests grant a role privileges on a schema or a sequence, which the shared grant helper, for tables, views and materialized views, doesn't cover, to check the reconciliation reads those grants."
+
+[[rule.exception]]
+path = "tests/integration/catalog_privilege_objects.py"
+match = "text(f'ALTER DEFAULT PRIVILEGES FOR ROLE {creator} IN SCHEMA {SCHEMA} GRANT {_privileges(privileges)} ON {object_type} TO {grantee}')"
+function = "alter_default_privileges"
+category = "no-orm-form"
+reason = "ALTER DEFAULT PRIVILEGES has no ORM form. The privilege reconciliation tests set a default ACL on the tables and sequences a role creates, PUBLIC's included, to check the reconciliation reads the default privileges."
+
+[[rule.exception]]
+path = "tests/integration/catalog_privilege_objects.py"
+match = "text(f\"CREATE {view_kind} {qualified_view} AS SELECT 1 AS id, 'label'::text AS label\")"
+function = "create_view"
+category = "no-orm-form"
+reason = "CREATE VIEW and CREATE MATERIALIZED VIEW have no SQLAlchemy construct. The v2 schema has only tables, so the privilege reconciliation tests create a view and a materialized view of one row, to check the reconciliation reads the grants on them."
 
 [[rule]]
 id = "api.legacy.removed-layers-stay-removed"

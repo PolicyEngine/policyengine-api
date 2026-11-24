@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from policyengine_api.data.orm import unpooled_v1_sessions
+from policyengine_api.data.v1_sessions import unpooled_v1_sessions
 from scripts.v1_database_migration import metadata_differences
 
 

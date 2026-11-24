@@ -4,7 +4,7 @@ C1 · 24's answer: ``POST /v2/reports/{report_id}/runs`` takes ``force``
 from an admin user and refuses it, before the simulation service is asked,
 from anyone else: 401 without a user credential, 403 for a signed-out
 browser or a user below admin. An unforced re-run needs no credential. The
-routes run as the Public API's runtime role.
+routes run as API v1's runtime role.
 """
 
 from __future__ import annotations

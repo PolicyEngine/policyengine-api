@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from sqlalchemy import delete, func, literal, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql.base import PGInspector
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +29,7 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import schema_inspector
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config, table_columns
+from tests.integration.privilege_statements import unfailed
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     add_row,
@@ -248,19 +249,15 @@ def _start_cliff_calculation(session: Session, run_id: UUID) -> UUID | None:
 
     This is what a request starting a run's cliff calculation inserts
     (INSERT ... ON CONFLICT DO NOTHING RETURNING id): the conflict target
-    names the partial unique index's whole condition, ``status <> 'failed'``.
-    The status is written into the statement as a literal: PostgreSQL matches
-    the condition to the index when it plans the statement, so a parameter
-    there fails once psycopg prepares the statement, after five runs on one
-    connection, and PostgreSQL plans it without the parameter's value.
+    names the partial unique index's whole condition, ``status <> 'failed'``,
+    with the status written into the statement as a literal (``unfailed``).
     """
-    failed_status = literal(SimulationStatus.FAILED, literal_execute=True)
     start_calculation = (
         postgresql.insert(CliffImpact)
         .values(id=uuid4(), simulation_run_id=run_id, status=SimulationStatus.PENDING)
         .on_conflict_do_nothing(
             index_elements=["simulation_run_id"],
-            index_where=col(CliffImpact.status) != failed_status,
+            index_where=unfailed(col(CliffImpact.status), SimulationStatus.FAILED),
         )
         .returning(col(CliffImpact.id))
     )

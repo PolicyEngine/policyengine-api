@@ -2,7 +2,7 @@
 
 A budget window's run is a budget-window run with a report run per year; a
 request for one records each year's report run for the user, with one
-``requested_at``. The routes run as the Public API's runtime role, through
+``requested_at``. The routes run as API v1's runtime role, through
 a stand-in for the simulation service that answers a window run it names or
 one it stores.
 """
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 WINDOW_YEARS = (2026, 2027, 2028)
@@ -66,7 +67,8 @@ def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
 
 @pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> sessionmaker[Session]:
     return v2_sessions_as_role(managed_v2_roles.runtime)
 

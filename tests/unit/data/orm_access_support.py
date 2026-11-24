@@ -28,12 +28,15 @@ differs in four ways:
   the named ``DECLARATIVE_BASE_MODULES``, rather than files matched by name.
 - A session-factory module may also import ``Connection``, open a Connection
   (``connect()``, ``connection()``, ``get_bind()`` and ``begin()`` on an
-  engine) and attach listeners for pool, engine or dialect events, which no
-  other module may do. ``raw_connection()`` hands out the driver's connection,
-  not SQLAlchemy's, and is reported in every module.
-- A finding is allowed when a ``no-orm-form`` exception names its file and,
-  in ``match``, its ``source``; a ``migration-revision`` exception names a
-  path pattern the rule test doesn't read.
+  engine), call a database driver's ``connect`` and attach listeners for pool,
+  engine or dialect events, which no other module may do.
+  ``raw_connection()`` hands out the driver's connection, not SQLAlchemy's,
+  and is reported in every module.
+- A finding is allowed when a ``no-orm-form`` exception names its file, in
+  ``match`` its ``source`` and, when the exception gives one, in ``function``
+  the function it is in; a ``migration-revision`` exception names a path
+  pattern the rule test doesn't read. Each finding records the innermost
+  class or function whose body holds it.
 
 The source checks look for Core rather than for the ORM, so any statement on
 mapped classes passes. Each file is checked on its own, through its own imports:
@@ -48,13 +51,17 @@ it.
 
 A public function of a session-factory module may not return an Engine or
 Connection, and only a session-factory module may read ``factory.kw["bind"]``.
-The rules that go by a method or attribute name alone apply only in modules that
+A statement run outside a session is reported with its constant arguments, as
+in ``connection.execute('PRAGMA foreign_keys = ON')``, so an exception can name
+that one statement. ``.connection()``, ``.get_bind()``, ``.raw_connection()``
+and ``.exec_driver_sql()`` are SQLAlchemy's names and count in every module, as
+does a call of ``connect`` from psycopg, psycopg2, pymysql, sqlite3 or
+mysql.connector, followed through the module's imports. The rules that go by a
+method or attribute name other libraries share apply only in modules that
 import sqlalchemy or sqlmodel: any ``.table`` read, ``kw["bind"]``,
 ``.execute()`` on anything not named as a session, ``.scalar()``,
 ``.scalars()``, ``.stream()`` and ``.stream_scalars()`` on a name such as
-``connection``, and the ``.connect()``, ``.connection()``,
-``.raw_connection()``, ``.get_bind()``, ``.begin()``, ``.cursor()`` and
-``.exec_driver_sql()`` calls.
+``connection``, and the ``.connect()``, ``.begin()`` and ``.cursor()`` calls.
 
 The checks guard against ordinary Core use, not against deliberate evasion. They
 don't see imports made through ``importlib`` or ``__import__``, engines or
@@ -65,10 +72,11 @@ return annotation, the engine an ``Inspector`` holds in ``bind`` or ``engine``, 
 quoted name inside an annotation such as ``Optional["Table"]``, ``Table`` under
 another local name such as ``Jobs = Table``, names from ``from sqlalchemy import
 *``, a ``.table`` read in a module that doesn't import sqlalchemy or sqlmodel, a
-Session's ``bind`` attribute, or an event listener whose target and event name
-aren't its first two positional arguments, the name a string literal. ``.tables``
-of a MetaData isn't reported when the name holding it doesn't end in
-``metadata`` and wasn't assigned ``MetaData(...)``.
+statement run on an open driver connection in such a module, a Session's
+``bind`` attribute, or an event listener whose target and event name aren't its
+first two positional arguments, the name a string literal. ``.tables`` of a
+MetaData isn't reported when the name holding it doesn't end in ``metadata``
+and wasn't assigned ``MetaData(...)``.
 """
 
 from __future__ import annotations
@@ -122,12 +130,18 @@ SESSION_FACTORY_MODULES = frozenset(
     {
         "policyengine_api/data/orm.py",
         "policyengine_api/data/orm_pool_events.py",
+        # API v1's Session factories for commands that run once; unlike orm.py,
+        # importing it loads no .env file, Cloud SQL connector or pool listeners.
+        "policyengine_api/data/v1_sessions.py",
         "policyengine_api/data/v2/database.py",
         "tests/fixtures/database_sessions.py",
         # The tests of orm_pool_events drive the pool it listens to: they
         # invalidate, detach and recycle connections and hold two at once,
         # which no Session offers. Their statements still run in Sessions.
         "tests/unit/data/test_orm_pool_events.py",
+        # The pool event tests' fake database driver: it opens the in-memory
+        # SQLite connections, shaped like pymysql's, that their engine pools.
+        "tests/unit/data/fake_driver_connections.py",
     }
 )
 ENGINE_NAMES = frozenset(
@@ -144,13 +158,28 @@ ENGINE_FACTORIES = frozenset({"create_async_engine", "create_engine"})
 ENGINE_TYPES = frozenset({"AsyncEngine", "Engine"})
 # A name such as engine or simulation_engine, but not policyengine.
 ENGINE_NAME_PATTERN = re.compile(r"(?:^|_)engine$", re.IGNORECASE)
-# Calls that open a Connection: on anything, and begin() on an engine. Only a
-# session-factory module may make them.
-CONNECTION_METHODS = frozenset({"connect", "connection", "get_bind"})
+# Calls that open a Connection, which only a session-factory module may make.
+# connection() and get_bind() are SQLAlchemy's names, so they count in every
+# module; connect() and begin() on an engine count only beside sqlalchemy,
+# because other libraries share those names.
+SESSION_CONNECTION_METHODS = frozenset({"connection", "get_bind"})
+CONNECT_METHOD = "connect"
 ENGINE_TRANSACTION_METHOD = "begin"
 # The call that hands out the driver's connection beneath SQLAlchemy's, which
 # no module may make.
 DRIVER_CONNECTION_METHODS = frozenset({"raw_connection"})
+# The database drivers, and the functions of theirs that open a connection,
+# which only a session-factory module may call.
+DATABASE_DRIVER_MODULES = (
+    "mysql.connector",
+    "psycopg",
+    "psycopg2",
+    "pymysql",
+    "sqlite3",
+)
+DRIVER_CONNECT_FUNCTIONS = frozenset(
+    f"{driver}.connect" for driver in DATABASE_DRIVER_MODULES
+)
 # execute runs only on a name such as session or store_session, which finds a
 # connection passed around without a Connection annotation. A Result has scalar
 # and scalars too, so the others are reported only on a name such as connection.
@@ -223,8 +252,11 @@ MAPPER_NAMES = frozenset({"__mapper__", "mapper"})
 # module that imports sqlalchemy or sqlmodel, any .table is reported.
 COLUMN_TABLE_ATTRIBUTE = "table"
 METADATA_SUFFIX = "metadata"
-RAW_SQL_FUNCTIONS = frozenset({"TextClause", "literal_column", "text"})
-RAW_SQL_METHODS = frozenset({"cursor", "exec_driver_sql"})
+RAW_SQL_FUNCTIONS = frozenset({"DDL", "TextClause", "literal_column", "text"})
+# exec_driver_sql is SQLAlchemy's name, so it counts in every module; a cursor
+# counts only beside sqlalchemy, because every DB-API driver has one.
+DRIVER_SQL_METHOD = "exec_driver_sql"
+CURSOR_METHOD = "cursor"
 # A model's schema details given as SQL text: a server default and a partial
 # index's condition, by keyword, and a check constraint's condition.
 SCHEMA_DETAIL_KEYWORDS = frozenset(
@@ -239,65 +271,85 @@ RAW_SQL = "raw SQL"
 UNMAPPED_TABLE = "table without a mapped class"
 
 # The rule's [[rule.exception]] categories: one construct in one module that
-# SQLAlchemy's ORM has no form for, named by the module's path and, in match,
-# the finding's source; and a path pattern the rule test doesn't read at all.
+# SQLAlchemy's ORM has no form for, named by the module's path, in match the
+# finding's source and, in function, the function it is in; and a path pattern
+# the rule test doesn't read at all.
 NO_ORM_FORM = "no-orm-form"
 MIGRATION_REVISION = "migration-revision"
 EXCEPTION_CATEGORIES = (NO_ORM_FORM, MIGRATION_REVISION)
+# Outside the tests, every no-orm-form exception names its function.
+TEST_DIRECTORY = "tests/"
+SCOPE_NODES = (ast.AsyncFunctionDef, ast.ClassDef, ast.FunctionDef)
 
 
 @dataclass(frozen=True)
 class Finding:
-    """One place where code reaches the database without the ORM."""
+    """One place where code reaches the database without the ORM.
+
+    ``function`` is the dotted name of the innermost class or function whose
+    body holds it, as in ``Reconciler.apply``, or ``None`` at module level.
+    """
 
     file: str
     line: int
     check: str
     source: str
+    function: str | None = None
 
     def __str__(self) -> str:
-        """Describe the finding as ``file:line: check: source``."""
-        return f"{self.file}:{self.line}: {self.check}: {self.source}"
+        """Describe the finding as ``file:line: check: source in function``."""
+        described = f"{self.file}:{self.line}: {self.check}: {self.source}"
+        if self.function is None:
+            return described
+        return f"{described} in {self.function}"
 
 
 def _matches_module(module_name: str, parent_module: str) -> bool:
     return module_name == parent_module or module_name.startswith(f"{parent_module}.")
 
 
-def _orm_library(module_name: str) -> str | None:
-    """Return the ORM library ``module_name`` belongs to, or ``None``."""
+def _library_of(module_name: str, libraries: Iterable[str]) -> str | None:
+    """Return the one of ``libraries`` that ``module_name`` belongs to, or ``None``."""
     return next(
-        (
-            library
-            for library in ORM_LIBRARY_MODULES
-            if _matches_module(module_name, library)
-        ),
+        (library for library in libraries if _matches_module(module_name, library)),
         None,
     )
 
 
-def _orm_library_imports(tree: ast.Module) -> dict[str, str]:
-    """Map each name imported from sqlalchemy or sqlmodel to its dotted name."""
+def _orm_library(module_name: str) -> str | None:
+    """Return the ORM library ``module_name`` belongs to, or ``None``."""
+    return _library_of(module_name, ORM_LIBRARY_MODULES)
+
+
+def _library_imports(tree: ast.Module, libraries: Iterable[str]) -> dict[str, str]:
+    """Map each name the module imports from ``libraries`` to its dotted name.
+
+    ``import mysql.connector`` binds ``mysql``, and ``from mysql import
+    connector`` binds ``connector`` as ``mysql.connector``.
+    """
+    libraries = tuple(libraries)
     imported: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                library = _orm_library(alias.name)
-                if library is None:
+                if _library_of(alias.name, libraries) is None:
                     continue
                 if alias.asname:
                     imported[alias.asname] = alias.name
                 else:
-                    imported[library] = library
-        elif (
-            isinstance(node, ast.ImportFrom)
-            and not node.level
-            and node.module is not None
-            and _orm_library(node.module) is not None
-        ):
+                    top_level = alias.name.split(".", 1)[0]
+                    imported[top_level] = top_level
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
             for alias in node.names:
-                imported[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+                qualified = f"{node.module}.{alias.name}"
+                if _library_of(qualified, libraries) is not None:
+                    imported[alias.asname or alias.name] = qualified
     return imported
+
+
+def _orm_library_imports(tree: ast.Module) -> dict[str, str]:
+    """Map each name imported from sqlalchemy or sqlmodel to its dotted name."""
+    return _library_imports(tree, ORM_LIBRARY_MODULES)
 
 
 def _qualified_name(node: ast.expr, imported: Mapping[str, str]) -> str | None:
@@ -359,11 +411,12 @@ def _last_name(node: ast.expr) -> str:
 
 @dataclass
 class _Module:
-    """One scanned file and the names it imports from sqlalchemy or sqlmodel."""
+    """One scanned file and the names it imports from the ORM and the drivers."""
 
     file: str
     tree: ast.Module
     imported: dict[str, str]
+    driver_imported: dict[str, str]
 
     @property
     def uses_sqlalchemy(self) -> bool:
@@ -446,6 +499,20 @@ def _call_summary(call: ast.Call) -> str:
     parts = [ast.unparse(call.args[0])] if call.args else []
     if len(call.args) > 1 or call.keywords:
         parts.append("...")
+    return f"{ast.unparse(call.func)}({', '.join(parts)})"
+
+
+def _statement_summary(call: ast.Call) -> str:
+    """Summarize a statement call, its constant arguments written out.
+
+    Any other argument, and any keyword, is ``...``, with a run of them written
+    once: ``connection.execute('SELECT 1', ...)`` or ``connection.execute(...)``.
+    """
+    parts: list[str] = []
+    for argument in [*call.args, *call.keywords]:
+        part = ast.unparse(argument) if isinstance(argument, ast.Constant) else "..."
+        if part != "..." or not parts or parts[-1] != "...":
+            parts.append(part)
     return f"{ast.unparse(call.func)}({', '.join(parts)})"
 
 
@@ -540,28 +607,47 @@ def _attribute_findings(
 def _runs_raw_sql(node: ast.Call, function: str, context: _ModuleContext) -> bool:
     if function in RAW_SQL_FUNCTIONS:
         return id(node) not in context.schema_details
+    if not isinstance(node.func, ast.Attribute):
+        return False
+    if node.func.attr == DRIVER_SQL_METHOD:
+        return True
+    return context.module.uses_sqlalchemy and node.func.attr == CURSOR_METHOD
+
+
+def _connects_a_driver(node: ast.Call, context: _ModuleContext) -> bool:
+    """Whether a call opens a database driver's connection outside a factory."""
     return (
-        context.module.uses_sqlalchemy
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in RAW_SQL_METHODS
+        not context.module.is_session_factory
+        and _qualified_name(node.func, context.module.driver_imported)
+        in DRIVER_CONNECT_FUNCTIONS
+    )
+
+
+def _opens_engine_connection(method: ast.Attribute, context: _ModuleContext) -> bool:
+    """Whether ``connect()``, or ``begin()`` on an engine, opens a Connection.
+
+    Other libraries share these names, so they count only beside sqlalchemy.
+    """
+    if not context.module.uses_sqlalchemy:
+        return False
+    if method.attr == CONNECT_METHOD:
+        return True
+    receiver = _last_name(method.value)
+    return method.attr == ENGINE_TRANSACTION_METHOD and (
+        receiver in context.engine_names or bool(ENGINE_NAME_PATTERN.search(receiver))
     )
 
 
 def _opens_connection(node: ast.Call, context: _ModuleContext) -> bool:
     """Whether a call opens a Connection where it may not, or a driver connection."""
-    if not context.module.uses_sqlalchemy or not isinstance(node.func, ast.Attribute):
+    if not isinstance(node.func, ast.Attribute):
         return False
     if node.func.attr in DRIVER_CONNECTION_METHODS:
         return True
     if context.module.is_session_factory:
         return False
-    if node.func.attr in CONNECTION_METHODS:
-        return True
-    if node.func.attr != ENGINE_TRANSACTION_METHOD:
-        return False
-    receiver = _last_name(node.func.value)
-    return receiver in context.engine_names or bool(
-        ENGINE_NAME_PATTERN.search(receiver)
+    return node.func.attr in SESSION_CONNECTION_METHODS or _opens_engine_connection(
+        node.func, context
     )
 
 
@@ -612,12 +698,12 @@ def _call_findings(
         yield CORE_TABLE_DECLARATION, _call_summary(node)
     elif _runs_raw_sql(node, function, context):
         yield RAW_SQL, _call_summary(node)
-    elif _opens_connection(node, context):
+    elif _connects_a_driver(node, context) or _opens_connection(node, context):
         yield CORE_CONNECTION, _call_summary(node)
     elif listener := _database_event_listener(node, function, context):
         yield CORE_CONNECTION, listener
     elif _runs_outside_a_session(node, context):
-        yield CORE_CONNECTION, f"{ast.unparse(node.func)}(...)"
+        yield CORE_CONNECTION, _statement_summary(node)
 
 
 def _annotation_text(annotation: ast.expr) -> str:
@@ -755,6 +841,31 @@ def _module_context(module: _Module) -> _ModuleContext:
     )
 
 
+def _enclosing_scopes(tree: ast.Module) -> dict[int, str]:
+    """Map each node in a class's or function's body to that scope's dotted name.
+
+    The innermost scope counts, named as Python's ``__qualname__`` names it
+    without ``<locals>``: ``Reconciler.apply.build``. A definition's own
+    decorators, parameters and annotations belong to the scope around it.
+    """
+    scopes: dict[int, str] = {}
+    pending: list[tuple[ast.AST, str | None]] = [(tree, None)]
+    while pending:
+        node, scope = pending.pop()
+        if scope is not None:
+            scopes[id(node)] = scope
+        if not isinstance(node, SCOPE_NODES):
+            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+            continue
+        inner = node.name if scope is None else f"{scope}.{node.name}"
+        body = {id(statement) for statement in node.body}
+        pending.extend(
+            (child, inner if id(child) in body else scope)
+            for child in ast.iter_child_nodes(node)
+        )
+    return scopes
+
+
 def orm_access_findings(sources: Mapping[str, str]) -> list[Finding]:
     """Return every place the sources reach the database without the ORM.
 
@@ -763,10 +874,22 @@ def orm_access_findings(sources: Mapping[str, str]) -> list[Finding]:
     findings: list[Finding] = []
     for file, source in sorted(sources.items()):
         tree = ast.parse(source, filename=file)
-        module = _Module(file=file, tree=tree, imported=_orm_library_imports(tree))
+        module = _Module(
+            file=file,
+            tree=tree,
+            imported=_orm_library_imports(tree),
+            driver_imported=_library_imports(tree, DATABASE_DRIVER_MODULES),
+        )
         context = _module_context(module)
+        scopes = _enclosing_scopes(tree)
         findings.extend(
-            Finding(file, getattr(node, "lineno", 0), check, finding_source)
+            Finding(
+                file,
+                getattr(node, "lineno", 0),
+                check,
+                finding_source,
+                function=scopes.get(id(node)),
+            )
             for node in ast.walk(tree)
             for check, finding_source in _node_findings(node, context)
         )
@@ -873,31 +996,30 @@ def unmapped_tables_in_packages(
     return _unmapped_findings(placed_modules)
 
 
-def _declared_constructs(
-    exceptions: Iterable[RuleException],
-) -> frozenset[tuple[str, str]]:
-    """Return the (file, source) pairs the no-orm-form exceptions allow."""
-    return frozenset(
-        (exception.path, exception.match)
-        for exception in exceptions
-        if exception.category == NO_ORM_FORM and exception.match is not None
+def _names_finding(exception: RuleException, finding: Finding) -> bool:
+    """Whether a no-orm-form exception allows ``finding``.
+
+    Its ``path`` is the finding's file and its ``match`` the finding's
+    ``source``, exactly. With a ``function``, the finding is in that function
+    too; without one, the exception allows the source anywhere in the file.
+    """
+    return (
+        exception.category == NO_ORM_FORM
+        and exception.match is not None
+        and (exception.path, exception.match) == (finding.file, finding.source)
+        and exception.function in (None, finding.function)
     )
 
 
 def undeclared_findings(
     findings: Iterable[Finding], exceptions: Iterable[RuleException]
 ) -> list[Finding]:
-    """Return the findings that no no-orm-form exception names.
-
-    An exception names a finding when its ``path`` is the finding's file and its
-    ``match`` is the finding's ``source``, exactly; it then allows every finding
-    in that file with that source.
-    """
-    declared = _declared_constructs(exceptions)
+    """Return the findings that no no-orm-form exception names."""
+    exceptions = list(exceptions)
     return [
         finding
         for finding in findings
-        if (finding.file, finding.source) not in declared
+        if not any(_names_finding(exception, finding) for exception in exceptions)
     ]
 
 
@@ -905,12 +1027,12 @@ def unused_exceptions(
     findings: Iterable[Finding], exceptions: Iterable[RuleException]
 ) -> list[RuleException]:
     """Return each no-orm-form exception that names no finding."""
-    found = {(finding.file, finding.source) for finding in findings}
+    findings = list(findings)
     return [
         exception
         for exception in exceptions
         if exception.category == NO_ORM_FORM
-        and (exception.path, exception.match) not in found
+        and not any(_names_finding(exception, finding) for finding in findings)
     ]
 
 
@@ -927,6 +1049,35 @@ def unscanned_files(
     )
 
 
+def _names_sql_text(match: str) -> bool:
+    """Whether ``match`` is a call whose first argument is a string or f-string.
+
+    Such a match names one statement, as ``text(f'TRUNCATE {tables}')`` does. A
+    bare call, a call on variables and an attribute read name none.
+    """
+    try:
+        expression = ast.parse(match, mode="eval").body
+    except SyntaxError:
+        return False
+    if not isinstance(expression, ast.Call) or not expression.args:
+        return False
+    statement = expression.args[0]
+    return isinstance(statement, ast.JoinedStr) or (
+        isinstance(statement, ast.Constant) and isinstance(statement.value, str)
+    )
+
+
+def _needs_function(exception: RuleException, match: str) -> bool:
+    """Whether a no-orm-form exception must name the function it allows.
+
+    Every exception outside the tests does, and so does one whose match names
+    no statement, which would otherwise allow every such call in its module.
+    """
+    return exception.function is None and (
+        not exception.path.startswith(TEST_DIRECTORY) or not _names_sql_text(match)
+    )
+
+
 def _construct_exception_problem(
     exception: RuleException, repository_root: Path
 ) -> str | None:
@@ -936,6 +1087,11 @@ def _construct_exception_problem(
         return f"{where} names no construct: set match to the finding's source"
     if not (repository_root / exception.path).is_file():
         return f"{where} must name one existing file"
+    if _needs_function(exception, exception.match):
+        return (
+            f"{where} ({exception.match}) needs a function: set function to the "
+            "enclosing function of its finding"
+        )
     return None
 
 
@@ -946,6 +1102,8 @@ def _path_exception_problem(
     where = f"exception for {exception.path}"
     if exception.match is not None:
         return f"{where} skips whole files, so it takes no match"
+    if exception.function is not None:
+        return f"{where} skips whole files, so it takes no function"
     if not unscanned_files([exception], repository_root) & read_files:
         return f"{where} matches no file the rule test reads: remove it"
     return None
@@ -970,7 +1128,7 @@ def exception_problems(
     read_files: Iterable[str],
     repository_root: Path,
 ) -> list[str]:
-    """Describe each exception with an unknown category, or no module or construct.
+    """Describe each exception with an unknown category, module, construct or function.
 
     ``read_files`` are the repository-relative files the rule test reads before
     the migration-revision exceptions take theirs out.

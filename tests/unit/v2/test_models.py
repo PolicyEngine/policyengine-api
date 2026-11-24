@@ -362,7 +362,7 @@ def test_user_type_defaults_to_standard_for_every_writer() -> None:
 
     assert not users.user_type.nullable
     assert users.user_type.type.length == 16
-    # The server default covers inserts by Public API revisions that predate
+    # The server default covers inserts by API v1 revisions that predate
     # the column; the Python default covers this revision's ORM inserts.
     assert users.user_type.server_default.arg == "standard"
     assert User().user_type == "standard"
@@ -592,7 +592,7 @@ def test_saved_simulations_and_reports_name_stored_v2_rows() -> None:
     reports = stored_v2_table("user_report_associations")
     report_columns = model_columns("user_report_associations")
 
-    # The retired columns stay, nullable, for the previous Public API revision.
+    # The retired columns stay, nullable, for the previous API v1 revision.
     for table_name in ("user_simulation_associations", "user_report_associations"):
         columns = model_columns(table_name)
         assert columns.country.nullable

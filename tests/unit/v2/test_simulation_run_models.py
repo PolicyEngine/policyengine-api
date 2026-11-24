@@ -68,7 +68,7 @@ COMPARISON_RESULT_TABLES = (
     "program_statistics",
     "withheld_area_codes",
 )
-# The tables the simulation service and its Modal workers write. The Public API
+# The tables the simulation service and its Modal workers write. API v1
 # writes every other table.
 SIMULATION_SIDE_TABLES = frozenset(
     {
@@ -86,7 +86,7 @@ SIMULATION_SIDE_TABLES = frozenset(
         *COMPARISON_RESULT_TABLES,
     }
 )
-# The foreign keys from the simulation service's tables to the Public API's rows,
+# The foreign keys from the simulation service's tables to API v1's rows,
 # with their delete rules. Each service writes only its own tables, and
 # PostgreSQL checks every row named on insert.
 PUBLIC_API_FOREIGN_KEYS = {

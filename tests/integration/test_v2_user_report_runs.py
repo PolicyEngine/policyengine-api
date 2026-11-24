@@ -5,7 +5,7 @@ request may end on a run that already exists: it answers 201 naming that
 run, and a re-run while a run is pending or running answers that run rather
 than 409. A stand-in for the simulation service's client answers so: with a
 run it names (``joined_run``), or else with a new pending run it stores. The
-routes run as the Public API's runtime role and read the report back with
+routes run as API v1's runtime role and read the report back with
 the run the answer names, whichever run is the report's newest.
 """
 
@@ -78,6 +78,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 
@@ -98,7 +99,8 @@ def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
 
 @pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> sessionmaker[Session]:
     return v2_sessions_as_role(managed_v2_roles.runtime)
 

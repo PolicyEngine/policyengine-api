@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 import unittest
 from datetime import date
+from typing import TYPE_CHECKING
 
 from scripts.rules.load import parse
 from scripts.rules.model import (
@@ -19,6 +20,9 @@ from scripts.rules.model import (
     Tier,
 )
 from scripts.rules.tests.support import REGISTRY
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 BOUNDARY_NODE = "tests/unit/test_boundaries.py::test_routes_have_no_sql"
 KNOWN_RULE_KEYS = (
@@ -204,7 +208,7 @@ class ExceptionFunctionTest(unittest.TestCase):
     """An exception's ``function`` narrows it to findings inside that function."""
 
     def _parsed_exceptions(
-        self, exception: dict[str, object]
+        self, exception: Mapping[str, object]
     ) -> tuple[list[str], tuple[RuleException, ...]]:
         raw = tomllib.loads(REGISTRY)
         rule = {**SINGLE_TABLES_RULE, "exception": exception}

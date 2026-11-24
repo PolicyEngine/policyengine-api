@@ -1,10 +1,14 @@
 """Tests for lazy process-owned v2 engine and SQLModel Session factories."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, select
 
 from policyengine_api.data.v1_models import Policy
@@ -171,6 +175,28 @@ def test_read_sessions_refuse_to_write_rows() -> None:
 
         with sessions() as session:
             assert session.exec(select(TaxBenefitModel)).all() == []
+
+
+@pytest.mark.parametrize(
+    "unpooled_sessions",
+    [database.unpooled_v2_sessions, database.unpooled_v2_read_only_sessions],
+    ids=["read-write", "read-only"],
+)
+def test_unpooled_sessions_keep_no_pool_and_dispose_of_their_engine(
+    monkeypatch: pytest.MonkeyPatch,
+    unpooled_sessions: Callable[[str], AbstractContextManager[sessionmaker[Session]]],
+) -> None:
+    engine = Mock()
+    engine_factory = Mock(return_value=engine)
+    monkeypatch.setattr(database, "create_engine", engine_factory)
+
+    with unpooled_sessions(UNCONNECTED_POSTGRES_URL) as sessions:
+        assert sessions.kw["expire_on_commit"] is False
+        assert issubclass(sessions.class_, Session)
+        engine.dispose.assert_not_called()
+
+    engine_factory.assert_called_once_with(UNCONNECTED_POSTGRES_URL, poolclass=NullPool)
+    engine.dispose.assert_called_once_with()
 
 
 def test_unpooled_read_only_sessions_make_every_transaction_read_only() -> None:

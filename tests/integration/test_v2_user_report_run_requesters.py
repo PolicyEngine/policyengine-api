@@ -4,7 +4,7 @@ A signed-in user's request provisions and records that user. A signed-out
 browser's user may be merged into an account, or converted into one in
 place, while the simulation service is asked: the run is then recorded for
 the user the check found, or not at all, never for a new user re-created
-with the browser's ID. The routes run as the Public API's runtime role.
+with the browser's ID. The routes run as API v1's runtime role.
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 ISSUER = "https://users.example.test/"
@@ -66,7 +67,8 @@ def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
 
 @pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> sessionmaker[Session]:
     return v2_sessions_as_role(managed_v2_roles.runtime)
 

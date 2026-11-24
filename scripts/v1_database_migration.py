@@ -22,8 +22,8 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import URL
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.orm import unpooled_v1_sessions, v1_schema_inspector
 from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v1_sessions import unpooled_v1_sessions, v1_schema_inspector
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session

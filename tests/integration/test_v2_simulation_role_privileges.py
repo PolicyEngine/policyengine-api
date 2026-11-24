@@ -3,15 +3,21 @@
 The simulation service creates simulations, reports, their runs, budget-window
 runs, household jobs and simulation runs' cliff calculations; its Modal
 workers write their runs' and cliff calculations' status and results and
-their budget-window runs' status; API v1 reads them. Each
-role holds only its declared privileges
-(``policyengine_api/data/v2/privileges.py``), so a statement outside them
-fails here as it would in staging and production.
+their budget-window runs' status; API v1 reads them. Each role holds only its
+declared privileges (``policyengine_api/data/v2/privileges.py``), so a
+statement outside them fails here as it would in staging and production.
 
 Every statement runs through one Session of the database's owner, which
-``act_as`` switches to a role for the rest of its transaction. An ORM
-``update`` also sets ``updated_at`` on the tables that have it, which every
-role here that updates those tables may do.
+``act_as`` switches to a role for the rest of its transaction. A refused
+statement sends only the columns it names, so the database refuses it for
+those columns. A model's ORM ``update`` also sets ``updated_at``, and its ORM
+``insert`` also writes Python-side defaults such as ``created_at``, so refused
+inserts, and refused updates of tables where the role may not update
+``updated_at``, go through ``tests.integration.privilege_statements``' classes,
+which map only the columns they name. The other refused updates use the
+models: both simulation roles may update ``updated_at`` on the run, budget-window
+run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
+have no ``updated_at``.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import bindparam, delete, false, func, insert, inspect, select, update
+from sqlalchemy import delete, false, func, insert, inspect, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import col
@@ -31,7 +37,6 @@ from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import (
     BudgetWindowRun,
     CliffImpact,
-    Household,
     HouseholdJob,
     LaborSupplyDecileResponse,
     ParameterValue,
@@ -51,6 +56,19 @@ from policyengine_api.data.v2.privileges import (
     declared_privileges,
 )
 from tests.fixtures.database_sessions import act_as
+from tests.integration.privilege_statements import (
+    BudgetWindowRunColumns,
+    CliffImpactColumns,
+    HouseholdColumns,
+    LaborSupplyDecileResponseColumns,
+    PolicyColumns,
+    PovertyColumns,
+    ReportRunColumns,
+    SimulationColumns,
+    WithheldAreaCodeColumns,
+    unfailed,
+    update_row,
+)
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -62,7 +80,7 @@ from tests.integration.simulation_rows import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Executable, Update
+    from sqlalchemy import Executable
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
@@ -96,11 +114,6 @@ def _refused(session: Session, statement: Executable) -> None:
     """Expect a permission error from ``statement``."""
     with refused(session, ProgrammingError, match="permission denied"):
         session.execute(statement)
-
-
-def _update_row(model: type[Any], row_id: object, **values: object) -> Update:
-    """Build an UPDATE of the model's row with ID ``row_id``, setting ``values``."""
-    return update(model).where(model.id == row_id).values(**values)
 
 
 def _update_from_status(
@@ -246,21 +259,21 @@ def test_the_simulation_service_creates_rows_and_records_only_its_calls(
     )
     assert (recorded, failed) == (ids["report_run"], ids["household_job"])
     for statement in (
-        _update_row(SimulationRun, ids["run"], started_at=func.now()),
-        _update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
-        _update_row(SimulationRun, ids["run"], year=2027),
-        _update_row(ReportRun, ids["report_run"], baseline_cliff_gap=1.0),
-        insert(Poverty).values(
+        update_row(SimulationRun, ids["run"], started_at=func.now()),
+        update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
+        update_row(SimulationRun, ids["run"], year=2027),
+        update_row(ReportRun, ids["report_run"], baseline_cliff_gap=1.0),
+        insert(PovertyColumns).values(
             id=uuid4(),
             simulation_run_id=ids["run"],
             poverty_type="spm",
             entity="person",
         ),
         delete(Simulation).where(col(Simulation.id) == ids["simulation"]),
-        insert(LaborSupplyDecileResponse).values(
+        insert(LaborSupplyDecileResponseColumns).values(
             id=uuid4(), report_run_id=ids["report_run"], decile=1
         ),
-        update(Policy).values(content_hash=col(Policy.content_hash)),
+        update(PolicyColumns).values(content_hash=PolicyColumns.content_hash),
     ):
         _refused(session, statement)
 
@@ -290,7 +303,7 @@ def test_modal_workers_write_their_run_status_and_results_only(
         rate=0.1,
     )
     session.execute(
-        _update_row(
+        update_row(
             ReportRun,
             ids["report_run"],
             status="running",
@@ -327,14 +340,14 @@ def test_modal_workers_write_their_run_status_and_results_only(
     assert updated == ids["run"]
     assert finished_job == ids["household_job"]
     for statement in (
-        insert(Simulation).values(
+        insert(SimulationColumns).values(
             id=uuid4(),
             simulation_type="economy",
             dataset_id=uuid4(),
             tax_benefit_model_version_id=uuid4(),
         ),
         delete(Poverty).where(col(Poverty.simulation_run_id) == ids["run"]),
-        insert(BudgetWindowRun).values(
+        insert(BudgetWindowRunColumns).values(
             id=uuid4(),
             report_id=ids["report"],
             tax_benefit_model_version_id=public_api_rows.version_id,
@@ -345,22 +358,22 @@ def test_modal_workers_write_their_run_status_and_results_only(
         update(Poverty)
         .where(col(Poverty.simulation_run_id) == ids["run"])
         .values(rate=0),
-        update(Household).values(content_hash=col(Household.content_hash)),
+        update(HouseholdColumns).values(content_hash=HouseholdColumns.content_hash),
     ):
         _refused(session, statement)
     # What a run is stays as the simulation service wrote it.
     for statement in (
-        _update_row(SimulationRun, ids["run"], year=2027),
-        _update_row(
+        update_row(SimulationRun, ids["run"], year=2027),
+        update_row(
             SimulationRun, ids["run"], simulation_id=col(SimulationRun.simulation_id)
         ),
-        _update_row(
+        update_row(
             ReportRun,
             ids["report_run"],
             baseline_simulation_run_id=col(ReportRun.baseline_simulation_run_id),
         ),
-        _update_row(ReportRun, ids["report_run"], markdown="edited"),
-        _update_row(
+        update_row(ReportRun, ids["report_run"], markdown="edited"),
+        update_row(
             HouseholdJob,
             ids["household_job"],
             household_id=col(HouseholdJob.household_id),
@@ -403,7 +416,7 @@ def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
     )
 
     # Once written, a withheld code is never changed or removed by the workers.
-    _refused(session, _update_row(WithheldAreaCode, withheld_code_id, code="E14001064"))
+    _refused(session, update_row(WithheldAreaCode, withheld_code_id, code="E14001064"))
     _refused(
         session,
         delete(WithheldAreaCode).where(col(WithheldAreaCode.id) == withheld_code_id),
@@ -419,7 +432,7 @@ def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
     )
     _refused(
         session,
-        insert(WithheldAreaCode).values(
+        insert(WithheldAreaCodeColumns).values(
             id=uuid4(),
             report_run_id=ids["report_run"],
             baseline_simulation_run_id=ids["run"],
@@ -462,9 +475,9 @@ def test_the_simulation_service_fails_a_window_whose_first_calls_modal_refuses(
 
     assert failed_window == window_id
     for statement in (
-        _update_row(BudgetWindowRun, window_id, started_at=func.now()),
-        _update_row(BudgetWindowRun, window_id, recalculate=True),
-        _update_row(
+        update_row(BudgetWindowRun, window_id, started_at=func.now()),
+        update_row(BudgetWindowRun, window_id, recalculate=True),
+        update_row(
             BudgetWindowRun, window_id, report_id=col(BudgetWindowRun.report_id)
         ),
     ):
@@ -531,9 +544,9 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
     assert started_windows == [window_id, failing_window_id]
     assert (succeeded_window, failed_window) == (window_id, failing_window_id)
     for statement in (
-        _update_row(BudgetWindowRun, window_id, trigger="manual"),
-        _update_row(BudgetWindowRun, window_id, recalculate=False),
-        _update_row(
+        update_row(BudgetWindowRun, window_id, trigger="manual"),
+        update_row(BudgetWindowRun, window_id, recalculate=False),
+        update_row(
             BudgetWindowRun,
             window_id,
             tax_benefit_model_version_id=col(
@@ -594,7 +607,7 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
         session.execute(_row_count(model)).scalar_one()
     _refused(
         session,
-        insert(ReportRun).values(
+        insert(ReportRunColumns).values(
             id=uuid4(),
             report_id=uuid4(),
             baseline_simulation_run_id=uuid4(),
@@ -652,15 +665,12 @@ def _start_cliff_calculation(session: Session, run_id: object) -> UUID | None:
     as well as INSERT. Its condition is sent as a literal, as in the index, so
     PostgreSQL can match the index however often the statement runs.
     """
-    unfailed = col(CliffImpact.status) != bindparam(
-        "failed_status", SimulationStatus.FAILED, literal_execute=True
-    )
     return session.execute(
         postgresql.insert(CliffImpact)
         .values(id=uuid4(), simulation_run_id=run_id, status="pending")
         .on_conflict_do_nothing(
             index_elements=[col(CliffImpact.simulation_run_id)],
-            index_where=unfailed,
+            index_where=unfailed(col(CliffImpact.status), SimulationStatus.FAILED),
         )
         .returning(col(CliffImpact.id))
     ).scalar_one_or_none()
@@ -704,9 +714,9 @@ def test_the_simulation_service_starts_cliff_calculations_and_records_calls(
     assert joined_calculation is None
     assert recorded == failed == calculation_id
     for statement in (
-        _update_row(CliffImpact, calculation_id, started_at=func.now()),
-        _update_row(CliffImpact, calculation_id, cliff_gap=1.0),
-        _update_row(
+        update_row(CliffImpact, calculation_id, started_at=func.now()),
+        update_row(CliffImpact, calculation_id, cliff_gap=1.0),
+        update_row(
             CliffImpact,
             calculation_id,
             simulation_run_id=col(CliffImpact.simulation_run_id),
@@ -753,10 +763,10 @@ def test_modal_workers_claim_cliff_calculations_and_write_their_results(
 
     assert claimed == succeeded == calculation_id
     for statement in (
-        insert(CliffImpact).values(
+        insert(CliffImpactColumns).values(
             id=uuid4(), simulation_run_id=ids["run"], status="pending"
         ),
-        _update_row(
+        update_row(
             CliffImpact,
             calculation_id,
             simulation_run_id=col(CliffImpact.simulation_run_id),
@@ -778,7 +788,7 @@ def test_api_v1_reads_cliff_results_and_other_roles_cannot(
     calculation_id = _start_cliff_calculation(session, ids["run"])
     act_as(session, managed_v2_roles.modal_worker)
     session.execute(
-        _update_row(
+        update_row(
             CliffImpact,
             calculation_id,
             status="succeeded",
@@ -810,11 +820,11 @@ def test_api_v1_reads_cliff_results_and_other_roles_cannot(
     assert [tuple(result) for result in results] == [(1.5e9, 0.04)]
     _refused(
         session,
-        insert(CliffImpact).values(
+        insert(CliffImpactColumns).values(
             id=uuid4(), simulation_run_id=ids["run"], status="pending"
         ),
     )
-    _refused(session, _update_row(CliffImpact, calculation_id, cliff_gap=0))
+    _refused(session, update_row(CliffImpactColumns, calculation_id, cliff_gap=0))
     for role in (managed_v2_roles.stage12, CATALOG_WRITER_ROLE):
         act_as(session, role)
         _refused(session, _row_count(CliffImpact))

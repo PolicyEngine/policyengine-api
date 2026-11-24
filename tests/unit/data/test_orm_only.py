@@ -7,9 +7,10 @@ explains the rule under "Database statements through the ORM", with the way to
 write each kind of statement. The checks live in orm_access_support.py.
 
 A finding fails unless one of the rule's ``no-orm-form`` [[rule.exception]]
-entries names its module and, in ``match``, its source, and an entry that names
-no finding fails too. The rule's ``migration-revision`` entry takes
-``migrations/`` out of the check.
+entries names its module, in ``match`` its source and, when the entry gives
+one, in ``function`` the function it is in. An entry that names no finding
+fails too. The rule's ``migration-revision`` entry takes ``migrations/`` out of
+the check.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
 
     import pytest
 
-    from scripts.rules.model import Rule
+    from scripts.rules.model import Rule, RuleException
 
 PROJECT_ROOT = Path(__file__).parents[3]
 RULE_ID = "api.data.orm-only"
@@ -64,6 +65,12 @@ ROW_HELPER_MODULES = (
     "tests.integration.stored_report_rows",
     "tests.unit.v2.sqlite_report_rows",
 )
+
+
+def _declared_site(exception: RuleException) -> str:
+    """Describe what an exception names: its file, its match and its function."""
+    site = f"{exception.path}: {exception.match}"
+    return site if exception.function is None else f"{site} in {exception.function}"
 
 
 @cache
@@ -129,8 +136,7 @@ def test_database_code_uses_only_the_orm() -> None:
 
     problems = [str(finding) for finding in undeclared_findings(findings, exceptions)]
     problems.extend(
-        f"declared exception names no finding, remove it: {exception.path}: "
-        f"{exception.match}"
+        f"declared exception names no finding, remove it: {_declared_site(exception)}"
         for exception in unused_exceptions(findings, exceptions)
     )
 
@@ -157,7 +163,7 @@ def test_orm_only_exceptions_match_a_finding_and_name_a_category() -> None:
 
     problems = exception_problems(exceptions, _read_files(), PROJECT_ROOT)
     problems.extend(
-        f"exception for {exception.path} names no finding: {exception.match}"
+        f"exception names no finding: {_declared_site(exception)}"
         for exception in unused_exceptions(_repository_findings(), exceptions)
     )
 

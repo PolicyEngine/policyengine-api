@@ -1,6 +1,6 @@
 """Serve and check the v2 countries from a migrated disposable Postgres database.
 
-The route and the startup check run as the Public API's runtime role, so the
+The route and the startup check run as API v1's runtime role, so the
 tests prove the role's declared privileges cover them (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``).
 """
@@ -42,9 +42,11 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
+
 
 def test_postgres_countries_list_the_rows_the_revision_inserted(
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
@@ -81,7 +83,7 @@ def test_postgres_countries_list_the_rows_the_revision_inserted(
 
 
 def test_postgres_countries_match_the_code_list_as_the_runtime_role(
-    managed_v2_roles,
+    managed_v2_roles: ManagedV2Roles,
     v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
     v2_owner_sessions: sessionmaker[Session],
 ) -> None:
