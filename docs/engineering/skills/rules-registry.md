@@ -60,7 +60,7 @@ gap is visible, rather than leaving it out.
 | `[[rule.ci]]` | `workflow`, `job`, and an `invocation` string that must appear in that job's `run:` text (or its reusable-workflow `uses:`), or in a command of a Makefile target the job runs with `make <target>`, following the targets' prerequisites and the `$(MAKE)` calls in their recipes (`scripts/rules/makefile.py`). |
 | `[rule.proof]` | Optional; see "Proof". |
 | `[rule.baseline]` | Only for `ratcheted` rules: `file` listing tolerated violations, and their `count`. |
-| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions); for `api.data.sqlalchemy-and-alembic-only`, `match` is the exact construct and `category` is `driver-access`, `schema-change` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#declared-exceptions)). |
+| `[[rule.exception]]` | Carve-out: `path`, `reason`, and `expires`; or, for rules whose guard reads them, `match` (one site), `removal`, `issue` and `category` ([dependencies.md](dependencies.md#exceptions); for `api.data.sqlalchemy-and-alembic-only`, `match` is the exact construct and `category` is `driver-access`, `schema-change` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#declared-exceptions); for `api.data.orm-only`, `match` is the finding's source and `category` is `no-orm-form` or `migration-revision`: [alembic-migrations.md](alembic-migrations.md#orm-only-exceptions)). |
 | `[rule.downgrade]` | Required `reason` when a rule moves from enforced/ratcheted to advisory/doc-only. |
 
 `blocking` is derived, never declared: a rule blocks merges when its status is

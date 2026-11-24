@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 71 | 7 | 1 | 8 | 87 |
+| mechanical | 72 | 7 | 1 | 8 | 88 |
 | metric | 2 | 0 | 0 | 0 | 2 |
 | judgment | 0 | 0 | 0 | 1 | 1 |
 
-**Blocking:** 80 of 90 rules.
+**Blocking:** 81 of 91 rules.
 
 ## Gaps
 
@@ -71,6 +71,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Exceptions and review dates
 
+- `api.data.orm-only`: exception for `migrations/**/*.py` allowed as a migration-revision (migrations/ holds the Alembic environments and the revisions Alembic generates. The environments run Alembic's migration context on a Connection, and the revisions are where schema changes belong (api.data.sqlalchemy-and-alembic-only), so the rule test doesn't read them.)
 - `api.data.sqlalchemy-and-alembic-only`: exception for `migrations/*/versions/*.py` allowed as a migration-revision (Alembic generates the revisions, and they are where schema changes belong, so the check doesn't scan them. Ruff skips the same files (extend-exclude in pyproject.toml).)
 - `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/orm_pool_events.py` (`attribute ._sock`) allowed as a driver-access (The v1 pool's diagnostics read the file descriptor and local port of pymysql's socket from the driver connection a SQLAlchemy pool event passes them, because SQLAlchemy has no API for a connection's socket. They never read or write through the socket or the driver connection, and import no driver.)
 - `api.data.sqlalchemy-and-alembic-only`: exception for `policyengine_api/data/v2/catalog/publication_staging.py` (`attribute .driver_connection`) allowed as a driver-access (Catalog publication runs COPY through the psycopg connection beneath a SQLAlchemy Connection that SQLAlchemy opened and still manages, so the transaction stays SQLAlchemy's.)
@@ -164,6 +165,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.data.orm-only` | Code that reads or writes database rows declares tables only as SQLAlchemy ORM mapped classes, SQLModel classes included, and runs every statement through an ORM Session against those classes. It never uses Core Table objects, Connections or handwritten SQL, apart from the registry's named exceptions. | mechanical | enforced | yes | pytest `tests/unit/data/test_orm_only.py` | `pr.yml:test` | yes |
 | `api.data.runtime-sql-confined` | Raw SQL is confined to the data-access layer; runtime modules and report orchestration use sessions and mapped models. | mechanical | enforced | yes | pytest `tests/unit/data/test_runtime_sql_boundaries.py` | `pr.yml:test` | **unproven** |
 | `api.data.sqlalchemy-and-alembic-only` | Code connects to relational databases only through SQLAlchemy engines, connections and sessions, never by calling a database driver directly, and changes persistent schema only through Alembic revisions. | mechanical | enforced | yes | pytest `tests/unit/data/test_database_access_boundaries.py` | `pr.yml:test` | yes |
 | `api.legacy.removed-layers-stay-removed` | Removed legacy persistence layers, the temporary DAO module and the legacy endpoints package stay removed. | mechanical | enforced | yes | pytest `tests/unit/data/test_runtime_sql_boundaries.py`, `tests/unit/routes/test_flask_route_boundaries.py`, `tests/unit/services/test_orm_service_boundaries.py` | `pr.yml:test` | **unproven** |
@@ -175,9 +177,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
+  r_api_data_orm_only("api.data.orm-only (enforced)")
+  e_pytest_tests_unit_data_test_orm_only_py["pytest tests/unit/data/test_orm_only.py"]
+  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_data_runtime_sql_confined("api.data.runtime-sql-confined (enforced)")
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py["pytest tests/unit/data/test_runtime_sql_boundaries.py"]
-  j_CI_pr_yml_test["CI pr.yml:test"]
   r_api_data_sqlalchemy_and_alembic_only("api.data.sqlalchemy-and-alembic-only (enforced)")
   e_pytest_tests_unit_data_test_database_access_boundaries_py["pytest tests/unit/data/test_database_access_boundaries.py"]
   r_api_legacy_removed_layers_stay_removed("api.legacy.removed-layers-stay-removed (enforced)")
@@ -190,6 +194,8 @@ flowchart LR
   e_pytest_tests_unit_services_test_local_data_service_boundaries_py__tests_unit_services_test_orchestration_service_database_boundaries_py__tests_unit_services_test_orm_service_boundaries_py__tests_unit_services_test_run_and_spec_service_database_boundaries_py["pytest tests/unit/services/test_local_data_service_boundaries.py, tests/unit/services/test_orchestration_service_database_boundaries.py, tests/unit/services/test_orm_service_boundaries.py, tests/unit/services/test_run_and_spec_service_database_boundaries.py"]
   r_api_services_session_ownership("api.services.session-ownership (enforced)")
   e_pytest_tests_unit_services_test_local_data_service_boundaries_py__tests_unit_services_test_orm_service_boundaries_py["pytest tests/unit/services/test_local_data_service_boundaries.py, tests/unit/services/test_orm_service_boundaries.py"]
+  r_api_data_orm_only --> e_pytest_tests_unit_data_test_orm_only_py
+  e_pytest_tests_unit_data_test_orm_only_py --> j_CI_pr_yml_test
   r_api_data_runtime_sql_confined --> e_pytest_tests_unit_data_test_runtime_sql_boundaries_py
   e_pytest_tests_unit_data_test_runtime_sql_boundaries_py --> j_CI_pr_yml_test
   r_api_data_sqlalchemy_and_alembic_only --> e_pytest_tests_unit_data_test_database_access_boundaries_py

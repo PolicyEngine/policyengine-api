@@ -618,6 +618,41 @@ category = "migration-revision"
 reason = "Alembic generates the revisions, and they are where schema changes belong, so the check doesn't scan them. Ruff skips the same files (extend-exclude in pyproject.toml)."
 
 [[rule]]
+id = "api.data.orm-only"
+category = "runtime-layers"
+statement = "Code that reads or writes database rows declares tables only as SQLAlchemy ORM mapped classes, SQLModel classes included, and runs every statement through an ORM Session against those classes. It never uses Core Table objects, Connections or handwritten SQL, apart from the registry's named exceptions."
+rationale = "docs/engineering/skills/alembic-migrations.md#database-statements-through-the-orm"
+scope = ["policyengine_api/**/*.py", "scripts/**/*.py", "tests/**/*.py", ".github/**/*.py"]
+tier = "mechanical"
+status = "enforced"
+autofix = false
+[rule.enforcer]
+kind = "pytest"
+nodes = [
+  "tests/unit/data/test_orm_only.py::test_database_code_uses_only_the_orm",
+  "tests/unit/data/test_orm_only.py::test_every_table_is_mapped_by_a_class",
+  "tests/unit/data/test_orm_only.py::test_orm_only_exceptions_match_a_finding_and_name_a_category",
+  "tests/unit/data/test_orm_only.py::test_every_scanned_directory_contributes_files",
+]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
+[rule.proof]
+bad_fixture = "rules/fixtures/api.data.orm-only/bad_simulation_rows.py"
+good_fixture = "rules/fixtures/api.data.orm-only/good_simulation_rows.py"
+test = "tests/unit/data/test_orm_only.py::test_rule_proof_orm_only"
+# Each exception names a module and, in match, the source of the one finding
+# there that SQLAlchemy's ORM has no form for (category no-orm-form), or a path
+# pattern the rule test doesn't read (category migration-revision). The rule
+# test fails on a finding no exception names and on an exception that names
+# nothing.
+[[rule.exception]]
+path = "migrations/**/*.py"
+category = "migration-revision"
+reason = "migrations/ holds the Alembic environments and the revisions Alembic generates. The environments run Alembic's migration context on a Connection, and the revisions are where schema changes belong (api.data.sqlalchemy-and-alembic-only), so the rule test doesn't read them."
+
+[[rule]]
 id = "api.legacy.removed-layers-stay-removed"
 category = "runtime-layers"
 statement = "Removed legacy persistence layers, the temporary DAO module and the legacy endpoints package stay removed."
