@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.countries.types import CountryRead
     from policyengine_api.services.v2.households.types import HouseholdRead
     from policyengine_api.services.v2.policies.types import CheckedPolicyRead
+    from policyengine_api.services.v2.simulation_service.types import DynamicSource
 
 # The simulation service's limits on axes, as its household contract sets
 # them: at most MAXIMUM_AXIS_GROUPS groups of at most MAXIMUM_PARALLEL_AXES
@@ -70,7 +71,9 @@ def _omit_spm_default(schema: dict[str, Any]) -> None:
 class HouseholdCalculationInput(StrictCalculationModel):
     """A stored household to calculate under a stored policy, or current law.
 
-    The calculation's year is the household's default year, the year its
+    ``dynamic_id`` names a stored dynamic, whose model assumptions apply
+    too; none means no assumptions beyond the model's defaults. The
+    calculation's year is the household's default year, the year its
     values name. ``axes`` vary inputs across points: the axes of one group
     vary together, so they share one point count, and the groups form a grid
     of at most 10,000 points. ``add_missing_variables`` adds every yearly,
@@ -82,6 +85,7 @@ class HouseholdCalculationInput(StrictCalculationModel):
     country_id: CountryId
     household_id: UUID
     policy_id: UUID | None = None
+    dynamic_id: UUID | None = None
     axes: Annotated[list[AxisGroup], Field(max_length=MAXIMUM_AXIS_GROUPS)] | None = (
         None
     )
@@ -130,7 +134,7 @@ class HouseholdCalculationSubmitted:
     """A calculation the simulation service accepted, and what it calculates.
 
     ``year`` is the household's default year, which the simulation service
-    calculates.
+    calculates. ``dynamic_id`` is the dynamic it applies, None for none.
     """
 
     calculation_id: UUID
@@ -138,6 +142,7 @@ class HouseholdCalculationSubmitted:
     country_id: str
     household_id: UUID
     policy_id: UUID | None
+    dynamic_id: UUID | None
     year: int
 
 
@@ -181,15 +186,17 @@ class HouseholdCalculationFailure:
 class HouseholdCalculationRead:
     """A household calculation as household_jobs records it.
 
-    ``catalog_version_id`` and the package versions are those the simulation
-    service ran it with. ``result`` is set once it succeeded and ``error``
-    once it failed.
+    ``dynamic_id`` is the dynamic it applies, None for none, or once the
+    dynamic was deleted. ``catalog_version_id`` and the package versions
+    are those the simulation service ran it with. ``result`` is set once it
+    succeeded and ``error`` once it failed.
     """
 
     calculation_id: UUID
     country_id: str
     household_id: UUID
     policy_id: UUID | None
+    dynamic_id: UUID | None
     year: int
     catalog_version_id: UUID
     country_package_version: str
@@ -306,12 +313,29 @@ class PolicySource(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class HouseholdCalculationSources:
+    """The stored rows a submission is checked against, each through its service.
+
+    ``countries``, ``households``, ``policies`` and ``dynamics`` are read
+    through the services of ``/v2/countries``, ``/v2/households``,
+    ``/v2/policies`` and ``/v2/dynamics``; ``dynamics`` is the economy
+    path's ``DynamicSource``, read only for a submission that names a
+    dynamic.
+    """
+
+    countries: CountrySource
+    households: HouseholdSource
+    policies: PolicySource
+    dynamics: DynamicSource
+
+
 class HouseholdCalculationSubmitter(Protocol):
     """The simulation service's ``POST /household-calculations``.
 
-    The simulation service reads the household, the policy's parameter values
-    and the catalog version from the Public API's tables itself, inserts the
-    job and starts its Modal call.
+    The simulation service reads the household, the policy's and the
+    dynamic's parameter values and the catalog version from API v1's tables
+    itself, inserts the job and starts its Modal call.
     """
 
     def submit(

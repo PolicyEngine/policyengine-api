@@ -37,6 +37,9 @@ from policyengine_api.services.v2.household_calculations.database_session import
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
+)
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationNotFoundError,
 )
@@ -199,13 +202,16 @@ def runtime_service(
     """Return the household calculation service, reading as the runtime role."""
     sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     return V2HouseholdCalculationService(
-        countries=V2CountryService(CountryDatabaseSession(sessions)),
-        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-        policies=V2PolicyService(
-            PolicyDatabaseSession(sessions), running_policyengine_version="6.10.0"
-        ),
-        dynamics=V2DynamicService(
-            DynamicDatabaseSession(sessions), running_policyengine_version="6.10.0"
+        sources=HouseholdCalculationSources(
+            countries=V2CountryService(CountryDatabaseSession(sessions)),
+            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
+            policies=V2PolicyService(
+                PolicyDatabaseSession(sessions), running_policyengine_version="6.10.0"
+            ),
+            dynamics=V2DynamicService(
+                DynamicDatabaseSession(sessions),
+                running_policyengine_version="6.10.0",
+            ),
         ),
         database_session=HouseholdCalculationDatabaseSession(sessions),
         simulation_factory=_no_simulation_service,

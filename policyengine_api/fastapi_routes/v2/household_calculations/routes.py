@@ -39,6 +39,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
 )
 from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import current_observability_id
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationNotFoundError,
@@ -82,6 +83,7 @@ HOUSEHOLD_CALCULATION_ERROR_MAPPINGS = (
         (
             HouseholdNotFoundError,
             PolicyNotFoundError,
+            DynamicNotFoundError,
             HouseholdCalculationNotFoundError,
         ),
         404,

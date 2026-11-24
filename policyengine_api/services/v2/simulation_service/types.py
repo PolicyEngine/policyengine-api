@@ -295,9 +295,15 @@ class EconomyReportCreationInput(EconomyReportFields):
 
 
 class HouseholdPolicyChoice(StrictSubmissionModel):
-    """A household simulation's stored policy; none means current law."""
+    """A household simulation's stored policy and dynamic; neither means current law.
+
+    No policy is current law, and no dynamic no model assumptions beyond the
+    model's defaults. The simulation service applies the dynamic's values
+    with the policy's, and refuses a parameter both set.
+    """
 
     policy_id: ResourceId | None = None
+    dynamic_id: ResourceId | None = None
 
 
 class HouseholdReportFields(StrictSubmissionModel):
@@ -307,6 +313,8 @@ class HouseholdReportFields(StrictSubmissionModel):
     the report's country, and both simulations calculate it in its default
     year, the year its values name, as a household calculation does.
     ``reform`` is null, or omitted, for a report of the baseline alone. Each
+    side names its own policy and dynamic, and nothing requires the two
+    sides' dynamics to match, as for an economy report. Each
     simulation calculates every yearly, monthly and eternal variable the
     household lacks, as ``/calculate-full`` does, so the report gives every
     value; there is no option to fill in only the values the household asks

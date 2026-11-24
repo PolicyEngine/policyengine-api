@@ -10,14 +10,16 @@ from policyengine_api.services.v2.household_calculations.types import (
 class HouseholdCalculationRequest(HouseholdCalculationInput):
     """A stored household to calculate under a stored policy, or current law.
 
-    ``household_id`` and ``policy_id`` name records of ``country_id`` stored
-    through ``/v2/households`` and ``/v2/policies``; without ``policy_id`` the
-    household is calculated under current law, for the household's
-    ``default_year``. Each group in ``axes`` varies its inputs together across
-    ``count`` points; several groups form a grid of at most 10,000 points.
-    ``add_missing_variables`` adds every variable the household lacks before
-    calculating. ``spm`` selects the SPM forecast scenario and geography for
-    a US household. Each submission starts a new calculation.
+    ``household_id``, ``policy_id`` and ``dynamic_id`` name records of
+    ``country_id`` stored through ``/v2/households``, ``/v2/policies`` and
+    ``/v2/dynamics``; without ``policy_id`` the household is calculated under
+    current law, and without ``dynamic_id`` with no model assumptions beyond
+    the model's defaults, for the household's ``default_year``. Each group
+    in ``axes`` varies its inputs together across ``count`` points; several
+    groups form a grid of at most 10,000 points. ``add_missing_variables``
+    adds every variable the household lacks before calculating. ``spm``
+    selects the SPM forecast scenario and geography for a US household. Each
+    submission starts a new calculation.
     """
 
     def to_service_input(self) -> HouseholdCalculationInput:

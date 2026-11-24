@@ -19,6 +19,9 @@ from policyengine_api.services.v2.dynamics.validators import (
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
+)
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationStorageError,
@@ -79,10 +82,12 @@ class Services:
 
     def service(self, database=None) -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=self.countries,
-            households=self.households,
-            policies=self.policies,
-            dynamics=self.dynamics,
+            sources=HouseholdCalculationSources(
+                countries=self.countries,
+                households=self.households,
+                policies=self.policies,
+                dynamics=self.dynamics,
+            ),
             database_session=database or UnreadableDatabase(),
             simulation_factory=self.simulation_factory,
         )

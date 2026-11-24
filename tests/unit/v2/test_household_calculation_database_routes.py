@@ -52,6 +52,9 @@ from policyengine_api.services.v2.household_calculations.database_session import
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
 )
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
+)
 from policyengine_api.services.v2.households.database_session import (
     HouseholdDatabaseSession,
 )
@@ -190,6 +193,22 @@ def stored(sessions) -> dict[str, object]:
     return {name: row.id for name, row in rows.items()}
 
 
+def _sources(sessions: sessionmaker[Session]) -> HouseholdCalculationSources:
+    """Read the countries, households, policies and dynamics from ``sessions``."""
+    return HouseholdCalculationSources(
+        countries=V2CountryService(CountryDatabaseSession(sessions)),
+        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
+        policies=V2PolicyService(
+            PolicyDatabaseSession(sessions),
+            running_policyengine_version=RUNNING_VERSION,
+        ),
+        dynamics=V2DynamicService(
+            DynamicDatabaseSession(sessions),
+            running_policyengine_version=RUNNING_VERSION,
+        ),
+    )
+
+
 @pytest.fixture
 def simulation() -> FakeSimulation:
     return FakeSimulation()
@@ -199,16 +218,7 @@ def simulation() -> FakeSimulation:
 def client(sessions, simulation) -> TestClient:
     def service() -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=V2CountryService(CountryDatabaseSession(sessions)),
-            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-            policies=V2PolicyService(
-                PolicyDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
-            dynamics=V2DynamicService(
-                DynamicDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
+            sources=_sources(sessions),
             database_session=HouseholdCalculationDatabaseSession(sessions),
             simulation_factory=lambda: simulation,
         )
@@ -383,16 +393,7 @@ def client_with_simulation_client(sessions, simulation_recorder) -> TestClient:
 
     def service() -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=V2CountryService(CountryDatabaseSession(sessions)),
-            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-            policies=V2PolicyService(
-                PolicyDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
-            dynamics=V2DynamicService(
-                DynamicDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
+            sources=_sources(sessions),
             database_session=HouseholdCalculationDatabaseSession(sessions),
             simulation_factory=lambda: (
                 SimulationHouseholdCalculationClient.from_environment(
