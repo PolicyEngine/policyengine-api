@@ -36,22 +36,16 @@ from policyengine_api.data.v2.models import (
     BudgetWindowRun,
     CliffImpact,
     ReportRun,
-    ReportRunTrigger,
     Simulation,
+    UserReportRunAssociation,
     WithheldAreaCode,
 )
-from policyengine_api.data.v2.models.base import enum_type
 
 
 def _type_of(model: type[SQLModel], column_name: str) -> TypeEngine[Any]:
     """Return a copy of the type the model gives a column, such as its enum type."""
     column_type: TypeEngine[Any] = class_mapper(model).columns[column_name].type
     return column_type.copy()
-
-
-def _trigger_type() -> TypeEngine[Any]:
-    """Return the runs' ``trigger`` type, which no model's mapper holds any more."""
-    return enum_type(ReportRunTrigger, "v2_report_run_trigger")
 
 
 named_column_tables = registry()
@@ -147,7 +141,9 @@ class BudgetWindowRunColumns:
     id: Mapped[UUID] = mapped_column(primary_key=True)
     report_id: Mapped[UUID]
     tax_benefit_model_version_id: Mapped[UUID]
-    trigger: Mapped[str | None] = mapped_column(_trigger_type())
+    trigger: Mapped[str | None] = mapped_column(
+        _type_of(UserReportRunAssociation, "trigger")
+    )
     recalculate: Mapped[bool]
     status: Mapped[str] = mapped_column(_type_of(BudgetWindowRun, "status"))
 
@@ -168,7 +164,9 @@ class ReportRunColumns:
     country_package_version: Mapped[str]
     policyengine_version: Mapped[str]
     status: Mapped[str] = mapped_column(_type_of(ReportRun, "status"))
-    trigger: Mapped[str | None] = mapped_column(_trigger_type())
+    trigger: Mapped[str | None] = mapped_column(
+        _type_of(UserReportRunAssociation, "trigger")
+    )
     baseline_cliff_gap: Mapped[float | None]
     baseline_cliff_share: Mapped[float | None]
     reform_cliff_gap: Mapped[float | None]

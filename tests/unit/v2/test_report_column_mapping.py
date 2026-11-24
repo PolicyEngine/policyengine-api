@@ -18,7 +18,7 @@ from policyengine_api.data.v2.models import (
     ReportRun,
     User,
 )
-from tests.unit.v2.v2_schema_reading import stored_v2_table
+from tests.unit.v2.v2_schema_reading import model_columns, stored_v2_table
 
 UNMAPPED_COLUMNS = [
     (Report, "label"),
@@ -64,9 +64,12 @@ def test_the_table_keeps_an_unmapped_column_until_a_revision_drops_it(
 @pytest.mark.parametrize("model", [ReportRun, BudgetWindowRun])
 def test_a_runs_trigger_keeps_the_type_users_run_records_share(model: type) -> None:
     trigger_type = model.model_fields["trigger"].sa_type
+    record_trigger_type = model_columns("user_report_run_associations").trigger.type
 
     assert isinstance(trigger_type, sa.Enum)
-    assert trigger_type.name == "v2_report_run_trigger"
+    assert isinstance(record_trigger_type, sa.Enum)
+    assert trigger_type.name == record_trigger_type.name == "v2_report_run_trigger"
+    assert trigger_type.enums == record_trigger_type.enums
 
 
 def test_the_reports_user_key_and_index_stay_with_the_column() -> None:
