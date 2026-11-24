@@ -5,9 +5,12 @@ sequences, grants on their columns, and default privileges (set by ``ALTER
 DEFAULT PRIVILEGES``). The v2 schema has only tables, so tests make the rest
 here: a view and a materialized view, mapped by ``PrivilegeTestView`` and
 ``PrivilegeTestMaterializedView`` so that the shared ``grant`` grants on them,
-and sequences. The ORM has no form for these statements, so each helper that
-writes SQL text is a ``no-orm-form`` exception of rule api.data.orm-only in
-rules/registry.toml:
+and sequences. test_v2_privilege_reconciliation.py uses all of it.
+test_v2_migration_target_persistent.py uses ``grant_on_schema_object`` to give
+a migration role CREATE on ``public``, so the persistent target's privilege
+check meets a role with that privilege and one without. The ORM has no form
+for these statements, so each helper that writes SQL text is a
+``no-orm-form`` exception of rule api.data.orm-only in rules/registry.toml:
 
 - ``grant_on_schema_object``: GRANT on a schema or a sequence, which the shared
   ``grant`` (tables, views and materialized views) doesn't cover;

@@ -181,8 +181,8 @@ def api_base_url() -> str:
 
 
 @pytest.fixture
-def api_client(api_base_url: str):
-    """Call the deployed Public API with the CI server credential on every request.
+def api_client(api_base_url: str) -> Iterator[httpx.Client]:
+    """Call the deployed API v1 with the CI server credential on every request.
 
     The client is ``deployed_api_client``'s
     (``tests/integration/deployed_api_credentials.py``). The test fails, rather
@@ -197,8 +197,8 @@ def api_client(api_base_url: str):
 
 
 @pytest.fixture
-def uncredentialed_api_client(api_base_url: str):
-    """Call the deployed Public API without any credential, as an outside caller."""
+def uncredentialed_api_client(api_base_url: str) -> Iterator[httpx.Client]:
+    """Call the deployed API v1 without any credential, as an outside caller."""
     with httpx.Client(
         base_url=api_base_url,
         timeout=90.0,
@@ -229,7 +229,8 @@ def _poll_live_endpoint(
     route_name: str,
 ) -> dict:
     deadline = time.monotonic() + INTEGRATION_TIMEOUT_SECONDS
-    last_response = None
+    # The last error, response summary or payload, for the timeout's message.
+    last_response: object = None
 
     while True:
         try:
@@ -254,7 +255,7 @@ def _poll_live_endpoint(
                         request=error.request,
                         response=error.response,
                     ) from error
-                payload = response.json()
+                payload: dict = response.json()
 
                 if payload["status"] != "computing":
                     return payload
@@ -271,7 +272,7 @@ def _poll_live_endpoint(
 
 
 @pytest.fixture
-def poll_live_endpoint():
+def poll_live_endpoint() -> Callable[..., dict]:
     return _poll_live_endpoint
 
 

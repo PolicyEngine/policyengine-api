@@ -643,13 +643,14 @@ bad_fixture = "rules/fixtures/api.data.orm-only/bad_simulation_rows.py"
 good_fixture = "rules/fixtures/api.data.orm-only/good_simulation_rows.py"
 test = "tests/unit/data/test_orm_only.py::test_rule_proof_orm_only"
 # Each exception names a module, in match the source of a finding there that
-# SQLAlchemy's ORM has no form for and, in function, the function it is in
-# (category no-orm-form), or a path pattern the rule test doesn't read
-# (category migration-revision). Without a function, an entry allows its source
-# anywhere in the module. Every entry outside tests/, and every entry whose
-# match holds no SQL text (a bare call, a call on variables or an attribute
-# read), names its function. The rule test fails on a finding no exception
-# names and on an exception that names nothing.
+# SQLAlchemy's ORM has no form for and, in function, the function it is in, or
+# "<module>" for module level (category no-orm-form), or a path pattern the
+# rule test doesn't read (category migration-revision). Without a function, an
+# entry allows its source anywhere in the module. Every entry outside tests/
+# names its function, and so does every entry whose match isn't raw SQL text
+# or a statement method given SQL of its own, such as a bare call, a call on
+# variables, a driver's connect or an attribute read. The rule test fails on a
+# finding no exception names and on an exception that names nothing.
 [[rule.exception]]
 path = "migrations/**/*.py"
 category = "migration-revision"
@@ -806,7 +807,7 @@ path = "tests/integration/catalog_privilege_objects.py"
 match = "text(f'GRANT {_privileges(privileges)} ON {on_object} TO {grantee}')"
 function = "grant_on_schema_object"
 category = "no-orm-form"
-reason = "Grants have no ORM form. The privilege reconciliation tests grant a role privileges on a schema or a sequence, which the shared grant helper, for tables, views and materialized views, doesn't cover, to check the reconciliation reads those grants."
+reason = "Grants have no ORM form. The privilege reconciliation tests grant a role privileges on a schema or a sequence, which the shared grant helper, for tables, views and materialized views, doesn't cover, to check the reconciliation reads those grants. test_v2_migration_target_persistent grants a migration role CREATE on the public schema, so the persistent target's privilege check meets a role with that privilege and one without."
 
 [[rule.exception]]
 path = "tests/integration/catalog_privilege_objects.py"

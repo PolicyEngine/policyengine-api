@@ -28,15 +28,16 @@ differs in four ways:
   the named ``DECLARATIVE_BASE_MODULES``, rather than files matched by name.
 - A session-factory module may also import ``Connection``, open a Connection
   (``connect()``, ``connection()``, ``get_bind()`` and ``begin()`` on an
-  engine), call a database driver's ``connect`` and attach listeners for pool,
-  engine or dialect events, which no other module may do.
+  engine), open a database driver's connection and attach listeners for
+  pool, engine or dialect events, which no other module may do.
   ``raw_connection()`` hands out the driver's connection, not SQLAlchemy's,
   and is reported in every module.
 - A finding is allowed when a ``no-orm-form`` exception names its file, in
   ``match`` its ``source`` and, when the exception gives one, in ``function``
-  the function it is in; a ``migration-revision`` exception names a path
-  pattern the rule test doesn't read. Each finding records the innermost
-  class or function whose body holds it.
+  the function it is in, or ``<module>`` for module level; a
+  ``migration-revision`` exception names a path pattern the rule test doesn't
+  read. Each finding records the innermost class or function whose body holds
+  it.
 
 The source checks look for Core rather than for the ORM, so any statement on
 mapped classes passes. Each file is checked on its own, through its own imports:
@@ -54,9 +55,11 @@ Connection, and only a session-factory module may read ``factory.kw["bind"]``.
 A statement run outside a session is reported with its constant arguments, as
 in ``connection.execute('PRAGMA foreign_keys = ON')``, so an exception can name
 that one statement. ``.connection()``, ``.get_bind()``, ``.raw_connection()``
-and ``.exec_driver_sql()`` are SQLAlchemy's names and count in every module, as
-does a call of ``connect`` from psycopg, psycopg2, pymysql, sqlite3 or
-mysql.connector, followed through the module's imports. The rules that go by a
+and ``.exec_driver_sql()`` are SQLAlchemy's names and count whatever a module
+imports, as does opening a connection of psycopg, psycopg2, pymysql, sqlite3 or
+mysql.connector: a call into one of them, followed through the module's
+imports, whose last name is ``connect``, ``Connect``, ``Connection`` or
+``AsyncConnection``. The rules that go by a
 method or attribute name other libraries share apply only in modules that
 import sqlalchemy or sqlmodel: any ``.table`` read, ``kw["bind"]``,
 ``.execute()`` on anything not named as a session, ``.scalar()``,
@@ -168,8 +171,10 @@ ENGINE_TRANSACTION_METHOD = "begin"
 # The call that hands out the driver's connection beneath SQLAlchemy's, which
 # no module may make.
 DRIVER_CONNECTION_METHODS = frozenset({"raw_connection"})
-# The database drivers, and the functions of theirs that open a connection,
-# which only a session-factory module may call.
+# The database drivers, and the last names of their calls that open a
+# connection: a connect function or method, as in psycopg.connect or
+# psycopg.Connection.connect, or a connection class, as in sqlite3.Connection.
+# Only a session-factory module may make them.
 DATABASE_DRIVER_MODULES = (
     "mysql.connector",
     "psycopg",
@@ -177,8 +182,8 @@ DATABASE_DRIVER_MODULES = (
     "pymysql",
     "sqlite3",
 )
-DRIVER_CONNECT_FUNCTIONS = frozenset(
-    f"{driver}.connect" for driver in DATABASE_DRIVER_MODULES
+DRIVER_CONNECT_NAMES = frozenset(
+    {"AsyncConnection", "Connect", "Connection", "connect"}
 )
 # execute runs only on a name such as session or store_session, which finds a
 # connection passed around without a Connection annotation. A Result has scalar
@@ -277,8 +282,18 @@ UNMAPPED_TABLE = "table without a mapped class"
 NO_ORM_FORM = "no-orm-form"
 MIGRATION_REVISION = "migration-revision"
 EXCEPTION_CATEGORIES = (NO_ORM_FORM, MIGRATION_REVISION)
-# Outside the tests, every no-orm-form exception names its function.
+# Outside the tests, every no-orm-form exception names its function, or
+# MODULE_LEVEL for a finding in no class or function.
 TEST_DIRECTORY = "tests/"
+MODULE_LEVEL = "<module>"
+# The calls whose first argument is SQL: the raw SQL constructs and the methods
+# that run a statement. An exception naming one, given SQL of its own, names
+# one statement, so it needs no function in a test module.
+SQL_TEXT_CALLS = RAW_SQL_FUNCTIONS | {
+    DRIVER_SQL_METHOD,
+    EXECUTE_METHOD,
+    *CONNECTION_STATEMENT_METHODS,
+}
 SCOPE_NODES = (ast.AsyncFunctionDef, ast.ClassDef, ast.FunctionDef)
 
 
@@ -615,11 +630,18 @@ def _runs_raw_sql(node: ast.Call, function: str, context: _ModuleContext) -> boo
 
 
 def _connects_a_driver(node: ast.Call, context: _ModuleContext) -> bool:
-    """Whether a call opens a database driver's connection outside a factory."""
+    """Whether a call opens a database driver's connection outside a factory.
+
+    The call is into a driver module, followed through the module's imports,
+    and its last name is a connect function or a connection class.
+    """
+    if context.module.is_session_factory:
+        return False
+    qualified = _qualified_name(node.func, context.module.driver_imported)
     return (
-        not context.module.is_session_factory
-        and _qualified_name(node.func, context.module.driver_imported)
-        in DRIVER_CONNECT_FUNCTIONS
+        qualified is not None
+        and _library_of(qualified, DATABASE_DRIVER_MODULES) is not None
+        and qualified.rsplit(".", 1)[-1] in DRIVER_CONNECT_NAMES
     )
 
 
@@ -844,9 +866,12 @@ def _module_context(module: _Module) -> _ModuleContext:
 def _enclosing_scopes(tree: ast.Module) -> dict[int, str]:
     """Map each node in a class's or function's body to that scope's dotted name.
 
-    The innermost scope counts, named as Python's ``__qualname__`` names it
-    without ``<locals>``: ``Reconciler.apply.build``. A definition's own
-    decorators, parameters and annotations belong to the scope around it.
+    The innermost class or function counts, its name joined to the names of
+    the classes and functions around it: ``Reconciler.apply.build``. A lambda
+    counts as the function it is in, and two definitions with one name in one
+    scope, such as a property's getter and setter, share that name. A
+    definition's own decorators, parameters and annotations belong to the
+    scope around it.
     """
     scopes: dict[int, str] = {}
     pending: list[tuple[ast.AST, str | None]] = [(tree, None)]
@@ -1001,13 +1026,14 @@ def _names_finding(exception: RuleException, finding: Finding) -> bool:
 
     Its ``path`` is the finding's file and its ``match`` the finding's
     ``source``, exactly. With a ``function``, the finding is in that function
-    too; without one, the exception allows the source anywhere in the file.
+    too, or at module level for ``MODULE_LEVEL``; without one, the exception
+    allows the source anywhere in the file.
     """
     return (
         exception.category == NO_ORM_FORM
         and exception.match is not None
         and (exception.path, exception.match) == (finding.file, finding.source)
-        and exception.function in (None, finding.function)
+        and exception.function in (None, finding.function or MODULE_LEVEL)
     )
 
 
@@ -1049,21 +1075,40 @@ def unscanned_files(
     )
 
 
-def _names_sql_text(match: str) -> bool:
-    """Whether ``match`` is a call whose first argument is a string or f-string.
+def _holds_literal_sql(argument: ast.expr) -> bool:
+    """Whether a string or f-string argument has SQL of its own, not only names.
 
-    Such a match names one statement, as ``text(f'TRUNCATE {tables}')`` does. A
+    ``'TRUNCATE reports'`` and ``f'TRUNCATE {tables}'`` do; ``''``,
+    ``f'{statement}'`` and ``f'{statement} {parameters}'`` don't.
+    """
+    if isinstance(argument, ast.Constant):
+        return isinstance(argument.value, str) and bool(argument.value.strip())
+    return isinstance(argument, ast.JoinedStr) and any(
+        _holds_literal_sql(part)
+        for part in argument.values
+        if isinstance(part, ast.Constant)
+    )
+
+
+def _names_sql_text(match: str) -> bool:
+    """Whether ``match`` is raw SQL, or a statement method, given SQL of its own.
+
+    Such a match names one statement: a raw SQL construct (``text``,
+    ``TextClause``, ``literal_column``, ``DDL``) or a statement method
+    (``execute``, ``exec_driver_sql``, ``scalar`` and the like) whose first
+    argument holds literal SQL, as ``text(f'TRUNCATE {tables}')`` does. A
+    string given to anything else, such as ``sqlite3.connect(':memory:')``, a
     bare call, a call on variables and an attribute read name none.
     """
     try:
         expression = ast.parse(match, mode="eval").body
     except SyntaxError:
         return False
-    if not isinstance(expression, ast.Call) or not expression.args:
-        return False
-    statement = expression.args[0]
-    return isinstance(statement, ast.JoinedStr) or (
-        isinstance(statement, ast.Constant) and isinstance(statement.value, str)
+    return (
+        isinstance(expression, ast.Call)
+        and bool(expression.args)
+        and _last_name(expression.func) in SQL_TEXT_CALLS
+        and _holds_literal_sql(expression.args[0])
     )
 
 
@@ -1090,7 +1135,8 @@ def _construct_exception_problem(
     if _needs_function(exception, exception.match):
         return (
             f"{where} ({exception.match}) needs a function: set function to the "
-            "enclosing function of its finding"
+            f"enclosing function of its finding, or to {MODULE_LEVEL} for a "
+            "finding at module level"
         )
     return None
 

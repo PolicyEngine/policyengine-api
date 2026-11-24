@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from scripts.rules.load import FUNCTION_EXCEPTION_RULES
 from scripts.rules.model import Kind, Registry, Rule, RuleException, Status, Tier
 
 RULES_MD = Path("docs/generated/rules.md")
@@ -193,7 +194,7 @@ def render_rules_md(registry: Registry) -> str:
         ],
     )
     dated = [f"- `{r.id}`: review by {r.review_by}" for r in rules if r.review_by] + [
-        f"- `{r.id}`: {_exception_summary(e)}" for r in rules for e in r.exceptions
+        f"- `{r.id}`: {_exception_summary(r, e)}" for r in rules for e in r.exceptions
     ]
     section("Exceptions and review dates", sorted(dated))
 
@@ -289,12 +290,15 @@ def write_outputs(registry: Registry, root: Path) -> list[Path]:
     return [rules_md, agents]
 
 
-def _exception_summary(exception: RuleException) -> str:
-    """Describe where an exception applies, why, and when it ends."""
+def _exception_summary(rule: Rule, exception: RuleException) -> str:
+    """Describe where an exception applies, why, and when it ends.
+
+    Its function is shown only for a rule whose checker reads it.
+    """
     site = f"`{exception.path}`"
     if exception.match is not None:
         site += f" (`{exception.match}`"
-        if exception.function is not None:
+        if exception.function is not None and rule.id in FUNCTION_EXCEPTION_RULES:
             site += f" in `{exception.function}`"
         site += ")"
     if exception.category is not None:

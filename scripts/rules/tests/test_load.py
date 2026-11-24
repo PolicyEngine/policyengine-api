@@ -204,19 +204,25 @@ NARROWED_EXCEPTION = {
 }
 
 
+ORM_ONLY_RULE = "api.data.orm-only"
+
+
 class ExceptionFunctionTest(unittest.TestCase):
-    """An exception's ``function`` narrows it to findings inside that function."""
+    """An exception's ``function`` narrows it to findings inside that function.
+
+    Only the rules whose checkers read it, api.data.orm-only's, may give one.
+    """
 
     def _parsed_exceptions(
-        self, exception: Mapping[str, object]
+        self, exception: Mapping[str, object], rule_id: str = ORM_ONLY_RULE
     ) -> tuple[list[str], tuple[RuleException, ...]]:
         raw = tomllib.loads(REGISTRY)
-        rule = {**SINGLE_TABLES_RULE, "exception": exception}
+        rule = {**SINGLE_TABLES_RULE, "id": rule_id, "exception": exception}
         del rule["baseline"]
         raw["rule"] = [rule]
         registry, violations = parse(raw)
         assert registry is not None
-        parsed = registry.rule("ex.layers.single-tables")
+        parsed = registry.rule(rule_id)
         assert parsed is not None
         return [str(violation) for violation in violations], parsed.exceptions
 
@@ -255,11 +261,25 @@ class ExceptionFunctionTest(unittest.TestCase):
         self.assertEqual(
             violations,
             [
-                "[ex.layers.single-tables] schema: "
-                "ex.layers.single-tables.exception.function must be a non-empty "
-                "string. Fix: set function."
+                f"[{ORM_ONLY_RULE}] schema: {ORM_ONLY_RULE}.exception.function "
+                "must be a non-empty string. Fix: set function."
             ],
         )
+
+    def test_another_rules_exception_may_not_give_a_function(self) -> None:
+        violations, exceptions = self._parsed_exceptions(
+            NARROWED_EXCEPTION, rule_id="ex.layers.single-tables"
+        )
+
+        self.assertEqual(
+            violations,
+            [
+                "[ex.layers.single-tables] schema: "
+                "ex.layers.single-tables.exception.function is read only for "
+                f"{ORM_ONLY_RULE}. Fix: remove function."
+            ],
+        )
+        self.assertIsNone(exceptions[0].function)
 
 
 if __name__ == "__main__":

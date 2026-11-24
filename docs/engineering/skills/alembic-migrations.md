@@ -193,9 +193,11 @@ SQLAlchemy's `text`. They report four kinds of finding:
 - **Core engine or connection**: importing `Engine`, `create_engine` or
   `Connection` outside a session-factory module; opening a Connection there
   (`connect()`, `connection()`, `get_bind()`, or `begin()` on an engine);
-  calling a database driver's `connect` there (`psycopg`, `psycopg2`,
-  `pymysql`, `sqlite3` or `mysql.connector`); `raw_connection()` in any
-  module; `execute()` on anything not named as a session, and `scalar()`,
+  opening a database driver's connection there (a call into `psycopg`,
+  `psycopg2`, `pymysql`, `sqlite3` or `mysql.connector` whose last name is
+  `connect`, `Connect`, `Connection` or `AsyncConnection`, as in
+  `psycopg.connect(url)` or `sqlite3.Connection(':memory:')`);
+  `raw_connection()` in any module; `execute()` on anything not named as a session, and `scalar()`,
   `scalars()`, `stream()` or `stream_scalars()` on a name such as
   `connection`; listening for pool, engine or dialect events (`connect`,
   `checkout`, `before_cursor_execute`, `handle_error` and the rest) outside a
@@ -205,11 +207,12 @@ SQLAlchemy's `text`. They report four kinds of finding:
   `cursor()`, apart from `text()` given as a server default, a partial
   index's condition or a check constraint's condition.
 
-`connection()`, `get_bind()`, `raw_connection()` and `exec_driver_sql()` are
-SQLAlchemy's names, so they count in every module, as does a driver's
-`connect`. The names other libraries share, such as `execute()`, `connect()`,
-`begin()` and `cursor()`, count only in a module that imports `sqlalchemy` or
-`sqlmodel`. A statement run outside a session is reported with its constant
+`connection()`, `get_bind()` and a driver's connection are reported in every
+module outside the session-factory modules, whatever the module imports, and
+`raw_connection()` and `exec_driver_sql()` in every module, session-factory
+modules included. The names other libraries share, such as `execute()`,
+`connect()`, `begin()` and `cursor()`, count only in a module that imports
+`sqlalchemy` or `sqlmodel`. A statement run outside a session is reported with its constant
 arguments, as `sqlite_connection.execute('PRAGMA foreign_keys = ON')`, and
 every finding records the innermost class or function whose body holds it,
 such as `Reconciler.apply`.
@@ -221,7 +224,7 @@ mapped class maps, including tables built in ways the source checks can't see.
 Two kinds of module have a role of their own:
 
 - **Session-factory modules** are the only modules that may create or hold an
-  Engine, open a Connection, call a database driver's `connect` or attach pool
+  Engine, open a Connection or a database driver's connection, or attach pool
   events:
   - `policyengine_api/data/orm.py`, API v1's runtime factory, with
     `policyengine_api/data/orm_pool_events.py`, whose listeners record the v1
@@ -256,7 +259,7 @@ session-factory modules:
 
 | Function | What it gives |
 | --- | --- |
-| `v1_sessions.unpooled_v1_sessions(url)` | A context manager yielding API v1 Session factories for the database at `url`, on an engine with no pool, disposed of on exit. For the household mirror command and the v1 schema migration. Importing `v1_sessions` loads no `.env` file, so a command's environment is the one its caller gives it. |
+| `v1_sessions.unpooled_v1_sessions(url)` | A context manager yielding API v1 Session factories for the database at `url`, on an engine with no pool, disposed of on exit. For the household mirror command and the v1 schema migration. Importing `v1_sessions` loads no `.env` file, so the v1 schema migration's environment is the one its caller gives it (`test_importing_the_script_loads_no_dotenv_file`). The household mirror command still imports `orm` through its services, and `orm` loads `.env`. |
 | `v1_sessions.v1_schema_inspector(source)` | SQLAlchemy's `Inspector` of the database a v1 Session (inside its transaction) or Session factory uses. |
 | `v2.database.unpooled_v2_sessions(url)` | The same for API v2, given `V2DatabaseSettings.connection.url` or `V2AlembicSettings.url`: catalog initialization and privilege reconciliation. |
 | `v2.database.unpooled_v2_read_only_sessions(url)` | The same, with every transaction `READ ONLY` (`postgresql_readonly`): the migration qualification commands. |
@@ -343,13 +346,20 @@ The rule's exceptions are its `[[rule.exception]]` entries in
   exactly as the check reports it, the text after its kind, such as
   `text(f'DROP ROLE {quoted_role}')`. `function` names the class or function
   whose body holds it, as the finding reports it after `in`, such as
-  `apply_declared_privileges` or `Reconciler.apply`. With `function`, the
-  entry allows that source only there; without it, anywhere in the module.
-  Every entry outside `tests/` gives its `function`, and so does any entry
-  whose `match` holds no SQL text, such as `text(statement)`,
-  `session.connection()` or an attribute read, which would otherwise allow
-  every such call in its module. Two sites in different functions take an
-  entry each.
+  `apply_declared_privileges` or `Reconciler.apply`; `<module>` names a
+  finding at module level, which the finding reports with no `in`. With
+  `function`, the entry allows that source only there; without it, anywhere
+  in the module. Every entry outside `tests/` gives its `function`. So does
+  every entry whose `match` doesn't name one SQL statement, which would
+  otherwise allow every such call in its module. A `match` names one
+  statement only when it is a raw SQL construct (`text`, `TextClause`,
+  `literal_column`, `DDL`) or a statement method (`execute`,
+  `exec_driver_sql`, `scalar` and the like) whose first argument is a string
+  or f-string with SQL of its own, as `text(f'TRUNCATE {tables} CASCADE')`.
+  `text(statement)`, `text(f'{statement}')`, `session.connection()`,
+  `sqlite3.connect(':memory:')` and an attribute read name none. Two sites in
+  different functions take an entry each. Only this rule's entries may give
+  `function`: the rules loader refuses it on any other rule's.
 - **`migration-revision`**: a path pattern the rule test doesn't read. It
   takes no `match` and no `function`.
 
@@ -358,8 +368,9 @@ finding, and on an entry with an unknown category, a `no-orm-form` entry
 without a `match`, an existing file or a `function` it needs, or a
 `migration-revision` entry that names no file or gives a `match` or
 `function`. Only statements SQLAlchemy can't express get an entry: `GRANT`
-and `REVOKE`, `CREATE`, `ALTER` and `DROP ROLE` (with `DROP OWNED BY`),
-`DROP TABLE`, `TRUNCATE`, `COPY`, `EXPLAIN`, `ANALYZE`, Alembic's need for a
+and `REVOKE`, `ALTER DEFAULT PRIVILEGES`, `CREATE`, `ALTER` and `DROP ROLE`
+(with `DROP OWNED BY`), `CREATE VIEW` and `CREATE MATERIALIZED VIEW`, `DROP
+TABLE`, `TRUNCATE`, `COPY`, `EXPLAIN`, `ANALYZE`, Alembic's need for a
 Connection, and connection settings no SQL function sets, such as SQLite's
 `foreign_keys` and `BEGIN IMMEDIATE`. Roles and Postgres settings inside a
 transaction need none: `set_config` sets them. Keep the entries in as few
