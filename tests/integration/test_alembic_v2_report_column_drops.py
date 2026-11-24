@@ -30,6 +30,7 @@ from policyengine_api.data.v2.models import (
     ReportRun,
     Simulation,
     SimulationRun,
+    User,
 )
 from policyengine_api.data.v2.privilege_reconciliation import (
     DEPLOYMENT_ENVIRONMENT,
@@ -270,8 +271,9 @@ def _store_rows_with_dropped_values(
     """Store a report, its run and its window run, each holding dropped values."""
     ids = {
         name: uuid4()
-        for name in ("simulation", "run", "report", "report_run", "window_run")
+        for name in ("user", "simulation", "run", "report", "report_run", "window_run")
     }
+    add_row(session, User, id=ids["user"], user_type="standard", primary_country="us")
     add_row(
         session,
         Simulation,
@@ -297,6 +299,7 @@ def _store_rows_with_dropped_values(
         id=ids["report"],
         label="Stored label",
         description="Stored description",
+        user_id=ids["user"],
         country="us",
         tax_benefit_model_id=rows.model_id,
         inputs={},
@@ -333,6 +336,7 @@ def _delete_stored_rows(session: Session, ids: dict[str, UUID]) -> None:
     session.execute(delete(Report).where(col(Report.id) == ids["report"]))
     session.execute(delete(SimulationRun).where(col(SimulationRun.id) == ids["run"]))
     session.execute(delete(Simulation).where(col(Simulation.id) == ids["simulation"]))
+    session.execute(delete(User).where(col(User.id) == ids["user"]))
 
 
 def test_rows_survive_the_drop_and_a_downgrade_restores_columns_without_values(

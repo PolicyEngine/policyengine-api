@@ -162,7 +162,11 @@ def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
     client: TestClient,
     runtime_sessions: sessionmaker[Session],
 ) -> None:
-    """No statement the read sends names a report run's own cliff columns."""
+    """No statement the read sends names the cliff columns report runs held.
+
+    Revision 4e30076d4b9f drops them, so a statement naming one would fail the
+    read; the scan also says which column it named.
+    """
     with owner_sessions.begin() as session:
         report = store_report(session, catalogs["us"])
         store_report_run(
