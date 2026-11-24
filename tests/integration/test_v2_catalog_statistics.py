@@ -14,22 +14,20 @@ that privilege first and fails before writing anything without it.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import make_url
-from sqlalchemy.pool import NullPool
+from sqlalchemy import cast, func, select
+from sqlalchemy.dialects.postgresql import REGCLASS
 
+from policyengine_api.data.v2.catalog import publication as publication_module
+from policyengine_api.data.v2.catalog import publication_statistics
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
+from policyengine_api.data.v2.models import TaxBenefitModelVersion
 from policyengine_api.data.v2.privilege_reconciliation import (
     apply_declared_privileges,
 )
@@ -37,17 +35,17 @@ from policyengine_api.data.v2.privileges import (
     CATALOG_WRITER_ROLE,
     declared_privileges,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.database_sessions import create_role, drop_role
 from tests.fixtures.v2_catalog import normalized_catalog
+from tests.integration.catalog_publication_support import emptied_catalog
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from datetime import datetime
 
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
-REPO = Path(__file__).parents[2]
-DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
 UNDEFINED_TABLE_FAILURE = "psycopg.errors.UndefinedTable (SQLSTATE 42P01)"
 ANALYZED_TABLES = (
     "datasets",
@@ -60,70 +58,65 @@ ANALYZED_TABLES = (
 )
 
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    url = make_url(database_url)
-    if url.database != DISPOSABLE_DATABASE or url.host not in {
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "postgres",
-    }:
-        pytest.fail("catalog publication tests require disposable local Postgres")
-    return database_url
-
-
 @pytest.fixture
-def superuser_engine() -> Iterator[Engine]:
+def superuser_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
     """Upgrade the disposable database and empty its catalog before and after."""
-    database_url = _disposable_url()
-    command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(database_url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    try:
-        yield engine
-    finally:
-        with engine.begin() as connection:
-            connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-        engine.dispose()
+    with emptied_catalog(v2_owner_sessions) as sessions:
+        yield sessions
 
 
 @pytest.fixture
-def writer_engine(superuser_engine, v2_engine_as_role) -> Iterator[Engine]:
-    engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
+def writer_sessions(
+    superuser_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(CATALOG_WRITER_ROLE)
 
 
-def _database_time(engine: Engine) -> datetime:
-    with engine.connect() as connection:
-        return connection.execute(text("SELECT clock_timestamp()")).scalar_one()
+def _database_time(sessions: sessionmaker[Session]) -> datetime:
+    with sessions() as session:
+        moment: datetime = session.execute(select(func.clock_timestamp())).scalar_one()
+    return moment
 
 
-def _last_manual_analyze(engine: Engine) -> dict[str, datetime | None]:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT relname, last_analyze FROM pg_stat_user_tables "
-                "WHERE schemaname = 'public' AND relname = ANY(:tables)"
-            ),
-            {"tables": list(ANALYZED_TABLES)},
-        )
-        return {row.relname: row.last_analyze for row in rows}
+def _last_manual_analyze(
+    sessions: sessionmaker[Session],
+) -> dict[str, datetime | None]:
+    """Return when each catalog table was last analyzed by an ``ANALYZE``.
+
+    ``pg_stat_get_last_analyze_time`` is what ``pg_stat_user_tables`` reports
+    as ``last_analyze``.
+    """
+    with sessions() as session:
+        return {
+            table: session.execute(
+                select(
+                    func.pg_stat_get_last_analyze_time(
+                        cast(f"public.{table}", REGCLASS)
+                    )
+                )
+            ).scalar_one()
+            for table in ANALYZED_TABLES
+        }
+
+
+def _stored_version_count(sessions: sessionmaker[Session]) -> int:
+    with sessions() as session:
+        count: int = session.execute(
+            select(func.count()).select_from(TaxBenefitModelVersion)
+        ).scalar_one()
+    return count
 
 
 def test_publishing_a_new_version_as_the_catalog_writer_analyzes_the_catalog(
-    superuser_engine, writer_engine
+    superuser_sessions: sessionmaker[Session], writer_sessions: sessionmaker[Session]
 ) -> None:
-    started = _database_time(superuser_engine)
+    started = _database_time(superuser_sessions)
 
-    evidence = publish_catalog(writer_engine, normalized_catalog())
-    last_analyze = _last_manual_analyze(superuser_engine)
+    evidence = publish_catalog(writer_sessions, normalized_catalog())
+    last_analyze = _last_manual_analyze(superuser_sessions)
 
     assert evidence.catalog_tables_analyzed == ANALYZED_TABLES
     assert evidence.as_dict()["catalog_tables_analyzed"] == list(ANALYZED_TABLES)
@@ -135,15 +128,15 @@ def test_publishing_a_new_version_as_the_catalog_writer_analyzes_the_catalog(
 
 
 def test_republishing_an_unchanged_catalog_analyzes_it_again(
-    superuser_engine, writer_engine
+    superuser_sessions: sessionmaker[Session], writer_sessions: sessionmaker[Session]
 ) -> None:
     """Every run analyzes, so a run after a failed ``ANALYZE`` repeats it."""
     catalog = normalized_catalog()
-    publish_catalog(writer_engine, catalog)
-    second_started = _database_time(superuser_engine)
+    publish_catalog(writer_sessions, catalog)
+    second_started = _database_time(superuser_sessions)
 
-    second = publish_catalog(writer_engine, catalog)
-    last_analyze = _last_manual_analyze(superuser_engine)
+    second = publish_catalog(writer_sessions, catalog)
+    last_analyze = _last_manual_analyze(superuser_sessions)
 
     assert second.catalog_tables_analyzed == ANALYZED_TABLES
     assert second.catalog_statistics_failure is None
@@ -154,30 +147,33 @@ def test_republishing_an_unchanged_catalog_analyzes_it_again(
 
 
 def test_a_failed_analyze_is_recorded_and_the_publication_kept(
-    superuser_engine, writer_engine
+    superuser_sessions: sessionmaker[Session],
+    writer_sessions: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The database refuses the ``ANALYZE``, and SQLAlchemy wraps its error.
 
     The evidence names the driver's error and SQLSTATE, as a failed pruning's
     does, not SQLAlchemy's wrapper, which is the same for any database error.
+    The ``ANALYZE`` names a table that doesn't exist, once publication has
+    checked the privileges on the real ones.
     """
+    analyze_catalog_tables = publication_statistics.analyze_catalog_tables
 
-    def analyze_a_missing_table(
-        _connection, _cursor, statement, parameters, *_arguments
-    ):
-        if statement.startswith("ANALYZE"):
-            return "ANALYZE public.no_such_catalog_table", parameters
-        return statement, parameters
+    def analyze_a_missing_table(sessions: sessionmaker[Session]):
+        monkeypatch.setattr(
+            publication_statistics,
+            "CATALOG_STATISTICS_TABLES",
+            ("no_such_catalog_table",),
+        )
+        return analyze_catalog_tables(sessions)
 
-    event.listen(
-        writer_engine, "before_cursor_execute", analyze_a_missing_table, retval=True
+    monkeypatch.setattr(
+        publication_module, "analyze_catalog_tables", analyze_a_missing_table
     )
 
-    evidence = publish_catalog(writer_engine, normalized_catalog())
-    with superuser_engine.connect() as connection:
-        stored_versions = connection.execute(
-            text("SELECT count(*) FROM tax_benefit_model_versions")
-        ).scalar_one()
+    evidence = publish_catalog(writer_sessions, normalized_catalog())
+    stored_versions = _stored_version_count(superuser_sessions)
 
     assert stored_versions > 0
     assert evidence.catalog_tables_analyzed == ()
@@ -186,7 +182,9 @@ def test_a_failed_analyze_is_recorded_and_the_publication_kept(
 
 
 @pytest.fixture
-def writer_without_maintain(superuser_engine) -> Iterator[str]:
+def writer_without_maintain(
+    superuser_sessions: sessionmaker[Session],
+) -> Iterator[str]:
     """Create a role with the catalog writer's declared privileges except MAINTAIN."""
     role = f"policyengine_catalog_test_{uuid4().hex[:12]}"
     writer_tables = declared_privileges("test")[CATALOG_WRITER_ROLE]
@@ -198,30 +196,26 @@ def writer_without_maintain(superuser_engine) -> Iterator[str]:
             for table, privileges in writer_tables.items()
         }
     }
-    with superuser_engine.begin() as connection:
-        connection.execute(text(f'CREATE ROLE "{role}" NOLOGIN'))
-        apply_declared_privileges(connection, declared)
+    with superuser_sessions.begin() as session:
+        create_role(session, role)
+        apply_declared_privileges(session, declared)
     try:
         yield role
     finally:
-        with superuser_engine.begin() as connection:
-            connection.execute(text(f'DROP OWNED BY "{role}"'))
-            connection.execute(text(f'DROP ROLE "{role}"'))
+        with superuser_sessions.begin() as session:
+            drop_role(session, role)
 
 
 def test_a_role_that_cannot_analyze_the_catalog_fails_before_writing(
-    superuser_engine, v2_engine_as_role, writer_without_maintain
+    superuser_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    writer_without_maintain: str,
 ) -> None:
-    engine = v2_engine_as_role(writer_without_maintain, poolclass=NullPool)
-    try:
-        with pytest.raises(CatalogPublicationError) as raised:
-            publish_catalog(engine, normalized_catalog())
-    finally:
-        engine.dispose()
-    with superuser_engine.connect() as connection:
-        stored_versions = connection.execute(
-            text("SELECT count(*) FROM tax_benefit_model_versions")
-        ).scalar_one()
+    with pytest.raises(CatalogPublicationError) as raised:
+        publish_catalog(
+            v2_sessions_as_role(writer_without_maintain), normalized_catalog()
+        )
+    stored_versions = _stored_version_count(superuser_sessions)
 
     assert "MAINTAIN" in str(raised.value)
     assert "parameters" in str(raised.value)

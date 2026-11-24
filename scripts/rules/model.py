@@ -205,7 +205,9 @@ class RuleException:
     """A carve-out of ``path`` from a rule; the guard fails once ``expires`` passes.
 
     ``match`` narrows the carve-out to one site in the file (a command or call
-    containing that text). An exception ends either on its ``expires`` review
+    containing that text). ``function`` narrows it further to that function, as
+    ``name`` or ``Class.method``, for a rule whose checker records the function
+    each finding is in. An exception ends either on its ``expires`` review
     date, tracked by ``issue``, or when its ``removal`` condition holds.
     ``category`` names a kind of exception a rule allows as a class, such as
     ``pinned-tool`` for the locked-installs rules.
@@ -218,6 +220,7 @@ class RuleException:
     category: str | None = None
     removal: str | None = None
     issue: int | None = None
+    function: str | None = None
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from scripts.rules.model import (
     Category,
@@ -12,6 +13,7 @@ from scripts.rules.model import (
     Kind,
     Registry,
     Rule,
+    RuleException,
     Status,
     Tier,
 )
@@ -203,6 +205,74 @@ class MermaidTest(unittest.TestCase):
             [
                 [rule_node(number) for number in range(15)],
                 [rule_node(number) for number in range(15, 20)],
+            ],
+        )
+
+
+ORM_ONLY_RULE = "api.data.orm-only"
+NARROWED_EXCEPTION = RuleException(
+    path="pkg/store.py",
+    reason="GRANT has no ORM form",
+    match="text(statement)",
+    category="no-orm-form",
+    function="apply_declared_privileges",
+)
+
+
+class ExceptionSummaryTest(unittest.TestCase):
+    def _exception_lines(
+        self, exceptions: tuple[RuleException, ...], rule_id: str = ORM_ONLY_RULE
+    ) -> list[str]:
+        rule = make_rule(rule_id, Enforcer(Kind.NONE))
+        registry = Registry(
+            schema_version=1,
+            repo="example",
+            categories=(Category("checks", "Checks"),),
+            discovery=Discovery(),
+            rules=(replace(rule, exceptions=exceptions),),
+        )
+        return [
+            line
+            for line in render_rules_md(registry).splitlines()
+            if line.startswith(f"- `{rule_id}`: exception")
+        ]
+
+    def test_an_exception_names_its_match_and_function(self) -> None:
+        lines = self._exception_lines(
+            (
+                NARROWED_EXCEPTION,
+                RuleException(
+                    path="pkg/rows.py",
+                    reason="TRUNCATE has no ORM form",
+                    match="text('TRUNCATE reports')",
+                    category="no-orm-form",
+                ),
+            )
+        )
+
+        self.assertEqual(
+            lines,
+            [
+                f"- `{ORM_ONLY_RULE}`: exception for `pkg/rows.py` "
+                "(`text('TRUNCATE reports')`) allowed as a no-orm-form "
+                "(TRUNCATE has no ORM form)",
+                f"- `{ORM_ONLY_RULE}`: exception for `pkg/store.py` "
+                "(`text(statement)` in `apply_declared_privileges`) allowed as a "
+                "no-orm-form (GRANT has no ORM form)",
+            ],
+        )
+
+    def test_another_rules_exception_shows_no_function(self) -> None:
+        lines = self._exception_lines(
+            (NARROWED_EXCEPTION,), rule_id="ex.checks.driver-access"
+        )
+
+        self.assertEqual(
+            lines,
+            [
+                "- `ex.checks.driver-access`: exception for `pkg/store.py` "
+                "(`text(statement)`) allowed as a no-orm-form "
+                "(GRANT has no ORM form)",
             ],
         )
 

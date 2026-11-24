@@ -12,20 +12,13 @@ keeps a change without its admin.
 
 from __future__ import annotations
 
-import os
 import threading
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, or_, select, update
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
+from sqlalchemy import delete, or_, select, update
 
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
     User,
@@ -34,7 +27,6 @@ from policyengine_api.data.v2.models import (
     UserType,
     UserTypeChange,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.libs.auth0_management import (
     Auth0UserIdSearch,
     Auth0UserProfile,
@@ -84,49 +76,40 @@ from policyengine_api.services.v2.user_types.validators import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 # Long enough for a change or deletion not blocked by the held lock to finish.
 LOCK_WAIT_SECONDS = 1.0
 
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("user type persistence tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
 @pytest.fixture
-def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Session]]:
-    """Open sessions as the Public API's runtime role; clean up as the superuser.
+def sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Open sessions as API v1's runtime role; clean up as the database's owner.
 
     The database may hold other tests' admins, so each test starts with none
-    and puts them back afterwards.
+    and puts them back afterwards. The factory is this test's own, and each
+    of its Sessions opens its own connection.
     """
-    runtime_engine = v2_engine_as_role(
-        managed_v2_roles.runtime, pool_size=5, max_overflow=5
-    )
-    cleanup_engine = create_engine(_disposable_url())
-    factory = sessionmaker(runtime_engine, class_=Session, expire_on_commit=False)
+    factory = v2_sessions_as_role(managed_v2_roles.runtime)
     issuer = f"https://user-types-{uuid4().hex[:12]}.example.test/"
     factory.kw["info"] = {"issuer": issuer}
-    with cleanup_engine.begin() as connection:
+    with v2_owner_sessions.begin() as session:
         other_admins = list(
-            connection.execute(
+            session.scalars(
                 select(User.id).where(User.user_type == UserType.ADMIN.value)
-            ).scalars()
+            )
         )
         if other_admins:
-            connection.execute(
+            session.execute(
                 update(User)
                 .where(User.id.in_(other_admins))
                 .values(user_type=UserType.STANDARD.value)
@@ -134,11 +117,11 @@ def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Sessi
     try:
         yield factory
     finally:
-        with cleanup_engine.begin() as connection:
+        with v2_owner_sessions.begin() as session:
             owned = select(UserIdentity.user_id).where(UserIdentity.issuer == issuer)
-            user_ids = list(connection.execute(owned).scalars())
+            user_ids = list(session.scalars(owned))
             if user_ids:
-                connection.execute(
+                session.execute(
                     delete(UserInvitation).where(
                         or_(
                             UserInvitation.invited_by_user_id.in_(user_ids),
@@ -146,20 +129,18 @@ def sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker[Sessi
                         )
                     )
                 )
-                connection.execute(
+                session.execute(
                     delete(LegacyUserMapping).where(
                         LegacyUserMapping.user_id.in_(user_ids)
                     )
                 )
-                connection.execute(delete(User).where(User.id.in_(user_ids)))
+                session.execute(delete(User).where(User.id.in_(user_ids)))
             if other_admins:
-                connection.execute(
+                session.execute(
                     update(User)
                     .where(User.id.in_(other_admins))
                     .values(user_type=UserType.ADMIN.value)
                 )
-        runtime_engine.dispose()
-        cleanup_engine.dispose()
 
 
 def _principal(sessions, name: str) -> UserPrincipal:
@@ -178,15 +159,13 @@ def _user_types(sessions) -> V2UserTypeService:
     return V2UserTypeService(UserTypeDatabaseSession(sessions))
 
 
-def _store_type_as_superuser(user_id: UUID, user_type: UserType) -> None:
-    engine = create_engine(_disposable_url())
-    try:
-        with engine.begin() as connection:
-            connection.execute(
-                update(User).where(User.id == user_id).values(user_type=user_type.value)
-            )
-    finally:
-        engine.dispose()
+def _store_type_as_superuser(
+    v2_owner_sessions: sessionmaker[Session], user_id: UUID, user_type: UserType
+) -> None:
+    with v2_owner_sessions.begin() as session:
+        session.execute(
+            update(User).where(User.id == user_id).values(user_type=user_type.value)
+        )
 
 
 def _stored_types(sessions, user_ids: list[UUID]) -> list[str]:
@@ -203,13 +182,15 @@ def _history(sessions, user_id: UUID) -> list[UserTypeChange]:
         )
 
 
-def test_the_runtime_role_changes_types_and_records_them(sessions) -> None:
+def test_the_runtime_role_changes_types_and_records_them(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     accounts = _accounts(sessions)
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="uk").id
-    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, alice_id, UserType.ADMIN)
     user_types = _user_types(sessions)
 
     promoted = user_types.change_user_type(
@@ -278,7 +259,9 @@ class StandInAuth0:
         return self.profile if user_id == self.profile.user_id else None
 
 
-def test_the_runtime_role_finds_users_by_their_auth0_email(sessions) -> None:
+def test_the_runtime_role_finds_users_by_their_auth0_email(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     alice = _principal(sessions, "alice")
     accounts = _accounts(sessions)
     alice_id = accounts.get_account(principal=alice, country_id="us").id
@@ -288,7 +271,7 @@ def test_the_runtime_role_finds_users_by_their_auth0_email(sessions) -> None:
         issuer=sessions.kw["info"]["issuer"], subject="google-oauth2|carol"
     )
     carol_id = accounts.get_account(principal=carol, country_id="uk").id
-    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, alice_id, UserType.ADMIN)
     auth0 = StandInAuth0(
         Auth0UserProfile(
             user_id=carol.subject,
@@ -319,7 +302,7 @@ def test_the_runtime_role_finds_users_by_their_auth0_email(sessions) -> None:
 
 
 def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     """Alice demotes Bob while Bob's demotion of Alice waits for the lock."""
     alice = _principal(sessions, "alice")
@@ -328,7 +311,7 @@ def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     for user_id in (alice_id, bob_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
     finished = threading.Event()
 
@@ -366,7 +349,9 @@ def test_a_change_waits_for_another_and_never_demotes_the_last_admin(
     assert _stored_types(sessions, [alice_id, bob_id]) == ["admin", "standard"]
 
 
-def test_deleting_accounts_removes_or_keeps_their_recorded_changes(sessions) -> None:
+def test_deleting_accounts_removes_or_keeps_their_recorded_changes(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     carol = _principal(sessions, "carol")
@@ -374,7 +359,7 @@ def test_deleting_accounts_removes_or_keeps_their_recorded_changes(sessions) -> 
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     carol_id = accounts.get_account(principal=carol, country_id="us").id
-    _store_type_as_superuser(carol_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, carol_id, UserType.ADMIN)
     user_types = _user_types(sessions)
     for user_id in (alice_id, bob_id):
         user_types.change_user_type(
@@ -431,7 +416,7 @@ def _admin_ids(sessions) -> list[UUID]:
 
 
 def test_a_deletion_waits_for_a_promotion_and_never_removes_the_last_admin(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     """Olivia, standard, deletes her account while Xavier makes her the only admin."""
     olivia = _principal(sessions, "olivia")
@@ -439,7 +424,7 @@ def test_a_deletion_waits_for_a_promotion_and_never_removes_the_last_admin(
     accounts = _accounts(sessions)
     olivia_id = accounts.get_account(principal=olivia, country_id="us").id
     xavier_id = accounts.get_account(principal=xavier, country_id="us").id
-    _store_type_as_superuser(xavier_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, xavier_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
 
     held = sessions()
@@ -466,7 +451,7 @@ def test_a_deletion_waits_for_a_promotion_and_never_removes_the_last_admin(
 
 
 def test_a_deletion_after_a_demotion_is_allowed_while_another_admin_remains(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     """Xavier demotes Olivia while her deletion waits; she is then deleted."""
     olivia = _principal(sessions, "olivia")
@@ -475,7 +460,7 @@ def test_a_deletion_after_a_demotion_is_allowed_while_another_admin_remains(
     olivia_id = accounts.get_account(principal=olivia, country_id="us").id
     xavier_id = accounts.get_account(principal=xavier, country_id="us").id
     for user_id in (olivia_id, xavier_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
 
     held = sessions()
@@ -497,7 +482,9 @@ def test_a_deletion_after_a_demotion_is_allowed_while_another_admin_remains(
     assert _admin_ids(sessions) == [xavier_id]
 
 
-def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> None:
+def test_a_change_from_a_type_changed_while_it_waited_is_refused(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     """Carol read Bob as standard; Alice makes him an author while Carol waits."""
     alice = _principal(sessions, "alice")
     carol = _principal(sessions, "carol")
@@ -507,7 +494,7 @@ def test_a_change_from_a_type_changed_while_it_waited_is_refused(sessions) -> No
     carol_id = accounts.get_account(principal=carol, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     for user_id in (alice_id, carol_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
     finished = threading.Event()
 
@@ -579,13 +566,15 @@ def _sent_token(postmark: RecordingPostmark) -> str:
     return postmark.sent[-1]["model"]["accept_url"].split("#token=", 1)[1]
 
 
-def test_the_runtime_role_invites_accepts_and_dismisses(sessions) -> None:
+def test_the_runtime_role_invites_accepts_and_dismisses(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     accounts = _accounts(sessions)
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
-    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, alice_id, UserType.ADMIN)
     postmark = RecordingPostmark()
     auth0 = StandInAuth0(
         Auth0UserProfile(
@@ -640,7 +629,7 @@ def test_the_runtime_role_invites_accepts_and_dismisses(sessions) -> None:
 
 
 def test_an_acceptance_waits_for_its_inviters_demotion_and_is_refused(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     """Carol demotes Alice while Bob's acceptance of Alice's invitation waits."""
     alice = _principal(sessions, "alice")
@@ -651,7 +640,7 @@ def test_an_acceptance_waits_for_its_inviters_demotion_and_is_refused(
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     carol_id = accounts.get_account(principal=carol, country_id="us").id
     for user_id in (alice_id, carol_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     postmark = RecordingPostmark()
     auth0 = StandInAuth0(
         Auth0UserProfile(
@@ -701,14 +690,16 @@ def test_an_acceptance_waits_for_its_inviters_demotion_and_is_refused(
     assert _stored_types(sessions, [bob_id]) == ["standard"]
 
 
-def test_deleting_an_account_deletes_the_invitations_it_accepted(sessions) -> None:
+def test_deleting_an_account_deletes_the_invitations_it_accepted(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     """The runtime role holds no DELETE on invitations; the foreign key cascades."""
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     accounts = _accounts(sessions)
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     accounts.get_account(principal=bob, country_id="us")
-    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, alice_id, UserType.ADMIN)
     postmark = RecordingPostmark()
     auth0 = StandInAuth0(
         Auth0UserProfile(
@@ -767,14 +758,14 @@ def _admin_deletion_in_thread(
 
 
 def test_the_runtime_role_deletes_another_users_account_for_an_admin(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
     accounts = _accounts(sessions)
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
-    _store_type_as_superuser(alice_id, UserType.ADMIN)
+    _store_type_as_superuser(v2_owner_sessions, alice_id, UserType.ADMIN)
     _user_types(sessions).change_user_type(
         principal=alice,
         user_id=bob_id,
@@ -802,7 +793,7 @@ def test_the_runtime_role_deletes_another_users_account_for_an_admin(
 
 
 def test_an_admins_own_deletion_waits_for_a_demotion_and_keeps_the_last_admin(
-    sessions,
+    sessions, v2_owner_sessions: sessionmaker[Session]
 ) -> None:
     """Alice deletes her own account while a change demotes Bob, the other admin."""
     alice = _principal(sessions, "alice")
@@ -811,7 +802,7 @@ def test_an_admins_own_deletion_waits_for_a_demotion_and_keeps_the_last_admin(
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     for user_id in (alice_id, bob_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
 
     held = sessions()
@@ -837,7 +828,9 @@ def test_an_admins_own_deletion_waits_for_a_demotion_and_keeps_the_last_admin(
     assert _admin_ids(sessions) == [alice_id]
 
 
-def test_two_admins_deleting_each_other_at_once_leave_one_admin(sessions) -> None:
+def test_two_admins_deleting_each_other_at_once_leave_one_admin(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
     """Bob deletes Alice while Alice's deletion of Bob holds the lock."""
     alice = _principal(sessions, "alice")
     bob = _principal(sessions, "bob")
@@ -845,7 +838,7 @@ def test_two_admins_deleting_each_other_at_once_leave_one_admin(sessions) -> Non
     alice_id = accounts.get_account(principal=alice, country_id="us").id
     bob_id = accounts.get_account(principal=bob, country_id="us").id
     for user_id in (alice_id, bob_id):
-        _store_type_as_superuser(user_id, UserType.ADMIN)
+        _store_type_as_superuser(v2_owner_sessions, user_id, UserType.ADMIN)
     outcomes: dict[str, object] = {}
 
     held = sessions()

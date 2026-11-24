@@ -1,6 +1,7 @@
 """Controlled imports and metadata export for the reviewed v2 schema."""
 
 from sqlmodel import SQLModel
+from sqlmodel.main import default_registry
 
 from policyengine_api.data.v2.metadata_validation import (
     validate_v2_metadata_table_names,
@@ -78,6 +79,7 @@ from policyengine_api.data.v2.models.run_results import (  # noqa: E402  # table
     AggregateType,
     BudgetSummary,
     ChangeAggregate,
+    CliffImpact,
     CongressionalDistrictImpact,
     ConstituencyImpact,
     DecileImpact,
@@ -111,12 +113,21 @@ from policyengine_api.data.v2.models.users import (  # noqa: E402
 )
 
 V2_METADATA = SQLModel.metadata
-validate_v2_metadata_table_names(V2_METADATA.tables)
+# The registry that maps the v2 table classes: SQLModel's own, whose metadata is
+# V2_METADATA. Every v2 table has a mapped class (rule api.data.orm-only), so
+# V2_TABLE_NAMES, the tables its classes map, are all of V2_METADATA's tables.
+V2_REGISTRY = default_registry
+V2_TABLE_NAMES = frozenset(
+    mapper.class_.__tablename__ for mapper in V2_REGISTRY.mappers
+)
+validate_v2_metadata_table_names(V2_TABLE_NAMES)
 
 __all__ = [
     "INVITATION_USER_TYPES",
     "SIGNED_IN_USER_TYPES",
     "V2_METADATA",
+    "V2_REGISTRY",
+    "V2_TABLE_NAMES",
     "AggregateOutput",
     "AggregateType",
     "BudgetSummary",
@@ -124,6 +135,7 @@ __all__ = [
     "CatalogEntity",
     "CatalogEnumValue",
     "ChangeAggregate",
+    "CliffImpact",
     "CongressionalDistrictImpact",
     "ConstituencyImpact",
     "Country",

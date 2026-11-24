@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import os
 import time
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -10,6 +14,16 @@ from tests.integration.deployed_api_credentials import (
     MissingServerCredentialError,
     deployed_api_client,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+# The database fixtures import the tests' session factories when they run, so
+# the tests of deployed services load no database code.
 
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
@@ -86,13 +100,6 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
     ``reconcile_v2_privileges.py apply --create-missing-roles``. Repeating it
     here grants nothing more there, and lets the tests run locally on their own.
     """
-    from sqlalchemy import create_engine
-    from sqlalchemy.pool import NullPool
-
-    from policyengine_api.data.v2.privilege_reconciliation import (
-        apply_declared_privileges,
-        create_missing_roles,
-    )
     from policyengine_api.data.v2.privileges import (
         MODAL_WORKER_ROLE,
         RUNTIME_ROLE,
@@ -100,18 +107,14 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
         declared_privileges,
         stage12_role,
     )
+    from tests.fixtures import database_sessions
 
     deployment_environment = (
         os.environ.get("DEPLOYMENT_ENVIRONMENT", "").strip() or "test"
     )
-    declared = declared_privileges(deployment_environment)
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        with engine.begin() as connection:
-            create_missing_roles(connection, declared)
-            plan, _default_privileges = apply_declared_privileges(connection, declared)
-    finally:
-        engine.dispose()
+    plan = database_sessions.grant_declared_v2_privileges(
+        disposable_v2_database_url, declared_privileges(deployment_environment)
+    )
     if not plan.can_apply:
         pytest.fail(
             "the disposable v2 database lacks declared roles or tables: "
@@ -127,29 +130,46 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
 
 
 @pytest.fixture(scope="session")
-def v2_engine_as_role(disposable_v2_database_url: str, managed_v2_roles):
-    """Return a builder of engines whose connections act as one managed role.
+def v2_owner_sessions(
+    disposable_v2_database_url: str,
+) -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of the disposable v2 database's owner (superuser)."""
+    from tests.fixtures import database_sessions
 
-    Each new connection runs ``SET ROLE`` and commits it, so every statement on
-    it is checked against that role's privileges, as in staging and production,
-    instead of the disposable database's superuser.
+    with database_sessions.v2_owner_sessions(disposable_v2_database_url) as sessions:
+        yield sessions
+
+
+@pytest.fixture(scope="session")
+def v2_sessions_as_role(
+    disposable_v2_database_url: str, managed_v2_roles: ManagedV2Roles
+) -> Iterator[Callable[[str], sessionmaker[Session]]]:
+    """Return a builder of Session factories whose connections act as one role.
+
+    Every statement is checked against that role's privileges, as in staging
+    and production, instead of the disposable database's owner's. The managed
+    roles exist and hold their declared privileges; a test may name a role it
+    created. The factories' engines are disposed of after the test session.
     """
-    from psycopg import sql
-    from sqlalchemy import create_engine, event
+    from tests.fixtures import database_sessions
 
-    def build(role: str, **engine_options):
-        set_role = sql.SQL("SET ROLE {}").format(sql.Identifier(role))
-        engine = create_engine(disposable_v2_database_url, **engine_options)
+    with ExitStack() as factories:
 
-        @event.listens_for(engine, "connect")
-        def act_as_role(dbapi_connection, _connection_record) -> None:
-            with dbapi_connection.cursor() as cursor:
-                cursor.execute(set_role)
-            dbapi_connection.commit()
+        def build(role: str) -> sessionmaker[Session]:
+            return factories.enter_context(
+                database_sessions.v2_role_sessions(disposable_v2_database_url, role)
+            )
 
-        return engine
+        yield build
 
-    return build
+
+@pytest.fixture(scope="session")
+def v1_sessions(disposable_v1_database_url: str) -> Iterator[sessionmaker[OrmSession]]:
+    """Return API v1's Session factories of the disposable MySQL database."""
+    from tests.fixtures import database_sessions
+
+    with database_sessions.v1_sessions(disposable_v1_database_url) as sessions:
+        yield sessions
 
 
 @pytest.fixture
@@ -161,8 +181,8 @@ def api_base_url() -> str:
 
 
 @pytest.fixture
-def api_client(api_base_url: str):
-    """Call the deployed Public API with the CI server credential on every request.
+def api_client(api_base_url: str) -> Iterator[httpx.Client]:
+    """Call the deployed API v1 with the CI server credential on every request.
 
     The client is ``deployed_api_client``'s
     (``tests/integration/deployed_api_credentials.py``). The test fails, rather
@@ -177,8 +197,8 @@ def api_client(api_base_url: str):
 
 
 @pytest.fixture
-def uncredentialed_api_client(api_base_url: str):
-    """Call the deployed Public API without any credential, as an outside caller."""
+def uncredentialed_api_client(api_base_url: str) -> Iterator[httpx.Client]:
+    """Call the deployed API v1 without any credential, as an outside caller."""
     with httpx.Client(
         base_url=api_base_url,
         timeout=90.0,
@@ -209,7 +229,8 @@ def _poll_live_endpoint(
     route_name: str,
 ) -> dict:
     deadline = time.monotonic() + INTEGRATION_TIMEOUT_SECONDS
-    last_response = None
+    # The last error, response summary or payload, for the timeout's message.
+    last_response: object = None
 
     while True:
         try:
@@ -234,7 +255,7 @@ def _poll_live_endpoint(
                         request=error.request,
                         response=error.response,
                     ) from error
-                payload = response.json()
+                payload: dict = response.json()
 
                 if payload["status"] != "computing":
                     return payload
@@ -251,7 +272,7 @@ def _poll_live_endpoint(
 
 
 @pytest.fixture
-def poll_live_endpoint():
+def poll_live_endpoint() -> Callable[..., dict]:
     return _poll_live_endpoint
 
 

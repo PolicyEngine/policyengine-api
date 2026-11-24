@@ -1,0 +1,1 @@
+The v2 database can store one cliff result per simulation run, its cliff gap and cliff share, with the state of its calculation. The simulation service may start each calculation, its Modal workers may write the result, and API v1 may read it.

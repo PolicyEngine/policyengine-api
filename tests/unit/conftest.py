@@ -1,38 +1,41 @@
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.data import orm
 from policyengine_api.data.v1_models import V1Base
-from tests.fixtures.local_v1_database import create_test_v1_schema
+from tests.fixtures.database_sessions import (
+    delete_all_rows,
+    serve_v1_sessions,
+    sqlite_v1_sessions,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import Session, sessionmaker
 
 
 @pytest.fixture(scope="session")
-def test_engine():
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    create_test_v1_schema(engine)
-    yield engine
-    engine.dispose()
+def v1_test_sessions() -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of an in-memory SQLite copy of API v1's schema."""
+    with sqlite_v1_sessions() as sessions:
+        yield sessions
 
 
 @pytest.fixture(autouse=True)
-def isolated_orm_database(test_engine, monkeypatch):
+def isolated_orm_database(
+    v1_test_sessions: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
     """Bind runtime factories to a clean in-memory ORM database per test."""
-    monkeypatch.setattr(orm, "get_v1_engine", lambda: test_engine)
-    orm.clear_v1_session_factories()
-    factory = orm.get_v1_session_factory()
-    with factory.begin() as session:
-        production_tables = V1Base.metadata.sorted_tables
-        for table in reversed(production_tables):
-            session.execute(table.delete())
+    serve_v1_sessions(monkeypatch, v1_test_sessions)
+    with orm.get_v1_session_factory().begin() as session:
+        delete_all_rows(session, V1Base.registry)
     try:
         yield
     finally:
@@ -40,11 +43,11 @@ def isolated_orm_database(test_engine, monkeypatch):
 
 
 @pytest.fixture
-def orm_session_factory(isolated_orm_database):
+def orm_session_factory(isolated_orm_database: None) -> sessionmaker[Session]:
     return orm.get_v1_session_factory()
 
 
 @pytest.fixture
-def orm_session(orm_session_factory):
+def orm_session(orm_session_factory: sessionmaker[Session]) -> Iterator[Session]:
     with orm_session_factory() as session:
         yield session

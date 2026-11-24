@@ -14,12 +14,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Household,
     Policy,
     Report,
@@ -60,11 +56,13 @@ from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     StoredReportNotFoundError,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 STORED_AT = datetime(2026, 11, 13, 9, tzinfo=UTC)
 CURRENT_VERSIONS = PackageVersions(
@@ -119,20 +117,9 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
-
-
-@pytest.fixture
-def sessions(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(engine, class_=Session, expire_on_commit=False)
+def sessions() -> Iterator[sessionmaker[Session]]:
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 @pytest.fixture

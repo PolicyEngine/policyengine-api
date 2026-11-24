@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Connection, MetaData, inspect, text
+from sqlalchemy import func, select
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -21,10 +21,13 @@ from policyengine_api.data.v2.settings import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
+
+    from sqlalchemy.engine import Inspector
+    from sqlmodel import Session
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
-V2_ALEMBIC_HEAD_REVISION = "9d1d12a7ac58"
+V2_ALEMBIC_HEAD_REVISION = "bc334f9877b7"
 DISPOSABLE_DATABASE_NAME = "policyengine_v2_alembic_test"
 DISPOSABLE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
 MIGRATION_ROLE = "policyengine_v2_migrator"
@@ -136,12 +139,24 @@ def load_v2_alembic_settings(
     )
 
 
-def qualify_v2_connection(
-    connection: Connection,
+def _schema_inspector(session: Session) -> Inspector:
+    """Return the Inspector of the session's database, inside its transaction."""
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    return v2_schema_inspector(session)
+
+
+def qualify_v2_target(
+    session: Session,
     settings: V2AlembicSettings,
 ) -> None:
-    """Verify live target identity and first-use state before Alembic runs."""
-    if connection.dialect.name != "postgresql":
+    """Verify live target identity and first-use state before Alembic runs.
+
+    The reads run in the session's transaction; the Alembic environment's
+    session shares the migration's connection and transaction.
+    """
+    inspector = _schema_inspector(session)
+    if inspector.dialect.name != "postgresql":
         msg = "v2 Alembic requires a Postgres connection"
         raise V2MigrationTargetError(msg)
     if settings.disposable_test:
@@ -151,21 +166,23 @@ def qualify_v2_connection(
     if target is None:
         msg = "persistent v2 Alembic target is missing"
         raise V2MigrationTargetError(msg)
-    identity = connection.execute(text("SELECT current_database(), current_user")).one()
+    identity = session.execute(
+        select(func.current_database(), func.current_user())
+    ).one()
     if identity[0] != target.database_name or identity[1] != target.migration_role:
         msg = (
             "the live database or migration identity does not match the configured "
             "v2 target"
         )
         raise V2MigrationTargetError(msg)
-    can_create = connection.execute(
-        text("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
+    can_create = session.execute(
+        select(func.has_schema_privilege(func.current_user(), "public", "CREATE"))
     ).scalar_one()
     if can_create is not True:
         msg = "the configured v2 migration identity lacks public schema CREATE"
         raise V2MigrationTargetError(msg)
 
-    public_tables = set(inspect(connection).get_table_names(schema="public"))
+    public_tables = set(inspector.get_table_names(schema="public"))
     if "alembic_version" not in public_tables:
         if not target.freshness_audit_passed:
             msg = "the configured first-use freshness audit has not passed"
@@ -178,11 +195,14 @@ def qualify_v2_connection(
             raise V2MigrationTargetError(msg)
 
 
-def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
-    """Require live application tables to match authoritative ORM metadata."""
-    public_tables = set(inspect(connection).get_table_names(schema="public"))
+def validate_v2_head_schema(session: Session, table_names: Collection[str]) -> None:
+    """Require the live application tables to be exactly ``table_names``.
+
+    ``table_names`` are the tables of the v2 mapped classes, ``V2_TABLE_NAMES``.
+    """
+    public_tables = set(_schema_inspector(session).get_table_names(schema="public"))
     application_tables = public_tables - {"alembic_version"}
-    metadata_tables = {table.name for table in metadata.tables.values()}
+    metadata_tables = set(table_names)
     unexpected = application_tables - metadata_tables
     missing = metadata_tables - application_tables
     if unexpected or missing:

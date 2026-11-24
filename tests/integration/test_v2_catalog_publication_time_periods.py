@@ -1,75 +1,49 @@
 """Disposable-Postgres coverage: republication and a stored version's time periods.
 
 A stored catalog version takes the staged time periods (metadata_time_periods),
-the years the Public API offers for it, which come from
+the years API v1 offers for it, which come from
 policyengine_api.economy_years. Every other column and table must still match.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine, make_url
-from sqlalchemy.pool import NullPool
+from sqlalchemy import select
+from sqlmodel import col
 
 from policyengine_api.data.v2.catalog import publication as publication_module
 from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from policyengine_api.data.v2.models import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine_api.economy_years import UK_ECONOMY_YEARS, US_ECONOMY_YEARS
 from tests.fixtures.v2_catalog import normalized_catalog
+from tests.integration.catalog_publication_support import (
+    emptied_catalog,
+    stored_identifiers,
+)
 
-REPO = Path(__file__).parents[2]
-DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
 # The US years catalog versions were stored with before 2022 and 2023 were
 # dropped: 2035 to 2022, newest first.
 PREVIOUS_US_YEARS = tuple(range(2035, 2021, -1))
-CATALOG_TABLES = (
-    "tax_benefit_models",
-    "tax_benefit_model_versions",
-    "variables",
-    "parameter_nodes",
-    "parameters",
-    "parameter_values",
-    "datasets",
-    "regions",
-)
-
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    url = make_url(database_url)
-    if url.database != DISPOSABLE_DATABASE or url.host not in {
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "postgres",
-    }:
-        pytest.fail("catalog publication tests require disposable local Postgres")
-    return database_url
 
 
 @pytest.fixture
-def publication_engine() -> Engine:
-    database_url = _disposable_url()
-    command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(database_url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    yield engine
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    engine.dispose()
+def publication_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    with emptied_catalog(v2_owner_sessions) as sessions:
+        yield sessions
 
 
 def _with_us_years(catalog, years: tuple[int, ...]):
@@ -81,42 +55,31 @@ def _with_us_years(catalog, years: tuple[int, ...]):
     )
 
 
-def _stored_years(engine: Engine) -> dict[str, list[int]]:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT model.name, version.metadata_time_periods "
-                "FROM tax_benefit_model_versions AS version "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id"
+def _stored_years(sessions: sessionmaker[Session]) -> dict[str, list[int]]:
+    with sessions() as session:
+        rows = session.execute(
+            select(
+                col(TaxBenefitModel.name),
+                col(TaxBenefitModelVersion.metadata_time_periods),
+            ).join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
             )
         ).all()
     return {model_name: list(years) for model_name, years in rows}
 
 
-def _identifiers(engine: Engine) -> dict[str, tuple[str, ...]]:
-    with engine.connect() as connection:
-        return {
-            table_name: tuple(
-                str(value)
-                for value in connection.execute(
-                    text(f"SELECT id FROM {table_name} ORDER BY id")
-                ).scalars()
-            )
-            for table_name in CATALOG_TABLES
-        }
-
-
 def test_stored_version_takes_the_staged_time_periods_and_logs_them(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, _with_us_years(catalog, PREVIOUS_US_YEARS))
-    assert _stored_years(publication_engine) == {
+    publish_catalog(publication_sessions, _with_us_years(catalog, PREVIOUS_US_YEARS))
+    assert _stored_years(publication_sessions) == {
         "policyengine-us": list(PREVIOUS_US_YEARS),
         "policyengine-uk": list(UK_ECONOMY_YEARS),
     }
-    before_ids = _identifiers(publication_engine)
+    before_ids = stored_identifiers(publication_sessions)
     # Alembic's logging configuration disables existing loggers, so the
     # warnings are recorded where they are emitted.
     warnings: list[tuple[str, dict]] = []
@@ -126,13 +89,13 @@ def test_stored_version_takes_the_staged_time_periods_and_logs_them(
         lambda message, *args, **kwargs: warnings.append((message % args, kwargs)),
     )
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
-    assert _stored_years(publication_engine) == {
+    assert _stored_years(publication_sessions) == {
         "policyengine-us": list(US_ECONOMY_YEARS),
         "policyengine-uk": list(UK_ECONOMY_YEARS),
     }
-    assert _identifiers(publication_engine) == before_ids
+    assert stored_identifiers(publication_sessions) == before_ids
     version = catalog.policyengine_version
     assert evidence.time_period_updates == (
         ("us", version, PREVIOUS_US_YEARS, US_ECONOMY_YEARS),
@@ -164,16 +127,16 @@ def test_stored_version_takes_the_staged_time_periods_and_logs_them(
     ]
 
     # Publishing the same years again changes and reports nothing.
-    again = publish_catalog(publication_engine, catalog)
+    again = publish_catalog(publication_sessions, catalog)
     assert again.time_period_updates == ()
     assert again.as_dict()["updated_time_periods"] == []
 
 
 def test_stored_version_with_changed_time_periods_still_fails_on_other_tables(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, _with_us_years(catalog, PREVIOUS_US_YEARS))
+    publish_catalog(publication_sessions, _with_us_years(catalog, PREVIOUS_US_YEARS))
     us = catalog.country("us")
     changed = replace(
         catalog,
@@ -188,8 +151,8 @@ def test_stored_version_with_changed_time_periods_still_fails_on_other_tables(
         match=r"^the stored us catalog version 5\.0\.4 differs from the staged "
         r"catalog in its variables$",
     ):
-        publish_catalog(publication_engine, changed)
+        publish_catalog(publication_sessions, changed)
 
-    assert _stored_years(publication_engine)["policyengine-us"] == list(
+    assert _stored_years(publication_sessions)["policyengine-us"] == list(
         PREVIOUS_US_YEARS
     )

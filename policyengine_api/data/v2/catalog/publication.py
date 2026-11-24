@@ -9,8 +9,12 @@ from functools import partial
 from typing import TYPE_CHECKING, TypeVar
 
 import sqlalchemy as sa
-from sqlalchemy import Connection, Engine
+from sqlmodel import col
 
+from policyengine_api.data.v2.alembic_revision import (
+    ALEMBIC_REVISION_TABLE,
+    AlembicRevision,
+)
 from policyengine_api.data.v2.catalog.publication_inserts import publish_new_country
 from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
     assert_parameter_search_files_written,
@@ -62,6 +66,9 @@ from policyengine_api.data.v2.models import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
     from policyengine_api.data.v2.catalog.publication_pruning import (
         PrunedRows,
         StoredCatalogVersion,
@@ -74,16 +81,8 @@ if TYPE_CHECKING:
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
 
-ALEMBIC_VERSION = sa.table(
-    "alembic_version",
-    sa.column("version_num", sa.String),
-)
-PROTECTED_TABLES = (
-    DatasetVersion.__table__,
-    Simulation.__table__,
-    Report.__table__,
-    ReportRun.__table__,
-)
+# The tables whose rows publication must leave as they are.
+PROTECTED_MODELS = (DatasetVersion, Simulation, Report, ReportRun)
 
 LOGGER = logging.getLogger(__name__)
 ResultT = TypeVar("ResultT")
@@ -96,36 +95,37 @@ __all__ = [
 ]
 
 
-def _verify_expected_revision(connection: Connection) -> None:
-    if connection.dialect.name != "postgresql":
+def _verify_expected_revision(session: Session) -> None:
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    inspector = v2_schema_inspector(session)
+    if inspector.dialect.name != "postgresql":
         msg = "catalog publication requires PostgreSQL"
         raise CatalogPublicationError(msg)
-    if not sa.inspect(connection).has_table(ALEMBIC_VERSION.name):
+    if not inspector.has_table(ALEMBIC_REVISION_TABLE):
         msg = "the v2 Alembic revision table is absent"
         raise CatalogPublicationError(msg)
-    revisions = set(
-        connection.execute(sa.select(ALEMBIC_VERSION.c.version_num)).scalars()
-    )
+    revisions = set(session.scalars(sa.select(col(AlembicRevision.version_num))))
     if revisions != {V2_ALEMBIC_HEAD_REVISION}:
         msg = "the v2 database is not at the expected Alembic revision"
         raise CatalogPublicationError(msg)
 
 
-def _acquire_publication_lock(connection: Connection) -> None:
-    connection.execute(
+def _acquire_publication_lock(session: Session) -> None:
+    session.execute(
         sa.select(sa.func.pg_advisory_xact_lock(PUBLICATION_ADVISORY_LOCK_KEY))
     ).scalar_one()
 
 
-def _protected_row_counts(connection: Connection) -> tuple[int, int, int, int]:
+def _protected_row_counts(session: Session) -> tuple[int, ...]:
     return tuple(
-        connection.execute(sa.select(sa.func.count()).select_from(table)).scalar_one()
-        for table in PROTECTED_TABLES
+        session.execute(sa.select(sa.func.count()).select_from(model)).scalar_one()
+        for model in PROTECTED_MODELS
     )
 
 
 def unpublished_countries(
-    engine: Engine, catalog: NormalizedCatalog
+    sessions: sessionmaker[Session], catalog: NormalizedCatalog
 ) -> tuple[str, ...]:
     """Return the countries whose catalog version is not stored yet, in catalog order.
 
@@ -134,27 +134,27 @@ def unpublished_countries(
     transaction: a version another publisher adds meanwhile is still compared
     with the staged one when this one publishes.
     """
-    with engine.connect() as connection:
-        _verify_expected_revision(connection)
+    with sessions() as session:
+        _verify_expected_revision(session)
         return tuple(
             country.country_id
             for country in catalog.countries
-            if not version_exists(connection, country)
+            if not version_exists(session, country)
         )
 
 
 def publish_catalog(
-    engine: Engine,
+    sessions: sessionmaker[Session],
     catalog: NormalizedCatalog,
     *,
-    checkpoint: Callable[[str, Connection], None] | None = None,
+    checkpoint: Callable[[str, Session], None] | None = None,
 ) -> PublicationEvidence:
     """Publish one complete catalog atomically and return non-secret evidence.
 
     A catalog version that is already stored is compared with the staged one
     and left as it is, apart from two exceptions: it keeps the regions it was
     published with, and it takes the staged time periods
-    (``metadata_time_periods``), the years the Public API offers for it.
+    (``metadata_time_periods``), the years API v1 offers for it.
     In the same transaction it writes the parameter tree and the parameter
     search file of each version in the catalog that has none, built from the
     catalog: the versions it publishes, and the installed version when an
@@ -174,50 +174,48 @@ def publish_catalog(
     checks that its role may analyze them.
     """
     started = time.monotonic()
-    with engine.begin() as connection:
-        _verify_expected_revision(connection)
-        _acquire_publication_lock(connection)
-        require_analyze_privilege(connection)
-        before = _protected_row_counts(connection)
-        create_staging_tables(connection)
-        stage_catalog(connection, catalog, checkpoint=checkpoint)
+    with sessions.begin() as session:
+        _verify_expected_revision(session)
+        _acquire_publication_lock(session)
+        require_analyze_privilege(session)
+        before = _protected_row_counts(session)
+        create_staging_tables(session)
+        stage_catalog(session, catalog, checkpoint=checkpoint)
         if checkpoint is not None:
-            checkpoint("after_copy", connection)
+            checkpoint("after_copy", session)
 
-        restored_versions = restore_pruned_catalog_versions(
-            connection, catalog.countries
-        )
-        stored_versions = _reconcile_stored_versions(connection, catalog)
+        restored_versions = restore_pruned_catalog_versions(session, catalog.countries)
+        stored_versions = _reconcile_stored_versions(session, catalog)
         existing = stored_versions.countries
 
         for country in catalog.countries:
             if country.country_id not in existing:
-                publish_new_country(connection, country)
-        parameter_trees_written = write_parameter_trees(connection, catalog.countries)
+                publish_new_country(session, country)
+        parameter_trees_written = write_parameter_trees(session, catalog.countries)
         parameter_search_files_written = write_parameter_search_files(
-            connection, catalog.countries
+            session, catalog.countries
         )
-        record_catalog_publication(connection, catalog.countries)
+        record_catalog_publication(session, catalog.countries)
         if checkpoint is not None:
-            checkpoint("after_reconciliation", connection)
+            checkpoint("after_reconciliation", session)
 
         for country in catalog.countries:
             assert_country_matches(
-                connection,
+                session,
                 country,
                 include_regions=country.country_id not in existing,
             )
-        assert_canonical_value_uniqueness(connection)
-        assert_parameter_trees_written(connection, catalog.countries)
-        assert_parameter_search_files_written(connection, catalog.countries)
-        if _protected_row_counts(connection) != before:
+        assert_canonical_value_uniqueness(session)
+        assert_parameter_trees_written(session, catalog.countries)
+        assert_parameter_search_files_written(session, catalog.countries)
+        if _protected_row_counts(session) != before:
             msg = "publication changed simulation, report, or dataset-version rows"
             raise CatalogPublicationError(msg)
         if checkpoint is not None:
-            checkpoint("after_validation", connection)
+            checkpoint("after_validation", session)
 
-    pruning = _prune_older_versions(engine, catalog)
-    statistics = analyze_catalog_tables(engine)
+    pruning = _prune_older_versions(sessions, catalog)
+    statistics = analyze_catalog_tables(sessions)
     return replace(
         _evidence(
             catalog,
@@ -248,7 +246,9 @@ class _PruningRun:
     left_to_prune: int
 
 
-def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _PruningRun:
+def _prune_older_versions(
+    sessions: sessionmaker[Session], catalog: NormalizedCatalog
+) -> _PruningRun:
     """Prune the catalog models' older versions, one transaction each.
 
     Runs after the publication committed, so an exception, of any kind, never
@@ -270,7 +270,7 @@ def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _Prunin
         country.model.name: country.country_id for country in catalog.countries
     }
     stored_versions = _returned_or_raised(
-        partial(_read_stored_versions, engine, installed_versions)
+        partial(_read_stored_versions, sessions, installed_versions)
     )
     if isinstance(stored_versions, Exception):
         return _PruningRun(
@@ -291,7 +291,7 @@ def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _Prunin
         deleted = _returned_or_raised(
             partial(
                 _prune_if_still_chosen,
-                engine,
+                sessions,
                 stored,
                 installed_versions[stored.model_name],
             )
@@ -314,14 +314,16 @@ def _prune_older_versions(engine: Engine, catalog: NormalizedCatalog) -> _Prunin
 
 
 def _read_stored_versions(
-    engine: Engine, installed_versions: Mapping[str, str]
+    sessions: sessionmaker[Session], installed_versions: Mapping[str, str]
 ) -> tuple[StoredCatalogVersion, ...]:
-    with engine.connect() as connection:
-        return read_stored_catalog_versions(connection, installed_versions)
+    with sessions() as session:
+        return read_stored_catalog_versions(session, installed_versions)
 
 
 def _prune_if_still_chosen(
-    engine: Engine, stored: StoredCatalogVersion, installed_version: str
+    sessions: sessionmaker[Session],
+    stored: StoredCatalogVersion,
+    installed_version: str,
 ) -> PrunedRows | None:
     """Prune one version in its own transaction, if the rule still chooses it.
 
@@ -331,15 +333,15 @@ def _prune_if_still_chosen(
     returns None, deleting nothing, when ``catalog_versions_to_prune`` no
     longer chooses the version, or when it was pruned meanwhile.
     """
-    with engine.begin() as connection:
-        _acquire_publication_lock(connection)
-        current_versions = read_stored_catalog_versions(connection, [stored.model_name])
+    with sessions.begin() as session:
+        _acquire_publication_lock(session)
+        current_versions = read_stored_catalog_versions(session, [stored.model_name])
         chosen = catalog_versions_to_prune(
             current_versions, {stored.model_name: installed_version}
         )
         if all(version.id != stored.id for version in chosen):
             return None
-        return prune_catalog_version(connection, stored.id)
+        return prune_catalog_version(session, stored.id)
 
 
 def _returned_or_raised(action: Callable[[], ResultT]) -> ResultT | Exception:
@@ -368,14 +370,14 @@ class _StoredVersions:
 
 
 def _reconcile_stored_versions(
-    connection: Connection,
+    session: Session,
     catalog: NormalizedCatalog,
 ) -> _StoredVersions:
     """Compare each stored catalog version, then give it the staged time periods.
 
     A stored version's regions stay as they were published even when the
     reference files differ now. Its time periods (``metadata_time_periods``)
-    become the staged ones, which come from the Public API's code. Every other
+    become the staged ones, which come from API v1's code. Every other
     table and column must still match exactly, or CatalogPublicationError is
     raised before anything is changed.
     """
@@ -383,15 +385,15 @@ def _reconcile_stored_versions(
     kept_region_summaries: list[tuple[str, str, int, int]] = []
     time_period_updates: list[tuple[str, str, tuple[int, ...], tuple[int, ...]]] = []
     for country in catalog.countries:
-        if version_exists(connection, country):
-            assert_country_matches(connection, country, include_regions=False)
-            kept = _kept_region_summary(connection, country)
+        if version_exists(session, country):
+            assert_country_matches(session, country, include_regions=False)
+            kept = _kept_region_summary(session, country)
             if kept is not None:
                 kept_region_summaries.append(kept)
             countries.add(country.country_id)
     for country in catalog.countries:
         if country.country_id in countries:
-            update = _time_period_update(connection, country)
+            update = _time_period_update(session, country)
             if update is not None:
                 time_period_updates.append(update)
     return _StoredVersions(
@@ -402,7 +404,7 @@ def _reconcile_stored_versions(
 
 
 def _time_period_update(
-    connection: Connection,
+    session: Session,
     country: CountryCatalog,
 ) -> tuple[str, str, tuple[int, ...], tuple[int, ...]] | None:
     """Give a stored version the staged time periods, and log any change.
@@ -410,7 +412,7 @@ def _time_period_update(
     Return the country, the version, and the stored and staged time periods
     when they differed; there is none when they are the same.
     """
-    update = update_stored_time_periods(connection, country)
+    update = update_stored_time_periods(session, country)
     if update is None:
         return None
     stored, staged = update
@@ -490,7 +492,7 @@ def _evidence(
 
 
 def _kept_region_summary(
-    connection: Connection,
+    session: Session,
     country: CountryCatalog,
 ) -> tuple[str, str, int, int] | None:
     """Return and log how a stored version's kept regions differ from the staged.
@@ -499,7 +501,7 @@ def _kept_region_summary(
     counts; there is none when the regions are the same. The log names counts
     only.
     """
-    staged_not_stored, stored_not_staged = count_region_differences(connection, country)
+    staged_not_stored, stored_not_staged = count_region_differences(session, country)
     if not staged_not_stored and not stored_not_staged:
         return None
     # The seed command configures no logging handler, so the details are in the
@@ -523,7 +525,7 @@ def _kept_region_summary(
     return (
         country.country_id,
         country.model_version.version,
-        count_stored_regions(connection, country),
+        count_stored_regions(session, country),
         len(country.regions),
     )
 

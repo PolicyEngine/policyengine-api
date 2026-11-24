@@ -139,7 +139,7 @@ def _store_unrecorded(monkeypatch: pytest.MonkeyPatch, *model_names: str) -> Non
     monkeypatch.setattr(
         spm_availability,
         "read_unrecorded_versions",
-        lambda _connection, versions: {
+        lambda _session, versions: {
             (model_name, version)
             for model_name, version in versions
             if model_name in model_names
@@ -147,8 +147,8 @@ def _store_unrecorded(monkeypatch: pytest.MonkeyPatch, *model_names: str) -> Non
     )
 
 
-class RecordingEngine:
-    """An engine whose transactions are only counted."""
+class RecordingSessions:
+    """Session factories whose transactions are only counted."""
 
     def __init__(self) -> None:
         """Start with no transaction."""
@@ -156,9 +156,9 @@ class RecordingEngine:
 
     @contextmanager
     def begin(self) -> Iterator[str]:
-        """Count one transaction and hand out a placeholder connection."""
+        """Count one transaction and hand out a placeholder Session."""
         self.transactions += 1
-        yield "connection"
+        yield "session"
 
 
 def test_publication_records_only_what_is_known(
@@ -166,7 +166,7 @@ def test_publication_records_only_what_is_known(
 ) -> None:
     recorded: list[tuple[str, dict]] = []
 
-    def record(_connection, *, model_name, version, availability) -> bool:
+    def record(_session, *, model_name, version, availability) -> bool:
         recorded.append((model_name, dict(availability)))
         return True
 
@@ -175,7 +175,7 @@ def test_publication_records_only_what_is_known(
     not_served = {"policyengine": {"latest": "6.11.0", "6.11.0": "app"}}
 
     recording = spm_availability.record_published_spm_availability(
-        RecordingEngine(),
+        RecordingSessions(),
         _catalog("uk", "us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
         fetch_versions=lambda _url: not_served,
@@ -198,12 +198,12 @@ def test_a_version_recorded_by_an_earlier_publication_is_not_listed(
     monkeypatch.setattr(
         spm_availability,
         "record_spm_availability",
-        lambda _connection, *, model_name, version, availability: False,
+        lambda _session, *, model_name, version, availability: False,
     )
     _store_unrecorded(monkeypatch)
 
     recording = spm_availability.record_published_spm_availability(
-        RecordingEngine(),
+        RecordingSessions(),
         _catalog("us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
         fetch_versions=lambda _url: versions,
@@ -262,7 +262,7 @@ def test_an_unreadable_versions_answer_lists_only_versions_still_unrecorded(
     monkeypatch.setattr(
         spm_availability,
         "record_spm_availability",
-        lambda _connection, *, model_name, version, availability: recorded.append(
+        lambda _session, *, model_name, version, availability: recorded.append(
             model_name
         ),
     )
@@ -274,7 +274,7 @@ def test_an_unreadable_versions_answer_lists_only_versions_still_unrecorded(
         raise CatalogPublicationError(msg)
 
     recording = spm_availability.record_published_spm_availability(
-        RecordingEngine(),
+        RecordingSessions(),
         _catalog("uk", "us"),
         {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
         fetch_versions=unreadable,
@@ -309,7 +309,7 @@ def test_an_unreadable_versions_answer_warns_only_when_versions_are_unrecorded(
 
     with caplog.at_level("WARNING", logger=spm_availability.LOGGER.name):
         spm_availability.record_published_spm_availability(
-            RecordingEngine(),
+            RecordingSessions(),
             _catalog("uk", "us"),
             {"SIMULATION_ENTRYPOINT_URL": "https://simulation.example"},
             fetch_versions=unreadable,

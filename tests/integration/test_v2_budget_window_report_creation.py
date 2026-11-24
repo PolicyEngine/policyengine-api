@@ -4,7 +4,7 @@ A stand-in for the simulation service's client stores the rows the
 simulation service creates for a budget window (the report with its first
 year's simulations, its budget-window run, and a pending report run per
 year under that year's simulations) and answers with the report's and
-window run's IDs. The routes run as the Public API's runtime
+window run's IDs. The routes run as API v1's runtime
 role, checking the country and policies and reading the window back.
 """
 
@@ -19,10 +19,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
@@ -70,13 +66,15 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.services.v2.simulation_service.types import (
         BudgetWindowReportCreationInput,
     )
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -90,7 +88,7 @@ def current_versions(country_id: str) -> PackageVersions:
 class StoringSimulationService:
     """Store the budget window the simulation service would create; answer its IDs."""
 
-    engine: Engine
+    owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     windows: list[BudgetWindowReportCreationInput] = field(default_factory=list)
 
@@ -98,22 +96,22 @@ class StoringSimulationService:
         self, report: BudgetWindowReportCreationInput
     ) -> SubmittedBudgetWindow:
         self.windows.append(report)
-        with self.engine.begin() as connection:
+        with self.owner_sessions.begin() as session:
             stored = store_report(
-                connection,
+                session,
                 self.catalog,
                 budget_window_size=report.budget_window_size,
                 year=report.year,
             )
             pending = RunSettings(versions=CURRENT_VERSIONS, status="pending")
             window_run_id = store_budget_window_run(
-                connection, self.catalog, stored, pending
+                session, self.catalog, stored, pending
             )
             for year in range(report.year, report.year + report.budget_window_size):
                 store_report_run(
-                    connection,
+                    session,
                     self.catalog,
-                    store_year_simulations(connection, self.catalog, stored, year),
+                    store_year_simulations(session, self.catalog, stored, year),
                     RunSettings(
                         versions=CURRENT_VERSIONS,
                         status="pending",
@@ -128,27 +126,28 @@ class StoringSimulationService:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 def client_for(
@@ -202,9 +201,11 @@ def window_body(policy_id: UUID) -> dict[str, Any]:
 
 
 def test_a_created_budget_window_is_answered_as_the_tables_hold_it(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringSimulationService(owner_engine, catalog)
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us", json=window_body(catalog.policy_id)
@@ -229,9 +230,11 @@ def test_a_created_budget_window_is_answered_as_the_tables_hold_it(
 
 
 def test_a_budget_window_naming_a_policy_the_country_does_not_store_is_not_sent(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringSimulationService(owner_engine, catalog)
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us", json=window_body(uuid4())

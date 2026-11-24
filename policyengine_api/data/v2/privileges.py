@@ -29,20 +29,22 @@ Roles and what decides their privileges:
   analyzes afterwards; its code isn't organized as connector modules, so the
   deploy check, not the connector analysis, covers it.
 - ``policyengine_v2_simulation_service``: the simulation API on Cloud Run. It
-  creates simulations, reports, their runs, budget-window runs and household
-  jobs, and reads the policy, dynamic, household and catalog rows a run needs.
-  It starts the Modal calls of runs and household jobs, so it may update their
+  creates simulations, reports, their runs, budget-window runs, household
+  jobs and simulation runs' cliff calculations, and reads the policy,
+  dynamic, household and catalog rows a run needs. It starts the Modal calls
+  of runs, household jobs and cliff calculations, so it may update their
   status, Modal call ID, error and completion columns: it records a call's ID
   once Modal accepts the call, and fails the run when Modal refuses it. It
   starts a budget-window run's first years at submit, so it may update the
   window run's status, error and completion columns, to fail it at once when
   Modal refuses those years' calls.
 - ``policyengine_v2_modal_worker``: the simulation API's Modal workers. They
-  write the status of the runs and household jobs they were given, and their
-  results, and read the rows a run needs. They also write a budget-window
-  run's status, error and times: each year's coordinator starts the window's
-  next unstarted year when its own year finishes, the last year to finish
-  marks the window succeeded, and a failed year fails it.
+  write the status of the runs, household jobs and cliff calculations they
+  were given, and their results, and read the rows a run needs. They also
+  write a budget-window run's status, error and times: each year's
+  coordinator starts the window's next unstarted year when its own year
+  finishes, the last year to finish marks the window succeeded, and a failed
+  year fails it.
 
 Both simulation API roles update only the columns ``update_columns`` names, so
 the database refuses any change to what a run is (its simulation or report,
@@ -269,6 +271,11 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "reports": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
     "simulation_runs": _run_table("output_uri", "output_sha256", "household_result"),
     "simulations": replace(_SIMULATION_DEFINITION, catalog_writer=READ),
+    # A simulation run's cliff calculations, started and finished as a run is:
+    # the simulation service inserts one and records or fails its Modal call,
+    # and the Modal worker claims it and writes its cliff gap and share. Neither
+    # may change the run a calculation names.
+    "cliff_impacts": _run_table("cliff_gap", "cliff_share"),
     # Results of simulation runs and report runs.
     "labor_supply_decile_responses": _RESULT,
     "labor_supply_responses": _RESULT,
