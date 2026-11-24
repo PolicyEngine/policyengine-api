@@ -1,3 +1,14 @@
+## [5.54.0] - 2026-11-24
+
+### Added
+
+- The v2 database can store one cliff result per simulation run, its cliff gap and cliff share, with the state of its calculation. The simulation service may start each calculation, its Modal workers may write the result, and API v1 may read it.
+
+### Changed
+
+- API v1 runs every database statement through SQLAlchemy's ORM, in its production code, scripts and tests, and rule api.data.orm-only enforces it; the few statements SQLAlchemy can't express, such as GRANT and COPY, are named exceptions. Commands, their arguments and their environment variables are unchanged.
+
+
 ## [5.53.0] - 2026-11-19
 
 ### Added
