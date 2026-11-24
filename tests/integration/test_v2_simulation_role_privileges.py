@@ -18,9 +18,10 @@ which map only the columns they name. The other refused updates use the
 models: both simulation roles may update ``updated_at`` on the run, budget-window
 run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
 have no ``updated_at``. A column a model's mapper leaves out, such as a report
-run's four older cliff columns until a revision drops them, has no statement
-through the model, so its writes and refusals go through the class that maps
-it, ``ReportRunColumns``.
+run's ``trigger`` and four older cliff columns, or a budget-window run's
+``trigger``, until a revision drops them, has no statement through the model,
+so its writes and refusals go through the class that maps it,
+``ReportRunColumns`` or ``BudgetWindowRunColumns``.
 """
 
 from __future__ import annotations

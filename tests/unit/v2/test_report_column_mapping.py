@@ -9,6 +9,7 @@ leaves it out of the mapper, so the models neither select nor write it.
 
 import pytest
 import sqlalchemy as sa
+from pydantic_core import PydanticUndefined
 from sqlmodel import select
 
 from policyengine_api.data.v2.models import (
@@ -52,9 +53,20 @@ def test_the_table_keeps_an_unmapped_column_until_a_revision_drops_it(
     model: type, column_name: str
 ) -> None:
     stored_column = stored_v2_table(model.__tablename__).columns[column_name]
+    field = model.model_fields[column_name]
+    column_arguments = getattr(field, "sa_column_kwargs", None)
 
     assert stored_column.nullable
-    assert model.model_fields[column_name].default is None
+    assert field.default is None
+    assert column_arguments in (None, PydanticUndefined)
+
+
+@pytest.mark.parametrize("model", [ReportRun, BudgetWindowRun])
+def test_a_runs_trigger_keeps_the_type_users_run_records_share(model: type) -> None:
+    trigger_type = model.model_fields["trigger"].sa_type
+
+    assert isinstance(trigger_type, sa.Enum)
+    assert trigger_type.name == "v2_report_run_trigger"
 
 
 def test_the_reports_user_key_and_index_stay_with_the_column() -> None:

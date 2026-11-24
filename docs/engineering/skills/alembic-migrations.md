@@ -309,13 +309,17 @@ and `refused(session, ...)`.
   `add_row(session, Model, **values)`, given a mapped class. A JSON column
   takes the Python value, such as `[2026]`, not its JSON text.
 - **Columns a mapper leaves out**: a column kept in its table but left out of
-  the model's mapper (`exclude_properties`), such as a report run's four older
-  cliff columns until a revision drops them, has no statement through the
-  model: `update(Model).values(column=...)` raises `AttributeError`. A test
-  that sets one maps it on a class of a registry of its own, as
-  `tests.integration.privilege_statements.ReportRunColumns` does, and reads it
-  from SQLite's copy of the schema (`StoredTable.columns` in
-  `tests.unit.v2.v2_schema_reading`) or from the database's `Inspector`.
+  the model's mapper (`exclude_properties`), such as a report's `label`,
+  `description` and `user_id`, a report run's `trigger` and four older cliff
+  columns, and a budget-window run's `trigger` until a revision drops them,
+  has no statement through the model: `update(Model).values(column=...)`
+  raises `AttributeError`, a constructor value is never stored, and
+  `Model.column` is the table's Core column, which the rule rules out even
+  in a `select`. A test that sets or selects one maps it on a class of a
+  registry of its own, as `tests.integration.privilege_statements`'
+  `ReportColumns`, `ReportRunColumns` and `BudgetWindowRunColumns` do, and
+  reads its declaration from SQLite's copy of the schema (`StoredTable.columns`
+  in `tests.unit.v2.v2_schema_reading`) or from the database's `Inspector`.
 - **Postgres functions**: `func`, as in
   `session.execute(select(func.current_database(), func.current_user()))`,
   `func.pg_backend_pid()` and `func.has_table_privilege(...)`.

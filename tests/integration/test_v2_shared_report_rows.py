@@ -50,7 +50,9 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import act_as, act_as_owner, query_plan
 from tests.integration.privilege_statements import (
+    BudgetWindowRunColumns,
     ReportColumns,
+    ReportRunColumns,
     SimulationColumns,
     unfailed,
     update_row,
@@ -694,11 +696,18 @@ def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
 
     act_as(session, managed_v2_roles.runtime)
     stored = session.execute(
-        select(col(Report.label), col(ReportRun.trigger), col(BudgetWindowRun.trigger))
-        .select_from(Report)
-        .join(ReportRun, col(ReportRun.report_id) == col(Report.id))
-        .join(BudgetWindowRun, col(BudgetWindowRun.report_id) == col(Report.id))
-        .where(col(Report.id) == report_id)
+        select(
+            ReportColumns.label,
+            ReportRunColumns.trigger,
+            BudgetWindowRunColumns.trigger,
+        )
+        .select_from(ReportColumns)
+        .join(ReportRunColumns, ReportRunColumns.report_id == ReportColumns.id)
+        .join(
+            BudgetWindowRunColumns,
+            BudgetWindowRunColumns.report_id == ReportColumns.id,
+        )
+        .where(ReportColumns.id == report_id)
     ).one()
     assert tuple(stored) == (None, None, None)
 
