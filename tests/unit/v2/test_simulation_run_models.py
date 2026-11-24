@@ -9,6 +9,8 @@ Columns are read from the models' mappers, and keys, constraints and indexes
 from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py).
 """
 
+from uuid import uuid4
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -19,7 +21,11 @@ from policyengine_api.data.v2.models import (
     ReportRun,
     SimulationRun,
 )
-from tests.fixtures.database_sessions import v2_schema_statements
+from tests.fixtures.database_sessions import (
+    recorded_statements,
+    sqlite_v2_sessions,
+    v2_schema_statements,
+)
 from tests.unit.v2.v2_schema_reading import (
     StoredForeignKeyColumn,
     model_columns,
@@ -290,16 +296,48 @@ def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
     assert {"labor_supply_result", "cliff_impact_result"}.isdisjoint(report_runs.keys())
 
 
-def test_report_runs_load_and_write_none_of_their_cliff_columns() -> None:
-    """A run's cliffs are its simulation runs', so API v1 leaves these columns alone."""
+def test_report_runs_load_none_of_their_cliff_columns() -> None:
+    """A run's cliffs are its simulation runs', so API v1 leaves these columns alone.
+
+    They stay SQLModel fields, as rule ``api.data.orm-only`` requires of every
+    column, with no Core column of their own, and the mapper leaves them out
+    until a revision drops them.
+    """
     loaded_columns = str(sa.select(ReportRun).compile(dialect=postgresql.dialect()))
 
     assert [name for name in CLIFF_IMPACT_COLUMNS if name in loaded_columns] == []
     assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(
         sa.inspect(ReportRun).column_attrs.keys()
     )
-    assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(ReportRun.model_fields)
-    assert [name for name in CLIFF_IMPACT_COLUMNS if hasattr(ReportRun, name)] == []
+    assert set(CLIFF_IMPACT_COLUMNS) <= set(ReportRun.model_fields)
+    core_columns = [
+        argument
+        for argument in ReportRun.__table_args__
+        if isinstance(argument, sa.Column)
+    ]
+    assert core_columns == []
+
+
+def test_storing_a_report_run_writes_none_of_its_cliff_columns() -> None:
+    report_run = ReportRun(
+        report_id=uuid4(),
+        baseline_simulation_run_id=uuid4(),
+        reform_simulation_run_id=uuid4(),
+        country_package_version="1.0.0",
+        policyengine_version="4.2.0",
+        baseline_cliff_gap=1.5,
+    )
+
+    with (
+        sqlite_v2_sessions() as sessions,
+        recorded_statements(sessions) as statements,
+        sessions.begin() as session,
+    ):
+        session.add(report_run)
+
+    (stored,) = [statement for statement in statements if "INSERT" in statement]
+    assert "report_runs" in stored
+    assert [name for name in CLIFF_IMPACT_COLUMNS if name in stored] == []
 
 
 def test_labor_supply_responses_have_one_typed_row_per_report_run() -> None:
