@@ -1,8 +1,8 @@
 """Create, read and list household reports through /v2/reports on migrated PostgreSQL.
 
 The routes run as API v1's runtime role, so the tests prove its
-declared privileges cover every read: the countries row, the stored household
-and policies the checks read, and the reports, simulations, runs and
+declared privileges cover every read: the countries row, the stored household,
+policies and dynamics the checks read, and the reports, simulations, runs and
 calculated households the reads return (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``). The rows the
 simulation service and its household functions write are stored by the
@@ -22,10 +22,13 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
+from sqlalchemy import delete, select
+from sqlmodel import col
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import (
+    Dynamic,
     Household,
     Report,
     ReportRun,
@@ -58,6 +61,7 @@ from policyengine_api.services.v2.simulation_service.services import (
 )
 from policyengine_api.services.v2.simulation_service.types import (
     PackageVersions,
+    StartedReportRun,
     SubmittedReport,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
@@ -79,6 +83,7 @@ if TYPE_CHECKING:
 
     from policyengine_api.services.v2.simulation_service.types import (
         HouseholdReportCreationInput,
+        ReportRerunInput,
     )
     from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
@@ -163,12 +168,20 @@ class SimulationRunToStore:
         return self.status in {"succeeded", "failed"}
 
 
+@dataclass(frozen=True)
+class HouseholdSideToStore:
+    """A household simulation's policy and dynamic, each None for none."""
+
+    policy_id: UUID | None
+    dynamic_id: UUID | None = None
+
+
 def store_household_simulation(
     session: Session,
     catalog: CatalogRows,
     household_id: UUID,
     *,
-    policy_id: UUID | None,
+    side: HouseholdSideToStore,
     run: SimulationRunToStore,
 ) -> tuple[UUID, UUID]:
     """Store a household simulation and one run; return both IDs."""
@@ -179,11 +192,30 @@ def store_household_simulation(
         id=simulation_id,
         simulation_type="household",
         household_id=household_id,
-        policy_id=policy_id,
+        policy_id=side.policy_id,
+        dynamic_id=side.dynamic_id,
         tax_benefit_model_version_id=catalog.version_id,
         year=2026,
     )
     catalog.simulation_ids.append(simulation_id)
+    return simulation_id, store_household_simulation_run(
+        session, catalog, simulation_id, run
+    )
+
+
+def store_household_simulation_run(
+    session: Session,
+    catalog: CatalogRows,
+    simulation_id: UUID,
+    run: SimulationRunToStore,
+    *,
+    forced: bool = False,
+) -> UUID:
+    """Store a run of a stored household simulation; return its ID.
+
+    ``forced`` marks a run calculated again on versions it already has a run
+    on, which a household report's re-run always is.
+    """
     run_id = uuid4()
     # A run without a calculated household holds SQL NULL, not JSON null.
     calculated = {} if run.document is None else {"household_result": run.document}
@@ -197,10 +229,11 @@ def store_household_simulation(
         status=run.status,
         started_at=STARTED_AT,
         completed_at=STARTED_AT + timedelta(minutes=1) if run.finished else None,
+        forced=forced,
         **calculated,
         **CURRENT_VERSIONS,
     )
-    return simulation_id, run_id
+    return run_id
 
 
 @dataclass(frozen=True)
@@ -211,11 +244,13 @@ class HouseholdReportToStore:
     Without it, each side's run has the report run's status and, once
     succeeded, its calculated household. Without ``with_reform``, it is a
     report of the baseline alone, and the reform's run is not stored.
+    ``dynamic_ids`` are the baseline's and the reform's dynamics.
     """
 
     status: str = "succeeded"
     with_reform: bool = True
     side_runs: tuple[SimulationRunToStore, SimulationRunToStore] | None = None
+    dynamic_ids: tuple[UUID | None, UUID | None] = (None, None)
 
     def runs(self) -> tuple[SimulationRunToStore, SimulationRunToStore]:
         """Return the baseline's and the reform's simulation runs to store."""
@@ -248,8 +283,13 @@ def store_household_report(
     status = report.status
     with_reform = report.with_reform
     baseline_run, reform_run = report.runs()
+    baseline_dynamic_id, reform_dynamic_id = report.dynamic_ids
     baseline_id, baseline_run_id = store_household_simulation(
-        session, catalog, household_id, policy_id=None, run=baseline_run
+        session,
+        catalog,
+        household_id,
+        side=HouseholdSideToStore(policy_id=None, dynamic_id=baseline_dynamic_id),
+        run=baseline_run,
     )
     reform_id = reform_run_id = None
     if with_reform:
@@ -257,7 +297,9 @@ def store_household_report(
             session,
             catalog,
             household_id,
-            policy_id=catalog.policy_id,
+            side=HouseholdSideToStore(
+                policy_id=catalog.policy_id, dynamic_id=reform_dynamic_id
+            ),
             run=reform_run,
         )
     report_id = uuid4()
@@ -304,6 +346,7 @@ class StoringHouseholdReportService:
     owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     household_reports: list[HouseholdReportCreationInput] = field(default_factory=list)
+    reruns: list[ReportRerunInput] = field(default_factory=list)
 
     def submit_household_report(
         self, report: HouseholdReportCreationInput
@@ -314,11 +357,56 @@ class StoringHouseholdReportService:
                 session,
                 self.catalog,
                 report.household_id,
-                HouseholdReportToStore(status="pending"),
+                HouseholdReportToStore(
+                    status="pending",
+                    with_reform=report.reform is not None,
+                    dynamic_ids=(
+                        report.baseline.dynamic_id,
+                        None if report.reform is None else report.reform.dynamic_id,
+                    ),
+                ),
             )
         return SubmittedReport(
             report_id=stored.report_id, report_run_id=stored.report_run_id
         )
+
+    def rerun_report(self, rerun: ReportRerunInput) -> StartedReportRun:
+        """Store a pending run of the report's own simulations, as a re-run does.
+
+        A household report's sides are always calculated again, so the new
+        runs are forced, as the simulation service creates them.
+        """
+        self.reruns.append(rerun)
+        pending = SimulationRunToStore("pending", None)
+        with self.owner_sessions.begin() as session:
+            report = session.execute(
+                select(
+                    col(Report.baseline_simulation_id),
+                    col(Report.reform_simulation_id),
+                ).where(col(Report.id) == rerun.report_id)
+            ).one()
+            simulation_run_ids = [
+                None
+                if simulation_id is None
+                else store_household_simulation_run(
+                    session, self.catalog, simulation_id, pending, forced=True
+                )
+                for simulation_id in report
+            ]
+            report_run_id = uuid4()
+            add_row(
+                session,
+                ReportRun,
+                id=report_run_id,
+                report_id=rerun.report_id,
+                baseline_simulation_run_id=simulation_run_ids[0],
+                reform_simulation_run_id=simulation_run_ids[1],
+                status="pending",
+                forced=True,
+                started_at=STARTED_AT + timedelta(days=1),
+                **CURRENT_VERSIONS,
+            )
+        return StartedReportRun(report_run_id=report_run_id)
 
 
 @pytest.fixture
@@ -332,6 +420,40 @@ def household_only_uk(owner_sessions: sessionmaker[Session]) -> Iterator[Catalog
     """Make the UK household-only, store a UK catalog, and restore both after."""
     with household_only_catalog(owner_sessions, "uk") as uk_catalog:
         yield uk_catalog
+
+
+@pytest.fixture
+def stored_dynamic_ids(
+    owner_sessions: sessionmaker[Session], household_only_uk: CatalogRows
+) -> Iterator[list[UUID]]:
+    """Collect the dynamics a test stores, and delete them before their catalog."""
+    dynamic_ids: list[UUID] = []
+    yield dynamic_ids
+    with owner_sessions.begin() as session:
+        session.execute(delete(Dynamic).where(col(Dynamic.id).in_(dynamic_ids)))
+
+
+def store_dynamic(
+    session: Session,
+    catalog: CatalogRows,
+    dynamic_ids: list[UUID],
+    *,
+    country_id: str | None = None,
+) -> UUID:
+    """Store a dynamic on the catalog's version, in its country unless named."""
+    dynamic_id = uuid4()
+    add_row(
+        session,
+        Dynamic,
+        id=dynamic_id,
+        country_id=country_id or catalog.country,
+        tax_benefit_model_id=catalog.model_id,
+        tax_benefit_model_version_id=catalog.version_id,
+        canonicalization_version=1,
+        content_hash=uuid4().hex * 2,
+    )
+    dynamic_ids.append(dynamic_id)
+    return dynamic_id
 
 
 @pytest.fixture
@@ -621,3 +743,99 @@ def test_a_household_only_country_still_refuses_economy_reports(
 
     assert response.status_code == 422
     assert "Economy calculations are not available" in response.json()["message"]
+
+
+def test_a_household_report_naming_a_dynamic_on_each_side_is_checked_and_sent(
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    stored_dynamic_ids: list[UUID],
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    catalog = household_only_uk
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
+        dynamic_id = store_dynamic(session, catalog, stored_dynamic_ids)
+    simulation_service = StoringHouseholdReportService(owner_sessions, catalog)
+    body = {
+        **household_body(household_id, catalog.policy_id),
+        "baseline": {"dynamic_id": str(dynamic_id)},
+        "reform": {"policy_id": str(catalog.policy_id), "dynamic_id": str(dynamic_id)},
+    }
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=uk", json=body
+    )
+
+    assert response.status_code == 201, response.text
+    (sent,) = simulation_service.household_reports
+    assert sent.baseline.dynamic_id == dynamic_id
+    assert sent.reform is not None
+    assert sent.reform.dynamic_id == dynamic_id
+    item = response.json()["result"]["item"]
+    assert item["baseline_simulation"]["dynamic_id"] == str(dynamic_id)
+    assert item["reform_simulation"]["dynamic_id"] == str(dynamic_id)
+
+
+@pytest.mark.parametrize("stored_in", ["us", None])
+def test_a_household_reports_dynamic_the_country_does_not_store_is_not_sent(
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    stored_dynamic_ids: list[UUID],
+    runtime_sessions: sessionmaker[Session],
+    stored_in: str | None,
+) -> None:
+    catalog = household_only_uk
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
+        dynamic_id = (
+            uuid4()
+            if stored_in is None
+            else store_dynamic(
+                session, catalog, stored_dynamic_ids, country_id=stored_in
+            )
+        )
+    simulation_service = StoringHouseholdReportService(owner_sessions, catalog)
+    body = {
+        **household_body(household_id, catalog.policy_id),
+        "reform": {"policy_id": str(catalog.policy_id), "dynamic_id": str(dynamic_id)},
+    }
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=uk", json=body
+    )
+
+    assert response.status_code == 404, response.text
+    assert str(dynamic_id) in response.json()["message"]
+    assert simulation_service.household_reports == []
+
+
+def test_a_household_reports_rerun_keeps_each_sides_dynamic(
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    stored_dynamic_ids: list[UUID],
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    catalog = household_only_uk
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
+        dynamic_id = store_dynamic(session, catalog, stored_dynamic_ids)
+        stored = store_household_report(
+            session,
+            catalog,
+            household_id,
+            HouseholdReportToStore(dynamic_ids=(dynamic_id, dynamic_id)),
+        )
+    simulation_service = StoringHouseholdReportService(owner_sessions, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{stored.report_id}/runs?country_id=uk", json={}
+    )
+
+    assert response.status_code == 201, response.text
+    (rerun,) = simulation_service.reruns
+    assert (rerun.report_id, rerun.kind) == (stored.report_id, "household")
+    item = response.json()["result"]["item"]
+    assert item["status"] == "pending"
+    assert item["run"]["id"] != str(stored.report_run_id)
+    assert item["baseline_simulation"]["dynamic_id"] == str(dynamic_id)
+    assert item["reform_simulation"]["dynamic_id"] == str(dynamic_id)

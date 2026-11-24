@@ -8,6 +8,10 @@ from uuid import UUID
 
 import pytest
 
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+)
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationOutput,
 )
@@ -46,6 +50,8 @@ from tests.unit.v2.stored_report_support import (
 )
 
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-00000000e001")
+DYNAMIC_ID = UUID("00000000-0000-0000-0000-00000000e002")
+ASSUMED_PARAMETER = "gov.simulation.labor_supply_responses.elasticities.income"
 REPORTS = "/v2/reports?country_id=us"
 BASELINE_HOUSEHOLD = {"people": {"you": {"net_income": {"2026": 30_000.0}}}}
 REFORM_HOUSEHOLD = {"people": {"you": {"net_income": {"2026": 31_250.5}}}}
@@ -153,6 +159,36 @@ def test_a_household_report_of_the_baseline_alone_can_be_created() -> None:
     assert arguments["report_input"].reform is None
 
 
+def test_each_sides_dynamic_reaches_the_service_and_is_answered() -> None:
+    # A report has one set of model assumptions, which v3 sends on both sides
+    # (C1 · 35's Q5); the API keeps each side's own.
+    service = FakeReportService(
+        report=household_report_read(
+            baseline_simulation=ReportSimulationRead(
+                id=BASELINE_SIMULATION_ID, policy_id=None, dynamic_id=DYNAMIC_ID
+            ),
+            reform_simulation=ReportSimulationRead(
+                id=REFORM_SIMULATION_ID, policy_id=POLICY_ID, dynamic_id=DYNAMIC_ID
+            ),
+        )
+    )
+    body = household_body(
+        baseline={"dynamic_id": str(DYNAMIC_ID)},
+        reform={"policy_id": str(POLICY_ID), "dynamic_id": str(DYNAMIC_ID)},
+    )
+
+    response = report_route_client(reports=service).post(REPORTS, json=body)
+
+    assert response.status_code == 201
+    item = response.json()["result"]["item"]
+    assert item["baseline_simulation"]["dynamic_id"] == str(DYNAMIC_ID)
+    assert item["reform_simulation"]["dynamic_id"] == str(DYNAMIC_ID)
+    ((_, arguments),) = service.calls
+    report_input = arguments["report_input"]
+    assert report_input.baseline.dynamic_id == DYNAMIC_ID
+    assert report_input.reform.dynamic_id == DYNAMIC_ID
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -166,6 +202,9 @@ def test_a_household_report_of_the_baseline_alone_can_be_created() -> None:
         pytest.param({"kind": "budget"}, id="unknown-kind"),
         # A household report always adds every variable the household lacks.
         pytest.param({"add_missing_variables": True}, id="add-missing-variables"),
+        pytest.param(
+            {"baseline": {"dynamic_id": "not-a-uuid"}}, id="dynamic-not-a-uuid"
+        ),
     ],
 )
 def test_a_household_report_outside_its_schema_is_refused_with_422(
@@ -228,6 +267,33 @@ def test_a_household_report_the_checks_refuse_is_answered_with_its_reason(
 
     assert response.status_code == status_code
     assert response.json()["message"] == str(error)
+
+
+def test_a_household_report_naming_a_dynamic_the_country_lacks_is_404() -> None:
+    error = DynamicNotFoundError(f"Dynamic {DYNAMIC_ID} was not found")
+    service = FakeReportService(error=error)
+
+    response = report_route_client(reports=service).post(
+        REPORTS, json=household_body(reform={"dynamic_id": str(DYNAMIC_ID)})
+    )
+
+    assert response.status_code == 404
+    assert response.json()["message"] == str(error)
+
+
+def test_a_household_reports_dynamic_with_missing_parameters_is_422() -> None:
+    service = FakeReportService(
+        error=DynamicParametersMissingError(DYNAMIC_ID, (ASSUMED_PARAMETER,))
+    )
+
+    response = report_route_client(reports=service).post(
+        REPORTS, json=household_body(reform={"dynamic_id": str(DYNAMIC_ID)})
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "missing_parameters"
+    assert response.json()["missing_parameters"] == [ASSUMED_PARAMETER]
+    assert response.json()["message"].startswith(f"Dynamic {DYNAMIC_ID} sets")
 
 
 def test_a_household_report_answers_both_calculated_households() -> None:
@@ -365,6 +431,9 @@ def test_the_create_routes_schema_offers_the_household_kind() -> None:
     # A report's name is each user's saved report's.
     assert "label" not in household_request["required"]
     assert "year" not in household_request["properties"]
+    side = components["HouseholdPolicyChoice"]
+    assert set(side["properties"]) == {"policy_id", "dynamic_id"}
+    assert "required" not in side
     # Each side's failure is read from the household function's failure
     # document, which always names its code.
     side_failure = components["HouseholdReportSideFailureItem"]

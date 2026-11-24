@@ -16,6 +16,10 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+)
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationFailure,
     HouseholdCalculationOutput,
@@ -49,8 +53,10 @@ from tests.fixtures.household_calculation_documents import (
     WARNING,
 )
 from tests.unit.v2.household_calculation_support import (
+    ASSUMED_PARAMETER,
     CATALOG_VERSION_ID,
     CREATED_AT,
+    DYNAMIC_ID,
     HOUSEHOLD_ID,
     POLICY_ID,
     REFORMED_PARAMETER,
@@ -66,6 +72,7 @@ def _read(**changes: object) -> HouseholdCalculationRead:
         "country_id": "us",
         "household_id": HOUSEHOLD_ID,
         "policy_id": POLICY_ID,
+        "dynamic_id": None,
         "year": 2026,
         "catalog_version_id": CATALOG_VERSION_ID,
         "country_package_version": "1.450.0",
@@ -105,6 +112,7 @@ class FakeCalculationService:
             country_id=calculation.country_id,
             household_id=calculation.household_id,
             policy_id=calculation.policy_id,
+            dynamic_id=calculation.dynamic_id,
             year=2026,
         )
 
@@ -169,6 +177,7 @@ def test_a_calculation_is_accepted_without_an_account(client, service) -> None:
                 "country_id": "us",
                 "household_id": str(HOUSEHOLD_ID),
                 "policy_id": str(POLICY_ID),
+                "dynamic_id": None,
                 "year": 2026,
             }
         },
@@ -177,6 +186,19 @@ def test_a_calculation_is_accepted_without_an_account(client, service) -> None:
     assert calculation.country_id == "us"
     assert calculation.household_id == HOUSEHOLD_ID
     assert calculation.policy_id == POLICY_ID
+    assert calculation.dynamic_id is None
+
+
+def test_a_calculation_naming_a_dynamic_reaches_the_service_and_is_answered(
+    client, service
+) -> None:
+    response = client.post(CALCULATIONS, json=_body(dynamic_id=str(DYNAMIC_ID)))
+
+    assert response.status_code == 202
+    item = response.json()["result"]["item"]
+    assert (item["policy_id"], item["dynamic_id"]) == (str(POLICY_ID), str(DYNAMIC_ID))
+    (calculation,) = service.submissions
+    assert calculation.dynamic_id == DYNAMIC_ID
 
 
 def test_axes_options_and_spm_settings_reach_the_service(client, service) -> None:
@@ -251,6 +273,7 @@ def test_a_malformed_request_is_refused_before_anything_is_read(
         ),
         (HouseholdNotFoundError("Household not found."), 404, "Household not found."),
         (PolicyNotFoundError("Policy not found."), 404, "Policy not found."),
+        (DynamicNotFoundError("Dynamic not found."), 404, "Dynamic not found."),
         (
             SimulationServiceUnavailableError("The simulation service answered 503."),
             503,
@@ -312,6 +335,25 @@ def test_a_policy_with_missing_parameters_is_refused_with_their_names(
     }
 
 
+def test_a_dynamic_with_missing_parameters_is_refused_with_their_names(
+    client, service
+) -> None:
+    service.error = DynamicParametersMissingError(DYNAMIC_ID, (ASSUMED_PARAMETER,))
+
+    response = client.post(CALCULATIONS, json=_body(dynamic_id=str(DYNAMIC_ID)))
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "status": "error",
+        "message": (
+            f"Dynamic {DYNAMIC_ID} sets parameters the running catalog version "
+            f"does not have: {ASSUMED_PARAMETER}"
+        ),
+        "code": "missing_parameters",
+        "missing_parameters": [ASSUMED_PARAMETER],
+    }
+
+
 def test_v2_storage_that_is_not_configured_answers_503() -> None:
     def unconfigured():
         msg = "V2_RUNTIME_DATABASE_URL is required"
@@ -340,6 +382,7 @@ def test_a_succeeded_calculation_reads_back_its_household(client, service) -> No
         "country_id": "us",
         "household_id": str(HOUSEHOLD_ID),
         "policy_id": str(POLICY_ID),
+        "dynamic_id": None,
         "year": 2026,
         "catalog_version_id": str(CATALOG_VERSION_ID),
         "country_package_version": "1.450.0",
@@ -360,6 +403,16 @@ def test_a_succeeded_calculation_reads_back_its_household(client, service) -> No
         "employment_income",
         "age",
     ]
+
+
+def test_a_calculation_naming_a_dynamic_reads_it_back(client, service) -> None:
+    service.read_answer = _read(policy_id=None, dynamic_id=DYNAMIC_ID)
+
+    response = client.get(f"{CALCULATIONS}/{JOB_ID}")
+
+    assert response.status_code == 200
+    item = response.json()["result"]["item"]
+    assert (item["policy_id"], item["dynamic_id"]) == (None, str(DYNAMIC_ID))
 
 
 def test_a_failed_calculation_reads_back_its_error(client, service) -> None:
@@ -455,3 +508,18 @@ def test_openapi_documents_both_routes_and_the_missing_parameter_refusal(
         "code",
         "missing_parameters",
     }
+
+
+def test_openapi_documents_the_dynamic_a_calculation_names(client) -> None:
+    schema = client.get("/v2/openapi.json").json()
+    components = schema["components"]["schemas"]
+
+    assert "dynamic_id" in components["HouseholdCalculationRequest"]["properties"]
+    assert "dynamic_id" not in components["HouseholdCalculationRequest"].get(
+        "required", []
+    )
+    for item in ("HouseholdCalculationSubmittedItem", "HouseholdCalculationItem"):
+        assert "dynamic_id" in components[item]["required"]
+    submit = schema["paths"][CALCULATIONS]["post"]
+    assert "dynamic" in submit["responses"]["404"]["description"]
+    assert "dynamic" in submit["responses"]["422"]["description"]
