@@ -44,6 +44,7 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import schema_inspector
 from tests.fixtures.integration.alembic_v2 import table_columns
+from tests.integration.privilege_statements import ReportRunColumns, update_row
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -645,15 +646,25 @@ def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
             report_run_id=report_run_id,
             decile=1,
         )
+    # ReportRun's mapper leaves the four cliff columns out until a revision
+    # drops them, so they are set through ReportRunColumns.
     with refused(session, match="ck_report_runs_cliff_impact_complete"):
-        _update_report_run(session, report_run_id, baseline_cliff_gap=1.0)
+        session.execute(
+            update_row(ReportRunColumns, report_run_id, baseline_cliff_gap=1.0)
+        )
+    session.execute(
+        update_row(
+            ReportRunColumns,
+            report_run_id,
+            baseline_cliff_gap=1.0,
+            baseline_cliff_share=0.1,
+            reform_cliff_gap=2.0,
+            reform_cliff_share=0.2,
+        )
+    )
     _update_report_run(
         session,
         report_run_id,
-        baseline_cliff_gap=1.0,
-        baseline_cliff_share=0.1,
-        reform_cliff_gap=2.0,
-        reform_cliff_share=0.2,
         data_version="1.0.0",
         spm_provenance={"source": "census"},
     )

@@ -57,6 +57,7 @@ from policyengine_api.data.v2.privileges import (
 )
 from tests.fixtures.database_sessions import act_as
 from tests.integration.privilege_statements import (
+    REPORT_RUN_CLIFF_COLUMNS,
     BudgetWindowRunColumns,
     CliffImpactColumns,
     HouseholdColumns,
@@ -262,7 +263,7 @@ def test_the_simulation_service_creates_rows_and_records_only_its_calls(
         update_row(SimulationRun, ids["run"], started_at=func.now()),
         update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
         update_row(SimulationRun, ids["run"], year=2027),
-        update_row(ReportRun, ids["report_run"], baseline_cliff_gap=1.0),
+        update_row(ReportRunColumns, ids["report_run"], baseline_cliff_gap=1.0),
         insert(PovertyColumns).values(
             id=uuid4(),
             simulation_run_id=ids["run"],
@@ -309,13 +310,19 @@ def test_modal_workers_write_their_run_status_and_results_only(
             status="running",
             started_at=func.now(),
             modal_call_id="fc-coordinator",
+            data_version="1.0.0",
+            spm_provenance={},
+            updated_at=func.now(),
+        )
+    )
+    session.execute(
+        update_row(
+            ReportRunColumns,
+            ids["report_run"],
             baseline_cliff_gap=1.0,
             baseline_cliff_share=0.1,
             reform_cliff_gap=2.0,
             reform_cliff_share=0.2,
-            data_version="1.0.0",
-            spm_provenance={},
-            updated_at=func.now(),
         )
     )
     add_row(
@@ -625,8 +632,10 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
 ) -> None:
     """Every column of the run tables is updatable exactly when it is declared.
 
-    Setting a column other than ``updated_at`` also sets ``updated_at``, which
-    both roles may update on each of these tables.
+    Setting a column of a model other than ``updated_at`` also sets
+    ``updated_at``, which both roles may update on each of these tables. The
+    report run's four older cliff columns, which ``ReportRun``'s mapper leaves
+    out, are set through ``ReportRunColumns``, which sets only the column.
     """
     role = getattr(managed_v2_roles, role_kind)
     declared = declared_privileges(managed_v2_roles.deployment_environment)[role]
@@ -646,12 +655,21 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
             and privilege.privilege is TablePrivilege.UPDATE
             for column in privilege.columns
         }
-        for column_attribute in inspect(model).column_attrs:
-            column = getattr(model, column_attribute.key)
+        statement_models = [
+            (model, column_attribute.key)
+            for column_attribute in inspect(model).column_attrs
+        ]
+        if model is ReportRun:
+            statement_models.extend(
+                (ReportRunColumns, column_name)
+                for column_name in REPORT_RUN_CLIFF_COLUMNS
+            )
+        for statement_model, column_name in statement_models:
+            column = getattr(statement_model, column_name)
             # The privilege is checked when the statement starts, so no row is
             # needed.
-            statement = update(model).where(false()).values({column: column})
-            if column_attribute.key in updatable:
+            statement = update(statement_model).where(false()).values({column: column})
+            if column_name in updatable:
                 session.execute(statement)
             else:
                 _refused(session, statement)

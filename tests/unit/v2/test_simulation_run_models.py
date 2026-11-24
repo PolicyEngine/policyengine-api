@@ -281,12 +281,17 @@ def test_report_runs_record_their_modal_call() -> None:
 
 
 def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
-    """The comparison parts with no result table are typed, except the receipt."""
+    """The comparison parts with no result table are typed, except the receipt.
+
+    The four cliff columns are read from the stored table: the mapper leaves
+    them out.
+    """
     report_runs = model_columns("report_runs")
+    stored_columns = stored_v2_table("report_runs").columns
 
     for column_name in CLIFF_IMPACT_COLUMNS:
-        assert report_runs[column_name].nullable, column_name
-        assert isinstance(report_runs[column_name].type, sa.Float), column_name
+        assert stored_columns[column_name].nullable, column_name
+        assert isinstance(stored_columns[column_name].type, sa.Float), column_name
     assert "ck_report_runs_cliff_impact_complete" in _check_names("report_runs")
     assert report_runs.spm_provenance.nullable
     spm_type = report_runs.spm_provenance.type
