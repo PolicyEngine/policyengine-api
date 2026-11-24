@@ -195,8 +195,10 @@ SQLAlchemy's `text`. They report four kinds of finding:
   (`connect()`, `connection()`, `get_bind()`, or `begin()` on an engine);
   opening a database driver's connection there (a call into `psycopg`,
   `psycopg2`, `pymysql`, `sqlite3` or `mysql.connector` whose last name is
-  `connect`, `Connect`, `Connection` or `AsyncConnection`, as in
-  `psycopg.connect(url)` or `sqlite3.Connection(':memory:')`);
+  `connect` or `Connect`, or ends with `Connection`, as in
+  `psycopg.connect(url)`, `sqlite3.Connection(':memory:')` or
+  `psycopg2.extras.RealDictConnection(dsn)`; naming a connection class
+  without calling it isn't reported);
   `raw_connection()` in any module; `execute()` on anything not named as a session, and `scalar()`,
   `scalars()`, `stream()` or `stream_scalars()` on a name such as
   `connection`; listening for pool, engine or dialect events (`connect`,
@@ -355,9 +357,17 @@ The rule's exceptions are its `[[rule.exception]]` entries in
   statement only when it is a raw SQL construct (`text`, `TextClause`,
   `literal_column`, `DDL`) or a statement method (`execute`,
   `exec_driver_sql`, `scalar` and the like) whose first argument is a string
-  or f-string with SQL of its own, as `text(f'TRUNCATE {tables} CASCADE')`.
-  `text(statement)`, `text(f'{statement}')`, `session.connection()`,
-  `sqlite3.connect(':memory:')` and an attribute read name none. Two sites in
+  or f-string whose literal text, less its SQL comments (`--` to the end of
+  a line, and `/* ... */`), holds a statement keyword as a whole word, in any
+  case: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `CREATE`,
+  `DROP`, `ALTER`, `GRANT`, `REVOKE`, `EXPLAIN`, `ANALYZE`, `BEGIN`,
+  `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `PRAGMA`, `SET`, `RESET`, `SHOW`,
+  `WITH`, `COPY`, `LOCK`, `VACUUM`, `COMMENT`, `DO` or `CALL`, as
+  `text(f'TRUNCATE {tables} CASCADE')` does. `text(statement)`,
+  `text(f'{statement};')`, `text(f'{schema}.{table}')`,
+  `text(f'{statement} -- cleanup')`, `literal_column('count(*)')`,
+  `session.connection()`, `sqlite3.connect(':memory:')` and an attribute read
+  name none. Two sites in
   different functions take an entry each. Only this rule's entries may give
   `function`: the rules loader refuses it on any other rule's.
 - **`migration-revision`**: a path pattern the rule test doesn't read. It

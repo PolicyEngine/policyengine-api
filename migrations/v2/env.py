@@ -82,9 +82,10 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Migrate the caller's connection, or else a new engine in one transaction.
 
-    On a new engine, the target qualification, the migration and the head
-    schema check share one transaction, which commits only when all of them
-    succeed: a failed ``validate_v2_head_schema`` rolls the migration back.
+    On a new engine, the target qualification, the migration and, when the
+    migration reaches the script heads, the head schema check share one
+    transaction, which commits only when all of them succeed: a failed
+    ``validate_v2_head_schema`` rolls the migration back.
     """
     provided_connection = config.attributes.get("connection")
     if provided_connection is not None:
@@ -94,10 +95,12 @@ def run_migrations_online() -> None:
     engine = create_engine(settings.url, poolclass=pool.NullPool)
     try:
         # engine.begin() opens the one transaction the qualification's reads,
-        # the migration and validate_v2_head_schema all run in. Alembic's
-        # begin_transaction joins it rather than committing on its own, so the
-        # migration commits only when the head schema check passes; when the
-        # check raises, engine.begin() rolls the migration back.
+        # the migration and validate_v2_head_schema run in. Alembic's
+        # begin_transaction joins it rather than committing on its own.
+        # _configure runs the head schema check only when the migration moved
+        # the database to the script heads: then the migration commits only
+        # when the check passes, and engine.begin() rolls it back when the
+        # check raises. Any other migration commits once it completes.
         with engine.begin() as connection:
             _configure(connection)
     finally:

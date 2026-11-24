@@ -58,8 +58,10 @@ that one statement. ``.connection()``, ``.get_bind()``, ``.raw_connection()``
 and ``.exec_driver_sql()`` are SQLAlchemy's names and count whatever a module
 imports, as does opening a connection of psycopg, psycopg2, pymysql, sqlite3 or
 mysql.connector: a call into one of them, followed through the module's
-imports, whose last name is ``connect``, ``Connect``, ``Connection`` or
-``AsyncConnection``. The rules that go by a
+imports, whose last name is ``connect`` or ``Connect``, or ends with
+``Connection``. An exception in a test module needs no ``function`` when its
+match is raw SQL text, or a statement method, whose first argument holds a
+statement keyword outside its SQL comments. The rules that go by a
 method or attribute name other libraries share apply only in modules that
 import sqlalchemy or sqlmodel: any ``.table`` read, ``kw["bind"]``,
 ``.execute()`` on anything not named as a session, ``.scalar()``,
@@ -79,7 +81,9 @@ statement run on an open driver connection in such a module, a Session's
 ``bind`` attribute, or an event listener whose target and event name aren't its
 first two positional arguments, the name a string literal. ``.tables`` of a
 MetaData isn't reported when the name holding it doesn't end in ``metadata``
-and wasn't assigned ``MetaData(...)``.
+and wasn't assigned ``MetaData(...)``. Imports are read for the whole module,
+not for each scope, so a local name that shadows one, such as a parameter
+named ``sqlite3``, is still taken for the import.
 """
 
 from __future__ import annotations
@@ -171,9 +175,10 @@ ENGINE_TRANSACTION_METHOD = "begin"
 # The call that hands out the driver's connection beneath SQLAlchemy's, which
 # no module may make.
 DRIVER_CONNECTION_METHODS = frozenset({"raw_connection"})
-# The database drivers, and the last names of their calls that open a
-# connection: a connect function or method, as in psycopg.connect or
-# psycopg.Connection.connect, or a connection class, as in sqlite3.Connection.
+# The database drivers, and how their calls that open a connection end: a
+# connect function or method, as in psycopg.connect or
+# psycopg.Connection.connect, or a connection class, whose name ends with
+# Connection, as in sqlite3.Connection or psycopg2.extras.RealDictConnection.
 # Only a session-factory module may make them.
 DATABASE_DRIVER_MODULES = (
     "mysql.connector",
@@ -182,9 +187,8 @@ DATABASE_DRIVER_MODULES = (
     "pymysql",
     "sqlite3",
 )
-DRIVER_CONNECT_NAMES = frozenset(
-    {"AsyncConnection", "Connect", "Connection", "connect"}
-)
+DRIVER_CONNECT_FUNCTIONS = frozenset({"Connect", "connect"})
+DRIVER_CONNECTION_CLASS_SUFFIX = "Connection"
 # execute runs only on a name such as session or store_session, which finds a
 # connection passed around without a Connection annotation. A Result has scalar
 # and scalars too, so the others are reported only on a name such as connection.
@@ -286,6 +290,15 @@ EXCEPTION_CATEGORIES = (NO_ORM_FORM, MIGRATION_REVISION)
 # MODULE_LEVEL for a finding in no class or function.
 TEST_DIRECTORY = "tests/"
 MODULE_LEVEL = "<module>"
+# What makes a literal SQL of its own: a statement keyword as a whole word,
+# outside a SQL comment (-- to the end of a line, or /* ... */).
+SQL_STATEMENT_KEYWORD = re.compile(
+    r"\b(?:ALTER|ANALYZE|BEGIN|CALL|COMMENT|COMMIT|COPY|CREATE|DELETE|DO|DROP"
+    r"|EXPLAIN|GRANT|INSERT|LOCK|PRAGMA|RESET|REVOKE|ROLLBACK|SAVEPOINT|SELECT"
+    r"|SET|SHOW|TRUNCATE|UPDATE|VACUUM|WITH)\b",
+    re.IGNORECASE,
+)
+SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 # The calls whose first argument is SQL: the raw SQL constructs and the methods
 # that run a statement. An exception naming one, given SQL of its own, names
 # one statement, so it needs no function in a test module.
@@ -633,15 +646,17 @@ def _connects_a_driver(node: ast.Call, context: _ModuleContext) -> bool:
     """Whether a call opens a database driver's connection outside a factory.
 
     The call is into a driver module, followed through the module's imports,
-    and its last name is a connect function or a connection class.
+    and its last name is ``connect`` or ``Connect``, or ends with
+    ``Connection``, as a connection class's does.
     """
     if context.module.is_session_factory:
         return False
     qualified = _qualified_name(node.func, context.module.driver_imported)
-    return (
-        qualified is not None
-        and _library_of(qualified, DATABASE_DRIVER_MODULES) is not None
-        and qualified.rsplit(".", 1)[-1] in DRIVER_CONNECT_NAMES
+    if qualified is None or _library_of(qualified, DATABASE_DRIVER_MODULES) is None:
+        return False
+    last_name = qualified.rsplit(".", 1)[-1]
+    return last_name in DRIVER_CONNECT_FUNCTIONS or last_name.endswith(
+        DRIVER_CONNECTION_CLASS_SUFFIX
     )
 
 
@@ -1075,19 +1090,35 @@ def unscanned_files(
     )
 
 
-def _holds_literal_sql(argument: ast.expr) -> bool:
-    """Whether a string or f-string argument has SQL of its own, not only names.
+def _literal_text(argument: ast.expr) -> str | None:
+    """Return a string argument's text, an f-string's with each value a space.
 
-    ``'TRUNCATE reports'`` and ``f'TRUNCATE {tables}'`` do; ``''``,
-    ``f'{statement}'`` and ``f'{statement} {parameters}'`` don't.
+    Return ``None`` for any other argument.
     """
     if isinstance(argument, ast.Constant):
-        return isinstance(argument.value, str) and bool(argument.value.strip())
-    return isinstance(argument, ast.JoinedStr) and any(
-        _holds_literal_sql(part)
+        return argument.value if isinstance(argument.value, str) else None
+    if not isinstance(argument, ast.JoinedStr):
+        return None
+    return "".join(
+        part.value
+        if isinstance(part, ast.Constant) and isinstance(part.value, str)
+        else " "
         for part in argument.values
-        if isinstance(part, ast.Constant)
     )
+
+
+def _holds_literal_sql(argument: ast.expr) -> bool:
+    """Whether a string or f-string argument names a SQL statement of its own.
+
+    Its literal text, less its SQL comments, holds a statement keyword as a
+    whole word: ``'TRUNCATE reports'`` and ``f'TRUNCATE {tables}'`` do;
+    ``f'{statement};'``, ``f'{schema}.{table}'``, ``'-- SELECT 1'`` and
+    ``'count(*)'`` don't.
+    """
+    literal = _literal_text(argument)
+    if literal is None:
+        return False
+    return bool(SQL_STATEMENT_KEYWORD.search(SQL_COMMENT.sub(" ", literal)))
 
 
 def _names_sql_text(match: str) -> bool:
@@ -1096,9 +1127,11 @@ def _names_sql_text(match: str) -> bool:
     Such a match names one statement: a raw SQL construct (``text``,
     ``TextClause``, ``literal_column``, ``DDL``) or a statement method
     (``execute``, ``exec_driver_sql``, ``scalar`` and the like) whose first
-    argument holds literal SQL, as ``text(f'TRUNCATE {tables}')`` does. A
-    string given to anything else, such as ``sqlite3.connect(':memory:')``, a
-    bare call, a call on variables and an attribute read name none.
+    argument holds a statement keyword outside its comments, as
+    ``text(f'TRUNCATE {tables}')`` does. A string given to anything else, such
+    as ``sqlite3.connect(':memory:')``, an expression such as
+    ``literal_column('count(*)')``, a bare call, a call on variables and an
+    attribute read name none.
     """
     try:
         expression = ast.parse(match, mode="eval").body
