@@ -266,6 +266,15 @@ def test_exceptions_outside_tests_or_naming_no_sql_text_need_a_function(
         "text(f'{statement} {parameters}')",
         "connection.execute(f'{statement}')",
         "text('')",
+        "text(f'{statement};')",
+        "text(f'({statement})')",
+        "text(f'{schema}.{table}')",
+        "text(f'{statement} -- cleanup')",
+        "text(f'{statement} /* cleanup */')",
+        "text('-- SELECT 1')",
+        "text(f'{column} = :value')",
+        "text(f'{table}_selection')",
+        "sa.literal_column('count(*)')",
     ],
 )
 def test_a_test_entry_naming_no_sql_statement_needs_a_function(
@@ -291,12 +300,16 @@ def test_a_test_entry_naming_no_sql_statement_needs_a_function(
         "text('TRUNCATE reports')",
         "sa.text(f'TRUNCATE {tables} CASCADE')",
         "sa.TextClause('SELECT 1')",
-        "sa.literal_column('count(*)')",
         "DDL('DROP TABLE reports')",
         "sqlite_connection.execute('PRAGMA foreign_keys = ON')",
         "connection.exec_driver_sql('BEGIN IMMEDIATE')",
         "session.connection().exec_driver_sql(f'EXPLAIN {expanded.statement}', ...)",
         "conn.scalar('SELECT 1')",
+        "text('select 1')",
+        "text(f'SELECT * FROM {table} -- read every row')",
+        "text('/* statistics */ VACUUM reports')",
+        "text(f'WITH recent AS ({query}) SELECT 1')",
+        "text(f'DROP OWNED BY {quoted_role}')",
     ],
 )
 def test_a_test_entry_naming_one_sql_statement_needs_no_function(

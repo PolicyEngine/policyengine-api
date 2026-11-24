@@ -718,14 +718,71 @@ def test_a_driver_connection_opened_another_way_is_reported(
         "class RecordingConnection(sqlite3.Connection):\n    pass",
         "error = psycopg.OperationalError('connection lost')",
         "rows = psycopg.Cursor",
+        "connection_class = psycopg2.extras.RealDictConnection",
+        "value = psycopg2.extras.Json({'people': {}})",
+        "statement = psycopg.sql.Identifier('reports')",
     ],
 )
 def test_naming_a_drivers_connection_class_without_calling_it_is_not_reported(
     source: str,
 ) -> None:
-    module = f"import psycopg\nimport sqlite3\n\n{source}\n"
+    """Only a call of a connect function or connection class opens one."""
+    module = f"import psycopg\nimport psycopg2.extras\nimport sqlite3\n\n{source}\n"
 
     assert _checks({ROUTES: module}, ROUTES) == []
+
+
+@pytest.mark.parametrize(
+    ("imports", "call", "summary"),
+    [
+        (
+            "from mysql.connector import connection",
+            "connection.MySQLConnection(user='root')",
+            "connection.MySQLConnection(...)",
+        ),
+        (
+            "import mysql.connector",
+            "mysql.connector.MySQLConnection(user='root')",
+            "mysql.connector.MySQLConnection(...)",
+        ),
+        (
+            "from mysql.connector.connection_cext import CMySQLConnection",
+            "CMySQLConnection(user='root')",
+            "CMySQLConnection(...)",
+        ),
+        (
+            "import psycopg2.extras",
+            "psycopg2.extras.RealDictConnection(dsn)",
+            "psycopg2.extras.RealDictConnection(dsn)",
+        ),
+        (
+            "from psycopg2.extras import LoggingConnection",
+            "LoggingConnection(dsn)",
+            "LoggingConnection(dsn)",
+        ),
+    ],
+)
+def test_a_drivers_other_connection_classes_are_reported(
+    imports: str, call: str, summary: str
+) -> None:
+    """A call of any driver class whose name ends with Connection opens one."""
+    source = f"{imports}\n\ndriver_connection = {call}\n"
+
+    assert _checks({ROUTES: source}, ROUTES) == [(CORE_CONNECTION, summary)]
+    assert _checks({SESSION_FACTORY: source}, SESSION_FACTORY) == []
+
+
+def test_a_name_shadowing_an_imported_driver_is_followed_as_the_driver() -> None:
+    """The checks read a module's imports, not each scope's names.
+
+    A parameter named ``sqlite3`` in a module that imports ``sqlite3`` is
+    still taken for the driver, so its ``connect()`` is reported.
+    """
+    source = (
+        "import sqlite3\n\ndef open_store(sqlite3):\n    return sqlite3.connect()\n"
+    )
+
+    assert _checks({ROUTES: source}, ROUTES) == [(CORE_CONNECTION, "sqlite3.connect()")]
 
 
 def test_a_session_factory_module_hands_out_no_engine_or_connection() -> None:
