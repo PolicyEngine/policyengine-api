@@ -504,7 +504,6 @@ def test_a_malformed_or_incomplete_key_is_refused(
         }
         if table == "simulations"
         else {
-            "label": "Report",
             "country": "us",
             "tax_benefit_model_id": public_api_rows.model_id,
             "inputs": {},

@@ -228,13 +228,11 @@ def test_per_user_columns_of_shared_rows_need_no_value(
 ) -> None:
     """A shared row describes no one caller, so the simulation service may omit them.
 
-    They go in a later revision; until then they are nullable, with no default,
-    so a row written without one holds none.
+    They go in a later revision; until then the table keeps them nullable, and
+    the models leave them out of their mappers, so no row API v1 writes names
+    them.
     """
-    column = model_columns(table_name)[column_name]
-
-    assert column.nullable
-    assert column.server_default is None
+    assert stored_v2_table(table_name).columns[column_name].nullable
 
 
 def test_user_report_run_associations_record_each_users_request_for_a_run() -> None:

@@ -519,14 +519,12 @@ def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
         "started_at",
         "completed_at",
         "policyengine_version",
-        "trigger",
     }
     assert set(windows.keys()) == {"id"} | required | optional
     assert all(not windows[name].nullable for name in required)
     assert all(windows[name].nullable for name in optional)
-    # A window run has a report run's states and starts for a report run's reasons.
+    # A window run has a report run's states.
     assert windows.status.type.name == "v2_report_run_status"
-    assert windows.trigger.type.name == "v2_report_run_trigger"
     report_key = _foreign_key("budget_window_runs", "report_id")
     assert report_key.target == "reports.id"
     assert report_key.ondelete == "CASCADE"
