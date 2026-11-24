@@ -1,6 +1,6 @@
 """Save detailed-save reports and simulations in migrated PostgreSQL.
 
-The saved-record services run as the Public API's runtime role. A saved
+The saved-record services run as API v1's runtime role. A saved
 report or simulation names a stored record of its country, checked with a
 SELECT in the write's own transaction; the database's ``RESTRICT`` foreign
 keys refuse one deleted between the check and the write, which is answered
@@ -16,10 +16,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, delete
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
+from sqlalchemy import delete
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import User
@@ -64,52 +61,53 @@ from tests.integration.stored_report_rows import (
 from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from uuid import UUID
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(v2_owner_sessions: sessionmaker[Session]) -> sessionmaker[Session]:
+    """Return the database owner's Session factories, its schema migrated to head."""
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
+def browsers(owner_sessions: sessionmaker[Session]) -> Iterator[list[UUID]]:
     """Signed-out browsers' user IDs; their users and saved records go afterwards."""
     user_ids: list[UUID] = []
     yield user_ids
-    with owner_engine.begin() as connection:
-        connection.execute(delete(User).where(User.id.in_(user_ids)))
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(User.id.in_(user_ids)))
 
 
 @pytest.fixture
 def catalogs(
-    owner_engine: Engine, browsers: list[UUID]
+    owner_sessions: sessionmaker[Session], browsers: list[UUID]
 ) -> Iterator[dict[str, CatalogRows]]:
     """Store a US and a UK catalog; delete them after the records that name them."""
-    with owner_engine.begin() as connection:
-        stored = {
-            country: store_catalog(connection, country) for country in ("us", "uk")
-        }
+    with owner_sessions.begin() as session:
+        stored = {country: store_catalog(session, country) for country in ("us", "uk")}
     yield stored
-    with owner_engine.begin() as connection:
-        connection.execute(delete(User).where(User.id.in_(browsers)))
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(User.id.in_(browsers)))
         for catalog in stored.values():
-            delete_catalog(connection, catalog)
+            delete_catalog(session, catalog)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[sessionmaker]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session, expire_on_commit=False)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    """Return Session factories acting as API v1's runtime role."""
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 def browser(browsers: list[UUID]) -> UnauthenticatedPrincipal:
@@ -131,13 +129,13 @@ def simulation_service(sessions: sessionmaker) -> V2UserSimulationService:
 
 
 def test_a_saved_report_names_a_stored_report_of_its_country(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
     service = report_service(runtime_sessions)
 
     saved = service.create_user_report(
@@ -154,13 +152,13 @@ def test_a_saved_report_names_a_stored_report_of_its_country(
 
 
 def test_a_saved_report_naming_a_missing_or_foreign_report_is_not_found(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        uk_report = store_report(connection, catalogs["uk"])
+    with owner_sessions.begin() as session:
+        uk_report = store_report(session, catalogs["uk"])
     service = report_service(runtime_sessions)
     principal = browser(browsers)
 
@@ -175,13 +173,13 @@ def test_a_saved_report_naming_a_missing_or_foreign_report_is_not_found(
 
 
 def test_a_saved_report_naming_both_references_is_refused(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
 
     with pytest.raises(AssociationReferenceConflictError, match="not both"):
         report_service(runtime_sessions).create_user_report(
@@ -193,13 +191,13 @@ def test_a_saved_report_naming_both_references_is_refused(
 
 
 def test_a_saved_report_cannot_come_to_name_both_references(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
     service = report_service(runtime_sessions)
     principal = browser(browsers)
     by_number = service.create_user_report(
@@ -228,14 +226,14 @@ def test_a_saved_report_cannot_come_to_name_both_references(
 
 
 def test_a_saved_report_is_repointed_only_to_a_stored_report(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        first = store_report(connection, catalogs["us"])
-        second = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        first = store_report(session, catalogs["us"])
+        second = store_report(session, catalogs["us"])
     service = report_service(runtime_sessions)
     principal = browser(browsers)
     saved = service.create_user_report(
@@ -285,13 +283,13 @@ def test_a_report_gone_after_the_check_is_refused_by_its_foreign_key(
 
 def test_a_report_gone_before_a_repoint_is_refused_by_its_foreign_key(
     monkeypatch: pytest.MonkeyPatch,
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
     service = report_service(runtime_sessions)
     principal = browser(browsers)
     saved = service.create_user_report(
@@ -322,16 +320,14 @@ def test_a_report_gone_before_a_repoint_is_refused_by_its_foreign_key(
 
 
 def test_a_saved_simulation_names_a_stored_simulation_of_its_country(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(connection, catalogs["uk"], policy_id=None)
-        other_simulation_id = store_simulation(
-            connection, catalogs["uk"], policy_id=None
-        )
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalogs["uk"], policy_id=None)
+        other_simulation_id = store_simulation(session, catalogs["uk"], policy_id=None)
     service = simulation_service(runtime_sessions)
     principal = browser(browsers)
 
@@ -354,13 +350,13 @@ def test_a_saved_simulation_names_a_stored_simulation_of_its_country(
 
 
 def test_a_saved_simulation_of_another_country_or_none_is_not_found(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        uk_simulation_id = store_simulation(connection, catalogs["uk"], policy_id=None)
+    with owner_sessions.begin() as session:
+        uk_simulation_id = store_simulation(session, catalogs["uk"], policy_id=None)
     service = simulation_service(runtime_sessions)
     principal = browser(browsers)
 
@@ -377,13 +373,13 @@ def test_a_saved_simulation_of_another_country_or_none_is_not_found(
 
 
 def test_a_saved_simulation_never_names_both_references(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(connection, catalogs["us"], policy_id=None)
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalogs["us"], policy_id=None)
     service = simulation_service(runtime_sessions)
     principal = browser(browsers)
     by_number = service.create_user_simulation(
@@ -435,13 +431,13 @@ def test_a_simulation_gone_after_the_check_is_refused_by_its_foreign_key(
 
 def test_a_simulation_gone_before_a_repoint_is_refused_by_its_foreign_key(
     monkeypatch: pytest.MonkeyPatch,
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     browsers: list[UUID],
     runtime_sessions: sessionmaker,
 ) -> None:
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(connection, catalogs["uk"], policy_id=None)
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalogs["uk"], policy_id=None)
     service = simulation_service(runtime_sessions)
     principal = browser(browsers)
     saved = service.create_user_simulation(

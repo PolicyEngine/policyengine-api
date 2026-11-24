@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import sqlalchemy as sa
+from sqlmodel import col
 
 from policyengine_api.data.v2.catalog.parameter_tree import (
     ParameterTreeChildRow,
@@ -36,7 +37,10 @@ from policyengine_api.data.v2.catalog.publication_reconciliation import (
     StoredVersion,
     stored_version,
 )
-from policyengine_api.data.v2.catalog.publication_staging import copy_rows
+from policyengine_api.data.v2.catalog.publication_staging import (
+    column_names,
+    copy_rows,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
@@ -49,16 +53,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
     from uuid import UUID
 
-    from sqlalchemy import Connection
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-PARAMETERS = Parameter.__table__
-PARAMETER_TREE_CHILDREN = ParameterTreeChild.__table__
 
-
-def _version_for_tree(connection: Connection, country: CountryCatalog) -> StoredVersion:
-    stored = stored_version(connection, country)
+def _version_for_tree(session: Session, country: CountryCatalog) -> StoredVersion:
+    stored = stored_version(session, country)
     if stored is None:
         msg = (
             f"the {country.country_id} catalog version "
@@ -68,24 +69,24 @@ def _version_for_tree(connection: Connection, country: CountryCatalog) -> Stored
     return stored
 
 
-def _has_tree(connection: Connection, version_id: UUID) -> bool:
+def _has_tree(session: Session, version_id: UUID) -> bool:
     return bool(
-        connection.execute(
+        session.execute(
             sa.select(
                 sa.exists().where(
-                    PARAMETER_TREE_CHILDREN.c.tax_benefit_model_version_id == version_id
+                    col(ParameterTreeChild.tax_benefit_model_version_id) == version_id
                 )
             )
         ).scalar_one()
     )
 
 
-def _stored_parameter_ids(connection: Connection, version_id: UUID) -> dict[str, UUID]:
+def _stored_parameter_ids(session: Session, version_id: UUID) -> dict[str, UUID]:
     return {
         row.name: row.id
-        for row in connection.execute(
-            sa.select(PARAMETERS.c.name, PARAMETERS.c.id).where(
-                PARAMETERS.c.tax_benefit_model_version_id == version_id
+        for row in session.execute(
+            sa.select(col(Parameter.name), col(Parameter.id)).where(
+                col(Parameter.tax_benefit_model_version_id) == version_id
             )
         )
     }
@@ -144,7 +145,7 @@ def _table_rows(
     rows: tuple[ParameterTreeChildRow, ...],
 ) -> Iterator[tuple[object, ...]]:
     created_at = datetime.now(UTC)
-    column_names = [column.name for column in PARAMETER_TREE_CHILDREN.columns]
+    names = column_names(ParameterTreeChild)
     for row in rows:
         values: dict[str, object] = {
             "id": uuid4(),
@@ -162,11 +163,11 @@ def _table_rows(
             "economy": row.economy,
             "household": row.household,
         }
-        yield tuple(values[name] for name in column_names)
+        yield tuple(values[name] for name in names)
 
 
 def write_parameter_trees(
-    connection: Connection,
+    session: Session,
     countries: Sequence[CountryCatalog],
 ) -> tuple[tuple[str, str, int], ...]:
     """Write the tree of each catalog country's stored version that has none.
@@ -179,15 +180,15 @@ def write_parameter_trees(
     """
     written = []
     for country in countries:
-        stored = _version_for_tree(connection, country)
-        if stored.catalog_format is None or _has_tree(connection, stored.id):
+        stored = _version_for_tree(session, country)
+        if stored.catalog_format is None or _has_tree(session, stored.id):
             continue
         rows = catalog_parameter_tree(
-            country, _stored_parameter_ids(connection, stored.id)
+            country, _stored_parameter_ids(session, stored.id)
         )
         count = copy_rows(
-            connection,
-            table=PARAMETER_TREE_CHILDREN,
+            session,
+            model=ParameterTreeChild,
             rows=_table_rows(stored.id, rows),
         )
         written.append((country.model.name, country.model_version.version, count))
@@ -195,7 +196,7 @@ def write_parameter_trees(
 
 
 def assert_parameter_trees_written(
-    connection: Connection,
+    session: Session,
     countries: Sequence[CountryCatalog],
 ) -> None:
     """Raise CatalogPublicationError if a catalog country's version has no tree.
@@ -203,8 +204,8 @@ def assert_parameter_trees_written(
     Versions stored before catalog format 2 are exempt: they get no tree.
     """
     for country in countries:
-        stored = _version_for_tree(connection, country)
-        if stored.catalog_format is not None and not _has_tree(connection, stored.id):
+        stored = _version_for_tree(session, country)
+        if stored.catalog_format is not None and not _has_tree(session, stored.id):
             msg = (
                 f"the {country.country_id} catalog version "
                 f"{country.model_version.version} has no parameter tree"

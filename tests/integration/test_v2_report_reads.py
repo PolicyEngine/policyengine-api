@@ -20,10 +20,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
@@ -63,10 +59,12 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -82,31 +80,31 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalogs(owner_engine: Engine) -> Iterator[dict[str, CatalogRows]]:
+def catalogs(owner_sessions: sessionmaker[Session]) -> Iterator[dict[str, CatalogRows]]:
     """Store a US and a UK catalog, and delete them and their reports after."""
-    with owner_engine.begin() as connection:
-        stored = {
-            country: store_catalog(connection, country) for country in ("us", "uk")
-        }
+    with owner_sessions.begin() as session:
+        stored = {country: store_catalog(session, country) for country in ("us", "uk")}
     yield stored
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         for catalog in stored.values():
-            delete_catalog(connection, catalog)
+            delete_catalog(session, catalog)
 
 
 @pytest.fixture
-def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
+def client(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> TestClient:
     """Serve the report and simulation routes as the runtime role."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    sessions = sessionmaker(runtime_engine, class_=Session)
+    sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
@@ -124,12 +122,11 @@ def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
         specification=RouteImplementation.FLASK_FALLBACK,
         metadata=RouteImplementation.FLASK_FALLBACK,
     )
-    yield TestClient(
+    return TestClient(
         create_asgi_app(
             Flask(__name__), dependencies=dependencies, route_settings=settings
         )
     )
-    runtime_engine.dispose()
 
 
 def _as_json(value: Any) -> Any:
@@ -142,7 +139,7 @@ def _as_json(value: Any) -> Any:
     ids=["us", "uk"],
 )
 def test_a_report_reads_its_newest_unforced_success_and_that_runs_result(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     client: TestClient,
     country: str,
@@ -151,10 +148,10 @@ def test_a_report_reads_its_newest_unforced_success_and_that_runs_result(
     catalog = catalogs[country]
     forced_output = json.loads(json.dumps(output))
     forced_output["budget"]["tax_revenue_impact"] = 1.0
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         newest = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS),
@@ -163,7 +160,7 @@ def test_a_report_reads_its_newest_unforced_success_and_that_runs_result(
         # On the same versions, the newer run is a forced re-run's, which is
         # never a read's default run.
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -202,20 +199,22 @@ def test_a_report_reads_its_newest_unforced_success_and_that_runs_result(
 
 
 def test_an_older_success_is_read_before_a_newer_run_still_running(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS),
             result=us_economy_result(),
         )
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -235,13 +234,15 @@ def test_an_older_success_is_read_before_a_newer_run_still_running(
 
 
 def test_a_failed_newest_run_says_why_without_a_result(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -263,11 +264,13 @@ def test_a_failed_newest_run_says_why_without_a_result(
 
 
 def test_a_report_with_no_run_answers_its_definition(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
 
@@ -283,10 +286,12 @@ def test_a_report_with_no_run_answers_its_definition(
 
 
 def test_a_report_is_not_found_in_another_country(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
 
@@ -295,13 +300,15 @@ def test_a_report_is_not_found_in_another_country(
 
 
 def test_a_succeeded_run_without_result_rows_is_unreadable(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         store_report_run(
-            connection, catalog, report, RunSettings(versions=CURRENT_VERSIONS)
+            session, catalog, report, RunSettings(versions=CURRENT_VERSIONS)
         )
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id=us")
@@ -314,21 +321,23 @@ def test_a_succeeded_run_without_result_rows_is_unreadable(
 
 
 def test_listing_reads_named_reports_in_the_order_asked(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        first = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        first = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             first,
             RunSettings(versions=CURRENT_VERSIONS),
             result=us_economy_result(),
         )
-        second = store_report(connection, catalog)
-        budget_window = store_report(connection, catalog, budget_window_size=3)
-        other_country = store_report(connection, catalogs["uk"])
+        second = store_report(session, catalog)
+        budget_window = store_report(session, catalog, budget_window_size=3)
+        other_country = store_report(session, catalogs["uk"])
     named = (
         second.report_id,
         uuid4(),
@@ -361,18 +370,18 @@ def test_listing_reads_named_reports_in_the_order_asked(
 
 
 def test_a_simulation_reads_its_newest_run_in_its_country(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(
-            connection, catalog, policy_id=catalog.policy_id
-        )
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalog, policy_id=catalog.policy_id)
         store_simulation_run(
-            connection, catalog, simulation_id, RunSettings(versions=OLDER_VERSIONS)
+            session, catalog, simulation_id, RunSettings(versions=OLDER_VERSIONS)
         )
         newest_run_id = store_simulation_run(
-            connection,
+            session,
             catalog,
             simulation_id,
             RunSettings(
@@ -401,11 +410,13 @@ def test_a_simulation_reads_its_newest_run_in_its_country(
 
 
 def test_a_simulation_with_no_run_answers_its_definition(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(connection, catalog, policy_id=None)
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalog, policy_id=None)
 
     item = client.get(f"/v2/simulations/{simulation_id}?country_id=us").json()[
         "result"
@@ -418,13 +429,15 @@ def test_a_simulation_with_no_run_answers_its_definition(
 
 
 def test_of_two_unsucceeded_runs_created_together_the_larger_id_is_read(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -435,7 +448,7 @@ def test_of_two_unsucceeded_runs_created_together_the_larger_id_is_read(
             ),
         )
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -457,13 +470,15 @@ def test_of_two_unsucceeded_runs_created_together_the_larger_id_is_read(
 
 
 def test_of_two_simulation_runs_created_together_the_larger_id_is_the_newest(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        simulation_id = store_simulation(connection, catalog, policy_id=None)
+    with owner_sessions.begin() as session:
+        simulation_id = store_simulation(session, catalog, policy_id=None)
         store_simulation_run(
-            connection,
+            session,
             catalog,
             simulation_id,
             RunSettings(
@@ -471,7 +486,7 @@ def test_of_two_simulation_runs_created_together_the_larger_id_is_the_newest(
             ),
         )
         store_simulation_run(
-            connection,
+            session,
             catalog,
             simulation_id,
             RunSettings(versions=OLDER_VERSIONS, run_id=SMALLER_RUN_ID),
@@ -489,22 +504,24 @@ DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
 
 
 def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         older, newer = (
             store_report(
-                connection,
+                session,
                 catalogs["uk"],
                 dataset_independent_key=DATASET_INDEPENDENT_KEY,
                 created_at=STARTED_AT + timedelta(hours=hours),
             )
             for hours in (1, 2)
         )
-        store_report(connection, catalogs["uk"], dataset_independent_key="0" * 64)
-        store_report(connection, catalogs["uk"])
+        store_report(session, catalogs["uk"], dataset_independent_key="0" * 64)
+        store_report(session, catalogs["uk"])
         store_report(
-            connection, catalogs["us"], dataset_independent_key=DATASET_INDEPENDENT_KEY
+            session, catalogs["us"], dataset_independent_key=DATASET_INDEPENDENT_KEY
         )
 
     response = client.get(
@@ -527,14 +544,16 @@ def test_a_search_finds_the_countrys_reports_with_the_key_newest_first(
 
 
 def test_a_local_area_report_reads_its_areas_and_withheld_codes(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     output = uk_local_area_economy_result()
-    with owner_engine.begin() as connection:
-        local_areas = store_local_area_catalog(connection, catalogs["uk"])
-        report = store_report(connection, local_areas)
+    with owner_sessions.begin() as session:
+        local_areas = store_local_area_catalog(session, catalogs["uk"])
+        report = store_report(session, local_areas)
         store_report_run(
-            connection,
+            session,
             local_areas,
             report,
             RunSettings(versions=CURRENT_VERSIONS),
@@ -555,22 +574,22 @@ def test_a_local_area_report_reads_its_areas_and_withheld_codes(
 
 @pytest.mark.parametrize("region_code", ["uk", "country/wales"], ids=["uk", "nation"])
 def test_a_uk_wide_or_nation_report_on_its_own_dataset_reads_no_withheld_codes(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     client: TestClient,
     region_code: str,
 ) -> None:
-    with owner_engine.begin() as connection:
-        local_areas = store_local_area_catalog(connection, catalogs["uk"])
+    with owner_sessions.begin() as session:
+        local_areas = store_local_area_catalog(session, catalogs["uk"])
         # UK-wide on the national dataset, or the catalog's Wales region.
         on_national_dataset = (
             replace(local_areas, dataset_id=catalogs["uk"].dataset_id)
             if region_code == "uk"
             else catalogs["uk"]
         )
-        report = store_report(connection, on_national_dataset)
+        report = store_report(session, on_national_dataset)
         store_report_run(
-            connection,
+            session,
             on_national_dataset,
             report,
             RunSettings(versions=CURRENT_VERSIONS),
@@ -588,7 +607,9 @@ def test_a_uk_wide_or_nation_report_on_its_own_dataset_reads_no_withheld_codes(
 
 
 def test_a_local_area_report_with_every_area_of_a_level_withheld_reads_it_empty(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     output = {
         **uk_local_area_economy_result(),
@@ -596,11 +617,11 @@ def test_a_local_area_report_with_every_area_of_a_level_withheld_reads_it_empty(
         "constituency_withheld_codes": ["E14001063", "W07000081"],
         "local_authority_withheld_codes": [],
     }
-    with owner_engine.begin() as connection:
-        local_areas = store_local_area_catalog(connection, catalogs["uk"])
-        report = store_report(connection, local_areas)
+    with owner_sessions.begin() as session:
+        local_areas = store_local_area_catalog(session, catalogs["uk"])
+        report = store_report(session, local_areas)
         store_report_run(
-            connection,
+            session,
             local_areas,
             report,
             RunSettings(versions=CURRENT_VERSIONS),

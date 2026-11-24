@@ -1,17 +1,35 @@
-"""Exercise the v2 catalog tables' revisions against disposable Postgres."""
+"""Exercise the v2 catalog tables' revisions against disposable Postgres.
 
+Every statement runs through a Session (rule api.data.orm-only). Rows read or
+written at head use the v2 models. Rows written at an earlier revision use the
+small mapped classes below, which map the catalog columns a version stored
+before catalog format 2 has; every revision these tests visit keeps them.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-import pytest
 import sqlalchemy as sa
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlmodel import col
 
-from tests.fixtures.integration.alembic_v2 import (
-    alembic_v2_config,
-    disposable_v2_url,
-    table_columns,
+from policyengine_api.data.v2.models import (
+    Parameter,
+    ParameterSearchFile,
+    ParameterTreeChild,
+    TaxBenefitModelVersion,
+    Variable,
 )
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import alembic_v2_config, table_columns
+from tests.integration.simulation_rows import add_row, refused
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session, sessionmaker
 
 CATALOG_FORMAT_2_PARENT_REVISION = "fb1a3e40d3d6"
 CATALOG_FORMAT_2_COLUMNS = {
@@ -28,93 +46,161 @@ CATALOG_FORMAT_2_COLUMNS = {
     ),
     "parameters": ("economy", "household"),
 }
+# The v2 model of each table with format 2 columns.
+CATALOG_FORMAT_2_MODELS: dict[str, Any] = {
+    "tax_benefit_model_versions": TaxBenefitModelVersion,
+    "variables": Variable,
+    "parameters": Parameter,
+}
+PROBE_MODEL_NAME = "catalog-format-probe"
 
 
-def _catalog_version_published_before_format_2(connection: sa.Connection) -> UUID:
+class CatalogBeforeFormat2Base(DeclarativeBase):
+    """The declarative base of the catalog tables before catalog format 2."""
+
+
+class TaxBenefitModelBeforeCatalogFormat2(CatalogBeforeFormat2Base):
+    """A tax-benefit model's name before catalog format 2."""
+
+    __tablename__ = "tax_benefit_models"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
+class TaxBenefitModelVersionBeforeCatalogFormat2(CatalogBeforeFormat2Base):
+    """A model version's required columns before catalog format 2."""
+
+    __tablename__ = "tax_benefit_model_versions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    model_id: Mapped[UUID]
+    version: Mapped[str]
+    current_law_id: Mapped[int]
+    metadata_time_periods: Mapped[list[int]] = mapped_column(sa.JSON)
+
+
+class VariableBeforeCatalogFormat2(CatalogBeforeFormat2Base):
+    """A variable's required columns before catalog format 2."""
+
+    __tablename__ = "variables"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    entity: Mapped[str]
+    default_value: Mapped[Any] = mapped_column(sa.JSON)
+    tax_benefit_model_version_id: Mapped[UUID]
+
+
+class ParameterBeforeCatalogFormat2(CatalogBeforeFormat2Base):
+    """A parameter's required columns before catalog format 2."""
+
+    __tablename__ = "parameters"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    tax_benefit_model_version_id: Mapped[UUID]
+
+
+def _catalog_version_published_before_format_2(session: Session) -> UUID:
     """Store a model version with one variable and one parameter; return its id."""
     model_id = uuid4()
     version_id = uuid4()
-    connection.execute(
-        text(
-            "INSERT INTO tax_benefit_models (id, name) "
-            "VALUES (:model_id, 'catalog-format-probe')"
-        ),
-        {"model_id": model_id},
+    add_row(
+        session,
+        TaxBenefitModelBeforeCatalogFormat2,
+        id=model_id,
+        name=PROBE_MODEL_NAME,
     )
-    connection.execute(
-        text(
-            "INSERT INTO tax_benefit_model_versions "
-            "(id, model_id, version, current_law_id, metadata_time_periods) "
-            "VALUES (:version_id, :model_id, '0.0.1-probe', 1, '[2026]')"
-        ),
-        {"version_id": version_id, "model_id": model_id},
+    add_row(
+        session,
+        TaxBenefitModelVersionBeforeCatalogFormat2,
+        id=version_id,
+        model_id=model_id,
+        version="0.0.1-probe",
+        current_law_id=1,
+        metadata_time_periods=[2026],
     )
-    connection.execute(
-        text(
-            "INSERT INTO variables "
-            "(id, name, entity, default_value, tax_benefit_model_version_id) "
-            "VALUES (:variable_id, 'probe_income', 'person', '0', :version_id)"
-        ),
-        {"variable_id": uuid4(), "version_id": version_id},
+    add_row(
+        session,
+        VariableBeforeCatalogFormat2,
+        id=uuid4(),
+        name="probe_income",
+        entity="person",
+        default_value=0,
+        tax_benefit_model_version_id=version_id,
     )
-    connection.execute(
-        text(
-            "INSERT INTO parameters (id, name, tax_benefit_model_version_id) "
-            "VALUES (:parameter_id, 'gov.probe.rate', :version_id)"
-        ),
-        {"parameter_id": uuid4(), "version_id": version_id},
+    add_row(
+        session,
+        ParameterBeforeCatalogFormat2,
+        id=uuid4(),
+        name="gov.probe.rate",
+        tax_benefit_model_version_id=version_id,
     )
     return version_id
 
 
-def _format_2_values(connection: sa.Connection, version_id: UUID) -> list[tuple]:
+def _delete_probe_catalog(sessions: sessionmaker[Session]) -> None:
+    """Delete the probe model, and with it its versions and their catalog rows."""
+    with sessions.begin() as session:
+        session.execute(
+            delete(TaxBenefitModelBeforeCatalogFormat2).where(
+                TaxBenefitModelBeforeCatalogFormat2.name == PROBE_MODEL_NAME
+            )
+        )
+
+
+def _version_row_count(model: Any, version_id: UUID) -> sa.Select[tuple[int]]:
+    """Select how many of a catalog table's rows belong to the version."""
+    return (
+        select(func.count())
+        .select_from(model)
+        .where(model.tax_benefit_model_version_id == version_id)
+    )
+
+
+def _format_2_values(session: Session, version_id: UUID) -> list[tuple[Any, ...]]:
     """Return the format 2 columns of the version's model, variable and parameter."""
     rows = []
     for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
+        model = CATALOG_FORMAT_2_MODELS[table_name]
         key = (
-            "id"
+            model.id
             if table_name == "tax_benefit_model_versions"
-            else "tax_benefit_model_version_id"
+            else model.tax_benefit_model_version_id
         )
-        rows.append(
-            tuple(
-                connection.execute(
-                    text(
-                        f"SELECT {', '.join(columns)} FROM {table_name} "
-                        f"WHERE {key} = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).one()
-            )
-        )
+        format_2_columns = select(
+            *(getattr(model, column_name) for column_name in columns)
+        ).where(key == version_id)
+        rows.append(tuple(session.execute(format_2_columns).one()))
     return rows
 
 
-def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
+def test_catalog_format_2_columns_leave_earlier_versions_empty(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     """A version stored before catalog format 2 keeps its format 2 fields null.
 
     Upgrading adds the columns as nullable without writing to stored rows, and
     downgrading drops them and keeps every row.
     """
     config = alembic_v2_config()
-    engine = create_engine(disposable_v2_url())
-    version_id = None
     try:
         command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
         for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            assert set(columns).isdisjoint(table_columns(engine, table_name))
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
+            assert set(columns).isdisjoint(table_columns(v2_owner_sessions, table_name))
+        with v2_owner_sessions.begin() as session:
+            version_id = _catalog_version_published_before_format_2(session)
 
         command.upgrade(config, "head")
 
         for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            stored_columns = table_columns(engine, table_name)
+            stored_columns = table_columns(v2_owner_sessions, table_name)
             for column_name in columns:
                 assert stored_columns[column_name]["nullable"]
                 assert stored_columns[column_name]["default"] is None
-        with engine.connect() as connection:
-            assert _format_2_values(connection, version_id) == [
+        with v2_owner_sessions() as session:
+            assert _format_2_values(session, version_id) == [
                 (None, None, None),
                 (None, None, None, None, None, None, None, None),
                 (None, None),
@@ -123,33 +209,30 @@ def test_catalog_format_2_columns_leave_earlier_versions_empty() -> None:
         command.downgrade(config, CATALOG_FORMAT_2_PARENT_REVISION)
 
         for table_name, columns in CATALOG_FORMAT_2_COLUMNS.items():
-            assert set(columns).isdisjoint(table_columns(engine, table_name))
-        with engine.connect() as connection:
-            counts = connection.execute(
-                text(
-                    "SELECT (SELECT count(*) FROM variables "
-                    "WHERE tax_benefit_model_version_id = :version_id), "
-                    "(SELECT count(*) FROM parameters "
-                    "WHERE tax_benefit_model_version_id = :version_id)"
-                ),
-                {"version_id": version_id},
+            assert set(columns).isdisjoint(table_columns(v2_owner_sessions, table_name))
+        with v2_owner_sessions() as session:
+            counts = session.execute(
+                select(
+                    _version_row_count(
+                        VariableBeforeCatalogFormat2, version_id
+                    ).scalar_subquery(),
+                    _version_row_count(
+                        ParameterBeforeCatalogFormat2, version_id
+                    ).scalar_subquery(),
+                )
             ).one()
         assert tuple(counts) == (1, 1)
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
+        _delete_probe_catalog(v2_owner_sessions)
         command.upgrade(config, "head")
-        engine.dispose()
 
 
 PARAMETER_TREE_PARENT_REVISION = "e86f19a6c4da"
 
 
-def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -> None:
+def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     """The parameter tree revision creates an empty table and downgrades cleanly.
 
     The revision writes no rows: catalog publication writes each version's
@@ -157,18 +240,22 @@ def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -
     downgrading drops the table while every catalog row stays.
     """
     config = alembic_v2_config()
-    engine = create_engine(disposable_v2_url())
     try:
         command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
-        assert "parameter_tree_children" not in inspect(engine).get_table_names()
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
+        assert (
+            "parameter_tree_children"
+            not in schema_inspector(v2_owner_sessions).get_table_names()
+        )
+        with v2_owner_sessions.begin() as session:
+            version_id = _catalog_version_published_before_format_2(session)
 
         command.upgrade(config, "head")
 
         indexes = {
             index["name"]: (index["column_names"], index["unique"])
-            for index in inspect(engine).get_indexes("parameter_tree_children")
+            for index in schema_inspector(v2_owner_sessions).get_indexes(
+                "parameter_tree_children"
+            )
         }
         assert indexes["ix_parameter_tree_children_listing"] == (
             ["tax_benefit_model_version_id", "parent_path", "position"],
@@ -178,93 +265,77 @@ def test_parameter_tree_table_is_created_empty_and_dropped_without_data_loss() -
             ["tax_benefit_model_version_id", "parent_path", "reform_position"],
             True,
         )
-        with engine.begin() as connection:
+        with v2_owner_sessions.begin() as session:
             assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_tree_children")
-                ).scalar_one()
+                session.scalar(select(func.count()).select_from(ParameterTreeChild))
                 == 0
             )
-            parameter_id = connection.execute(
-                text(
-                    "SELECT id FROM parameters "
-                    "WHERE tax_benefit_model_version_id = :version_id"
-                ),
-                {"version_id": version_id},
-            ).scalar_one()
+            parameter_id = session.scalars(
+                select(col(Parameter.id)).where(
+                    col(Parameter.tax_benefit_model_version_id) == version_id
+                )
+            ).one()
             for path, parent, position, child_type, child_count, reference in (
                 ("gov", "", 0, "node", 1, None),
                 ("gov.probe", "gov", 0, "node", 1, None),
                 ("gov.probe.rate", "gov.probe", 0, "parameter", None, parameter_id),
             ):
-                connection.execute(
-                    text(
-                        "INSERT INTO parameter_tree_children (id, "
-                        "tax_benefit_model_version_id, parent_path, path, position, "
-                        "label, child_type, child_count, parameter_id) VALUES "
-                        "(:id, :version_id, :parent, :path, :position, :path, "
-                        ":child_type, :child_count, :parameter_id)"
-                    ),
-                    {
-                        "id": uuid4(),
-                        "version_id": version_id,
-                        "parent": parent,
-                        "path": path,
-                        "position": position,
-                        "child_type": child_type,
-                        "child_count": child_count,
-                        "parameter_id": reference,
-                    },
+                add_row(
+                    session,
+                    ParameterTreeChild,
+                    id=uuid4(),
+                    tax_benefit_model_version_id=version_id,
+                    parent_path=parent,
+                    path=path,
+                    position=position,
+                    label=path,
+                    child_type=child_type,
+                    child_count=child_count,
+                    parameter_id=reference,
                 )
-            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
-                connection.execute(
-                    text(
-                        "INSERT INTO parameter_tree_children (id, "
-                        "tax_benefit_model_version_id, parent_path, path, position, "
-                        "label, child_type) VALUES (:id, :version_id, 'gov', "
-                        "'gov.other', 0, 'Other', 'node')"
-                    ),
-                    {"id": uuid4(), "version_id": version_id},
+            with refused(session):
+                add_row(
+                    session,
+                    ParameterTreeChild,
+                    id=uuid4(),
+                    tax_benefit_model_version_id=version_id,
+                    parent_path="gov",
+                    path="gov.other",
+                    position=0,
+                    label="Other",
+                    child_type="node",
                 )
-            connection.execute(
-                text("DELETE FROM parameters WHERE id = :parameter_id"),
-                {"parameter_id": parameter_id},
-            )
-            assert connection.execute(
-                text("SELECT path FROM parameter_tree_children ORDER BY path")
-            ).scalars().all() == ["gov", "gov.probe"]
+            session.execute(delete(Parameter).where(col(Parameter.id) == parameter_id))
+            assert session.scalars(
+                select(col(ParameterTreeChild.path)).order_by(
+                    col(ParameterTreeChild.path)
+                )
+            ).all() == ["gov", "gov.probe"]
 
         command.downgrade(config, PARAMETER_TREE_PARENT_REVISION)
 
-        assert "parameter_tree_children" not in inspect(engine).get_table_names()
-        with engine.connect() as connection:
+        assert (
+            "parameter_tree_children"
+            not in schema_inspector(v2_owner_sessions).get_table_names()
+        )
+        with v2_owner_sessions() as session:
             assert (
-                connection.execute(
-                    text(
-                        "SELECT count(*) FROM variables "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
+                session.scalar(
+                    _version_row_count(VariableBeforeCatalogFormat2, version_id)
+                )
                 == 1
             )
     finally:
         command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
-        engine.dispose()
+        _delete_probe_catalog(v2_owner_sessions)
 
 
 PARAMETER_SEARCH_FILE_PARENT_REVISION = "3869eb814a90"
 
 
-def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss() -> (
-    None
-):
+def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     """The search file revision creates an empty table and downgrades cleanly.
 
     The revision writes no rows: catalog publication writes each version's
@@ -272,103 +343,91 @@ def test_parameter_search_file_table_is_created_empty_and_dropped_without_loss()
     version, and downgrading drops the table while every catalog row stays.
     """
     config = alembic_v2_config()
-    engine = create_engine(disposable_v2_url())
     try:
         command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
-        assert "parameter_search_files" not in inspect(engine).get_table_names()
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
+        assert (
+            "parameter_search_files"
+            not in schema_inspector(v2_owner_sessions).get_table_names()
+        )
+        with v2_owner_sessions.begin() as session:
+            version_id = _catalog_version_published_before_format_2(session)
 
         command.upgrade(config, "head")
 
-        insert_file = text(
-            "INSERT INTO parameter_search_files (id, tax_benefit_model_version_id, "
-            "file_format, compressed_content, content_sha256, uncompressed_size, "
-            "compressed_size) VALUES (:id, :version_id, 1, :content, :sha, 2, 22)"
-        )
         file_values = {
-            "version_id": version_id,
-            "content": b"\x1f\x8b compressed bytes",
-            "sha": "0" * 64,
+            "tax_benefit_model_version_id": version_id,
+            "file_format": 1,
+            "compressed_content": b"\x1f\x8b compressed bytes",
+            "content_sha256": "0" * 64,
+            "uncompressed_size": 2,
+            "compressed_size": 22,
         }
-        with engine.begin() as connection:
+        with v2_owner_sessions.begin() as session:
             assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_search_files")
-                ).scalar_one()
+                session.scalar(select(func.count()).select_from(ParameterSearchFile))
                 == 0
             )
-            connection.execute(insert_file, {"id": uuid4(), **file_values})
-            with pytest.raises(sa.exc.IntegrityError), connection.begin_nested():
-                connection.execute(insert_file, {"id": uuid4(), **file_values})
+            add_row(session, ParameterSearchFile, id=uuid4(), **file_values)
+            with refused(session):
+                add_row(session, ParameterSearchFile, id=uuid4(), **file_values)
             assert (
-                connection.execute(
-                    text(
-                        "SELECT compressed_content FROM parameter_search_files "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
-                == file_values["content"]
+                session.scalars(
+                    select(col(ParameterSearchFile.compressed_content)).where(
+                        col(ParameterSearchFile.tax_benefit_model_version_id)
+                        == version_id
+                    )
+                ).one()
+                == file_values["compressed_content"]
             )
 
         command.downgrade(config, PARAMETER_SEARCH_FILE_PARENT_REVISION)
 
-        assert "parameter_search_files" not in inspect(engine).get_table_names()
-        with engine.connect() as connection:
+        assert (
+            "parameter_search_files"
+            not in schema_inspector(v2_owner_sessions).get_table_names()
+        )
+        with v2_owner_sessions() as session:
             assert (
-                connection.execute(
-                    text(
-                        "SELECT count(*) FROM variables "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
+                session.scalar(
+                    _version_row_count(VariableBeforeCatalogFormat2, version_id)
+                )
                 == 1
             )
 
         command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(insert_file, {"id": uuid4(), **file_values})
-            connection.execute(
-                text("DELETE FROM tax_benefit_model_versions WHERE id = :version_id"),
-                {"version_id": version_id},
+        with v2_owner_sessions.begin() as session:
+            add_row(session, ParameterSearchFile, id=uuid4(), **file_values)
+            session.execute(
+                delete(TaxBenefitModelVersion).where(
+                    col(TaxBenefitModelVersion.id) == version_id
+                )
             )
             assert (
-                connection.execute(
-                    text("SELECT count(*) FROM parameter_search_files")
-                ).scalar_one()
+                session.scalar(select(func.count()).select_from(ParameterSearchFile))
                 == 0
             )
     finally:
         command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
-        engine.dispose()
+        _delete_probe_catalog(v2_owner_sessions)
 
 
 CATALOG_PRUNING_PARENT_REVISION = "c614b6bcccfc"
 CATALOG_PRUNING_COLUMNS = ("catalog_last_published_at", "catalog_values_pruned_at")
 
 
-def _catalog_pruning_columns(
-    connection: sa.Connection, version_id: UUID
-) -> tuple[object, object]:
-    row = connection.execute(
-        text(
-            "SELECT catalog_last_published_at, catalog_values_pruned_at "
-            "FROM tax_benefit_model_versions WHERE id = :version_id"
-        ),
-        {"version_id": version_id},
+def _catalog_pruning_columns(session: Session, version_id: UUID) -> tuple[Any, Any]:
+    last_published_at, values_pruned_at = session.execute(
+        select(
+            col(TaxBenefitModelVersion.catalog_last_published_at),
+            col(TaxBenefitModelVersion.catalog_values_pruned_at),
+        ).where(col(TaxBenefitModelVersion.id) == version_id)
     ).one()
-    return tuple(row)
+    return last_published_at, values_pruned_at
 
 
-def test_catalog_pruning_columns_are_added_null_and_dropped_without_loss() -> None:
+def test_catalog_pruning_columns_are_added_null_and_dropped_without_loss(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     """The revision adds two null columns and downgrades cleanly.
 
     A stored version starts with neither a publication time nor a pruning
@@ -377,67 +436,54 @@ def test_catalog_pruning_columns_are_added_null_and_dropped_without_loss() -> No
     version null in both.
     """
     config = alembic_v2_config()
-    engine = create_engine(disposable_v2_url())
     try:
         command.downgrade(config, CATALOG_PRUNING_PARENT_REVISION)
         for column_name in CATALOG_PRUNING_COLUMNS:
             assert column_name not in table_columns(
-                engine, "tax_benefit_model_versions"
+                v2_owner_sessions, "tax_benefit_model_versions"
             )
-        with engine.begin() as connection:
-            version_id = _catalog_version_published_before_format_2(connection)
+        with v2_owner_sessions.begin() as session:
+            version_id = _catalog_version_published_before_format_2(session)
 
         command.upgrade(config, "head")
 
-        with engine.begin() as connection:
-            assert _catalog_pruning_columns(connection, version_id) == (None, None)
-            connection.execute(
-                text(
-                    "UPDATE tax_benefit_model_versions "
-                    "SET catalog_last_published_at = now(), "
-                    "catalog_values_pruned_at = now() WHERE id = :version_id"
-                ),
-                {"version_id": version_id},
+        with v2_owner_sessions.begin() as session:
+            assert _catalog_pruning_columns(session, version_id) == (None, None)
+            session.execute(
+                update(TaxBenefitModelVersion)
+                .where(col(TaxBenefitModelVersion.id) == version_id)
+                .values(
+                    catalog_last_published_at=func.now(),
+                    catalog_values_pruned_at=func.now(),
+                )
             )
-            assert None not in _catalog_pruning_columns(connection, version_id)
+            assert None not in _catalog_pruning_columns(session, version_id)
 
         command.downgrade(config, CATALOG_PRUNING_PARENT_REVISION)
 
         for column_name in CATALOG_PRUNING_COLUMNS:
             assert column_name not in table_columns(
-                engine, "tax_benefit_model_versions"
+                v2_owner_sessions, "tax_benefit_model_versions"
             )
-        with engine.connect() as connection:
+        with v2_owner_sessions() as session:
             assert (
-                connection.execute(
-                    text(
-                        "SELECT version FROM tax_benefit_model_versions "
-                        "WHERE id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
+                session.scalars(
+                    select(TaxBenefitModelVersionBeforeCatalogFormat2.version).where(
+                        TaxBenefitModelVersionBeforeCatalogFormat2.id == version_id
+                    )
+                ).one()
                 == "0.0.1-probe"
             )
             assert (
-                connection.execute(
-                    text(
-                        "SELECT count(*) FROM parameters "
-                        "WHERE tax_benefit_model_version_id = :version_id"
-                    ),
-                    {"version_id": version_id},
-                ).scalar_one()
+                session.scalar(
+                    _version_row_count(ParameterBeforeCatalogFormat2, version_id)
+                )
                 == 1
             )
 
         command.upgrade(config, "head")
-        with engine.connect() as connection:
-            assert _catalog_pruning_columns(connection, version_id) == (None, None)
+        with v2_owner_sessions() as session:
+            assert _catalog_pruning_columns(session, version_id) == (None, None)
     finally:
         command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM tax_benefit_models WHERE name = 'catalog-format-probe'"
-                )
-            )
-        engine.dispose()
+        _delete_probe_catalog(v2_owner_sessions)

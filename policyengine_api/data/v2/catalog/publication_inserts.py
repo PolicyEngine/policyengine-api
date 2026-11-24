@@ -2,55 +2,68 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlmodel import col
 
-from policyengine_api.data.v2.catalog.publication_staging import (
-    STAGE_CATALOG_DATASETS,
-    STAGE_CATALOG_MODELS,
-    STAGE_CATALOG_PARAMETER_NODES,
-    STAGE_CATALOG_PARAMETER_VALUES,
-    STAGE_CATALOG_PARAMETERS,
-    STAGE_CATALOG_REGIONS,
-    STAGE_CATALOG_VARIABLES,
+from policyengine_api.data.v2.catalog.publication_staging_base import (
+    StagedDataset,
+    StagedModel,
+    StagedParameter,
+    StagedParameterNode,
+    StagedParameterValue,
+    StagedRegion,
+    StagedVariable,
 )
-from policyengine_api.data.v2.catalog.publication_tables import (
-    DATASETS,
-    MODEL_VERSIONS,
-    MODELS,
-    PARAMETER_NODES,
-    PARAMETER_VALUES,
-    PARAMETERS,
-    REGIONS,
-    VARIABLES,
+from policyengine_api.data.v2.models import (
+    Dataset,
+    Parameter,
+    ParameterNode,
+    ParameterValue,
+    Region,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
 )
 
 if TYPE_CHECKING:
-    from sqlalchemy import Connection
+    from sqlalchemy.orm import Mapper
+    from sqlalchemy.types import TypeEngine
+    from sqlmodel import Session, SQLModel
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-COUNTRY_ID = sa.bindparam("country_id")
+COUNTRY_ID: sa.BindParameter[str] = sa.bindparam("country_id")
+# How a Session runs these statements: as written, with the country as their
+# one parameter. Given parameters, an ORM INSERT otherwise takes them for rows
+# to insert (its bulk strategy).
+RAW_DML_STRATEGY: dict[str, Any] = {"dml_strategy": "raw"}
+
+
+def column_type(model: type[SQLModel], column_name: str) -> TypeEngine[Any]:
+    """Return the SQL type of one column of a mapped class's table."""
+    mapper: Mapper[Any] = sa.inspect(model)
+    return mapper.columns[column_name].type
 
 
 INSERT_MODEL = (
-    postgresql_insert(MODELS)
+    postgresql_insert(TaxBenefitModel)
     .from_select(
         ["id", "created_at", "updated_at", "name", "description"],
         sa.select(
-            STAGE_CATALOG_MODELS.c.id,
+            col(StagedModel.id),
             sa.func.current_timestamp(),
             sa.func.current_timestamp(),
-            STAGE_CATALOG_MODELS.c.name,
-            STAGE_CATALOG_MODELS.c.description,
-        ).where(STAGE_CATALOG_MODELS.c.country_id == COUNTRY_ID),
+            col(StagedModel.name),
+            col(StagedModel.description),
+        ).where(col(StagedModel.country_id) == COUNTRY_ID),
     )
-    .on_conflict_do_nothing(index_elements=[MODELS.c.name])
+    .on_conflict_do_nothing(index_elements=[col(TaxBenefitModel.name)])
 )
 
-INSERT_MODEL_VERSION = sa.insert(MODEL_VERSIONS).from_select(
+INSERT_MODEL_VERSION = sa.insert(TaxBenefitModelVersion).from_select(
     [
         "id",
         "created_at",
@@ -64,33 +77,36 @@ INSERT_MODEL_VERSION = sa.insert(MODEL_VERSIONS).from_select(
         "basic_inputs",
     ],
     sa.select(
-        STAGE_CATALOG_MODELS.c.version_id,
+        col(StagedModel.version_id),
         sa.func.current_timestamp(),
-        MODELS.c.id,
-        STAGE_CATALOG_MODELS.c.version,
-        STAGE_CATALOG_MODELS.c.version_description,
-        STAGE_CATALOG_MODELS.c.current_law_id,
+        col(TaxBenefitModel.id),
+        col(StagedModel.version),
+        col(StagedModel.version_description),
+        col(StagedModel.current_law_id),
         sa.cast(
-            STAGE_CATALOG_MODELS.c.metadata_time_periods,
-            MODEL_VERSIONS.c.metadata_time_periods.type,
+            col(StagedModel.metadata_time_periods),
+            column_type(TaxBenefitModelVersion, "metadata_time_periods"),
         ),
-        STAGE_CATALOG_MODELS.c.catalog_format,
-        sa.cast(STAGE_CATALOG_MODELS.c.entities, MODEL_VERSIONS.c.entities.type),
+        col(StagedModel.catalog_format),
         sa.cast(
-            STAGE_CATALOG_MODELS.c.basic_inputs,
-            MODEL_VERSIONS.c.basic_inputs.type,
+            col(StagedModel.entities), column_type(TaxBenefitModelVersion, "entities")
+        ),
+        sa.cast(
+            col(StagedModel.basic_inputs),
+            column_type(TaxBenefitModelVersion, "basic_inputs"),
         ),
     )
     .select_from(
-        STAGE_CATALOG_MODELS.join(
-            MODELS,
-            MODELS.c.name == STAGE_CATALOG_MODELS.c.name,
+        sa.join(
+            StagedModel,
+            TaxBenefitModel,
+            col(TaxBenefitModel.name) == col(StagedModel.name),
         )
     )
-    .where(STAGE_CATALOG_MODELS.c.country_id == COUNTRY_ID),
+    .where(col(StagedModel.country_id) == COUNTRY_ID),
 )
 
-INSERT_DATASETS = sa.insert(DATASETS).from_select(
+INSERT_DATASETS = sa.insert(Dataset).from_select(
     [
         "id",
         "created_at",
@@ -103,34 +119,35 @@ INSERT_DATASETS = sa.insert(DATASETS).from_select(
         "tax_benefit_model_version_id",
     ],
     sa.select(
-        STAGE_CATALOG_DATASETS.c.id,
+        col(StagedDataset.id),
         sa.func.current_timestamp(),
         sa.func.current_timestamp(),
-        STAGE_CATALOG_DATASETS.c.name,
-        STAGE_CATALOG_DATASETS.c.description,
-        sa.cast(sa.null(), DATASETS.c.storage_path.type),
-        STAGE_CATALOG_DATASETS.c.year,
+        col(StagedDataset.name),
+        col(StagedDataset.description),
+        sa.cast(sa.null(), column_type(Dataset, "storage_path")),
+        col(StagedDataset.year),
         sa.literal(value=False),
-        MODEL_VERSIONS.c.id,
+        col(TaxBenefitModelVersion.id),
     )
     .select_from(
-        STAGE_CATALOG_DATASETS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_DATASETS.c.country_id,
+        sa.join(
+            StagedDataset,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedDataset.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
     )
-    .where(STAGE_CATALOG_DATASETS.c.country_id == COUNTRY_ID),
+    .where(col(StagedDataset.country_id) == COUNTRY_ID),
 )
 
-INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
+INSERT_VARIABLES = sa.insert(Variable).from_select(
     [
         "id",
         "created_at",
@@ -154,57 +171,58 @@ INSERT_VARIABLES = sa.insert(VARIABLES).from_select(
         "tax_benefit_model_version_id",
     ],
     sa.select(
-        STAGE_CATALOG_VARIABLES.c.id,
+        col(StagedVariable.id),
         sa.func.current_timestamp(),
-        STAGE_CATALOG_VARIABLES.c.name,
-        STAGE_CATALOG_VARIABLES.c.label,
-        STAGE_CATALOG_VARIABLES.c.entity,
-        STAGE_CATALOG_VARIABLES.c.description,
-        STAGE_CATALOG_VARIABLES.c.data_type,
+        col(StagedVariable.name),
+        col(StagedVariable.label),
+        col(StagedVariable.entity),
+        col(StagedVariable.description),
+        col(StagedVariable.data_type),
         sa.cast(
-            STAGE_CATALOG_VARIABLES.c.possible_values,
-            VARIABLES.c.possible_values.type,
+            col(StagedVariable.possible_values),
+            column_type(Variable, "possible_values"),
         ),
         sa.cast(
-            STAGE_CATALOG_VARIABLES.c.default_value,
-            VARIABLES.c.default_value.type,
+            col(StagedVariable.default_value),
+            column_type(Variable, "default_value"),
         ),
-        sa.cast(STAGE_CATALOG_VARIABLES.c.adds, VARIABLES.c.adds.type),
+        sa.cast(col(StagedVariable.adds), column_type(Variable, "adds")),
         sa.cast(
-            STAGE_CATALOG_VARIABLES.c.subtracts,
-            VARIABLES.c.subtracts.type,
+            col(StagedVariable.subtracts),
+            column_type(Variable, "subtracts"),
         ),
-        STAGE_CATALOG_VARIABLES.c.is_input_variable,
-        STAGE_CATALOG_VARIABLES.c.hidden_input,
-        STAGE_CATALOG_VARIABLES.c.module_name,
-        STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
-        STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
+        col(StagedVariable.is_input_variable),
+        col(StagedVariable.hidden_input),
+        col(StagedVariable.module_name),
+        col(StagedVariable.adds_parameter_path),
+        col(StagedVariable.subtracts_parameter_path),
         sa.cast(
-            STAGE_CATALOG_VARIABLES.c.enum_values,
-            VARIABLES.c.enum_values.type,
+            col(StagedVariable.enum_values),
+            column_type(Variable, "enum_values"),
         ),
-        STAGE_CATALOG_VARIABLES.c.unit,
-        STAGE_CATALOG_VARIABLES.c.definition_period,
-        MODEL_VERSIONS.c.id,
+        col(StagedVariable.unit),
+        col(StagedVariable.definition_period),
+        col(TaxBenefitModelVersion.id),
     )
     .select_from(
-        STAGE_CATALOG_VARIABLES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_VARIABLES.c.country_id,
+        sa.join(
+            StagedVariable,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedVariable.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
     )
-    .where(STAGE_CATALOG_VARIABLES.c.country_id == COUNTRY_ID),
+    .where(col(StagedVariable.country_id) == COUNTRY_ID),
 )
 
-INSERT_PARAMETER_NODES = sa.insert(PARAMETER_NODES).from_select(
+INSERT_PARAMETER_NODES = sa.insert(ParameterNode).from_select(
     [
         "id",
         "created_at",
@@ -214,32 +232,32 @@ INSERT_PARAMETER_NODES = sa.insert(PARAMETER_NODES).from_select(
         "tax_benefit_model_version_id",
     ],
     sa.select(
-        STAGE_CATALOG_PARAMETER_NODES.c.id,
+        col(StagedParameterNode.id),
         sa.func.current_timestamp(),
-        STAGE_CATALOG_PARAMETER_NODES.c.name,
-        STAGE_CATALOG_PARAMETER_NODES.c.label,
-        STAGE_CATALOG_PARAMETER_NODES.c.description,
-        MODEL_VERSIONS.c.id,
+        col(StagedParameterNode.name),
+        col(StagedParameterNode.label),
+        col(StagedParameterNode.description),
+        col(TaxBenefitModelVersion.id),
     )
     .select_from(
-        STAGE_CATALOG_PARAMETER_NODES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id
-            == STAGE_CATALOG_PARAMETER_NODES.c.country_id,
+        sa.join(
+            StagedParameterNode,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedParameterNode.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
     )
-    .where(STAGE_CATALOG_PARAMETER_NODES.c.country_id == COUNTRY_ID),
+    .where(col(StagedParameterNode.country_id) == COUNTRY_ID),
 )
 
-INSERT_PARAMETERS = sa.insert(PARAMETERS).from_select(
+INSERT_PARAMETERS = sa.insert(Parameter).from_select(
     [
         "id",
         "created_at",
@@ -253,35 +271,36 @@ INSERT_PARAMETERS = sa.insert(PARAMETERS).from_select(
         "tax_benefit_model_version_id",
     ],
     sa.select(
-        STAGE_CATALOG_PARAMETERS.c.id,
+        col(StagedParameter.id),
         sa.func.current_timestamp(),
-        STAGE_CATALOG_PARAMETERS.c.name,
-        STAGE_CATALOG_PARAMETERS.c.label,
-        STAGE_CATALOG_PARAMETERS.c.description,
-        STAGE_CATALOG_PARAMETERS.c.data_type,
-        STAGE_CATALOG_PARAMETERS.c.unit,
-        STAGE_CATALOG_PARAMETERS.c.economy,
-        STAGE_CATALOG_PARAMETERS.c.household,
-        MODEL_VERSIONS.c.id,
+        col(StagedParameter.name),
+        col(StagedParameter.label),
+        col(StagedParameter.description),
+        col(StagedParameter.data_type),
+        col(StagedParameter.unit),
+        col(StagedParameter.economy),
+        col(StagedParameter.household),
+        col(TaxBenefitModelVersion.id),
     )
     .select_from(
-        STAGE_CATALOG_PARAMETERS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_PARAMETERS.c.country_id,
+        sa.join(
+            StagedParameter,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedParameter.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
     )
-    .where(STAGE_CATALOG_PARAMETERS.c.country_id == COUNTRY_ID),
+    .where(col(StagedParameter.country_id) == COUNTRY_ID),
 )
 
-INSERT_PARAMETER_VALUES = sa.insert(PARAMETER_VALUES).from_select(
+INSERT_PARAMETER_VALUES = sa.insert(ParameterValue).from_select(
     [
         "id",
         "created_at",
@@ -293,44 +312,45 @@ INSERT_PARAMETER_VALUES = sa.insert(PARAMETER_VALUES).from_select(
         "dynamic_id",
     ],
     sa.select(
-        STAGE_CATALOG_PARAMETER_VALUES.c.id,
+        col(StagedParameterValue.id),
         sa.func.current_timestamp(),
-        PARAMETERS.c.id,
+        col(Parameter.id),
         sa.cast(
-            STAGE_CATALOG_PARAMETER_VALUES.c.value_json,
-            PARAMETER_VALUES.c.value_json.type,
+            col(StagedParameterValue.value_json),
+            column_type(ParameterValue, "value_json"),
         ),
-        STAGE_CATALOG_PARAMETER_VALUES.c.start_date,
-        STAGE_CATALOG_PARAMETER_VALUES.c.end_date,
-        sa.cast(sa.null(), PARAMETER_VALUES.c.policy_id.type),
-        sa.cast(sa.null(), PARAMETER_VALUES.c.dynamic_id.type),
+        col(StagedParameterValue.start_date),
+        col(StagedParameterValue.end_date),
+        sa.cast(sa.null(), column_type(ParameterValue, "policy_id")),
+        sa.cast(sa.null(), column_type(ParameterValue, "dynamic_id")),
     )
     .select_from(
-        STAGE_CATALOG_PARAMETER_VALUES.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id
-            == STAGE_CATALOG_PARAMETER_VALUES.c.country_id,
+        sa.join(
+            StagedParameterValue,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedParameterValue.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
         .join(
-            PARAMETERS,
+            Parameter,
             sa.and_(
-                PARAMETERS.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id,
-                PARAMETERS.c.name == STAGE_CATALOG_PARAMETER_VALUES.c.parameter_name,
+                col(Parameter.tax_benefit_model_version_id)
+                == col(TaxBenefitModelVersion.id),
+                col(Parameter.name) == col(StagedParameterValue.parameter_name),
             ),
         )
     )
-    .where(STAGE_CATALOG_PARAMETER_VALUES.c.country_id == COUNTRY_ID),
+    .where(col(StagedParameterValue.country_id) == COUNTRY_ID),
 )
 
-INSERT_REGIONS = sa.insert(REGIONS).from_select(
+INSERT_REGIONS = sa.insert(Region).from_select(
     [
         "id",
         "created_at",
@@ -349,44 +369,46 @@ INSERT_REGIONS = sa.insert(REGIONS).from_select(
         "default_dataset_id",
     ],
     sa.select(
-        STAGE_CATALOG_REGIONS.c.id,
+        col(StagedRegion.id),
         sa.func.current_timestamp(),
         sa.func.current_timestamp(),
-        STAGE_CATALOG_REGIONS.c.code,
-        STAGE_CATALOG_REGIONS.c.label,
-        sa.cast(STAGE_CATALOG_REGIONS.c.region_type, REGIONS.c.region_type.type),
-        STAGE_CATALOG_REGIONS.c.requires_filter,
-        STAGE_CATALOG_REGIONS.c.filter_field,
-        STAGE_CATALOG_REGIONS.c.filter_value,
-        STAGE_CATALOG_REGIONS.c.filter_strategy,
-        STAGE_CATALOG_REGIONS.c.parent_code,
-        STAGE_CATALOG_REGIONS.c.state_code,
-        STAGE_CATALOG_REGIONS.c.state_name,
-        MODEL_VERSIONS.c.id,
-        DATASETS.c.id,
+        col(StagedRegion.code),
+        col(StagedRegion.label),
+        sa.cast(col(StagedRegion.region_type), column_type(Region, "region_type")),
+        col(StagedRegion.requires_filter),
+        col(StagedRegion.filter_field),
+        col(StagedRegion.filter_value),
+        col(StagedRegion.filter_strategy),
+        col(StagedRegion.parent_code),
+        col(StagedRegion.state_code),
+        col(StagedRegion.state_name),
+        col(TaxBenefitModelVersion.id),
+        col(Dataset.id),
     )
     .select_from(
-        STAGE_CATALOG_REGIONS.join(
-            STAGE_CATALOG_MODELS,
-            STAGE_CATALOG_MODELS.c.country_id == STAGE_CATALOG_REGIONS.c.country_id,
+        sa.join(
+            StagedRegion,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedRegion.country_id),
         )
-        .join(MODELS, MODELS.c.name == STAGE_CATALOG_MODELS.c.name)
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
         .join(
-            MODEL_VERSIONS,
+            TaxBenefitModelVersion,
             sa.and_(
-                MODEL_VERSIONS.c.model_id == MODELS.c.id,
-                MODEL_VERSIONS.c.version == STAGE_CATALOG_MODELS.c.version,
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
             ),
         )
         .join(
-            DATASETS,
+            Dataset,
             sa.and_(
-                DATASETS.c.tax_benefit_model_version_id == MODEL_VERSIONS.c.id,
-                DATASETS.c.name == STAGE_CATALOG_REGIONS.c.default_dataset_name,
+                col(Dataset.tax_benefit_model_version_id)
+                == col(TaxBenefitModelVersion.id),
+                col(Dataset.name) == col(StagedRegion.default_dataset_name),
             ),
         )
     )
-    .where(STAGE_CATALOG_REGIONS.c.country_id == COUNTRY_ID),
+    .where(col(StagedRegion.country_id) == COUNTRY_ID),
 )
 
 SET_BASED_INSERT_STATEMENTS = (
@@ -401,10 +423,16 @@ SET_BASED_INSERT_STATEMENTS = (
 )
 
 
-def publish_new_country(connection: Connection, country: CountryCatalog) -> None:
+def publish_new_country(session: Session, country: CountryCatalog) -> None:
     """Insert one country's staged catalog into the v2 tables, parents first.
 
-    The model row is reused if one with the same name already exists.
+    The model row is reused if one with the same name already exists. Each
+    statement is one ``INSERT ... SELECT`` from the staging tables, so no row
+    passes through Python.
     """
     for statement in SET_BASED_INSERT_STATEMENTS:
-        connection.execute(statement, {"country_id": country.country_id})
+        session.execute(
+            statement,
+            {"country_id": country.country_id},
+            execution_options=RAW_DML_STRATEGY,
+        )

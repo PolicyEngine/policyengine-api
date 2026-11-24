@@ -8,13 +8,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     LegacyPolicyMapping,
     Parameter,
     TaxBenefitModel,
@@ -37,6 +36,10 @@ from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
 RUNNING_POLICYENGINE_VERSION = "6.7.5"
 COPIED_POLICY_ID = UUID("00000000-0000-0000-0000-000000000042")
@@ -81,14 +84,8 @@ def recorded_writes(monkeypatch) -> RecordedCopyWrites:
 
 @pytest.fixture
 def catalog_session():
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    session = Session(engine)
-    try:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         yield session
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def _add_running_catalog(

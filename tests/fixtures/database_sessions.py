@@ -18,17 +18,20 @@ rules/registry.toml. Roles and settings inside a transaction need none:
 
 from __future__ import annotations
 
+import importlib
 import re
 import sqlite3
 import sys
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
+from psycopg.pq import TransactionStatus
 from sqlalchemy import (
     JSON,
     Integer,
     String,
     create_engine,
+    create_mock_engine,
     delete,
     event,
     func,
@@ -37,6 +40,8 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.pool import NullPool, StaticPool
@@ -52,10 +57,12 @@ from policyengine_api.data.v2.privilege_reconciliation import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
+    from pathlib import Path
 
     import pytest
-    from sqlalchemy.engine import Inspector
+    from sqlalchemy.engine import URL, Connection, Inspector
     from sqlalchemy.orm import registry
+    from sqlalchemy.sql import ClauseElement
     from sqlmodel import Session
 
     from policyengine_api.data.v2.privilege_plans import ReconciliationPlan
@@ -83,6 +90,22 @@ def v2_owner_sessions(database_url: str) -> Iterator[sessionmaker[Session]]:
     engine keeps no connection pool and is disposed of on exit.
     """
     engine = create_engine(database_url, poolclass=NullPool)
+    try:
+        yield build_v2_session_factory(engine)
+    finally:
+        engine.dispose()
+
+
+@contextmanager
+def single_connection_v2_sessions(
+    database_url: str,
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the v2 database owner's Session factories on a pool of one connection.
+
+    Every Session gets the same pooled connection back, in the state the pool
+    returns it in. The engine is disposed of on exit.
+    """
+    engine = create_engine(database_url, pool_size=1, max_overflow=0)
     try:
         yield build_v2_session_factory(engine)
     finally:
@@ -165,6 +188,53 @@ def sqlite_v2_sessions(
         engine.dispose()
 
 
+@contextmanager
+def sqlite_v2_file_sessions(path: Path) -> Iterator[sessionmaker[Session]]:
+    """Yield Session factories of a SQLite file copy of the v2 schema.
+
+    Each Session gets its own connection, so threads can run transactions at
+    the same time. Every transaction starts with ``BEGIN IMMEDIATE``, which takes
+    SQLite's write lock at once, as ``SELECT ... FOR UPDATE`` makes writers wait
+    for each other on PostgreSQL.
+    """
+    engine = create_engine(
+        f"sqlite:///{path}", connect_args={"check_same_thread": False, "timeout": 10}
+    )
+
+    @event.listens_for(engine, "connect")
+    def _leave_transactions_to_sqlalchemy(
+        dbapi_connection: sqlite3.Connection, _connection_record: object
+    ) -> None:
+        # pysqlite then never begins a transaction itself; the begin event does.
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _begin_immediately(connection: Connection) -> None:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+
+    V2_METADATA.create_all(engine)
+    try:
+        yield build_v2_session_factory(engine)
+    finally:
+        engine.dispose()
+
+
+def v2_schema_statements(dialect_name: str = "postgresql") -> list[str]:
+    """Return the CREATE statements of the v2 schema, compiled for a dialect.
+
+    No database is involved: a mock engine records each statement that
+    ``create_all`` would send, in the order it would send them.
+    """
+    statements: list[str] = []
+
+    def record(statement: Any, *_parameters: object, **_options: object) -> None:
+        statements.append(str(statement.compile(dialect=recording_engine.dialect)))
+
+    recording_engine = create_mock_engine(f"{dialect_name}://", record)
+    V2_METADATA.create_all(recording_engine, checkfirst=False)
+    return statements
+
+
 class _SqliteV1PolicyBase(DeclarativeBase):
     """The declarative base of the SQLite copy of API v1's policy table."""
 
@@ -223,8 +293,68 @@ def serve_v1_sessions(
     from policyengine_api.data import orm
 
     engine = sessions.kw["bind"]
-    monkeypatch.setattr(orm, "get_v1_engine", lambda: engine)
+    monkeypatch.setattr(orm, "_v1_engine", lambda: engine)
     orm.clear_v1_session_factories()
+
+
+class _LocalMySqlConnector:
+    """Stands in for Cloud SQL's Connector, connecting to a local MySQL server.
+
+    The real connector's pymysql path passes every argument other than the
+    instance name and driver on to pymysql, so this one does the same.
+    """
+
+    def __init__(self, database_url: URL, **_connector_options: object) -> None:
+        self.database_url = database_url
+
+    def connect(
+        self, *, instance_connection_string: str, driver: str, **driver_arguments: Any
+    ) -> Any:
+        del instance_connection_string
+        if driver != "pymysql":
+            message = f"API v1's Cloud SQL engine asked for driver {driver!r}"
+            raise ValueError(message)
+        # pymysql ships no type stubs, so the module is loaded untyped.
+        driver_module = importlib.import_module("pymysql")
+        return driver_module.connect(
+            host=self.database_url.host,
+            port=self.database_url.port or 3306,
+            **driver_arguments,
+        )
+
+    def close(self) -> None:
+        """Release nothing: each connection closes when its pool closes it."""
+
+
+@contextmanager
+def v1_cloud_sql_sessions(
+    monkeypatch: pytest.MonkeyPatch, database_url: str
+) -> Iterator[sessionmaker[OrmSession]]:
+    """Yield API v1's own Session factory, its Cloud SQL engine on local MySQL.
+
+    ``orm.get_v1_session_factory()`` builds the engine as production does
+    (``orm._build_remote_engine``: its pool settings and connection arguments,
+    such as the ``CLIENT.FOUND_ROWS`` flag), but each connection goes to the
+    server at ``database_url``. ``monkeypatch`` undoes the state and settings
+    after the test.
+    """
+    from policyengine_api.data import orm, orm_pool_events
+
+    url = make_url(database_url)
+    monkeypatch.setattr(orm, "_cloud_sql_state", orm._CloudSqlState())
+    monkeypatch.setattr(
+        orm, "Connector", lambda **options: _LocalMySqlConnector(url, **options)
+    )
+    monkeypatch.setenv("POLICYENGINE_DB_INSTANCE_CONNECTION_NAME", "local:test:mysql")
+    monkeypatch.setenv("POLICYENGINE_DB_USER", url.username or "")
+    monkeypatch.setenv("POLICYENGINE_DB_NAME", url.database or "")
+    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", url.password or "")
+    try:
+        yield orm.get_v1_session_factory()
+    finally:
+        orm.close_v1_engines()
+        # Building the engine sends the connector's logs to the runtime; undo that.
+        orm_pool_events.stop_recording_connector_refresh_logs()
 
 
 def _set_transaction_role(session: OrmSession, role: str) -> None:
@@ -259,6 +389,19 @@ def schema_inspector(source: OrmSession | sessionmaker[Any]) -> Inspector:
     return inspector
 
 
+def query_plan(session: OrmSession, statement: ClauseElement) -> str:
+    """Return PostgreSQL's plan for an ORM statement (EXPLAIN), its rows joined.
+
+    A test that checks an index serves a lookup reads the plan of the ORM
+    statement that does the lookup, in the session's transaction and as the
+    session's role.
+    """
+    # The named paramstyle gives text() the :name parameters it parses.
+    compiled = statement.compile(dialect=postgresql.dialect(paramstyle="named"))
+    plan_rows = session.execute(text(f"EXPLAIN {compiled}"), compiled.params).scalars()
+    return "\n".join(plan_rows)
+
+
 @contextmanager
 def recorded_statements(
     source: OrmSession | sessionmaker[Any],
@@ -279,10 +422,67 @@ def recorded_statements(
         event.remove(engine, "before_cursor_execute", record)
 
 
+class DriverConnectionState(NamedTuple):
+    """The driver connection a statement ran on, as it was after the statement."""
+
+    connection_id: int
+    autocommit: bool
+    in_transaction: bool
+
+
+@contextmanager
+def recorded_driver_connection_states(
+    source: OrmSession | sessionmaker[Any],
+) -> Iterator[list[DriverConnectionState]]:
+    """Yield the state of the driver connection each of ``source``'s statements ran on.
+
+    Each state is read after its statement: which connection, its autocommit
+    mode, and whether it is inside a transaction. It is read after, not before,
+    because psycopg sends BEGIN as part of a transaction's first statement.
+    """
+    engine = source.get_bind() if isinstance(source, OrmSession) else source.kw["bind"]
+    states: list[DriverConnectionState] = []
+
+    def record(connection: Any, *_arguments: object) -> None:
+        driver_connection = connection.connection.dbapi_connection
+        states.append(
+            DriverConnectionState(
+                connection_id=id(driver_connection),
+                autocommit=driver_connection.autocommit,
+                in_transaction=(
+                    driver_connection.info.transaction_status
+                    == TransactionStatus.INTRANS
+                ),
+            )
+        )
+
+    event.listen(engine, "after_cursor_execute", record)
+    try:
+        yield states
+    finally:
+        event.remove(engine, "after_cursor_execute", record)
+
+
 def delete_all_rows(session: OrmSession, mapped_classes: registry) -> None:
     """Delete every row of every table the registry's mapped classes map."""
     for mapper in mapped_classes.mappers:
         session.execute(delete(mapper.class_))
+
+
+def create_registry_tables(session: OrmSession, mapped_classes: registry) -> None:
+    """Create the tables of a registry's mapped classes in the session's transaction.
+
+    It fails if one already exists (CREATE TABLE, not IF NOT EXISTS).
+    """
+    mapped_classes.metadata.create_all(session.connection(), checkfirst=False)
+
+
+def drop_registry_tables(session: OrmSession, mapped_classes: registry) -> None:
+    """Drop whichever of a registry's tables exist, in the session's transaction.
+
+    It skips a table that doesn't exist, as DROP TABLE IF EXISTS does.
+    """
+    mapped_classes.metadata.drop_all(session.connection())
 
 
 def _quoted(session: OrmSession, name: str) -> str:
@@ -293,6 +493,12 @@ def truncate(session: OrmSession, *models: type[Any]) -> None:
     """Empty the models' tables and every table referring to them (TRUNCATE CASCADE)."""
     tables = ", ".join(_quoted(session, model.__tablename__) for model in models)
     session.execute(text(f"TRUNCATE {tables} CASCADE"))
+
+
+def drop_tables(session: OrmSession, *models: type[Any]) -> None:
+    """Drop the models' tables, so later queries on them fail as on a broken catalog."""
+    tables = ", ".join(_quoted(session, model.__tablename__) for model in models)
+    session.execute(text(f"DROP TABLE {tables}"))
 
 
 def create_role(session: OrmSession, role: str) -> None:
@@ -329,7 +535,6 @@ def grant_declared_v2_privileges(
     does, in one transaction as the database's owner, and returns the plan.
     """
     with v2_owner_sessions(database_url) as sessions, sessions.begin() as session:
-        connection = session.connection()
-        create_missing_roles(connection, declared)
-        plan, _default_privileges = apply_declared_privileges(connection, declared)
+        create_missing_roles(session, declared)
+        plan, _default_privileges = apply_declared_privileges(session, declared)
     return plan

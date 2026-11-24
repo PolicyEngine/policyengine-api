@@ -5,21 +5,17 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
-import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine, make_url
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session, select
+import sqlalchemy as sa
+from sqlalchemy.engine import make_url
+from sqlmodel import col, select
 
 from policyengine_api.data.v2.catalog import publication as publication_module
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
@@ -32,6 +28,11 @@ from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
+    Parameter,
+    ParameterNode,
+    ParameterSearchFile,
+    ParameterTreeChild,
+    ParameterValue,
     Region,
     Report,
     ReportRun,
@@ -39,9 +40,10 @@ from policyengine_api.data.v2.models import (
     SimulationRun,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    Variable,
 )
 from policyengine_api.data.v2.privileges import CATALOG_WRITER_ROLE
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures import database_sessions
 from tests.fixtures.v2_catalog import (
     POLICYENGINE_VERSION,
     add_format_2_variable_records,
@@ -56,6 +58,11 @@ from tests.fixtures.v2_catalog_value_shapes import (
     REGION_FILTER_VALUES,
     value_shape_catalog,
 )
+from tests.integration.catalog_publication_support import (
+    emptied_catalog,
+    row_counts,
+    stored_identifiers,
+)
 from tests.integration.catalog_rows import (
     CATALOG_COLUMNS,
     assert_catalog_stored_unchanged,
@@ -64,99 +71,80 @@ from tests.integration.catalog_rows import (
     strict_json,
 )
 
-REPO = Path(__file__).parents[2]
-DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    url = make_url(database_url)
-    if url.database != DISPOSABLE_DATABASE or url.host not in {
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        "postgres",
-    }:
-        pytest.fail("catalog publication tests require disposable local Postgres")
-    return database_url
+# The tables whose rows the tests count: the catalog's, and those that name it.
+COUNTED_MODELS: dict[str, Any] = {
+    "tax_benefit_models": TaxBenefitModel,
+    "tax_benefit_model_versions": TaxBenefitModelVersion,
+    "variables": Variable,
+    "parameter_nodes": ParameterNode,
+    "parameters": Parameter,
+    "parameter_values": ParameterValue,
+    "datasets": Dataset,
+    "dataset_versions": DatasetVersion,
+    "regions": Region,
+    "simulations": Simulation,
+    "reports": Report,
+    "report_runs": ReportRun,
+}
 
 
 @pytest.fixture
-def publication_engine() -> Engine:
-    database_url = _disposable_url()
-    config = Config(str(REPO / "alembic-v2.ini"))
-    command.upgrade(config, "head")
-    engine = create_engine(database_url, poolclass=NullPool)
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    yield engine
-    with engine.begin() as connection:
-        connection.execute(text("TRUNCATE tax_benefit_models CASCADE"))
-    engine.dispose()
+def publication_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    with emptied_catalog(v2_owner_sessions) as sessions:
+        yield sessions
 
 
-def _counts(engine: Engine) -> dict[str, int]:
-    with engine.connect() as connection:
-        return {
-            table_name: connection.execute(
-                text(f"SELECT count(*) FROM {table_name}")
-            ).scalar_one()
-            for table_name in (
-                "tax_benefit_models",
-                "tax_benefit_model_versions",
-                "variables",
-                "parameter_nodes",
-                "parameters",
-                "parameter_values",
-                "datasets",
-                "dataset_versions",
-                "regions",
-                "simulations",
-                "reports",
-                "report_runs",
-            )
-        }
+def _counts(sessions: sessionmaker[Session]) -> dict[str, int]:
+    return row_counts(sessions, COUNTED_MODELS)
 
 
-def _identifiers(engine: Engine) -> dict[str, tuple[str, ...]]:
-    with engine.connect() as connection:
-        return {
-            table_name: tuple(
-                str(value)
-                for value in connection.execute(
-                    text(f"SELECT id FROM {table_name} ORDER BY id")
-                ).scalars()
-            )
-            for table_name in (
-                "tax_benefit_models",
-                "tax_benefit_model_versions",
-                "variables",
-                "parameter_nodes",
-                "parameters",
-                "parameter_values",
-                "datasets",
-                "regions",
-            )
-        }
+def _identifiers(sessions: sessionmaker[Session]) -> dict[str, tuple[str, ...]]:
+    return stored_identifiers(sessions)
+
+
+def _us_version_id() -> sa.ScalarSelect[Any]:
+    """Select the ID of the US model's stored version, of which there is one."""
+    return (
+        select(col(TaxBenefitModelVersion.id))
+        .join(
+            TaxBenefitModel,
+            col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+        )
+        .where(col(TaxBenefitModel.name) == "policyengine-us")
+        .scalar_subquery()
+    )
+
+
+def _version_ids(version: str) -> sa.Select[Any]:
+    """Select the IDs of the stored versions of one .py version, for every model."""
+    return select(col(TaxBenefitModelVersion.id)).where(
+        col(TaxBenefitModelVersion.version) == version
+    )
 
 
 def test_publish_and_republish_preserve_complete_catalog(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
 
-    first = publish_catalog(publication_engine, catalog)
-    first_counts = _counts(publication_engine)
-    first_ids = _identifiers(publication_engine)
-    second = publish_catalog(publication_engine, catalog)
+    first = publish_catalog(publication_sessions, catalog)
+    first_counts = _counts(publication_sessions)
+    first_ids = _identifiers(publication_sessions)
+    second = publish_catalog(publication_sessions, catalog)
 
     assert first.as_dict()["outcome"] == "ok"
     assert first.omitted_region_summaries == (("us", "place", 1),)
     assert second.policyengine_version == first.policyengine_version
     assert (
-        _counts(publication_engine)
+        _counts(publication_sessions)
         == first_counts
         == {
             "tax_benefit_models": 2,
@@ -173,24 +161,20 @@ def test_publish_and_republish_preserve_complete_catalog(
             "report_runs": 0,
         }
     )
-    assert _identifiers(publication_engine) == first_ids
+    assert _identifiers(publication_sessions) == first_ids
 
-    with publication_engine.connect() as connection:
-        datasets = connection.execute(
-            text(
-                "SELECT name, storage_path, is_output_dataset "
-                "FROM datasets ORDER BY name"
-            )
+    with publication_sessions() as session:
+        datasets = session.execute(
+            select(
+                col(Dataset.name),
+                col(Dataset.storage_path),
+                col(Dataset.is_output_dataset),
+            ).order_by(col(Dataset.name))
         ).all()
-        region_defaults = connection.execute(
-            text(
-                """
-                SELECT region.code, dataset.name
-                FROM regions AS region
-                JOIN datasets AS dataset ON dataset.id = region.default_dataset_id
-                ORDER BY region.code
-                """
-            )
+        region_defaults = session.execute(
+            select(col(Region.code), col(Dataset.name))
+            .join(Dataset, col(Dataset.id) == col(Region.default_dataset_id))
+            .order_by(col(Region.code))
         ).all()
     assert all(
         storage_path is None and not output for _, storage_path, output in datasets
@@ -207,31 +191,34 @@ def test_publish_and_republish_preserve_complete_catalog(
     }
 
 
-def test_unpublished_country_check_reports_a_missing_schema_specifically() -> None:
+def test_unpublished_country_check_reports_a_missing_schema_specifically(
+    disposable_v2_database_url: str,
+) -> None:
     # The same server's maintenance database has no v2 schema at all.
-    schema_less = make_url(_disposable_url()).set(database="postgres")
-    engine = create_engine(schema_less, poolclass=NullPool)
-    try:
-        with pytest.raises(
+    schema_less = make_url(disposable_v2_database_url).set(database="postgres")
+    with (
+        database_sessions.v2_owner_sessions(
+            schema_less.render_as_string(hide_password=False)
+        ) as schema_less_sessions,
+        pytest.raises(
             CatalogPublicationError,
             match=r"^the v2 Alembic revision table is absent$",
-        ):
-            unpublished_countries(engine, normalized_catalog())
-    finally:
-        engine.dispose()
+        ),
+    ):
+        unpublished_countries(schema_less_sessions, normalized_catalog())
 
 
 def test_lists_only_countries_whose_catalog_version_is_not_stored(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
     newer = normalized_catalog(policyengine_version="4.21.0")
 
-    assert unpublished_countries(publication_engine, catalog) == ("us", "uk")
-    publish_catalog(publication_engine, catalog)
+    assert unpublished_countries(publication_sessions, catalog) == ("us", "uk")
+    publish_catalog(publication_sessions, catalog)
 
-    assert unpublished_countries(publication_engine, catalog) == ()
-    assert unpublished_countries(publication_engine, newer) == ("us", "uk")
+    assert unpublished_countries(publication_sessions, catalog) == ()
+    assert unpublished_countries(publication_sessions, newer) == ("us", "uk")
 
 
 @pytest.mark.parametrize(
@@ -239,31 +226,31 @@ def test_lists_only_countries_whose_catalog_version_is_not_stored(
     ["during_copy", "after_reconciliation", "after_validation"],
 )
 def test_failure_during_publication_rolls_back_every_catalog_write(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     failure_point: str,
 ) -> None:
-    def fail(point: str, _connection) -> None:
+    def fail(point: str, _session) -> None:
         if point == failure_point:
             msg = "injected failure"
             raise RuntimeError(msg)
 
     with pytest.raises(RuntimeError, match="injected failure"):
         publish_catalog(
-            publication_engine,
+            publication_sessions,
             normalized_catalog(),
             checkpoint=fail,
         )
 
-    assert all(count == 0 for count in _counts(publication_engine).values())
+    assert all(count == 0 for count in _counts(publication_sessions).values())
 
 
 def test_same_version_with_changed_content_fails_without_mutation(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    before_ids = _identifiers(publication_engine)
-    before_counts = _counts(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    before_ids = _identifiers(publication_sessions)
+    before_counts = _counts(publication_sessions)
     us = catalog.country("us")
     changed_variable = replace(us.variables[0], label="Changed label")
     changed_us = replace(us, variables=(changed_variable,))
@@ -277,17 +264,17 @@ def test_same_version_with_changed_content_fails_without_mutation(
         match=r"^the stored us catalog version 5\.0\.4 differs from the staged "
         r"catalog in its variables$",
     ):
-        publish_catalog(publication_engine, changed)
+        publish_catalog(publication_sessions, changed)
 
-    assert _identifiers(publication_engine) == before_ids
-    assert _counts(publication_engine) == before_counts
+    assert _identifiers(publication_sessions) == before_ids
+    assert _counts(publication_sessions) == before_counts
 
 
 def test_stored_version_with_a_different_dataset_names_the_datasets(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
     uk = catalog.country("uk")
     changed = replace(
         catalog,
@@ -308,23 +295,28 @@ def test_stored_version_with_a_different_dataset_names_the_datasets(
         match=r"^the stored uk catalog version 5\.0\.4 differs from the staged "
         r"catalog in its datasets$",
     ):
-        publish_catalog(publication_engine, changed)
+        publish_catalog(publication_sessions, changed)
 
 
-def _region_rows(engine: Engine) -> list[tuple[object, ...]]:
-    with engine.connect() as connection:
+def _region_rows(sessions: sessionmaker[Session]) -> list[tuple[object, ...]]:
+    with sessions() as session:
         return [
             tuple(row)
-            for row in connection.execute(
-                text(
-                    """
-                    SELECT id, code, label, region_type, requires_filter,
-                           filter_field, filter_value, filter_strategy,
-                           parent_code, state_code, state_name, default_dataset_id
-                    FROM regions
-                    ORDER BY id
-                    """
-                )
+            for row in session.execute(
+                sa.select(
+                    col(Region.id),
+                    col(Region.code),
+                    col(Region.label),
+                    col(Region.region_type),
+                    col(Region.requires_filter),
+                    col(Region.filter_field),
+                    col(Region.filter_value),
+                    col(Region.filter_strategy),
+                    col(Region.parent_code),
+                    col(Region.state_code),
+                    col(Region.state_name),
+                    col(Region.default_dataset_id),
+                ).order_by(col(Region.id))
             )
         ]
 
@@ -346,14 +338,14 @@ def _with_changed_us_regions(catalog):
 
 
 def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    before_regions = _region_rows(publication_engine)
-    before_ids = _identifiers(publication_engine)
-    before_counts = _counts(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    before_regions = _region_rows(publication_sessions)
+    before_ids = _identifiers(publication_sessions)
+    before_counts = _counts(publication_sessions)
     # Alembic's logging configuration disables existing loggers, so the
     # warnings are recorded where they are emitted.
     warnings: list[tuple[str, dict]] = []
@@ -363,12 +355,12 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
         lambda message, *args, **kwargs: warnings.append((message % args, kwargs)),
     )
 
-    evidence = publish_catalog(publication_engine, _with_changed_us_regions(catalog))
+    evidence = publish_catalog(publication_sessions, _with_changed_us_regions(catalog))
 
     assert evidence.as_dict()["outcome"] == "ok"
-    assert _region_rows(publication_engine) == before_regions
-    assert _identifiers(publication_engine) == before_ids
-    assert _counts(publication_engine) == before_counts
+    assert _region_rows(publication_sessions) == before_regions
+    assert _identifiers(publication_sessions) == before_ids
+    assert _counts(publication_sessions) == before_counts
     # The evidence describes the stored rows, not the staged regions.
     assert evidence.entity_counts == {
         "models": before_counts["tax_benefit_models"],
@@ -406,11 +398,11 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
 
 
 def test_stored_version_with_changed_regions_still_fails_on_other_tables(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    before_regions = _region_rows(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    before_regions = _region_rows(publication_sessions)
     changed = _with_changed_us_regions(catalog)
     us = changed.country("us")
     changed = replace(
@@ -422,31 +414,35 @@ def test_stored_version_with_changed_regions_still_fails_on_other_tables(
     )
 
     with pytest.raises(CatalogPublicationError, match="differs"):
-        publish_catalog(publication_engine, changed)
+        publish_catalog(publication_sessions, changed)
 
-    assert _region_rows(publication_engine) == before_regions
+    assert _region_rows(publication_sessions) == before_regions
 
 
 def test_new_version_publishes_the_reference_file_regions(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
-    publish_catalog(publication_engine, normalized_catalog())
+    publish_catalog(publication_sessions, normalized_catalog())
     newer = _with_changed_us_regions(normalized_catalog(policyengine_version="4.21.0"))
 
-    publish_catalog(publication_engine, newer)
+    publish_catalog(publication_sessions, newer)
 
-    with publication_engine.connect() as connection:
+    with publication_sessions() as session:
         newer_us_regions = dict(
-            connection.execute(
-                text(
-                    """
-                    SELECT region.code, region.label
-                    FROM regions AS region
-                    JOIN tax_benefit_model_versions AS version
-                      ON version.id = region.tax_benefit_model_version_id
-                    JOIN tax_benefit_models AS model ON model.id = version.model_id
-                    WHERE version.version = '4.21.0' AND model.name = 'policyengine-us'
-                    """
+            session.execute(
+                select(col(Region.code), col(Region.label))
+                .join(
+                    TaxBenefitModelVersion,
+                    col(TaxBenefitModelVersion.id)
+                    == col(Region.tax_benefit_model_version_id),
+                )
+                .join(
+                    TaxBenefitModel,
+                    col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+                )
+                .where(
+                    col(TaxBenefitModelVersion.version) == "4.21.0",
+                    col(TaxBenefitModel.name) == "policyengine-us",
                 )
             ).all()
         )
@@ -457,12 +453,12 @@ def test_new_version_publishes_the_reference_file_regions(
 
 
 def test_republish_preserves_existing_run_and_dataset_version_records(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
 
-    with Session(publication_engine) as session:
+    with publication_sessions() as session:
         model = session.exec(
             select(TaxBenefitModel).where(TaxBenefitModel.name == "policyengine-us")
         ).one()
@@ -540,9 +536,9 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
             dataset_version.dataset_id,
         )
 
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
 
-    with Session(publication_engine) as session:
+    with publication_sessions() as session:
         persisted_dataset_version = session.get(DatasetVersion, protected_ids[0])
         persisted_simulation = session.get(Simulation, protected_ids[1])
         persisted_report = session.get(Report, protected_ids[2])
@@ -572,16 +568,16 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
 
 
 def test_new_version_is_additive_and_concurrent_retries_serialize(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     first = normalized_catalog()
     newer = normalized_catalog(policyengine_version="4.21.0")
-    publish_catalog(publication_engine, first)
+    publish_catalog(publication_sessions, first)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(
             executor.map(
-                lambda _index: publish_catalog(publication_engine, newer),
+                lambda _index: publish_catalog(publication_sessions, newer),
                 range(2),
             )
         )
@@ -590,7 +586,7 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
         "4.21.0",
         "4.21.0",
     ]
-    assert _counts(publication_engine) == {
+    assert _counts(publication_sessions) == {
         "tax_benefit_models": 2,
         "tax_benefit_model_versions": 4,
         "variables": 4,
@@ -607,18 +603,18 @@ def test_new_version_is_additive_and_concurrent_retries_serialize(
 
 
 def test_publication_stores_every_value_shape_unchanged(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = value_shape_catalog()
 
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
     # Publishing the same version again compares every stored row with the
     # catalog in both directions and fails on any difference, so this also
     # checks that the comparison reads each shape back as it was written.
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
 
-    assert_catalog_stored_unchanged(publication_engine, catalog)
-    stored_values = stored_parameter_values(publication_engine)
+    assert_catalog_stored_unchanged(publication_sessions, catalog)
+    stored_values = stored_parameter_values(publication_sessions)
     us_model = catalog.country("us").model.name
     for case in PARAMETER_CASES:
         assert [
@@ -629,7 +625,7 @@ def test_publication_stores_every_value_shape_unchanged(
             if (model_name, parameter_name) == (us_model, case.name)
         ] == [strict_json(value.stored_value) for value in case.values], case.name
 
-    stored_regions = stored_catalog_rows(publication_engine, "regions")
+    stored_regions = stored_catalog_rows(publication_sessions, "regions")
     filter_value_index = CATALOG_COLUMNS["regions"].index("filter_value") - 1
     for (country_id, code), filter_value in REGION_FILTER_VALUES.items():
         model_name = catalog.country(country_id).model.name
@@ -637,37 +633,35 @@ def test_publication_stores_every_value_shape_unchanged(
         assert stored_columns[filter_value_index] == filter_value, code
 
 
-def _format_2_values(engine: Engine) -> dict[str, object]:
+def _format_2_values(sessions: sessionmaker[Session]) -> dict[str, object]:
     """Return the US version's stored catalog format 2 fields."""
-    with engine.connect() as connection:
-        version = connection.execute(
-            text(
-                "SELECT version.catalog_format, version.entities, version.basic_inputs "
-                "FROM tax_benefit_model_versions AS version "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                "WHERE model.name = 'policyengine-us'"
+    with sessions() as session:
+        version = session.execute(
+            select(
+                col(TaxBenefitModelVersion.catalog_format),
+                col(TaxBenefitModelVersion.entities),
+                col(TaxBenefitModelVersion.basic_inputs),
+            ).where(col(TaxBenefitModelVersion.id) == _us_version_id())
+        ).one()
+        variable = session.execute(
+            sa.select(
+                col(Variable.is_input_variable),
+                col(Variable.hidden_input),
+                col(Variable.module_name),
+                col(Variable.adds_parameter_path),
+                col(Variable.subtracts_parameter_path),
+                col(Variable.enum_values),
+                col(Variable.unit),
+                col(Variable.definition_period),
+            ).where(
+                col(Variable.name) == "employment_income",
+                col(Variable.tax_benefit_model_version_id) == _us_version_id(),
             )
         ).one()
-        variable = connection.execute(
-            text(
-                "SELECT is_input_variable, hidden_input, module_name, "
-                "adds_parameter_path, subtracts_parameter_path, enum_values, "
-                "unit, definition_period "
-                "FROM variables WHERE name = 'employment_income' "
-                "AND tax_benefit_model_version_id = ("
-                "SELECT version.id FROM tax_benefit_model_versions AS version "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                "WHERE model.name = 'policyengine-us')"
-            )
-        ).one()
-        parameter = connection.execute(
-            text(
-                "SELECT economy, household FROM parameters "
-                "WHERE name = 'gov.example.rate' "
-                "AND tax_benefit_model_version_id = ("
-                "SELECT version.id FROM tax_benefit_model_versions AS version "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                "WHERE model.name = 'policyengine-us')"
+        parameter = session.execute(
+            select(col(Parameter.economy), col(Parameter.household)).where(
+                col(Parameter.name) == "gov.example.rate",
+                col(Parameter.tax_benefit_model_version_id) == _us_version_id(),
             )
         ).one()
     return {
@@ -677,34 +671,38 @@ def _format_2_values(engine: Engine) -> dict[str, object]:
     }
 
 
-def _clear_format_2_fields(engine: Engine) -> None:
-    """Make every stored version look as if published before catalog format 2."""
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "UPDATE tax_benefit_model_versions SET catalog_format = NULL, "
-                "entities = NULL, basic_inputs = NULL"
+def _clear_format_2_fields(sessions: sessionmaker[Session]) -> None:
+    """Make every stored version look as if published before catalog format 2.
+
+    The JSON columns get SQL NULL (``sa.null()``), not JSON's null.
+    """
+    with sessions.begin() as session:
+        session.execute(
+            sa.update(TaxBenefitModelVersion).values(
+                catalog_format=None, entities=sa.null(), basic_inputs=sa.null()
             )
         )
-        connection.execute(
-            text(
-                "UPDATE variables SET is_input_variable = NULL, hidden_input = NULL, "
-                "module_name = NULL, adds_parameter_path = NULL, "
-                "subtracts_parameter_path = NULL, enum_values = NULL, "
-                "unit = NULL, definition_period = NULL"
+        session.execute(
+            sa.update(Variable).values(
+                is_input_variable=None,
+                hidden_input=None,
+                module_name=None,
+                adds_parameter_path=None,
+                subtracts_parameter_path=None,
+                enum_values=sa.null(),
+                unit=None,
+                definition_period=None,
             )
         )
-        connection.execute(
-            text("UPDATE parameters SET economy = NULL, household = NULL")
-        )
+        session.execute(sa.update(Parameter).values(economy=None, household=None))
 
 
 def test_publication_stores_catalog_format_2_fields(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
-    publish_catalog(publication_engine, normalized_catalog())
+    publish_catalog(publication_sessions, normalized_catalog())
 
-    assert _format_2_values(publication_engine) == {
+    assert _format_2_values(publication_sessions) == {
         "version": (
             2,
             [
@@ -728,18 +726,18 @@ def test_publication_stores_catalog_format_2_fields(
 
 
 def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    _clear_format_2_fields(publication_engine)
-    before_ids = _identifiers(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    _clear_format_2_fields(publication_sessions)
+    before_ids = _identifiers(publication_sessions)
 
-    result = publish_catalog(publication_engine, catalog)
+    result = publish_catalog(publication_sessions, catalog)
 
     assert result.as_dict()["outcome"] == "ok"
-    assert _identifiers(publication_engine) == before_ids
-    assert _format_2_values(publication_engine) == {
+    assert _identifiers(publication_sessions) == before_ids
+    assert _format_2_values(publication_sessions) == {
         "version": (None, None, None),
         "variable": (None, None, None, None, None, None, None, None),
         "parameter": (None, None),
@@ -747,11 +745,11 @@ def test_version_stored_before_format_2_keeps_its_fields_empty_on_republish(
 
 
 def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    before_counts = _counts(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    before_counts = _counts(publication_sessions)
     us = catalog.country("us")
     changed_parameter = replace(us.parameters[0], household=True)
     changed = replace(
@@ -763,10 +761,10 @@ def test_version_stored_with_format_2_fails_when_a_format_2_field_changes(
     )
 
     with pytest.raises(CatalogPublicationError, match="differs"):
-        publish_catalog(publication_engine, changed)
+        publish_catalog(publication_sessions, changed)
 
-    assert _counts(publication_engine) == before_counts
-    assert _format_2_values(publication_engine)["parameter"] == (True, False)
+    assert _counts(publication_sessions) == before_counts
+    assert _format_2_values(publication_sessions)["parameter"] == (True, False)
 
 
 def _catalog_with_format_2_variable_records():
@@ -781,19 +779,19 @@ def _catalog_with_format_2_variable_records():
     )
 
 
-def _stored_us_variables(engine: Engine) -> dict[str, tuple[object, ...]]:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT variable.name, variable.enum_values, "
-                "variable.adds_parameter_path, variable.subtracts_parameter_path, "
-                "variable.unit, variable.definition_period "
-                "FROM variables AS variable "
-                "JOIN tax_benefit_model_versions AS version "
-                "ON version.id = variable.tax_benefit_model_version_id "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                "WHERE model.name = 'policyengine-us'"
-            )
+def _stored_us_variables(
+    sessions: sessionmaker[Session],
+) -> dict[str, tuple[object, ...]]:
+    with sessions() as session:
+        rows = session.execute(
+            sa.select(
+                col(Variable.name),
+                col(Variable.enum_values),
+                col(Variable.adds_parameter_path),
+                col(Variable.subtracts_parameter_path),
+                col(Variable.unit),
+                col(Variable.definition_period),
+            ).where(col(Variable.tax_benefit_model_version_id) == _us_version_id())
         ).all()
     return {row[0]: tuple(row[1:]) for row in rows}
 
@@ -811,14 +809,14 @@ def _with_changed_us_variable(catalog, name: str, **changes: object):
 
 
 def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = _catalog_with_format_2_variable_records()
 
-    publish_catalog(publication_engine, catalog)
-    before_ids = _identifiers(publication_engine)
-    stored = _stored_us_variables(publication_engine)
-    republished = publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
+    before_ids = _identifiers(publication_sessions)
+    stored = _stored_us_variables(publication_sessions)
+    republished = publish_catalog(publication_sessions, catalog)
 
     assert stored["filing_status"] == (
         [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],
@@ -836,7 +834,7 @@ def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
         "month",
     )
     assert republished.as_dict()["outcome"] == "ok"
-    assert _identifiers(publication_engine) == before_ids
+    assert _identifiers(publication_sessions) == before_ids
 
 
 @pytest.mark.parametrize(
@@ -858,13 +856,13 @@ def test_enum_labels_parameter_paths_units_and_periods_round_trip_exactly(
     ],
 )
 def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_period(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     variable_name: str,
     changes: dict[str, object],
 ) -> None:
     catalog = _catalog_with_format_2_variable_records()
-    publish_catalog(publication_engine, catalog)
-    stored = _stored_us_variables(publication_engine)
+    publish_catalog(publication_sessions, catalog)
+    stored = _stored_us_variables(publication_sessions)
 
     with pytest.raises(
         CatalogPublicationError,
@@ -872,55 +870,74 @@ def test_republication_detects_a_changed_enum_label_parameter_path_unit_or_perio
         r"catalog in its variables$",
     ):
         publish_catalog(
-            publication_engine,
+            publication_sessions,
             _with_changed_us_variable(catalog, variable_name, **changes),
         )
 
-    assert _stored_us_variables(publication_engine) == stored
+    assert _stored_us_variables(publication_sessions) == stored
 
 
 def _stored_tree(
-    engine: Engine,
+    sessions: sessionmaker[Session],
     model_name: str,
     version: str,
     *,
-    parameter_column: str = "parameter.name",
+    by_parameter_id: bool = False,
 ) -> list[tuple]:
     """Return a stored version's tree rows; each parameter by name by default."""
-    with engine.connect() as connection:
+    parameter_column = (
+        col(ParameterTreeChild.parameter_id) if by_parameter_id else col(Parameter.name)
+    )
+    with sessions() as session:
         return [
             tuple(row)
-            for row in connection.execute(
-                text(
-                    "SELECT tree.parent_path, tree.path, tree.position, tree.label, "
-                    "tree.child_type, tree.child_count, tree.reform_position, "
-                    f"tree.reform_child_count, {parameter_column}, tree.economy, "
-                    "tree.household "
-                    "FROM parameter_tree_children AS tree "
-                    "JOIN tax_benefit_model_versions AS version "
-                    "ON version.id = tree.tax_benefit_model_version_id "
-                    "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                    "LEFT JOIN parameters AS parameter "
-                    "ON parameter.id = tree.parameter_id "
-                    "WHERE model.name = :model_name AND version.version = :version "
-                    "ORDER BY tree.parent_path, tree.position"
-                ),
-                {"model_name": model_name, "version": version},
+            for row in session.execute(
+                sa.select(
+                    col(ParameterTreeChild.parent_path),
+                    col(ParameterTreeChild.path),
+                    col(ParameterTreeChild.position),
+                    col(ParameterTreeChild.label),
+                    col(ParameterTreeChild.child_type),
+                    col(ParameterTreeChild.child_count),
+                    col(ParameterTreeChild.reform_position),
+                    col(ParameterTreeChild.reform_child_count),
+                    parameter_column,
+                    col(ParameterTreeChild.economy),
+                    col(ParameterTreeChild.household),
+                )
+                .join(
+                    TaxBenefitModelVersion,
+                    col(TaxBenefitModelVersion.id)
+                    == col(ParameterTreeChild.tax_benefit_model_version_id),
+                )
+                .join(
+                    TaxBenefitModel,
+                    col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+                )
+                .outerjoin(
+                    Parameter, col(Parameter.id) == col(ParameterTreeChild.parameter_id)
+                )
+                .where(
+                    col(TaxBenefitModel.name) == model_name,
+                    col(TaxBenefitModelVersion.version) == version,
+                )
+                .order_by(
+                    col(ParameterTreeChild.parent_path),
+                    col(ParameterTreeChild.position),
+                )
             )
         ]
 
 
-def _delete_tree(engine: Engine, version: str) -> None:
+def _delete_tree(sessions: sessionmaker[Session], version: str) -> None:
     """Make the stored versions of one .py version look stored before the tree."""
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "DELETE FROM parameter_tree_children AS tree "
-                "USING tax_benefit_model_versions AS version "
-                "WHERE version.id = tree.tax_benefit_model_version_id "
-                "AND version.version = :version"
-            ),
-            {"version": version},
+    with sessions.begin() as session:
+        session.execute(
+            sa.delete(ParameterTreeChild).where(
+                col(ParameterTreeChild.tax_benefit_model_version_id).in_(
+                    _version_ids(version)
+                )
+            )
         )
 
 
@@ -944,16 +961,16 @@ FIXTURE_TREE = [
 
 
 def test_publication_writes_each_new_version_parameter_tree(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
     for country in catalog.countries:
         assert (
             _stored_tree(
-                publication_engine,
+                publication_sessions,
                 country.model.name,
                 country.model_version.version,
             )
@@ -966,11 +983,9 @@ def test_publication_writes_each_new_version_parameter_tree(
 
 
 def _stored_tree_with_parameter_ids(
-    engine: Engine, model_name: str, version: str
+    sessions: sessionmaker[Session], model_name: str, version: str
 ) -> list[tuple]:
-    return _stored_tree(
-        engine, model_name, version, parameter_column="tree.parameter_id"
-    )
+    return _stored_tree(sessions, model_name, version, by_parameter_id=True)
 
 
 def _with_other_parameter_ids(catalog):
@@ -995,7 +1010,7 @@ def _with_other_parameter_ids(catalog):
 
 
 def test_publication_gives_the_installed_stored_version_its_tree(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """The installed version, stored by a release without the tree, gets one.
 
@@ -1006,18 +1021,18 @@ def test_publication_gives_the_installed_stored_version_its_tree(
     """
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, _with_other_parameter_ids(catalog))
+    publish_catalog(publication_sessions, _with_other_parameter_ids(catalog))
     fresh = {
         country.model.name: _stored_tree_with_parameter_ids(
-            publication_engine, country.model.name, current_version
+            publication_sessions, country.model.name, current_version
         )
         for country in catalog.countries
     }
-    _delete_tree(publication_engine, current_version)
-    before_ids = _identifiers(publication_engine)
+    _delete_tree(publication_sessions, current_version)
+    before_ids = _identifiers(publication_sessions)
 
-    evidence = publish_catalog(publication_engine, catalog)
-    again = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
+    again = publish_catalog(publication_sessions, catalog)
 
     assert evidence.parameter_trees_written == tuple(
         (country.model.name, current_version, len(FIXTURE_TREE))
@@ -1027,11 +1042,11 @@ def test_publication_gives_the_installed_stored_version_its_tree(
     for country in catalog.countries:
         assert (
             _stored_tree_with_parameter_ids(
-                publication_engine, country.model.name, current_version
+                publication_sessions, country.model.name, current_version
             )
             == fresh[country.model.name]
         )
-    assert _identifiers(publication_engine) == before_ids
+    assert _identifiers(publication_sessions) == before_ids
     catalog_parameter_ids = {
         parameter.id
         for country in catalog.countries
@@ -1044,7 +1059,7 @@ def test_publication_gives_the_installed_stored_version_its_tree(
 
 
 def test_an_installed_version_stored_before_format_2_gets_no_tree(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """A version stored before catalog format 2 stores no flags, so no tree.
 
@@ -1054,22 +1069,23 @@ def test_an_installed_version_stored_before_format_2_gets_no_tree(
     """
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, catalog)
-    _clear_format_2_fields(publication_engine)
-    _delete_tree(publication_engine, current_version)
+    publish_catalog(publication_sessions, catalog)
+    _clear_format_2_fields(publication_sessions)
+    _delete_tree(publication_sessions, current_version)
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
     assert evidence.as_dict()["outcome"] == "ok"
     assert evidence.parameter_trees_written == ()
     for country in catalog.countries:
         assert (
-            _stored_tree(publication_engine, country.model.name, current_version) == []
+            _stored_tree(publication_sessions, country.model.name, current_version)
+            == []
         )
 
 
 def test_publication_writes_no_tree_for_another_version_stored_without_one(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """A stored version that is not the installed one keeps having no tree.
 
@@ -1079,52 +1095,50 @@ def test_publication_writes_no_tree_for_another_version_stored_without_one(
     older = normalized_catalog(policyengine_version="1.0.0")
     catalog = normalized_catalog()
     older_version = older.country("us").model_version.version
-    publish_catalog(publication_engine, older)
-    _delete_tree(publication_engine, older_version)
+    publish_catalog(publication_sessions, older)
+    _delete_tree(publication_sessions, older_version)
 
-    evidence = publish_catalog(publication_engine, catalog)
-    again = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
+    again = publish_catalog(publication_sessions, catalog)
 
     assert {version for _model, version, _rows in evidence.parameter_trees_written} == {
         catalog.country("us").model_version.version
     }
     assert again.parameter_trees_written == ()
     for country in catalog.countries:
-        assert _stored_tree(publication_engine, country.model.name, older_version) == []
+        assert (
+            _stored_tree(publication_sessions, country.model.name, older_version) == []
+        )
 
 
 def test_publication_fails_when_a_published_version_is_left_without_a_tree(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         publication_module,
         "write_parameter_trees",
-        lambda _connection, _countries: (),
+        lambda _session, _countries: (),
     )
 
     with pytest.raises(CatalogPublicationError, match="has no parameter tree"):
-        publish_catalog(publication_engine, normalized_catalog())
+        publish_catalog(publication_sessions, normalized_catalog())
 
-    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+    assert _counts(publication_sessions)["tax_benefit_model_versions"] == 0
 
 
 def test_the_catalog_writer_role_publishes_the_parameter_tree(
-    publication_engine: Engine,
-    managed_v2_roles,
-    v2_engine_as_role,
+    publication_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """Publication as the catalog writer, with only its declared privileges.
 
     It writes each published version's tree, which needs the role's INSERT
     grant on the tree table.
     """
-    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
     catalog = normalized_catalog()
-    try:
-        evidence = publish_catalog(writer_engine, catalog)
-    finally:
-        writer_engine.dispose()
+
+    evidence = publish_catalog(v2_sessions_as_role(CATALOG_WRITER_ROLE), catalog)
 
     assert evidence.parameter_trees_written == tuple(
         (country.model.name, country.model_version.version, len(FIXTURE_TREE))
@@ -1133,7 +1147,7 @@ def test_the_catalog_writer_role_publishes_the_parameter_tree(
     for country in catalog.countries:
         assert (
             _stored_tree(
-                publication_engine,
+                publication_sessions,
                 country.model.name,
                 country.model_version.version,
             )
@@ -1141,21 +1155,32 @@ def test_the_catalog_writer_role_publishes_the_parameter_tree(
         )
 
 
-def _stored_search_file(engine: Engine, model_name: str, version: str) -> dict:
+def _stored_search_file(
+    sessions: sessionmaker[Session], model_name: str, version: str
+) -> dict:
     """Return a stored version's search file, checking its hash and sizes."""
-    with engine.connect() as connection:
-        row = connection.execute(
-            text(
-                "SELECT search_file.file_format, search_file.compressed_content, "
-                "search_file.content_sha256, search_file.uncompressed_size, "
-                "search_file.compressed_size "
-                "FROM parameter_search_files AS search_file "
-                "JOIN tax_benefit_model_versions AS version "
-                "ON version.id = search_file.tax_benefit_model_version_id "
-                "JOIN tax_benefit_models AS model ON model.id = version.model_id "
-                "WHERE model.name = :model_name AND version.version = :version"
-            ),
-            {"model_name": model_name, "version": version},
+    with sessions() as session:
+        row = session.execute(
+            sa.select(
+                col(ParameterSearchFile.file_format),
+                col(ParameterSearchFile.compressed_content),
+                col(ParameterSearchFile.content_sha256),
+                col(ParameterSearchFile.uncompressed_size),
+                col(ParameterSearchFile.compressed_size),
+            )
+            .join(
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id)
+                == col(ParameterSearchFile.tax_benefit_model_version_id),
+            )
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
+            .where(
+                col(TaxBenefitModel.name) == model_name,
+                col(TaxBenefitModelVersion.version) == version,
+            )
         ).one()
     content = gzip.decompress(row.compressed_content)
     assert row.file_format == 1
@@ -1165,18 +1190,30 @@ def _stored_search_file(engine: Engine, model_name: str, version: str) -> dict:
     return json.loads(content)
 
 
-def _delete_search_files(engine: Engine, version: str) -> None:
+def _delete_search_files(sessions: sessionmaker[Session], version: str) -> None:
     """Make the stored versions of one .py version look stored before the files."""
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "DELETE FROM parameter_search_files AS search_file "
-                "USING tax_benefit_model_versions AS version "
-                "WHERE version.id = search_file.tax_benefit_model_version_id "
-                "AND version.version = :version"
-            ),
-            {"version": version},
+    with sessions.begin() as session:
+        session.execute(
+            sa.delete(ParameterSearchFile).where(
+                col(ParameterSearchFile.tax_benefit_model_version_id).in_(
+                    _version_ids(version)
+                )
+            )
         )
+
+
+def _search_file_count(sessions: sessionmaker[Session], version: str | None) -> int:
+    """Count the stored search files, of one .py version's versions if given."""
+    statement = sa.select(sa.func.count()).select_from(ParameterSearchFile)
+    if version is not None:
+        statement = statement.where(
+            col(ParameterSearchFile.tax_benefit_model_version_id).in_(
+                _version_ids(version)
+            )
+        )
+    with sessions() as session:
+        count: int = session.execute(statement).scalar_one()
+    return count
 
 
 def _fixture_search_file(country_id: str, version: str) -> dict:
@@ -1199,16 +1236,16 @@ def _fixture_search_file(country_id: str, version: str) -> dict:
 
 
 def test_publication_writes_each_new_version_parameter_search_file(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
     for country in catalog.countries:
         version = country.model_version.version
         assert _stored_search_file(
-            publication_engine, country.model.name, version
+            publication_sessions, country.model.name, version
         ) == _fixture_search_file(country.country_id, version)
     assert [
         (model_name, version)
@@ -1222,7 +1259,7 @@ def test_publication_writes_each_new_version_parameter_search_file(
 
 
 def test_republication_writes_only_the_installed_version_search_file(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """A stored version gets its file only when its packages are installed.
 
@@ -1235,15 +1272,15 @@ def test_republication_writes_only_the_installed_version_search_file(
     catalog = normalized_catalog()
     older_country_version = older.country("us").model_version.version
     current_country_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, older)
-    publish_catalog(publication_engine, catalog)
-    _delete_search_files(publication_engine, older_country_version)
-    _delete_search_files(publication_engine, current_country_version)
-    before_ids = _identifiers(publication_engine)
-    before_counts = _counts(publication_engine)
+    publish_catalog(publication_sessions, older)
+    publish_catalog(publication_sessions, catalog)
+    _delete_search_files(publication_sessions, older_country_version)
+    _delete_search_files(publication_sessions, current_country_version)
+    before_ids = _identifiers(publication_sessions)
+    before_counts = _counts(publication_sessions)
 
-    evidence = publish_catalog(publication_engine, catalog)
-    again = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
+    again = publish_catalog(publication_sessions, catalog)
 
     assert [
         (model_name, version)
@@ -1257,44 +1294,30 @@ def test_republication_writes_only_the_installed_version_search_file(
     assert again.parameter_search_files_written == ()
     for country in catalog.countries:
         assert _stored_search_file(
-            publication_engine, country.model.name, current_country_version
+            publication_sessions, country.model.name, current_country_version
         ) == _fixture_search_file(country.country_id, current_country_version)
-    with publication_engine.connect() as connection:
-        assert (
-            connection.execute(
-                text(
-                    "SELECT count(*) FROM parameter_search_files AS search_file "
-                    "JOIN tax_benefit_model_versions AS version "
-                    "ON version.id = search_file.tax_benefit_model_version_id "
-                    "WHERE version.version = :version"
-                ),
-                {"version": older_country_version},
-            ).scalar_one()
-            == 0
-        )
-    assert _identifiers(publication_engine) == before_ids
-    assert _counts(publication_engine) == before_counts
+    assert _search_file_count(publication_sessions, older_country_version) == 0
+    assert _identifiers(publication_sessions) == before_ids
+    assert _counts(publication_sessions) == before_counts
 
 
 def test_republication_refuses_a_stored_search_file_that_differs(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     catalog = normalized_catalog()
-    publish_catalog(publication_engine, catalog)
-    with publication_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE parameter_search_files SET content_sha256 = repeat('0', 64)")
-        )
+    publish_catalog(publication_sessions, catalog)
+    with publication_sessions.begin() as session:
+        session.execute(sa.update(ParameterSearchFile).values(content_sha256="0" * 64))
 
     with pytest.raises(
         CatalogPublicationError,
         match=r"stored parameter search file .* differs from the installed packages'",
     ):
-        publish_catalog(publication_engine, catalog)
+        publish_catalog(publication_sessions, catalog)
 
 
 def test_search_file_editability_follows_the_stored_current_law_values(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     models = source_models()
     add_format_2_variable_records(models["us"])
@@ -1334,11 +1357,11 @@ def test_search_file_editability_follows_the_stored_current_law_values(
         region_references=region_references(),
     )
 
-    publish_catalog(publication_engine, catalog)
+    publish_catalog(publication_sessions, catalog)
 
     us = catalog.country("us")
     search_file = _stored_search_file(
-        publication_engine, us.model.name, us.model_version.version
+        publication_sessions, us.model.name, us.model_version.version
     )
     entries = {entry["path"]: entry for entry in search_file["parameters"]}
     assert entries["gov.example.bracket[1].rate"] == {
@@ -1359,36 +1382,32 @@ def test_search_file_editability_follows_the_stored_current_law_values(
 
 
 def test_publication_fails_when_a_published_version_has_no_search_file(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         publication_module,
         "write_parameter_search_files",
-        lambda _connection, _countries: (),
+        lambda _session, _countries: (),
     )
 
     with pytest.raises(CatalogPublicationError, match="has no parameter search file"):
-        publish_catalog(publication_engine, normalized_catalog())
+        publish_catalog(publication_sessions, normalized_catalog())
 
-    assert _counts(publication_engine)["tax_benefit_model_versions"] == 0
+    assert _counts(publication_sessions)["tax_benefit_model_versions"] == 0
 
 
 def test_the_catalog_writer_role_publishes_the_search_files(
-    publication_engine: Engine,
-    managed_v2_roles,
-    v2_engine_as_role,
+    publication_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     """Publication as the catalog writer writes each version's search file.
 
     That needs the role's declared INSERT grant on the search files' table.
     """
-    writer_engine = v2_engine_as_role(CATALOG_WRITER_ROLE, poolclass=NullPool)
     catalog = normalized_catalog()
-    try:
-        evidence = publish_catalog(writer_engine, catalog)
-    finally:
-        writer_engine.dispose()
+
+    evidence = publish_catalog(v2_sessions_as_role(CATALOG_WRITER_ROLE), catalog)
 
     assert [
         (model_name, version)
@@ -1402,21 +1421,21 @@ def test_the_catalog_writer_role_publishes_the_search_files(
     for country in catalog.countries:
         version = country.model_version.version
         assert _stored_search_file(
-            publication_engine, country.model.name, version
+            publication_sessions, country.model.name, version
         ) == _fixture_search_file(country.country_id, version)
 
 
 def test_one_publication_gives_the_installed_stored_version_its_tree_and_file(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """The installed version stored without either gets both in one run."""
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, catalog)
-    _delete_tree(publication_engine, current_version)
-    _delete_search_files(publication_engine, current_version)
+    publish_catalog(publication_sessions, catalog)
+    _delete_tree(publication_sessions, current_version)
+    _delete_search_files(publication_sessions, current_version)
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
     model_names = [
         country.model.name
@@ -1431,28 +1450,28 @@ def test_one_publication_gives_the_installed_stored_version_its_tree_and_file(
     ] == model_names
     for country in catalog.countries:
         assert (
-            _stored_tree(publication_engine, country.model.name, current_version)
+            _stored_tree(publication_sessions, country.model.name, current_version)
             == FIXTURE_TREE
         )
         assert _stored_search_file(
-            publication_engine, country.model.name, current_version
+            publication_sessions, country.model.name, current_version
         ) == _fixture_search_file(country.country_id, current_version)
 
 
-def _mark_stored_before_catalog_format_2(engine: Engine, version: str) -> None:
+def _mark_stored_before_catalog_format_2(
+    sessions: sessionmaker[Session], version: str
+) -> None:
     """Make the stored versions of one .py version look stored before format 2."""
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "UPDATE tax_benefit_model_versions SET catalog_format = NULL "
-                "WHERE version = :version"
-            ),
-            {"version": version},
+    with sessions.begin() as session:
+        session.execute(
+            sa.update(TaxBenefitModelVersion)
+            .where(col(TaxBenefitModelVersion.version) == version)
+            .values(catalog_format=None)
         )
 
 
 def test_an_installed_version_stored_before_catalog_format_2_gets_no_search_file(
-    publication_engine: Engine,
+    publication_sessions: sessionmaker[Session],
 ) -> None:
     """A version stored without format 2's flags keeps having no search file.
 
@@ -1462,17 +1481,11 @@ def test_an_installed_version_stored_before_catalog_format_2_gets_no_search_file
     """
     catalog = normalized_catalog()
     current_version = catalog.country("us").model_version.version
-    publish_catalog(publication_engine, catalog)
-    _delete_search_files(publication_engine, current_version)
-    _mark_stored_before_catalog_format_2(publication_engine, current_version)
+    publish_catalog(publication_sessions, catalog)
+    _delete_search_files(publication_sessions, current_version)
+    _mark_stored_before_catalog_format_2(publication_sessions, current_version)
 
-    evidence = publish_catalog(publication_engine, catalog)
+    evidence = publish_catalog(publication_sessions, catalog)
 
     assert evidence.parameter_search_files_written == ()
-    with publication_engine.connect() as connection:
-        assert (
-            connection.execute(
-                text("SELECT count(*) FROM parameter_search_files")
-            ).scalar_one()
-            == 0
-        )
+    assert _search_file_count(publication_sessions, None) == 0

@@ -8,125 +8,140 @@ downgrade drops the table with its rows and leaves the type, which
 ``simulation_runs`` still uses.
 """
 
-from collections.abc import Iterator
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from sqlalchemy import Connection, Engine, create_engine, inspect, text
+from sqlalchemy import delete, func, literal, select, update
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql.base import PGInspector
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import NullPool
+from sqlmodel import col
 
-from tests.fixtures.integration.alembic_v2 import (
-    alembic_v2_config,
-    disposable_v2_url,
+from policyengine_api.data.v2.models import (
+    CliffImpact,
+    Simulation,
+    SimulationRun,
+    SimulationStatus,
 )
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import alembic_v2_config, table_columns
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
+    add_row,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
 DYNAMICS_REVISION = "9d1d12a7ac58"
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
-# What a request starting a run's cliff calculation inserts: the conflict
-# target names the partial unique index's whole condition.
-START_CLIFF_CALCULATION = (
-    "INSERT INTO cliff_impacts (id, simulation_run_id, status) "
-    "VALUES (:id, :simulation_run_id, 'pending') "
-    "ON CONFLICT (simulation_run_id) WHERE status <> 'failed' DO NOTHING "
-    "RETURNING id"
-)
 
 
-def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
+def _schema_shape(sessions: sessionmaker[Session]) -> dict[str, dict[str, Any]]:
     """Reflect every table's columns, keys, indexes and checks."""
-    inspector = inspect(engine)
-    return {
-        table_name: {
-            "columns": [
-                (
-                    column["name"],
-                    str(column["type"]),
-                    column["nullable"],
-                    column.get("default"),
-                )
-                for column in inspector.get_columns(table_name)
-            ],
-            "primary_key": inspector.get_pk_constraint(table_name),
-            "foreign_keys": sorted(
-                (
-                    key["name"],
-                    key["constrained_columns"],
-                    key["referred_table"],
-                    key["options"].get("ondelete"),
-                )
-                for key in inspector.get_foreign_keys(table_name)
-            ),
-            "unique_constraints": sorted(
-                (unique["name"], unique["column_names"])
-                for unique in inspector.get_unique_constraints(table_name)
-            ),
-            "indexes": sorted(
-                (
-                    index["name"],
-                    index["column_names"],
-                    index["unique"],
-                    index.get("dialect_options", {}).get("postgresql_where"),
-                )
-                for index in inspector.get_indexes(table_name)
-            ),
-            "checks": {
-                check["name"]: check["sqltext"]
-                for check in inspector.get_check_constraints(table_name)
-            },
+    with sessions() as session:
+        inspector = schema_inspector(session)
+        return {
+            table_name: {
+                "columns": [
+                    (
+                        column["name"],
+                        str(column["type"]),
+                        column["nullable"],
+                        column.get("default"),
+                    )
+                    for column in inspector.get_columns(table_name)
+                ],
+                "primary_key": inspector.get_pk_constraint(table_name),
+                "foreign_keys": sorted(
+                    (
+                        key["name"],
+                        key["constrained_columns"],
+                        key["referred_table"],
+                        key["options"].get("ondelete"),
+                    )
+                    for key in inspector.get_foreign_keys(table_name)
+                ),
+                "unique_constraints": sorted(
+                    (unique["name"], unique["column_names"])
+                    for unique in inspector.get_unique_constraints(table_name)
+                ),
+                "indexes": sorted(
+                    (
+                        index["name"],
+                        index["column_names"],
+                        index["unique"],
+                        index.get("dialect_options", {}).get("postgresql_where"),
+                    )
+                    for index in inspector.get_indexes(table_name)
+                ),
+                "checks": {
+                    check["name"]: check["sqltext"]
+                    for check in inspector.get_check_constraints(table_name)
+                },
+            }
+            for table_name in inspector.get_table_names(schema="public")
+            if table_name != "alembic_version"
         }
-        for table_name in inspector.get_table_names(schema="public")
-        if table_name != "alembic_version"
+
+
+def _enum_labels(sessions: sessionmaker[Session]) -> dict[str, list[str]]:
+    """Return each enum type in the public schema with its labels in order."""
+    inspector = schema_inspector(sessions)
+    assert isinstance(inspector, PGInspector)
+    return {
+        enum_type["name"]: enum_type["labels"]
+        for enum_type in inspector.get_enums(schema="public")
     }
 
 
-def _enum_labels(engine: Engine) -> dict[str, list[str]]:
-    """Return each enum type in the public schema with its labels in order."""
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT type.typname, enum.enumlabel FROM pg_type AS type "
-                "JOIN pg_enum AS enum ON enum.enumtypid = type.oid "
-                "JOIN pg_namespace AS namespace ON namespace.oid = type.typnamespace "
-                "WHERE namespace.nspname = 'public' "
-                "ORDER BY type.typname, enum.enumsortorder"
-            )
-        ).all()
-    labels: dict[str, list[str]] = {}
-    for type_name, label in rows:
-        labels.setdefault(type_name, []).append(label)
-    return labels
+def _table_names(sessions: sessionmaker[Session]) -> list[str]:
+    return schema_inspector(sessions).get_table_names()
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    """Yield an engine on the disposable database, left at the v2 head."""
-    database_engine = create_engine(disposable_v2_url(), poolclass=NullPool)
+def sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the disposable database owner's Session factories; leave it at head."""
     try:
-        yield database_engine
+        yield v2_owner_sessions
     finally:
         command.upgrade(alembic_v2_config(), "head")
-        database_engine.dispose()
 
 
-def test_cliff_impacts_revision_adds_only_its_table(engine: Engine) -> None:
+@pytest.fixture
+def session(sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Yield a Session at the v2 head whose writes are rolled back after the test."""
+    command.upgrade(alembic_v2_config(), "head")
+    with sessions() as database_session:
+        try:
+            yield database_session
+        finally:
+            database_session.rollback()
+
+
+def test_cliff_impacts_revision_adds_only_its_table(
+    sessions: sessionmaker[Session],
+) -> None:
     """The revision adds one table, with no new enum type, and changes nothing else."""
     config = alembic_v2_config()
 
     command.upgrade(config, "head")
     command.downgrade(config, DYNAMICS_REVISION)
-    parent_shape = _schema_shape(engine)
-    parent_enums = _enum_labels(engine)
+    parent_shape = _schema_shape(sessions)
+    parent_enums = _enum_labels(sessions)
     command.upgrade(config, CLIFF_IMPACTS_REVISION)
-    revision_shape = _schema_shape(engine)
+    revision_shape = _schema_shape(sessions)
 
     assert set(revision_shape) - set(parent_shape) == {"cliff_impacts"}
     assert {
@@ -134,7 +149,7 @@ def test_cliff_impacts_revision_adds_only_its_table(engine: Engine) -> None:
         for table_name, shape in revision_shape.items()
         if table_name != "cliff_impacts"
     } == parent_shape
-    assert _enum_labels(engine) == parent_enums
+    assert _enum_labels(sessions) == parent_enums
     cliff_impacts = revision_shape["cliff_impacts"]
     assert cliff_impacts["primary_key"]["constrained_columns"] == ["id"]
     assert [
@@ -156,33 +171,30 @@ def test_cliff_impacts_revision_adds_only_its_table(engine: Engine) -> None:
         "ck_cliff_impacts_finished_completion",
         "ck_cliff_impacts_result_when_succeeded",
     }
-    with engine.connect() as connection:
-        column_types = dict(
-            connection.execute(
-                text(
-                    "SELECT column_name, udt_name || ':' || is_nullable "
-                    "FROM information_schema.columns "
-                    "WHERE table_schema = 'public' AND table_name = 'cliff_impacts'"
-                )
-            ).all()
+    column_types = {
+        column_name: (
+            column["type"].compile(dialect=postgresql.dialect()),
+            column["nullable"],
         )
+        for column_name, column in table_columns(sessions, "cliff_impacts").items()
+    }
     assert column_types == {
-        "id": "uuid:NO",
-        "created_at": "timestamptz:NO",
-        "updated_at": "timestamptz:NO",
-        "simulation_run_id": "uuid:NO",
-        "status": "v2_simulation_status:NO",
-        "modal_call_id": "varchar:YES",
-        "error_message": "varchar:YES",
-        "started_at": "timestamptz:YES",
-        "completed_at": "timestamptz:YES",
-        "cliff_gap": "float8:YES",
-        "cliff_share": "float8:YES",
+        "id": ("UUID", False),
+        "created_at": ("TIMESTAMP WITH TIME ZONE", False),
+        "updated_at": ("TIMESTAMP WITH TIME ZONE", False),
+        "simulation_run_id": ("UUID", False),
+        "status": ("v2_simulation_status", False),
+        "modal_call_id": ("VARCHAR(255)", True),
+        "error_message": ("VARCHAR", True),
+        "started_at": ("TIMESTAMP WITH TIME ZONE", True),
+        "completed_at": ("TIMESTAMP WITH TIME ZONE", True),
+        "cliff_gap": ("DOUBLE PRECISION", True),
+        "cliff_share": ("DOUBLE PRECISION", True),
     }
 
 
 def test_cliff_impacts_downgrade_drops_the_table_and_keeps_the_status_type(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     """Downgrading drops only the table, so upgrading again works."""
     config = alembic_v2_config()
@@ -190,9 +202,9 @@ def test_cliff_impacts_downgrade_drops_the_table_and_keeps_the_status_type(
     command.upgrade(config, "head")
     command.downgrade(config, DYNAMICS_REVISION)
 
-    assert "cliff_impacts" not in inspect(engine).get_table_names()
+    assert "cliff_impacts" not in _table_names(sessions)
     # ``simulation_runs.status`` still uses the type.
-    assert _enum_labels(engine)["v2_simulation_status"] == [
+    assert _enum_labels(sessions)["v2_simulation_status"] == [
         "pending",
         "running",
         "succeeded",
@@ -201,26 +213,26 @@ def test_cliff_impacts_downgrade_drops_the_table_and_keeps_the_status_type(
 
     command.upgrade(config, CLIFF_IMPACTS_REVISION)
 
-    assert "cliff_impacts" in inspect(engine).get_table_names()
+    assert "cliff_impacts" in _table_names(sessions)
 
 
-def _insert_simulation_run(connection: Connection) -> UUID:
+def _insert_simulation_run(session: Session) -> UUID:
     """Store an economy simulation and one pending run of it."""
-    public_api_rows = insert_public_api_rows(connection)
+    public_api_rows = insert_public_api_rows(session)
     simulation_id = uuid4()
     run_id = uuid4()
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=simulation_id,
         simulation_type="economy",
         dataset_id=public_api_rows.dataset_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
         year=2026,
     )
-    insert_row(
-        connection,
-        "simulation_runs",
+    add_row(
+        session,
+        SimulationRun,
         id=run_id,
         simulation_id=simulation_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
@@ -231,139 +243,160 @@ def _insert_simulation_run(connection: Connection) -> UUID:
     return run_id
 
 
-def _start_cliff_calculation(connection: Connection, run_id: UUID) -> UUID | None:
-    """Insert a pending calculation unless one that hasn't failed exists."""
-    return connection.execute(
-        text(START_CLIFF_CALCULATION), {"id": uuid4(), "simulation_run_id": run_id}
-    ).scalar_one_or_none()
+def _start_cliff_calculation(session: Session, run_id: UUID) -> UUID | None:
+    """Insert a pending calculation unless one that hasn't failed exists.
+
+    This is what a request starting a run's cliff calculation inserts
+    (INSERT ... ON CONFLICT DO NOTHING RETURNING id): the conflict target
+    names the partial unique index's whole condition, ``status <> 'failed'``.
+    The status is written into the statement as a literal: PostgreSQL matches
+    the condition to the index when it plans the statement, so a parameter
+    there fails once psycopg prepares the statement, after five runs on one
+    connection, and PostgreSQL plans it without the parameter's value.
+    """
+    failed_status = literal(SimulationStatus.FAILED, literal_execute=True)
+    start_calculation = (
+        postgresql.insert(CliffImpact)
+        .values(id=uuid4(), simulation_run_id=run_id, status=SimulationStatus.PENDING)
+        .on_conflict_do_nothing(
+            index_elements=["simulation_run_id"],
+            index_where=col(CliffImpact.status) != failed_status,
+        )
+        .returning(col(CliffImpact.id))
+    )
+    return session.scalars(start_calculation).one_or_none()
 
 
-def _fail_cliff_calculation(connection: Connection, calculation_id: UUID) -> None:
-    connection.execute(
-        text(
-            "UPDATE cliff_impacts SET status = 'failed', "
-            "error_message = 'modal_call_ended: the call ended', "
-            "completed_at = now() WHERE id = :id"
-        ),
-        {"id": calculation_id},
+def _finish_cliff_calculation(
+    session: Session, calculation_id: UUID | None, **assignments: object
+) -> None:
+    """Update the calculation's columns (UPDATE cliff_impacts SET ...)."""
+    session.execute(
+        update(CliffImpact)
+        .where(col(CliffImpact.id) == calculation_id)
+        .values(**assignments)
     )
 
 
-def _cliff_statuses(connection: Connection, run_id: UUID) -> list[str]:
+def _fail_cliff_calculation(session: Session, calculation_id: UUID) -> None:
+    _finish_cliff_calculation(
+        session,
+        calculation_id,
+        status=SimulationStatus.FAILED,
+        error_message="modal_call_ended: the call ended",
+        completed_at=func.now(),
+    )
+
+
+def _cliff_statuses(session: Session, run_id: UUID) -> list[str]:
     return list(
-        connection.execute(
-            text(
-                "SELECT status::text FROM cliff_impacts "
-                "WHERE simulation_run_id = :run_id ORDER BY created_at, status"
-            ),
-            {"run_id": run_id},
-        ).scalars()
+        session.scalars(
+            select(col(CliffImpact.status))
+            .where(col(CliffImpact.simulation_run_id) == run_id)
+            .order_by(col(CliffImpact.created_at), col(CliffImpact.status))
+        )
     )
 
 
-def test_a_run_starts_one_cliff_calculation_until_it_fails(engine: Engine) -> None:
+def test_a_run_starts_one_cliff_calculation_until_it_fails(session: Session) -> None:
     """Two requests at once start one calculation; a failed one never counts."""
-    command.upgrade(alembic_v2_config(), "head")
+    run_id = _insert_simulation_run(session)
+    first_calculation = _start_cliff_calculation(session, run_id)
+    joined_calculation = _start_cliff_calculation(session, run_id)
 
-    with engine.connect() as connection:
-        transaction = connection.begin()
-        try:
-            run_id = _insert_simulation_run(connection)
-            first_calculation = _start_cliff_calculation(connection, run_id)
-            joined_calculation = _start_cliff_calculation(connection, run_id)
+    assert first_calculation is not None
+    # The second request joins the pending calculation.
+    assert joined_calculation is None
+    with refused(session, IntegrityError, match="uq_cliff_impacts_unfailed"):
+        add_row(
+            session,
+            CliffImpact,
+            id=uuid4(),
+            simulation_run_id=run_id,
+            status="running",
+        )
 
-            assert first_calculation is not None
-            # The second request joins the pending calculation.
-            assert joined_calculation is None
-            with refused(connection, IntegrityError, match="uq_cliff_impacts_unfailed"):
-                insert_row(
-                    connection,
-                    "cliff_impacts",
-                    id=uuid4(),
-                    simulation_run_id=run_id,
-                    status="running",
-                )
+    _fail_cliff_calculation(session, first_calculation)
+    retried_calculation = _start_cliff_calculation(session, run_id)
 
-            _fail_cliff_calculation(connection, first_calculation)
-            retried_calculation = _start_cliff_calculation(connection, run_id)
-
-            assert retried_calculation is not None
-            connection.execute(
-                text(
-                    "UPDATE cliff_impacts SET status = 'succeeded', "
-                    "cliff_gap = 1.5e9, cliff_share = 0.04, completed_at = now() "
-                    "WHERE id = :id"
-                ),
-                {"id": retried_calculation},
-            )
-            assert _start_cliff_calculation(connection, run_id) is None
-            assert sorted(_cliff_statuses(connection, run_id)) == [
-                "failed",
-                "succeeded",
-            ]
-        finally:
-            transaction.rollback()
+    assert retried_calculation is not None
+    _finish_cliff_calculation(
+        session,
+        retried_calculation,
+        status=SimulationStatus.SUCCEEDED,
+        cliff_gap=1.5e9,
+        cliff_share=0.04,
+        completed_at=func.now(),
+    )
+    assert _start_cliff_calculation(session, run_id) is None
+    assert sorted(_cliff_statuses(session, run_id)) == ["failed", "succeeded"]
 
 
 @pytest.mark.parametrize(
     ("assignments", "check_name"),
     [
-        ("status = 'succeeded', completed_at = now()", "result_when_succeeded"),
-        (
-            "status = 'succeeded', cliff_gap = 1.0, completed_at = now()",
+        pytest.param(
+            {"status": SimulationStatus.SUCCEEDED, "completed_at": func.now()},
             "result_when_succeeded",
+            id="succeeded-with-no-numbers",
         ),
-        ("cliff_gap = 1.0, cliff_share = 0.1", "result_when_succeeded"),
-        (
-            "status = 'failed', cliff_gap = 1.0, cliff_share = 0.1, "
-            "completed_at = now()",
+        pytest.param(
+            {
+                "status": SimulationStatus.SUCCEEDED,
+                "cliff_gap": 1.0,
+                "completed_at": func.now(),
+            },
             "result_when_succeeded",
+            id="succeeded-with-a-gap-alone",
         ),
-        ("status = 'failed'", "finished_completion"),
-        (
-            "status = 'succeeded', cliff_gap = 1.0, cliff_share = 0.1",
+        pytest.param(
+            {"cliff_gap": 1.0, "cliff_share": 0.1},
+            "result_when_succeeded",
+            id="pending-with-numbers",
+        ),
+        pytest.param(
+            {
+                "status": SimulationStatus.FAILED,
+                "cliff_gap": 1.0,
+                "cliff_share": 0.1,
+                "completed_at": func.now(),
+            },
+            "result_when_succeeded",
+            id="failed-with-numbers",
+        ),
+        pytest.param(
+            {"status": SimulationStatus.FAILED},
             "finished_completion",
+            id="failed-with-no-completion-time",
+        ),
+        pytest.param(
+            {
+                "status": SimulationStatus.SUCCEEDED,
+                "cliff_gap": 1.0,
+                "cliff_share": 0.1,
+            },
+            "finished_completion",
+            id="succeeded-with-no-completion-time",
         ),
     ],
 )
 def test_only_a_finished_calculation_ends_and_only_a_succeeded_one_has_numbers(
-    engine: Engine, assignments: str, check_name: str
+    session: Session, assignments: dict[str, object], check_name: str
 ) -> None:
-    command.upgrade(alembic_v2_config(), "head")
+    run_id = _insert_simulation_run(session)
+    calculation_id = _start_cliff_calculation(session, run_id)
 
-    with engine.connect() as connection:
-        transaction = connection.begin()
-        try:
-            run_id = _insert_simulation_run(connection)
-            calculation_id = _start_cliff_calculation(connection, run_id)
-
-            with refused(
-                connection, IntegrityError, match=f"ck_cliff_impacts_{check_name}"
-            ):
-                connection.execute(
-                    text(f"UPDATE cliff_impacts SET {assignments} WHERE id = :id"),
-                    {"id": calculation_id},
-                )
-        finally:
-            transaction.rollback()
+    with refused(session, IntegrityError, match=f"ck_cliff_impacts_{check_name}"):
+        _finish_cliff_calculation(session, calculation_id, **assignments)
 
 
-def test_a_runs_cliff_calculations_are_deleted_with_it(engine: Engine) -> None:
-    command.upgrade(alembic_v2_config(), "head")
+def test_a_runs_cliff_calculations_are_deleted_with_it(session: Session) -> None:
+    run_id = _insert_simulation_run(session)
+    failed_calculation = _start_cliff_calculation(session, run_id)
+    assert failed_calculation is not None
+    _fail_cliff_calculation(session, failed_calculation)
+    _start_cliff_calculation(session, run_id)
 
-    with engine.connect() as connection:
-        transaction = connection.begin()
-        try:
-            run_id = _insert_simulation_run(connection)
-            failed_calculation = _start_cliff_calculation(connection, run_id)
-            assert failed_calculation is not None
-            _fail_cliff_calculation(connection, failed_calculation)
-            _start_cliff_calculation(connection, run_id)
+    session.execute(delete(SimulationRun).where(col(SimulationRun.id) == run_id))
 
-            connection.execute(
-                text("DELETE FROM simulation_runs WHERE id = :id"), {"id": run_id}
-            )
-
-            assert _cliff_statuses(connection, run_id) == []
-        finally:
-            transaction.rollback()
+    assert _cliff_statuses(session, run_id) == []

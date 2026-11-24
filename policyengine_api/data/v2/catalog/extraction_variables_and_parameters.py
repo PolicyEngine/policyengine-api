@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import inspect
+
 from policyengine_api.data.v2.catalog.extraction_values import (
     CatalogExtractionError,
     catalog_identifier,
@@ -27,10 +29,13 @@ from policyengine_api.data.v2.models import Variable
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from sqlalchemy.orm import Mapper
+
 
 def _variable_column_length(column_name: str) -> int:
     """Return the length limit of one text column of the v2 ``variables`` table."""
-    length = getattr(Variable.__table__.c[column_name].type, "length", None)
+    mapper: Mapper[Variable] = inspect(Variable)
+    length = getattr(mapper.columns[column_name].type, "length", None)
     if not isinstance(length, int):
         msg = f"variables.{column_name} has no length limit"
         raise TypeError(msg)

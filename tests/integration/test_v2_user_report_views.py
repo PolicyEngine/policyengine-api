@@ -17,12 +17,15 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
+from sqlalchemy import delete, update
+from sqlmodel import col
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import (
+    BudgetWindowRun,
+    User,
+    UserReportAssociation,
+)
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from tests.fixtures.economy_results import us_economy_result
 from tests.integration.stored_report_rows import (
@@ -44,9 +47,10 @@ from tests.integration.user_report_run_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from tests.integration.stored_report_rows import CatalogRows, StoredReport
 
@@ -54,42 +58,38 @@ NEWER_VERSIONS = {**CURRENT_VERSIONS, "policyengine_version": "4.3.0"}
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(v2_owner_sessions: sessionmaker[Session]) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 @pytest.fixture
-def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
+def browsers(owner_sessions: sessionmaker[Session]) -> Iterator[list[UUID]]:
     """Name signed-out browsers' users, and delete them and their records after."""
     browser_ids = [uuid4() for _ in range(2)]
     yield browser_ids
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": browser_ids}
-        )
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(col(User.id).in_(browser_ids)))
 
 
 def store_run(  # noqa: PLR0913  # each run differs in a keyword-only setting
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     report: StoredReport,
     *,
@@ -100,7 +100,7 @@ def store_run(  # noqa: PLR0913  # each run differs in a keyword-only setting
 ) -> UUID:
     """Store a run of the report, with its result once it succeeded."""
     return store_report_run(
-        connection,
+        session,
         catalog,
         report,
         RunSettings(
@@ -120,41 +120,43 @@ def read_item(client: Any, report_id: UUID, headers: dict[str, str] | None = Non
 
 
 def test_without_a_record_the_newest_succeeded_unforced_run_is_read(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-        store_run(connection, catalog, report, days_later=0, status="failed")
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+        store_run(session, catalog, report, days_later=0, status="failed")
         succeeded = store_run(
-            connection, catalog, report, days_later=1, status="succeeded"
+            session, catalog, report, days_later=1, status="succeeded"
         )
         store_run(
-            connection, catalog, report, days_later=2, status="succeeded", forced=True
+            session, catalog, report, days_later=2, status="succeeded", forced=True
         )
         store_run(
-            connection,
+            session,
             catalog,
             report,
             days_later=3,
             status="pending",
             versions=NEWER_VERSIONS,
         )
-        only_forced = store_report(connection, catalog)
+        only_forced = store_report(session, catalog)
         store_run(
-            connection,
+            session,
             catalog,
             only_forced,
             days_later=0,
             status="succeeded",
             forced=True,
         )
-        unsucceeded = store_report(connection, catalog)
-        store_run(connection, catalog, unsucceeded, days_later=0, status="failed")
+        unsucceeded = store_report(session, catalog)
+        store_run(session, catalog, unsucceeded, days_later=0, status="failed")
         newest_unforced = store_run(
-            connection, catalog, unsucceeded, days_later=1, status="pending"
+            session, catalog, unsucceeded, days_later=1, status="pending"
         )
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
 
     item = read_item(client, report.report_id)
@@ -177,19 +179,19 @@ def test_without_a_record_the_newest_succeeded_unforced_run_is_read(
 
 
 def test_a_user_reads_their_own_newest_recorded_run(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     asker, other_user = browsers
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         first_asked = store_run(
-            connection, catalog, report, days_later=0, status="succeeded"
+            session, catalog, report, days_later=0, status="succeeded"
         )
         newest_asked = store_run(
-            connection,
+            session,
             catalog,
             report,
             days_later=1,
@@ -197,14 +199,14 @@ def test_a_user_reads_their_own_newest_recorded_run(
             versions=NEWER_VERSIONS,
         )
         newest_succeeded = store_run(
-            connection,
+            session,
             catalog,
             report,
             days_later=2,
             status="succeeded",
             versions={**CURRENT_VERSIONS, "policyengine_version": "4.4.0"},
         )
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
     client = client_for(runtime_sessions, simulation_service)
     for run_id in (first_asked, newest_asked):
         simulation_service.joined_run = JoinedRun(
@@ -236,21 +238,21 @@ def test_a_user_reads_their_own_newest_recorded_run(
 
 
 def test_a_user_reads_the_window_run_of_their_newest_recorded_year(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     asker = browsers[0]
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         asked = store_window(
-            connection,
+            session,
             catalog,
             years=(2026, 2027),
             settings=RunSettings(versions=CURRENT_VERSIONS, status="running"),
         )
         store_window(
-            connection,
+            session,
             catalog,
             years=(2026, 2027),
             settings=RunSettings(
@@ -261,7 +263,7 @@ def test_a_user_reads_the_window_run_of_their_newest_recorded_year(
             report=asked.report,
         )
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(
             report_id=asked.report.report_id,
@@ -285,25 +287,23 @@ def test_a_user_reads_the_window_run_of_their_newest_recorded_year(
 
 
 def test_a_reports_label_and_description_are_the_users_saved_reports(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     saver, other_user = browsers
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-    store_saved_report(owner_engine, user_id=saver, report_id=report.report_id)
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text(
-                "UPDATE user_report_associations SET description = 'Mine' "
-                "WHERE user_id = :user_id"
-            ),
-            {"user_id": saver},
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+    store_saved_report(owner_sessions, user_id=saver, report_id=report.report_id)
+    with owner_sessions.begin() as session:
+        session.execute(
+            update(UserReportAssociation)
+            .where(col(UserReportAssociation.user_id) == saver)
+            .values(description="Mine")
         )
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
 
     savers_item = read_item(client, report.report_id, as_browser(saver))
@@ -321,20 +321,20 @@ def test_a_reports_label_and_description_are_the_users_saved_reports(
 
 
 def test_a_search_by_key_reads_each_report_as_the_user_sees_it(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     saver, _ = browsers
     dataset_independent_key = "b" * 64
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         report = store_report(
-            connection, catalog, dataset_independent_key=dataset_independent_key
+            session, catalog, dataset_independent_key=dataset_independent_key
         )
-    store_saved_report(owner_engine, user_id=saver, report_id=report.report_id)
+    store_saved_report(owner_sessions, user_id=saver, report_id=report.report_id)
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
     search = (
         f"/v2/reports?country_id=us&dataset_independent_key={dataset_independent_key}"
@@ -354,12 +354,14 @@ def test_a_search_by_key_reads_each_report_as_the_user_sees_it(
 
 
 def test_a_malformed_browser_credential_on_a_read_is_refused(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
 
     read = client.get(
@@ -375,27 +377,27 @@ def test_a_malformed_browser_credential_on_a_read_is_refused(
 
 
 def test_the_newest_request_wins_whichever_run_was_created_last(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     asker = browsers[0]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         # Not succeeded, so neither the default run nor the newest run.
         created_first = store_run(
-            connection, catalog, report, days_later=0, status="pending"
+            session, catalog, report, days_later=0, status="pending"
         )
         created_last = store_run(
-            connection,
+            session,
             catalog,
             report,
             days_later=1,
             status="succeeded",
             versions=NEWER_VERSIONS,
         )
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
     client = client_for(runtime_sessions, simulation_service)
     # Asked for the run created last first, then the one created first.
     for run_id in (created_last, created_first):
@@ -415,17 +417,19 @@ def test_the_newest_request_wins_whichever_run_was_created_last(
 
 
 def test_a_recalculated_window_run_is_never_the_default(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         unrecalculated = store_window(
-            connection,
+            session,
             catalog,
             years=(2026, 2027),
             settings=RunSettings(versions=CURRENT_VERSIONS, status="pending"),
         )
         recalculated = store_window(
-            connection,
+            session,
             catalog,
             years=(2026, 2027),
             settings=RunSettings(
@@ -435,12 +439,13 @@ def test_a_recalculated_window_run_is_never_the_default(
             ),
             report=unrecalculated.report,
         )
-        connection.execute(
-            text("UPDATE budget_window_runs SET recalculate = true WHERE id = :id"),
-            {"id": recalculated.window_run_id},
+        session.execute(
+            update(BudgetWindowRun)
+            .where(col(BudgetWindowRun.id) == recalculated.window_run_id)
+            .values(recalculate=True)
         )
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
 
     item = read_item(client, unrecalculated.report.report_id)
@@ -449,34 +454,32 @@ def test_a_recalculated_window_run_is_never_the_default(
 
 
 def test_of_two_saved_reports_of_one_report_the_one_saved_last_names_it(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     saver = browsers[0]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     first_saved = store_saved_report(
-        owner_engine, user_id=saver, report_id=report.report_id
+        owner_sessions, user_id=saver, report_id=report.report_id
     )
     last_saved = store_saved_report(
-        owner_engine, user_id=saver, report_id=report.report_id
+        owner_sessions, user_id=saver, report_id=report.report_id
     )
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         for saved_report_id, name, saved_at in (
             (first_saved, "First name", STARTED_AT),
             (last_saved, "Last name", STARTED_AT + timedelta(days=1)),
         ):
-            connection.execute(
-                text(
-                    "UPDATE user_report_associations SET name = :name, "
-                    "created_at = :saved_at WHERE id = :id"
-                ),
-                {"name": name, "saved_at": saved_at, "id": saved_report_id},
+            session.execute(
+                update(UserReportAssociation)
+                .where(col(UserReportAssociation.id) == saved_report_id)
+                .values(name=name, created_at=saved_at)
             )
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
 
     item = read_item(client, report.report_id, as_browser(saver))

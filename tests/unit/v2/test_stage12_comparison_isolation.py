@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from policyengine_api.data.v2.models import V2_METADATA
+from tests.unit.v2.v2_schema_reading import v2_mappers
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_COMPARISON_TABLES = {
@@ -34,12 +34,13 @@ def test_normal_routes_and_services_do_not_read_comparison_tables() -> None:
 
 
 def test_production_tables_have_no_comparison_table_dependency() -> None:
-    for table_name, table in V2_METADATA.tables.items():
+    for mapper in v2_mappers():
+        table_name = mapper.class_.__tablename__
         if table_name in LEGACY_COMPARISON_TABLES:
             continue
         targets = {
             foreign_key.target_fullname
-            for column in table.columns
+            for column in mapper.columns
             for foreign_key in column.foreign_keys
         }
         assert not any(

@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool
+from sqlalchemy import func, select
 
 from policyengine_api.data.v2 import privilege_reconciliation
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_DISPOSABLE_TEST
+from policyengine_api.data.v2.models import Region
 from policyengine_api.data.v2.privilege_reconciliation import (
     DEPLOYMENT_ENVIRONMENT,
     PrivilegeEntry,
@@ -28,81 +28,76 @@ from policyengine_api.data.v2.privilege_reconciliation import (
 )
 from policyengine_api.data.v2.privileges import READ, TablePrivilege, update_columns
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from tests.fixtures.database_sessions import create_role, drop_role, grant
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
 @pytest.fixture
-def superuser_engine(disposable_v2_database_url) -> Iterator[Engine]:
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture
-def temporary_role(superuser_engine) -> Iterator[Callable[[], str]]:
+def temporary_role(v2_owner_sessions) -> Iterator[Callable[[], str]]:
     """Return a builder of NOLOGIN roles that are dropped after the test."""
     created_roles: list[str] = []
 
-    def create_role() -> str:
+    def create_temporary_role() -> str:
         role = f"policyengine_privilege_test_{uuid4().hex[:12]}"
-        with superuser_engine.begin() as connection:
-            connection.execute(text(f'CREATE ROLE "{role}" NOLOGIN'))
+        with v2_owner_sessions.begin() as session:
+            create_role(session, role)
         created_roles.append(role)
         return role
 
     try:
-        yield create_role
+        yield create_temporary_role
     finally:
-        with superuser_engine.begin() as connection:
+        with v2_owner_sessions.begin() as session:
             for role in created_roles:
-                connection.execute(text(f'DROP OWNED BY "{role}"'))
-                connection.execute(text(f'DROP ROLE "{role}"'))
+                drop_role(session, role)
 
 
-def _has_privilege(engine: Engine, role: str, table: str, privilege: str) -> bool:
-    with engine.connect() as connection:
+def _has_privilege(
+    sessions: sessionmaker[Session], role: str, table: str, privilege: str
+) -> bool:
+    with sessions() as session:
         return bool(
-            connection.execute(
-                text("SELECT has_table_privilege(:role, :table, :privilege)"),
-                {"role": role, "table": f"public.{table}", "privilege": privilege},
+            session.execute(
+                select(func.has_table_privilege(role, f"public.{table}", privilege))
             ).scalar_one()
         )
 
 
 def _has_column_privilege(
-    engine: Engine, role: str, table: str, column: str, privilege: str
+    sessions: sessionmaker[Session],
+    role: str,
+    table: str,
+    column: str,
+    privilege: str,
 ) -> bool:
-    with engine.connect() as connection:
+    with sessions() as session:
         return bool(
-            connection.execute(
-                text("SELECT has_column_privilege(:role, :table, :column, :privilege)"),
-                {
-                    "role": role,
-                    "table": f"public.{table}",
-                    "column": column,
-                    "privilege": privilege,
-                },
+            session.execute(
+                select(
+                    func.has_column_privilege(
+                        role, f"public.{table}", column, privilege
+                    )
+                )
             ).scalar_one()
         )
 
 
 def test_apply_grants_declared_columns_alone_and_verify_checks_them(
-    superuser_engine, temporary_role
+    v2_owner_sessions, temporary_role
 ) -> None:
     role = temporary_role()
     declared = {role: {"regions": READ | {update_columns("label")}}}
-    with superuser_engine.begin() as connection:
-        first_plan, _defaults = apply_declared_privileges(connection, declared)
-    with superuser_engine.begin() as connection:
-        second_plan, _defaults = apply_declared_privileges(connection, declared)
-        missing = check_declared_privileges(connection, declared)
-        overrides = check_table_wide_overrides(connection, declared)
+    with v2_owner_sessions.begin() as session:
+        first_plan, _defaults = apply_declared_privileges(session, declared)
+    with v2_owner_sessions.begin() as session:
+        second_plan, _defaults = apply_declared_privileges(session, declared)
+        missing = check_declared_privileges(session, declared)
+        overrides = check_table_wide_overrides(session, declared)
 
     assert first_plan.grants == (
         PrivilegeEntry(role, "regions", "SELECT"),
@@ -110,15 +105,15 @@ def test_apply_grants_declared_columns_alone_and_verify_checks_them(
     )
     assert (second_plan.grants, second_plan.undeclared) == ((), ())
     assert (missing, overrides) == ([], [])
-    assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
+    assert _has_column_privilege(v2_owner_sessions, role, "regions", "label", "UPDATE")
     assert not _has_column_privilege(
-        superuser_engine, role, "regions", "code", "UPDATE"
+        v2_owner_sessions, role, "regions", "code", "UPDATE"
     )
-    assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
+    assert not _has_privilege(v2_owner_sessions, role, "regions", "UPDATE")
 
 
 def test_verify_fails_when_a_role_can_update_the_whole_table(
-    disposable_v2_database_url, superuser_engine, temporary_role, monkeypatch, tmp_path
+    disposable_v2_database_url, v2_owner_sessions, temporary_role, monkeypatch, tmp_path
 ) -> None:
     """``UPDATE`` on the whole table would let the role change every column."""
     role = temporary_role()
@@ -139,8 +134,8 @@ def test_verify_fails_when_a_role_can_update_the_whole_table(
     }
 
     apply_status = run("apply", environ=environ)
-    with superuser_engine.begin() as connection:
-        connection.execute(text(f'GRANT UPDATE ON TABLE public.regions TO "{role}"'))
+    with v2_owner_sessions.begin() as session:
+        grant(session, "UPDATE", on=Region, to=role)
     verify_status = run("verify", environ=environ)
     summary = summary_path.read_text(encoding="utf-8")
 
@@ -152,7 +147,7 @@ def test_verify_fails_when_a_role_can_update_the_whole_table(
 
 
 def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
-    disposable_v2_database_url, superuser_engine, temporary_role, monkeypatch, tmp_path
+    disposable_v2_database_url, v2_owner_sessions, temporary_role, monkeypatch, tmp_path
 ) -> None:
     """A new table's default privileges give UPDATE on the whole table.
 
@@ -171,16 +166,9 @@ def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
     monkeypatch.setattr(
         privilege_reconciliation, "ROLES_AWAITING_PROVISIONING", frozenset()
     )
-    with superuser_engine.begin() as connection:
-        connection.execute(
-            text(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.regions "
-                f'TO "{role}"'
-            )
-        )
-        connection.execute(
-            text(f'GRANT UPDATE (label, code) ON TABLE public.regions TO "{role}"')
-        )
+    with v2_owner_sessions.begin() as session:
+        grant(session, "SELECT, INSERT, UPDATE, DELETE", on=Region, to=role)
+        grant(session, "UPDATE (label, code)", on=Region, to=role)
     summary_path = tmp_path / "summary.md"
     environ = {
         V2_MIGRATION_DATABASE_URL: disposable_v2_database_url,
@@ -192,19 +180,19 @@ def test_apply_revokes_a_new_tables_whole_table_update_and_verify_passes(
     apply_status = run("apply", environ=environ)
     verify_status = run("verify", environ=environ)
     summary = summary_path.read_text(encoding="utf-8")
-    with superuser_engine.begin() as connection:
-        second_plan, _defaults = apply_declared_privileges(connection, declared)
+    with v2_owner_sessions.begin() as session:
+        second_plan, _defaults = apply_declared_privileges(session, declared)
 
     assert (apply_status, verify_status) == (0, 0)
     assert f"| `{role}` | `regions` | UPDATE, UPDATE (code) |" in summary
     assert f"| `{role}` | `regions` | UPDATE (label) |" in summary
     assert f"| `{role}` | `regions` | DELETE, INSERT |" in summary
-    assert not _has_privilege(superuser_engine, role, "regions", "UPDATE")
-    assert _has_column_privilege(superuser_engine, role, "regions", "label", "UPDATE")
+    assert not _has_privilege(v2_owner_sessions, role, "regions", "UPDATE")
+    assert _has_column_privilege(v2_owner_sessions, role, "regions", "label", "UPDATE")
     assert not _has_column_privilege(
-        superuser_engine, role, "regions", "code", "UPDATE"
+        v2_owner_sessions, role, "regions", "code", "UPDATE"
     )
-    assert _has_privilege(superuser_engine, role, "regions", "DELETE")
+    assert _has_privilege(v2_owner_sessions, role, "regions", "DELETE")
     assert (second_plan.revocations, second_plan.grants) == ((), ())
 
 
@@ -233,26 +221,26 @@ def test_apply_grants_nothing_the_second_time_and_verify_passes(
 
 
 def test_apply_reports_an_extra_privilege_and_does_not_revoke_it(
-    superuser_engine, temporary_role
+    v2_owner_sessions, temporary_role
 ) -> None:
     role = temporary_role()
     declared = {role: {"regions": READ}}
-    with superuser_engine.begin() as connection:
-        first_plan, _defaults = apply_declared_privileges(connection, declared)
-        connection.execute(text(f'GRANT DELETE ON TABLE public.regions TO "{role}"'))
-    with superuser_engine.begin() as connection:
-        second_plan, _defaults = apply_declared_privileges(connection, declared)
-        missing_after_apply = check_declared_privileges(connection, declared)
+    with v2_owner_sessions.begin() as session:
+        first_plan, _defaults = apply_declared_privileges(session, declared)
+        grant(session, "DELETE", on=Region, to=role)
+    with v2_owner_sessions.begin() as session:
+        second_plan, _defaults = apply_declared_privileges(session, declared)
+        missing_after_apply = check_declared_privileges(session, declared)
 
     assert first_plan.grants == (PrivilegeEntry(role, "regions", "SELECT"),)
     assert second_plan.grants == ()
     assert second_plan.undeclared == (PrivilegeEntry(role, "regions", "DELETE"),)
     assert missing_after_apply == []
-    assert _has_privilege(superuser_engine, role, "regions", "DELETE")
+    assert _has_privilege(v2_owner_sessions, role, "regions", "DELETE")
 
 
 def test_a_missing_role_blocks_every_grant_and_fails_verification(
-    superuser_engine, temporary_role
+    v2_owner_sessions, temporary_role
 ) -> None:
     role = temporary_role()
     absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
@@ -260,13 +248,13 @@ def test_a_missing_role_blocks_every_grant_and_fails_verification(
         role: {"regions": READ},
         absent_role: {"regions": frozenset({TablePrivilege.SELECT})},
     }
-    with superuser_engine.begin() as connection:
-        plan, _defaults = apply_declared_privileges(connection, declared)
-        missing = check_declared_privileges(connection, declared)
+    with v2_owner_sessions.begin() as session:
+        plan, _defaults = apply_declared_privileges(session, declared)
+        missing = check_declared_privileges(session, declared)
 
     assert not plan.can_apply
     assert plan.missing_roles == (absent_role,)
-    assert not _has_privilege(superuser_engine, role, "regions", "SELECT")
+    assert not _has_privilege(v2_owner_sessions, role, "regions", "SELECT")
     assert missing == sorted(
         [
             PrivilegeEntry(absent_role, "regions", "SELECT"),
@@ -276,18 +264,18 @@ def test_a_missing_role_blocks_every_grant_and_fails_verification(
 
 
 def test_a_role_awaiting_creation_is_skipped_until_it_exists(
-    superuser_engine, temporary_role
+    v2_owner_sessions, temporary_role
 ) -> None:
     role = temporary_role()
     absent_role = f"policyengine_privilege_test_absent_{uuid4().hex[:12]}"
     declared = {role: {"regions": READ}, absent_role: {"regions": READ}}
-    with superuser_engine.begin() as connection:
+    with v2_owner_sessions.begin() as session:
         plan, _defaults = apply_declared_privileges(
-            connection, declared, roles_awaiting_creation={absent_role}
+            session, declared, roles_awaiting_creation={absent_role}
         )
-        skipped = skipped_roles(connection, declared, {absent_role})
+        skipped = skipped_roles(session, declared, {absent_role})
         missing = check_declared_privileges(
-            connection,
+            session,
             {name: tables for name, tables in declared.items() if name not in skipped},
         )
 
@@ -296,7 +284,7 @@ def test_a_role_awaiting_creation_is_skipped_until_it_exists(
     assert plan.grants == (PrivilegeEntry(role, "regions", "SELECT"),)
     assert skipped == (absent_role,)
     assert missing == []
-    assert _has_privilege(superuser_engine, role, "regions", "SELECT")
+    assert _has_privilege(v2_owner_sessions, role, "regions", "SELECT")
 
 
 def test_the_deploy_steps_pass_and_name_a_role_awaiting_creation(

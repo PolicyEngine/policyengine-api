@@ -10,11 +10,9 @@ import os
 import sys
 from typing import TYPE_CHECKING, NamedTuple
 
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
-from sqlalchemy.pool import NullPool
 
-from policyengine_api.data.orm import build_session_factory
+from policyengine_api.data.orm import unpooled_v1_sessions
 from policyengine_api.gcp_logging import logger
 from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
@@ -114,11 +112,16 @@ def validate_command_environment(
 
 def _proxy_event_service(
     environ: Mapping[str, str],
-) -> tuple[HouseholdService | None, Engine | None]:
-    """Use the workflow-authenticated Cloud SQL proxy when it is selected."""
+    cleanup: contextlib.ExitStack,
+) -> HouseholdService | None:
+    """Use the workflow-authenticated Cloud SQL proxy when it is selected.
+
+    Its Session factories stay open until ``cleanup`` closes, which disposes
+    of their engine; the engine keeps no connection pool.
+    """
     raw_port = environ.get("POLICYENGINE_DB_PROXY_PORT", "").strip()
     if not raw_port:
-        return None, None
+        return None
     try:
         port = int(raw_port)
     except ValueError as error:
@@ -129,18 +132,19 @@ def _proxy_event_service(
         raise HouseholdEventCommandConfigurationError(msg)
 
     password = _required(environ, "POLICYENGINE_DB_PASSWORD")
-    engine = create_engine(
-        URL.create(
-            "mysql+pymysql",
-            username=V1_MIGRATION_USER,
-            password=password,
-            host=V1_PROXY_HOST,
-            port=port,
-            database=V1_DATABASE_NAME,
-        ),
-        poolclass=NullPool,
+    sessions = cleanup.enter_context(
+        unpooled_v1_sessions(
+            URL.create(
+                "mysql+pymysql",
+                username=V1_MIGRATION_USER,
+                password=password,
+                host=V1_PROXY_HOST,
+                port=port,
+                database=V1_DATABASE_NAME,
+            )
+        )
     )
-    return HouseholdService(build_session_factory(engine)), engine
+    return HouseholdService(sessions)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -209,10 +213,11 @@ def main(
     values = os.environ if environ is None else environ
     event = _SelectedEvent(args.country_id, args.legacy_household_id)
     identity: dict[str, str] | None = None
-    v1_engine: Engine | None = None
+    # Closes the proxy's Session factories, if any, and disposes of their engine.
+    proxy_cleanup = contextlib.ExitStack()
     try:
         identity = validate_command_environment(args.environment, values)
-        event_service, v1_engine = _proxy_event_service(values)
+        event_service = _proxy_event_service(values, proxy_cleanup)
         if event_service is None:
             result = process_household_event_after_commit(
                 args.country_id,
@@ -255,8 +260,7 @@ def main(
         )
         return 1
     finally:
-        if v1_engine is not None:
-            v1_engine.dispose()
+        proxy_cleanup.close()
     # Outcome logging must not change the command result.
     with contextlib.suppress(Exception):
         _record_command_outcome(

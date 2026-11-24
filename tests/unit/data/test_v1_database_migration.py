@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
+from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, text
 from sqlalchemy.engine import URL
 
 import scripts.v1_database_migration as migration
@@ -115,13 +115,9 @@ def test_database_state_is_head_only_when_all_script_heads_are_applied():
 
 
 def test_metadata_difference_descriptions_are_stable_and_do_not_include_data():
-    metadata = MetaData()
-    question = Table(
-        "question",
-        metadata,
-        Column("question_id", Integer, primary_key=True),
-        Column("question", String(255)),
-    )
+    # Alembic names an extra table by the table it reflected, of which only the
+    # name is described.
+    question = SimpleNamespace(name="question")
 
     assert describe_metadata_difference(("remove_table", question)) == (
         "extra_table:question"
@@ -151,7 +147,7 @@ def test_metadata_difference_descriptions_are_stable_and_do_not_include_data():
                     "reform_impact",
                     "dataset",
                     {},
-                    text("'default'"),
+                    "'default'",
                     None,
                 )
             ]
@@ -170,30 +166,29 @@ def test_metadata_difference_rejects_unknown_shapes_without_repr_leakage():
     assert secret not in str(error.value)
 
 
-def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
-    connection = object()
+def test_upgrade_cli_commits_the_session_it_supplies(monkeypatch):
+    session = object()
+    opened_urls = []
 
-    class FakeEngine:
+    class FakeSessions:
         def begin(self):
-            return nullcontext(connection)
+            return nullcontext(session)
 
-        def connect(self):
+        def __call__(self):
             msg = "upgrade must use a committing transaction"
             raise AssertionError(msg)
 
-        def dispose(self):
-            pass
+    @contextmanager
+    def unpooled_v1_sessions(url):
+        opened_urls.append(url)
+        yield FakeSessions()
 
     calls = []
-    monkeypatch.setattr(
-        migration, "create_engine", lambda *_args, **_kwargs: FakeEngine()
-    )
+    monkeypatch.setattr(migration, "unpooled_v1_sessions", unpooled_v1_sessions)
     monkeypatch.setattr(
         migration,
         "upgrade_database",
-        lambda supplied_connection, **kwargs: calls.append(
-            (supplied_connection, kwargs)
-        ),
+        lambda supplied_session, **kwargs: calls.append((supplied_session, kwargs)),
     )
     monkeypatch.setenv("ALEMBIC_DATABASE_URL", "mysql+pymysql://unused")
 
@@ -208,9 +203,10 @@ def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
         )
         == 0
     )
+    assert opened_urls == ["mysql+pymysql://unused"]
     assert calls == [
         (
-            connection,
+            session,
             {
                 "backup_id": "verified-backup",
             },
@@ -220,17 +216,17 @@ def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
 
 @pytest.mark.parametrize("state", [DatabaseState.UNVERSIONED, DatabaseState.INVALID])
 def test_upgrade_refuses_databases_without_valid_revision_history(monkeypatch, state):
-    class FakeConnection:
+    class FakeSession:
         def scalar(self, *_args, **_kwargs):
             return 1
 
         def execute(self, *args, **kwargs):
             pass
 
-    monkeypatch.setattr(migration, "database_state", lambda _connection: state)
+    monkeypatch.setattr(migration, "database_state", lambda _session: state)
 
     with pytest.raises(RuntimeError, match="no valid Alembic revision"):
-        upgrade_database(FakeConnection(), backup_id="verified-backup")
+        upgrade_database(FakeSession(), backup_id="verified-backup")
 
 
 @pytest.mark.parametrize(

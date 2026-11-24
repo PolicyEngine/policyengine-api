@@ -575,7 +575,7 @@ PERSISTENT_ENVIRONMENT = {
 }
 
 
-def _engine_never_built(_settings: object) -> object:
+def _sessions_never_opened(_settings: object) -> object:
     msg = "the command must stop before connecting"
     raise AssertionError(msg)
 
@@ -588,7 +588,7 @@ def test_creating_roles_is_refused_for_a_persistent_database() -> None:
             "apply",
             create_roles=True,
             environ=PERSISTENT_ENVIRONMENT,
-            engine_builder=_engine_never_built,
+            session_factories=_sessions_never_opened,
         )
 
 
@@ -600,7 +600,7 @@ def test_a_persistent_database_needs_staging_or_production(environment: str) -> 
         privilege_reconciliation.run(
             "verify",
             environ=PERSISTENT_ENVIRONMENT | {"DEPLOYMENT_ENVIRONMENT": environment},
-            engine_builder=_engine_never_built,
+            session_factories=_sessions_never_opened,
         )
 
 

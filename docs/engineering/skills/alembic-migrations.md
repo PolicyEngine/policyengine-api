@@ -114,9 +114,9 @@ The entries:
    Publication writes rows with Postgres `COPY ... FROM STDIN`, which
    SQLAlchemy has no API for. `copy_rows` in
    `policyengine_api/data/v2/catalog/publication_staging.py` uses the psycopg
-   connection beneath a SQLAlchemy `Connection`
-   (`connection.connection.driver_connection`) that SQLAlchemy opened and still
-   manages, so the transaction stays SQLAlchemy's. It imports `psycopg.sql` to
+   connection beneath the Connection the publishing Session holds
+   (`session.connection().connection.driver_connection`), which SQLAlchemy
+   opened and still manages, so the transaction stays the Session's. It imports `psycopg.sql` to
    compose the `COPY` statement and `psycopg.types.json.Jsonb` to send JSON
    values.
 2. **Temporary staging tables** (`schema-change`). `create_staging_tables` in
@@ -214,7 +214,11 @@ Two kinds of module have a role of their own:
   `policyengine_api/data/orm.py` (with `policyengine_api/data/orm_pool_events.py`,
   whose listeners record the v1 pool's events),
   `policyengine_api/data/v2/database.py`, and
-  `tests/fixtures/database_sessions.py` for the tests. They hand out Session
+  `tests/fixtures/database_sessions.py` for the tests, with
+  `tests/unit/data/test_orm_pool_events.py`, whose tests drive the pool
+  `orm_pool_events.py` listens to (they invalidate, detach and recycle
+  connections and hold two at once, which no Session offers; their statements
+  still run in Sessions). They hand out Session
   factories, never an Engine or a Connection. When a module needs its own
   engine settings, such as `NullPool`, a deploy-time role or a separate URL,
   the session-factory module gets a function that returns a Session factory
@@ -250,11 +254,19 @@ integration fixtures built on it (`tests/integration/conftest.py`):
 | `sqlite_v2_sessions(foreign_keys=False)` | Session factories of a new in-memory SQLite copy of the v2 schema, whose savepoints behave as on PostgreSQL (Python 3.12's sqlite3 `autocommit=False`); with `foreign_keys`, SQLite enforces the foreign keys. |
 | `sqlite_v1_sessions(json_serializer=None)` | API v1's Session factories of a new in-memory SQLite copy of its schema, with SQLite numbering policies. |
 | `serve_v1_sessions(monkeypatch, sessions)` | Makes `orm.get_v1_session_factory()` open `sessions`' connections for the test. |
+| `v1_cloud_sql_sessions(monkeypatch, url)` | API v1's own Session factory, its Cloud SQL engine built as in production but connected to the local MySQL server at `url`. |
+| `sqlite_v2_file_sessions(path)` | Session factories of a SQLite file copy of the v2 schema, one connection per Session, every transaction starting with `BEGIN IMMEDIATE`, for concurrency tests. |
+| `single_connection_v2_sessions(url)` | The owner's Session factories on a pool of exactly one connection, so every Session gets the same pooled connection back. |
 | `act_as(session, role)`, `act_as_owner(session)` | Act as `role`, or as the database's owner again, until the transaction ends. |
 | `schema_inspector(source)` | SQLAlchemy's `Inspector` of the database a Session or Session factory uses. |
 | `recorded_statements(source)` | A context manager yielding the list of SQL statements sent through a Session or Session factory inside it. |
+| `recorded_driver_connection_states(source)` | A context manager yielding, for each statement, which driver connection it ran on, its autocommit mode and whether it was inside a transaction. |
+| `query_plan(session, statement)` | PostgreSQL's plan (`EXPLAIN`) of an ORM statement, its rows joined. |
+| `v2_schema_statements(dialect_name)` | The v2 schema's CREATE statements, compiled for a dialect, with no database. |
 | `delete_all_rows(session, registry)` | Deletes every row of every table a registry's mapped classes map, such as `V1Base.registry`. |
 | `truncate(session, *models)` | `TRUNCATE ... CASCADE` of the models' tables. |
+| `drop_tables(session, *models)` | `DROP TABLE` of the models' tables, so a later query on them fails with the database's own error. |
+| `create_registry_tables(session, registry)`, `drop_registry_tables(session, registry)` | Create a registry's tables (failing if one exists), or drop those that exist, in the Session's transaction, for tables a test declares itself. |
 | `create_role(session, role)`, `drop_role(session, role)` | Create a role that can't log in; drop what it owns and was granted, then the role. |
 | `grant(session, privileges, on=Model, to=role)` | `GRANT privileges ON TABLE` the model's table `TO` the role. |
 | `grant_declared_v2_privileges(url, declared)` | Creates the missing managed roles and grants their declared privileges, as `reconcile_v2_privileges.py apply --create-missing-roles` does. |
@@ -316,11 +328,11 @@ finding, and on an entry with an unknown category, a `no-orm-form` entry
 without a `match` or an existing file, or a `migration-revision` entry that
 names no file. Only statements SQLAlchemy can't express get an entry: `GRANT`
 and `REVOKE`, `CREATE`, `ALTER` and `DROP ROLE` (with `DROP OWNED BY`),
-`TRUNCATE`, `COPY`, and connection settings no SQL function sets, such as
-SQLite's `foreign_keys`. Roles and Postgres settings inside a transaction
-need none: `set_config` sets them. Keep the entries in as few modules as
-possible: the test session module, `privilege_reconciliation.py` and
-`publication_staging.py`. The entries:
+`DROP TABLE`, `TRUNCATE`, `COPY`, `EXPLAIN`, `ANALYZE`, Alembic's need for a
+Connection, and connection settings no SQL function sets, such as SQLite's
+`foreign_keys` and `BEGIN IMMEDIATE`. Roles and Postgres settings inside a
+transaction need none: `set_config` sets them. Keep the entries in as few
+modules as possible. The entries:
 
 1. **Alembic environments and revisions** (`migration-revision`),
    `migrations/**/*.py`. The environments run Alembic's migration context on
@@ -332,11 +344,34 @@ possible: the test session module, `privilege_reconciliation.py` and
    table each mapped class maps (`mapper.local_table`) and the tables a
    declarative base's metadata holds (`class_registry.metadata.tables`). It
    runs no statement.
-3. **The tests' statements with no ORM form** (`no-orm-form`, six entries),
+3. **The tests' statements with no ORM form** (`no-orm-form`, nine entries),
    in `tests/fixtures/database_sessions.py`: SQLite's `PRAGMA foreign_keys`
-   on each new in-memory connection; `TRUNCATE ... CASCADE` for cleanup; and
-   `CREATE ROLE`, `DROP OWNED BY`, `DROP ROLE` and `GRANT` for the privilege
-   tests' temporary roles.
+   on each new in-memory connection; `BEGIN IMMEDIATE` on the concurrency
+   test's SQLite file; `TRUNCATE ... CASCADE` for cleanup; `DROP TABLE`, so a
+   route's catalog query fails with the database's own error; `EXPLAIN`, to
+   read the plan of an ORM statement; and `CREATE ROLE`, `DROP OWNED BY`,
+   `DROP ROLE` and `GRANT` for the privilege tests' temporary roles.
+4. **Catalog publication** (`no-orm-form`, three entries).
+   `publication_staging.py` takes the Connection the publishing Session holds
+   (`session.connection()`) to create the `TEMPORARY` staging tables with
+   `MetaData.create_all` and to stream rows with `COPY ... FROM STDIN`, on a
+   cursor of the psycopg connection beneath it (`driver_connection.cursor()`).
+   `publication_statistics.py` runs one `ANALYZE` of the catalog tables a
+   publication wrote, after it commits.
+5. **Privilege reconciliation** (`no-orm-form`, two entries), in
+   `privilege_reconciliation.py`: `CREATE ROLE ... NOLOGIN` for missing
+   managed roles, only in the disposable test database, and the `GRANT` and
+   `REVOKE` statements `privilege_plans` builds, with identifiers checked by
+   `safe_identifier` and quoted by the session's dialect.
+6. **Alembic's Connection** (`no-orm-form`, two entries). Alembic's
+   `MigrationContext`, `compare_metadata` and `command.upgrade` take a
+   Connection, so `pending_revisions.py` (the migration qualification
+   commands' pending-revision check) and `scripts/v1_database_migration.py`
+   give them the Connection their Session holds, inside its transaction.
+7. **The dialect's name** (`no-orm-form`), in
+   `services/v2/user_types/database_connectors/reads.py`:
+   `session.get_bind()` reads it to skip PostgreSQL's advisory lock on the
+   SQLite test databases. It runs no statement on the engine.
 
 A new exception is a rule change: add a `[[rule.exception]]` entry to the rule
 in `rules/registry.toml`, explain here why the ORM can't express the

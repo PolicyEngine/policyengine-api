@@ -20,10 +20,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
@@ -37,6 +33,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from tests.fixtures.database_sessions import recorded_statements
 from tests.fixtures.economy_results import RunIds, uk_economy_result, us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
@@ -51,10 +48,12 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows, StoredReport
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -74,31 +73,31 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalogs(owner_engine: Engine) -> Iterator[dict[str, CatalogRows]]:
+def catalogs(owner_sessions: sessionmaker[Session]) -> Iterator[dict[str, CatalogRows]]:
     """Store a US and a UK catalog, and delete them and their reports after."""
-    with owner_engine.begin() as connection:
-        stored = {
-            country: store_catalog(connection, country) for country in ("us", "uk")
-        }
+    with owner_sessions.begin() as session:
+        stored = {country: store_catalog(session, country) for country in ("us", "uk")}
     yield stored
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         for catalog in stored.values():
-            delete_catalog(connection, catalog)
+            delete_catalog(session, catalog)
 
 
 @pytest.fixture
-def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
+def client(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> TestClient:
     """Serve the report routes as the runtime role."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    sessions = sessionmaker(runtime_engine, class_=Session)
+    sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
@@ -112,12 +111,11 @@ def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
         specification=RouteImplementation.FLASK_FALLBACK,
         metadata=RouteImplementation.FLASK_FALLBACK,
     )
-    yield TestClient(
+    return TestClient(
         create_asgi_app(
             Flask(__name__), dependencies=dependencies, route_settings=settings
         )
     )
-    runtime_engine.dispose()
 
 
 def year_result(country: str, year: int) -> dict[str, Any]:
@@ -148,7 +146,7 @@ class StoredWindow:
 
 
 def store_window(
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     report: StoredReport,
     window: StoredWindow,
@@ -158,13 +156,13 @@ def store_window(
     Return the window run's ID and each year's report and simulation run IDs.
     """
     settings = window.settings
-    window_run_id = store_budget_window_run(connection, catalog, report, settings)
+    window_run_id = store_budget_window_run(session, catalog, report, settings)
     year_run_ids = {}
     for year, status in window.year_statuses.items():
         run_ids = store_report_run(
-            connection,
+            session,
             catalog,
-            store_year_simulations(connection, catalog, report, year),
+            store_year_simulations(session, catalog, report, year),
             RunSettings(
                 versions=settings.versions,
                 status=status,
@@ -196,13 +194,15 @@ def read_item(client: TestClient, report_id: UUID, country: str) -> dict[str, An
 
 
 def test_a_budget_window_reads_its_newest_run_years_and_result(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=3)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=3)
         window_run_id, year_run_ids = store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -266,13 +266,15 @@ def test_a_budget_window_reads_its_newest_run_years_and_result(
 
 
 def test_a_uk_budget_window_has_no_state_tax(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=2)
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -291,13 +293,15 @@ def test_a_uk_budget_window_has_no_state_tax(
 
 
 def test_a_running_window_answers_each_years_status_without_a_result(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=3)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=3)
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -319,14 +323,16 @@ def test_a_running_window_answers_each_years_status_without_a_result(
 
 
 def test_a_failed_window_says_why_and_which_years_failed(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
     message = "budget_window_year_failed: The budget window's 2027 report run failed."
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=3)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=3)
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -346,11 +352,13 @@ def test_a_failed_window_says_why_and_which_years_failed(
 
 
 def test_a_budget_window_with_no_run_answers_its_definition(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=10)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=10)
 
     item = read_item(client, report.report_id, "us")
 
@@ -359,13 +367,15 @@ def test_a_budget_window_with_no_run_answers_its_definition(
 
 
 def test_an_older_succeeded_window_run_is_read_before_a_newer_pending_one(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=2)
         succeeded_run_id, _ = store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -374,7 +384,7 @@ def test_an_older_succeeded_window_run_is_read_before_a_newer_pending_one(
             ),
         )
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -396,15 +406,17 @@ def test_an_older_succeeded_window_run_is_read_before_a_newer_pending_one(
 
 
 def test_of_two_window_runs_created_together_the_larger_id_is_the_newest(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=1)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=1)
         # The larger ID is stored first, so insertion order can't pick it.
         for run_id, status in ((LARGER_RUN_ID, "failed"), (SMALLER_RUN_ID, "pending")):
             store_window(
-                connection,
+                session,
                 catalog,
                 report,
                 StoredWindow(
@@ -422,13 +434,15 @@ def test_of_two_window_runs_created_together_the_larger_id_is_the_newest(
 
 
 def test_a_succeeded_window_missing_a_years_result_is_unreadable(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=2)
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -448,11 +462,13 @@ def test_a_succeeded_window_missing_a_years_result_is_unreadable(
 
 
 def test_a_budget_window_is_not_found_in_another_country(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=2)
 
     response = client.get(f"/v2/reports/{report.report_id}?country_id=uk")
 
@@ -460,21 +476,23 @@ def test_a_budget_window_is_not_found_in_another_country(
 
 
 def test_listing_answers_budget_windows_with_their_years_beside_economy_reports(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        economy = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        economy = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             economy,
             RunSettings(versions=CURRENT_VERSIONS),
             result=us_economy_result(),
         )
-        succeeded_window = store_report(connection, catalog, budget_window_size=2)
+        succeeded_window = store_report(session, catalog, budget_window_size=2)
         window_run_id, _ = store_window(
-            connection,
+            session,
             catalog,
             succeeded_window,
             StoredWindow(
@@ -482,7 +500,7 @@ def test_listing_answers_budget_windows_with_their_years_beside_economy_reports(
                 {2026: "succeeded", 2027: "succeeded"},
             ),
         )
-        unrun_window = store_report(connection, catalog, budget_window_size=5)
+        unrun_window = store_report(session, catalog, budget_window_size=5)
     named = (
         succeeded_window.report_id,
         uuid4(),
@@ -511,15 +529,17 @@ def test_listing_answers_budget_windows_with_their_years_beside_economy_reports(
 
 
 def test_a_succeeded_window_whose_result_cannot_be_read_is_still_listed(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     # Listing never reads the window's figures, so a window whose years
     # stored no result rows is listed like any other.
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=2)
         store_window(
-            connection,
+            session,
             catalog,
             report,
             StoredWindow(
@@ -538,18 +558,18 @@ def test_a_succeeded_window_whose_result_cannot_be_read_is_still_listed(
 
 
 def test_listing_reads_any_number_of_windows_in_two_queries(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
-    managed_v2_roles,
-    v2_engine_as_role,
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        reports = [store_report(connection, catalog)]
+    with owner_sessions.begin() as session:
+        reports = [store_report(session, catalog)]
         for _ in range(3):
-            window = store_report(connection, catalog, budget_window_size=2)
+            window = store_report(session, catalog, budget_window_size=2)
             store_window(
-                connection,
+                session,
                 catalog,
                 window,
                 StoredWindow(
@@ -558,24 +578,16 @@ def test_listing_reads_any_number_of_windows_in_two_queries(
                 ),
             )
             reports.append(window)
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    statements: list[str] = []
-
-    def record_statement(
-        _connection: Any, _cursor: Any, statement: str, *_arguments: Any
-    ) -> None:
-        statements.append(statement)
-
-    event.listen(runtime_engine, "before_cursor_execute", record_statement)
+    runtime_sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     service = V2StoredReportService(
-        StoredReportDatabaseSession(sessionmaker(runtime_engine, class_=Session)),
+        StoredReportDatabaseSession(runtime_sessions),
         current_versions=current_versions,
     )
 
-    listed = service.list_reports(
-        country_id="us", report_ids=[report.report_id for report in reports]
-    )
-    runtime_engine.dispose()
+    with recorded_statements(runtime_sessions) as statements:
+        listed = service.list_reports(
+            country_id="us", report_ids=[report.report_id for report in reports]
+        )
 
     assert [read.kind for read in listed] == [
         "economy",

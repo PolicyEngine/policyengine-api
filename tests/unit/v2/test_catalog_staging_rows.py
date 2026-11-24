@@ -8,9 +8,13 @@ from dataclasses import replace
 from psycopg.types.json import Jsonb
 
 from policyengine_api.data.v2.catalog.publication_staging import (
-    STAGE_CATALOG_VARIABLES,
-    STAGING_TABLES,
     _catalog_rows,
+    column_names,
+    table_name,
+)
+from policyengine_api.data.v2.catalog.publication_staging_base import (
+    STAGING_MODELS,
+    StagedVariable,
 )
 from policyengine_api.data.v2.catalog.records import EnumValueRecord
 from tests.fixtures.v2_catalog import normalized_catalog
@@ -27,7 +31,7 @@ def test_catalog_rows_stream_every_staging_table_lazily_in_table_order() -> None
 
     rows_by_table = _catalog_rows(country)
 
-    assert list(rows_by_table) == list(STAGING_TABLES)
+    assert list(rows_by_table) == list(STAGING_MODELS)
     assert all(inspect.isgenerator(rows) for rows in rows_by_table.values())
 
 
@@ -37,8 +41,8 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
     parameter_names = {parameter.id: parameter.name for parameter in country.parameters}
 
     rows = {
-        table.name: [_plain(row) for row in table_rows]
-        for table, table_rows in _catalog_rows(country).items()
+        table_name(model): [_plain(row) for row in table_rows]
+        for model, table_rows in _catalog_rows(country).items()
     }
 
     assert rows["stage_catalog_models"] == [
@@ -157,9 +161,9 @@ def test_enum_values_are_staged_as_value_and_label_objects_in_order() -> None:
     )
     country = replace(country, variables=(variable,))
 
-    (row,) = (_plain(row) for row in _catalog_rows(country)[STAGE_CATALOG_VARIABLES])
+    (row,) = (_plain(row) for row in _catalog_rows(country)[StagedVariable])
 
-    staged_column_names = [column.name for column in STAGE_CATALOG_VARIABLES.columns]
+    staged_column_names = column_names(StagedVariable)
     assert row[staged_column_names.index("enum_values")] == (
         "jsonb",
         [{"value": "SINGLE", "label": "Single"}, {"value": "JOINT", "label": 2}],

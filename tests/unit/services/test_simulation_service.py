@@ -8,6 +8,7 @@ from policyengine_api.services.simulation_service import (
     SimulationCreateResult,
     SimulationService,
 )
+from tests.fixtures.database_sessions import recorded_statements
 
 
 @pytest.fixture
@@ -276,24 +277,14 @@ def test_creating_a_simulation_never_locks_a_household_row(
     unrelated household inserts into that range. What serializes a repeated
     create is the locking read of `simulations` itself, which is still taken.
     """
-    from sqlalchemy import event
-
-    statements = []
-    engine = orm_session_factory.kw["bind"]
-
-    @event.listens_for(engine, "before_cursor_execute", named=True)
-    def record(**event_arguments):
-        statements.append(" ".join(event_arguments["statement"].split()).lower())
-
-    try:
+    with recorded_statements(orm_session_factory) as sent_statements:
         result = service.get_or_create_simulation(
             country_id="us",
             population_id=population_id,
             population_type="household",
             policy_id=1,
         )
-    finally:
-        event.remove(engine, "before_cursor_execute", record)
+    statements = [" ".join(statement.split()).lower() for statement in sent_statements]
 
     assert result.created is True
     selects = [item for item in statements if item.startswith("select")]

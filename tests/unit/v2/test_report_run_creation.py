@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Report,
     ReportRun,
     ReportRunStatus,
@@ -25,6 +24,12 @@ from policyengine_api.data.v2.report_runs import (
     ReportRunSimulationRuns,
     create_report_run,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
 
 # The simulation runs each report run compares. SQLite doesn't enforce foreign
 # keys, so these tests store no simulation run rows for them.
@@ -34,15 +39,9 @@ SIMULATION_RUNS = ReportRunSimulationRuns(
 
 
 @pytest.fixture
-def engine():
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(test_engine)
-    yield test_engine
-    test_engine.dispose()
+def sessions() -> Iterator[sessionmaker[Session]]:
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 def _create_report(session: Session) -> Report:
@@ -60,9 +59,9 @@ def _create_report(session: Session) -> Report:
     return report
 
 
-def test_unknown_report_is_rejected_before_any_validation(engine) -> None:
+def test_unknown_report_is_rejected_before_any_validation(sessions) -> None:
     with (
-        Session(engine) as session,
+        sessions(expire_on_commit=True) as session,
         pytest.raises(ReportNotFoundError, match="does not exist"),
     ):
         create_report_run(
@@ -79,8 +78,8 @@ def test_unknown_report_is_rejected_before_any_validation(engine) -> None:
         )
 
 
-def test_manual_run_without_a_key_is_rejected_before_version_checks(engine) -> None:
-    with Session(engine) as session:
+def test_manual_run_without_a_key_is_rejected_before_version_checks(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
 
         with pytest.raises(
@@ -105,11 +104,11 @@ def test_manual_run_without_a_key_is_rejected_before_version_checks(engine) -> N
     [("", "4.5.6"), ("1.2.3", "")],
 )
 def test_empty_package_versions_are_rejected(
-    engine,
+    sessions,
     country_package_version: str,
     policyengine_version: str,
 ) -> None:
-    with Session(engine) as session:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
 
         with pytest.raises(
@@ -129,8 +128,8 @@ def test_empty_package_versions_are_rejected(
             )
 
 
-def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
-    with Session(engine) as session:
+def test_run_without_a_key_is_inserted_without_a_savepoint(sessions) -> None:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
 
         run = create_report_run(
@@ -159,7 +158,7 @@ def test_run_without_a_key_is_inserted_without_a_savepoint(engine) -> None:
 
 
 def test_conflict_without_a_matching_keyed_run_reraises(
-    engine,
+    sessions,
     monkeypatch,
 ) -> None:
     conflict = IntegrityError("insert", {}, Exception("unrelated constraint"))
@@ -169,7 +168,7 @@ def test_conflict_without_a_matching_keyed_run_reraises(
         raise conflict
         yield
 
-    with Session(engine) as session:
+    with sessions(expire_on_commit=True) as session:
         report = _create_report(session)
         monkeypatch.setattr(session, "begin_nested", failing_savepoint)
 

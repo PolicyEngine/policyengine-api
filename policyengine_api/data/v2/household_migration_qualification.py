@@ -7,13 +7,7 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from alembic.config import Config
-from alembic.migration import MigrationContext
-from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, Engine, func, inspect, select
-from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.pool import NullPool
-from sqlmodel import create_engine
+from sqlalchemy import func, select
 
 from policyengine_api.data.v2.models import (
     Household,
@@ -22,6 +16,7 @@ from policyengine_api.data.v2.models import (
     Simulation,
     UserHouseholdAssociation,
 )
+from policyengine_api.data.v2.pending_revisions import v2_revision_is_pending
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     V2DatabaseSettings,
@@ -30,9 +25,12 @@ from policyengine_api.data.v2.settings import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
+    from contextlib import AbstractContextManager
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 HOUSEHOLD_MIGRATION_REVISION = "724b1b11a33e"
-V2_ALEMBIC_CONFIG = "alembic-v2.ini"
 
 
 class ScalarExecutor(Protocol):
@@ -153,52 +151,47 @@ def require_no_retained_household_data(counts: HouseholdDataCounts) -> None:
         raise RetainedHouseholdDataError(counts)
 
 
-def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
-    """Build an isolated connection pool for one qualification attempt."""
-    return create_engine(settings.connection.url, poolclass=NullPool)
+def open_qualification_sessions(
+    settings: V2DatabaseSettings,
+) -> AbstractContextManager[sessionmaker[Session]]:
+    """Open Session factories for one qualification attempt.
+
+    Their engine keeps no pool, and every transaction is READ ONLY.
+    """
+    from policyengine_api.data.v2.database import unpooled_v2_read_only_sessions
+
+    return unpooled_v2_read_only_sessions(settings.connection.url)
 
 
-def _read_and_require_counts(connection: Connection) -> HouseholdDataCounts:
-    try:
-        existing_tables = inspect(connection).get_table_names(schema="public")
-    except NoInspectionAvailable:
-        existing_tables = None
-    counts = read_household_data_counts(connection, existing_tables)
+def _read_and_require_counts(session: Session) -> HouseholdDataCounts:
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    existing_tables = v2_schema_inspector(session).get_table_names(schema="public")
+    counts = read_household_data_counts(session, existing_tables)
     require_no_retained_household_data(counts)
     return counts
 
 
-def household_migration_is_pending(connection: Connection) -> bool:
+def household_migration_is_pending(session: Session) -> bool:
     """Return whether the Stage 11 household revision is in the upgrade path."""
-    current_heads = MigrationContext.configure(connection).get_current_heads()
-    revisions = ScriptDirectory.from_config(
-        Config(V2_ALEMBIC_CONFIG)
-    ).iterate_revisions("heads", current_heads)
-    return HOUSEHOLD_MIGRATION_REVISION in {
-        migration.revision for migration in revisions
-    }
+    return v2_revision_is_pending(session, HOUSEHOLD_MIGRATION_REVISION)
 
 
 def qualify_household_migration_target(
     environ: Mapping[str, str] | None = None,
     *,
-    engine_builder: Callable[[V2DatabaseSettings], Engine] = (
-        build_qualification_engine
-    ),
+    session_factories: Callable[
+        [V2DatabaseSettings], AbstractContextManager[sessionmaker[Session]]
+    ] = open_qualification_sessions,
 ) -> HouseholdMigrationQualification:
-    """Qualify the configured Supabase target without changing it."""
+    """Qualify the configured Supabase target without changing it.
+
+    The rows are read in one READ ONLY transaction, rolled back when the
+    session closes.
+    """
     settings = load_v2_migration_database_settings(environ)
-    engine = engine_builder(settings)
-    try:
-        with engine.connect() as connection:
-            transaction = connection.begin()
-            try:
-                connection.exec_driver_sql("SET TRANSACTION READ ONLY")
-                counts = _read_and_require_counts(connection)
-            finally:
-                transaction.rollback()
-    finally:
-        engine.dispose()
+    with session_factories(settings) as sessions, sessions() as session:
+        counts = _read_and_require_counts(session)
     return HouseholdMigrationQualification(
         environment=settings.target.environment,
         project_ref=settings.target.project_ref,
@@ -209,31 +202,26 @@ def qualify_household_migration_target(
 def qualify_household_migration_if_pending(
     environ: Mapping[str, str] | None = None,
     *,
-    engine_builder: Callable[[V2DatabaseSettings], Engine] = (
-        build_qualification_engine
-    ),
-    pending_checker: Callable[[Connection], bool] = household_migration_is_pending,
+    session_factories: Callable[
+        [V2DatabaseSettings], AbstractContextManager[sessionmaker[Session]]
+    ] = open_qualification_sessions,
+    pending_checker: Callable[[Session], bool] = household_migration_is_pending,
 ) -> HouseholdMigrationQualification:
-    """Qualify affected rows only while the Stage 11 revision is pending."""
+    """Qualify affected rows only while the Stage 11 revision is pending.
+
+    The revision check and the rows are read in one READ ONLY transaction,
+    rolled back when the session closes.
+    """
     settings = load_v2_migration_database_settings(environ)
-    engine = engine_builder(settings)
-    try:
-        with engine.connect() as connection:
-            transaction = connection.begin()
-            try:
-                connection.exec_driver_sql("SET TRANSACTION READ ONLY")
-                if not pending_checker(connection):
-                    return HouseholdMigrationQualification(
-                        environment=settings.target.environment,
-                        project_ref=settings.target.project_ref,
-                        counts=HouseholdDataCounts(0, 0, 0, 0, 0),
-                        required=False,
-                    )
-                counts = _read_and_require_counts(connection)
-            finally:
-                transaction.rollback()
-    finally:
-        engine.dispose()
+    with session_factories(settings) as sessions, sessions() as session:
+        if not pending_checker(session):
+            return HouseholdMigrationQualification(
+                environment=settings.target.environment,
+                project_ref=settings.target.project_ref,
+                counts=HouseholdDataCounts(0, 0, 0, 0, 0),
+                required=False,
+            )
+        counts = _read_and_require_counts(session)
     return HouseholdMigrationQualification(
         environment=settings.target.environment,
         project_ref=settings.target.project_ref,

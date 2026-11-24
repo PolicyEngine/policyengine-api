@@ -49,7 +49,7 @@ class UnclassifiedConnectorError(ValueError):
 class RequiredPrivilege:
     """One privilege a connector module needs on one table, and why."""
 
-    table: str
+    table_name: str
     privilege: TablePrivilege
     connector: str
     reason: str
@@ -202,7 +202,7 @@ def required_privileges(
     }
     requirements = {
         RequiredPrivilege(
-            table=table,
+            table_name=table,
             privilege=privilege,
             connector=label,
             reason=f"{kind} module uses the table",
@@ -214,7 +214,7 @@ def required_privileges(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             requirements.update(
                 RequiredPrivilege(
-                    table=table,
+                    table_name=table,
                     privilege=TablePrivilege.UPDATE,
                     connector=label,
                     reason=f"{node.name} locks rows with with_for_update",
@@ -236,5 +236,6 @@ def undeclared_requirements(
     return sorted(
         requirement
         for requirement in requirements
-        if requirement.privilege not in declared.get(requirement.table, frozenset())
+        if requirement.privilege
+        not in declared.get(requirement.table_name, frozenset())
     )

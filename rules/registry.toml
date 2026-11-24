@@ -665,10 +665,76 @@ category = "no-orm-form"
 reason = "The rule's check for tables without a mapped class reads the tables a declarative base's metadata holds, to find those no class maps. It runs no statement."
 
 [[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "session.connection()"
+category = "no-orm-form"
+reason = "Catalog publication creates its TEMPORARY staging tables with MetaData.create_all, which takes a Connection, and streams rows with COPY ... FROM STDIN through the psycopg connection beneath the Connection. Both run on the Connection the publishing Session holds, in its transaction."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_staging.py"
+match = "driver_connection.cursor()"
+category = "no-orm-form"
+reason = "COPY ... FROM STDIN has no SQLAlchemy form. Publication runs it through psycopg's Cursor.copy, on a cursor of the driver connection beneath the publishing Session's Connection."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/catalog/publication_statistics.py"
+match = "sa.text(f'ANALYZE {tables}')"
+category = "no-orm-form"
+reason = "ANALYZE has no ORM form. After a publication commits, one ANALYZE refreshes the planner statistics of the catalog tables it wrote."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/privilege_reconciliation.py"
+match = "text(f'CREATE ROLE {quote(safe_identifier(role))} NOLOGIN')"
+category = "no-orm-form"
+reason = "CREATE ROLE has no SQLAlchemy form. reconcile_v2_privileges.py apply --create-missing-roles creates each missing managed role as NOLOGIN, only in the disposable test database, in the reconciliation's one transaction. The role name is checked by safe_identifier and quoted by the session's dialect."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/privilege_reconciliation.py"
+match = "text(statement)"
+category = "no-orm-form"
+reason = "GRANT and REVOKE have no SQLAlchemy form. apply runs the REVOKEs and GRANTs that privilege_plans' revoke_statements and grant_statements build from the declared privileges, with identifiers checked by safe_identifier and quoted by the session's dialect, in the reconciliation's one transaction."
+
+[[rule.exception]]
+path = "policyengine_api/data/v2/pending_revisions.py"
+match = "session.connection()"
+category = "no-orm-form"
+reason = "Alembic's MigrationContext reads the database's current heads from its version table through a Connection. The migration qualification commands give it the Connection their Session holds, so the read runs inside the Session's READ ONLY transaction."
+
+[[rule.exception]]
+path = "scripts/v1_database_migration.py"
+match = "session.connection()"
+category = "no-orm-form"
+reason = "Alembic's MigrationContext, compare_metadata and command.upgrade take a Connection. The v1 schema migration gives them the Connection its Session holds, so the version reads, the schema comparison and the upgrade run in the Session's transaction, under the MySQL named lock the Session took."
+
+[[rule.exception]]
+path = "policyengine_api/services/v2/user_types/database_connectors/reads.py"
+match = "session.get_bind()"
+category = "no-orm-form"
+reason = "Reads the dialect's name, to skip PostgreSQL's advisory lock on the SQLite test databases, which have none. It runs no statement on the engine."
+
+[[rule.exception]]
 path = "tests/fixtures/database_sessions.py"
 match = "sqlite_connection.execute(...)"
 category = "no-orm-form"
 reason = "SQLite enforces foreign keys only once a connection sets PRAGMA foreign_keys, a connection setting SQLAlchemy has no API for. The in-memory SQLite test databases set it on each connection before its first transaction."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'EXPLAIN {compiled}')"
+category = "no-orm-form"
+reason = "EXPLAIN has no SQLAlchemy form. A test that checks an index serves a lookup reads PostgreSQL's plan for the ORM statement that does the lookup."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "connection.exec_driver_sql('BEGIN IMMEDIATE')"
+category = "no-orm-form"
+reason = "SQLite takes its write lock at the start of a transaction only with BEGIN IMMEDIATE, a transaction mode SQLAlchemy's SQLite dialect has no setting for. A concurrency test's file database starts every transaction that way, as SELECT ... FOR UPDATE makes writers wait on PostgreSQL."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'DROP TABLE {tables}')"
+category = "no-orm-form"
+reason = "Dropping a table has no ORM form. Route tests drop a catalog table so the route's real catalog query fails with the database's own error."
 
 [[rule.exception]]
 path = "tests/fixtures/database_sessions.py"

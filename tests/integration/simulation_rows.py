@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, insert, text
+from sqlalchemy import delete, insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
 
@@ -28,7 +28,6 @@ from policyengine_api.data.v2.models import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection
     from sqlalchemy.orm import Session
 
 # The package versions a test run records.
@@ -97,19 +96,6 @@ def insert_public_api_rows(session: Session) -> PublicApiRows:
         content_hash=uuid4().hex * 2,
     )
     return rows
-
-
-def insert_row(connection: Connection, table: str, **values: object) -> None:
-    """Insert one row of the named columns into ``table``, as handwritten SQL.
-
-    Only for the callers that still pass a Connection and a table's name;
-    rule api.data.orm-only reports it. Use ``add_row``.
-    """
-    columns = ", ".join(values)
-    placeholders = ", ".join(f":{column}" for column in values)
-    connection.execute(
-        text(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"), values
-    )
 
 
 @contextmanager

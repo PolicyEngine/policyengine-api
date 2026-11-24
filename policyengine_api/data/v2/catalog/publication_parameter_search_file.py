@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import sqlalchemy as sa
+from sqlmodel import col
 
 from policyengine_api.data.v2.catalog.parameter_search_file import (
     PARAMETER_SEARCH_FILE_FORMAT,
@@ -33,23 +34,21 @@ from policyengine_api.data.v2.catalog.publication_reconciliation import (
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import ParameterSearchFile
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from uuid import UUID
 
-    from sqlalchemy import Connection
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
-
 
 def _version_for_search_file(
-    connection: Connection, country: CountryCatalog
+    session: Session, country: CountryCatalog
 ) -> StoredVersion:
-    stored = stored_version(connection, country)
+    stored = stored_version(session, country)
     if stored is None:
         msg = (
             f"the {country.country_id} catalog version "
@@ -59,18 +58,18 @@ def _version_for_search_file(
     return stored
 
 
-def _stored_content_sha256(connection: Connection, version_id: UUID) -> str | None:
-    content_sha256: str | None = connection.execute(
-        sa.select(PARAMETER_SEARCH_FILES.c.content_sha256).where(
-            PARAMETER_SEARCH_FILES.c.tax_benefit_model_version_id == version_id,
-            PARAMETER_SEARCH_FILES.c.file_format == PARAMETER_SEARCH_FILE_FORMAT,
+def _stored_content_sha256(session: Session, version_id: UUID) -> str | None:
+    content_sha256: str | None = session.execute(
+        sa.select(col(ParameterSearchFile.content_sha256)).where(
+            col(ParameterSearchFile.tax_benefit_model_version_id) == version_id,
+            col(ParameterSearchFile.file_format) == PARAMETER_SEARCH_FILE_FORMAT,
         )
     ).scalar_one_or_none()
     return content_sha256
 
 
 def write_parameter_search_files(
-    connection: Connection,
+    session: Session,
     countries: Sequence[CountryCatalog],
 ) -> tuple[tuple[str, str, int, int], ...]:
     """Write the search file of each published format 2 version that has none.
@@ -81,14 +80,14 @@ def write_parameter_search_files(
     """
     written = []
     for country in sorted(countries, key=lambda item: item.model.name):
-        stored = _version_for_search_file(connection, country)
+        stored = _version_for_search_file(session, country)
         if stored.catalog_format is None:
             continue
         encoded = encode_parameter_search_file(country_search_file(country))
-        stored_sha256 = _stored_content_sha256(connection, stored.id)
+        stored_sha256 = _stored_content_sha256(session, stored.id)
         if stored_sha256 is None:
-            connection.execute(
-                sa.insert(PARAMETER_SEARCH_FILES).values(
+            session.execute(
+                sa.insert(ParameterSearchFile).values(
                     id=uuid4(),
                     tax_benefit_model_version_id=stored.id,
                     file_format=PARAMETER_SEARCH_FILE_FORMAT,
@@ -117,7 +116,7 @@ def write_parameter_search_files(
 
 
 def assert_parameter_search_files_written(
-    connection: Connection,
+    session: Session,
     countries: Sequence[CountryCatalog],
 ) -> None:
     """Raise CatalogPublicationError if a catalog country's version has no file.
@@ -125,10 +124,10 @@ def assert_parameter_search_files_written(
     A version stored before catalog format 2 is exempt: it gets no file.
     """
     for country in countries:
-        stored = _version_for_search_file(connection, country)
+        stored = _version_for_search_file(session, country)
         if stored.catalog_format is None:
             continue
-        if _stored_content_sha256(connection, stored.id) is None:
+        if _stored_content_sha256(session, stored.id) is None:
             msg = (
                 f"the {country.country_id} catalog version "
                 f"{country.model_version.version} has no parameter search file"

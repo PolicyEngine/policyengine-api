@@ -50,7 +50,8 @@ from tests.integration.simulation_rows import add_row
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy.orm import Session, sessionmaker
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 REGION_CODES = {"us": "state/ca", "uk": "country/wales"}
 DATASET_NAMES = {"us": "enhanced_cps_2024", "uk": "enhanced_frs_2023_24"}

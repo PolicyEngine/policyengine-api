@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING
 from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
+from sqlmodel import Session
 
 from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
-    qualify_v2_connection,
+    qualify_v2_target,
     validate_v2_head_schema,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import V2_METADATA, V2_TABLE_NAMES
 
 if TYPE_CHECKING:
     from alembic.runtime.environment import NameFilterType
@@ -42,7 +43,10 @@ def _include_application_object(
 
 
 def _configure(connection: Connection) -> None:
-    qualify_v2_connection(connection, settings)
+    # Each Session joins the connection's transaction, and closing it leaves
+    # that transaction to the environment.
+    with Session(bind=connection) as session:
+        qualify_v2_target(session, settings)
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -60,7 +64,8 @@ def _configure(connection: Connection) -> None:
     current_heads = frozenset(migration_context.get_current_heads())
     script_heads = frozenset(script.get_heads())
     if current_heads != previous_heads and current_heads == script_heads:
-        validate_v2_head_schema(connection, target_metadata)
+        with Session(bind=connection) as session:
+            validate_v2_head_schema(session, V2_TABLE_NAMES)
 
 
 def run_migrations_offline() -> None:

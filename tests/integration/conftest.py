@@ -172,34 +172,6 @@ def v1_sessions(disposable_v1_database_url: str) -> Iterator[sessionmaker[OrmSes
         yield sessions
 
 
-@pytest.fixture(scope="session")
-def v2_engine_as_role(disposable_v2_database_url: str, managed_v2_roles):
-    """Return a builder of engines whose connections act as one managed role.
-
-    Each new connection runs ``SET ROLE`` and commits it, so every statement on
-    it is checked against that role's privileges, as in staging and production,
-    instead of the disposable database's superuser. Only for the tests that
-    still build engines, which rule api.data.orm-only reports: use
-    ``v2_sessions_as_role``.
-    """
-    from psycopg import sql
-    from sqlalchemy import create_engine, event
-
-    def build(role: str, **engine_options):
-        set_role = sql.SQL("SET ROLE {}").format(sql.Identifier(role))
-        engine = create_engine(disposable_v2_database_url, **engine_options)
-
-        @event.listens_for(engine, "connect")
-        def act_as_role(dbapi_connection, _connection_record) -> None:
-            with dbapi_connection.cursor() as cursor:
-                cursor.execute(set_role)
-            dbapi_connection.commit()
-
-        return engine
-
-    return build
-
-
 @pytest.fixture
 def api_base_url() -> str:
     base_url = os.environ.get("API_BASE_URL")

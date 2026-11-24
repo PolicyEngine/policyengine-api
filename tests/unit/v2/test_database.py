@@ -4,11 +4,10 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2 import database
-from policyengine_api.data.v2.models import V2_METADATA, TaxBenefitModel
+from policyengine_api.data.v2.models import TaxBenefitModel
 from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
     V2_RUNTIME_DATABASE_URL,
@@ -18,6 +17,7 @@ from policyengine_api.data.v2.settings import (
     load_v2_migration_database_settings,
     load_v2_runtime_database_settings,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 
 
 def _environment(*, username: str = "runtime") -> dict[str, str]:
@@ -45,8 +45,8 @@ def _clear_v2_database_state() -> Iterator[None]:
 def test_engine_construction_is_lazy_and_reused_without_connecting() -> None:
     settings = load_v2_runtime_database_settings(_environment())
 
-    first = database.get_v2_engine(settings)
-    second = database.get_v2_engine(settings)
+    first = database._v2_engine(settings)
+    second = database._v2_engine(settings)
 
     assert first is second
     assert first.url.drivername == "postgresql+psycopg"
@@ -67,7 +67,7 @@ def test_engine_uses_one_timeout_for_pool_connection_and_statements(
 
     monkeypatch.setattr(database, "create_engine", capture_create_engine)
 
-    engine = database.build_v2_engine(settings)
+    engine = database._build_v2_engine(settings)
 
     assert engine is expected_engine
     assert captured["url"] is settings.connection.url
@@ -87,16 +87,16 @@ def test_session_factory_builds_sqlmodel_sessions() -> None:
 
     with factory() as session:
         assert isinstance(session, Session)
-        assert session.bind is database.get_v2_engine(settings)
+        assert session.bind is database._v2_engine(settings)
 
 
 def test_process_engine_cannot_silently_change_target() -> None:
     first = load_v2_runtime_database_settings(_environment(username="runtime"))
     second = load_v2_runtime_database_settings(_environment(username="other-runtime"))
-    database.get_v2_engine(first)
+    database._v2_engine(first)
 
     with pytest.raises(V2ConfigurationError, match="different explicit target"):
-        database.get_v2_engine(second)
+        database._v2_engine(second)
 
 
 def test_migration_credentials_are_not_selected_as_runtime_fallback(
@@ -110,7 +110,7 @@ def test_migration_credentials_are_not_selected_as_runtime_fallback(
     monkeypatch.delenv(V2_RUNTIME_DATABASE_URL, raising=False)
 
     with pytest.raises(V2ConfigurationError, match=V2_RUNTIME_DATABASE_URL):
-        database.get_v2_engine()
+        database._v2_engine()
 
     assert migration.connection.url.username == "migrator"
 
@@ -119,12 +119,12 @@ def test_forked_process_state_builds_a_new_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = load_v2_runtime_database_settings(_environment())
-    parent_engine = database.get_v2_engine(settings)
+    parent_engine = database._v2_engine(settings)
     parent_pid = database._engine_state.engine_pid
     assert parent_pid is not None
     monkeypatch.setattr(database.os, "getpid", lambda: parent_pid + 1)
 
-    child_engine = database.get_v2_engine(settings)
+    child_engine = database._v2_engine(settings)
 
     assert child_engine is not parent_engine
     assert database._engine_state.engine_pid == parent_pid + 1
@@ -134,10 +134,10 @@ def test_read_sessions_share_the_runtime_pool_without_transactions() -> None:
     settings = load_v2_runtime_database_settings(_environment())
 
     read_factory = database.get_v2_read_session_factory(settings)
-    runtime_engine = database.get_v2_engine(settings)
+    runtime_engine = database._v2_engine(settings)
 
     with read_factory() as session:
-        bind = session.get_bind()
+        bind = session.bind
         assert bind.get_execution_options()["isolation_level"] == "AUTOCOMMIT"
         assert bind.pool is runtime_engine.pool
     assert database.get_v2_read_session_factory(settings) is read_factory
@@ -154,20 +154,16 @@ def test_read_session_factory_is_rebuilt_with_the_engine() -> None:
 
 
 def test_read_sessions_refuse_to_write_rows() -> None:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    V2_METADATA.create_all(engine)
-    read_factory = database.build_v2_read_session_factory(engine)
+    with sqlite_v2_sessions() as sessions:
+        read_factory = database.build_v2_read_session_factory(sessions)
 
-    with read_factory() as session:
-        session.add(TaxBenefitModel(name="policyengine-test"))
-        with pytest.raises(database.ReadOnlySessionError):
-            session.flush()
+        with read_factory() as session:
+            session.add(TaxBenefitModel(name="policyengine-test"))
+            with pytest.raises(database.ReadOnlySessionError):
+                session.flush()
 
-    with Session(engine) as session:
-        assert session.exec(select(TaxBenefitModel)).all() == []
-    engine.dispose()
+        with sessions() as session:
+            assert session.exec(select(TaxBenefitModel)).all() == []
 
 
 def test_only_the_metadata_reader_opens_read_sessions() -> None:

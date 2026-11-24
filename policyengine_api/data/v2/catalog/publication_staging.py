@@ -1,15 +1,28 @@
-"""Temporary-table staging for v2 catalog publication."""
+"""Temporary-table staging for v2 catalog publication.
+
+Publication COPYs every country's catalog records into the staging tables
+(``publication_staging_base``), which it creates in its own transaction.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 from psycopg import sql
 from psycopg.types.json import Jsonb
-from sqlalchemy import Connection, MetaData, Table
-from sqlalchemy.dialects.postgresql import JSONB
 
+from policyengine_api.data.v2.catalog.publication_staging_base import (
+    STAGING_METADATA,
+    STAGING_MODELS,
+    StagedDataset,
+    StagedModel,
+    StagedParameter,
+    StagedParameterNode,
+    StagedParameterValue,
+    StagedRegion,
+    StagedVariable,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
@@ -25,141 +38,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
     from uuid import UUID
 
+    from sqlalchemy.orm import Mapper
+    from sqlmodel import Session, SQLModel
+
 COPY_BATCH_SIZE = 10_000
-
-STAGING_METADATA = MetaData()
-
-STAGE_CATALOG_MODELS = Table(
-    "stage_catalog_models",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("name", sa.Text, nullable=False),
-    sa.Column("description", sa.Text),
-    sa.Column("version_id", sa.Uuid, nullable=False),
-    sa.Column("version", sa.Text, nullable=False),
-    sa.Column("version_description", sa.Text),
-    sa.Column("current_law_id", sa.Integer, nullable=False),
-    sa.Column("metadata_time_periods", JSONB, nullable=False),
-    sa.Column("catalog_format", sa.Integer, nullable=False),
-    sa.Column("entities", JSONB, nullable=False),
-    sa.Column("basic_inputs", JSONB, nullable=False),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_VARIABLES = Table(
-    "stage_catalog_variables",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("name", sa.Text, primary_key=True),
-    sa.Column("label", sa.Text),
-    sa.Column("entity", sa.Text, nullable=False),
-    sa.Column("description", sa.Text),
-    sa.Column("data_type", sa.Text),
-    sa.Column("possible_values", JSONB),
-    sa.Column("default_value", JSONB, nullable=False),
-    sa.Column("adds", JSONB),
-    sa.Column("subtracts", JSONB),
-    sa.Column("is_input_variable", sa.Boolean),
-    sa.Column("hidden_input", sa.Boolean),
-    sa.Column("module_name", sa.Text),
-    sa.Column("adds_parameter_path", sa.Text),
-    sa.Column("subtracts_parameter_path", sa.Text),
-    sa.Column("enum_values", JSONB),
-    sa.Column("unit", sa.Text),
-    sa.Column("definition_period", sa.Text),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_PARAMETER_NODES = Table(
-    "stage_catalog_parameter_nodes",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("name", sa.Text, primary_key=True),
-    sa.Column("label", sa.Text),
-    sa.Column("description", sa.Text),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_PARAMETERS = Table(
-    "stage_catalog_parameters",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("name", sa.Text, primary_key=True),
-    sa.Column("label", sa.Text),
-    sa.Column("description", sa.Text),
-    sa.Column("data_type", sa.Text),
-    sa.Column("unit", sa.Text),
-    sa.Column("economy", sa.Boolean, nullable=False),
-    sa.Column("household", sa.Boolean, nullable=False),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_PARAMETER_VALUES = Table(
-    "stage_catalog_parameter_values",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("parameter_name", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("value_json", JSONB, nullable=False),
-    sa.Column(
-        "start_date",
-        sa.DateTime(timezone=True),
-        primary_key=True,
-    ),
-    sa.Column("end_date", sa.DateTime(timezone=True)),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_DATASETS = Table(
-    "stage_catalog_datasets",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("name", sa.Text, primary_key=True),
-    sa.Column("description", sa.Text),
-    sa.Column("year", sa.Integer, nullable=False),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGE_CATALOG_REGIONS = Table(
-    "stage_catalog_regions",
-    STAGING_METADATA,
-    sa.Column("country_id", sa.Text, primary_key=True),
-    sa.Column("id", sa.Uuid, nullable=False),
-    sa.Column("code", sa.Text, primary_key=True),
-    sa.Column("label", sa.Text, nullable=False),
-    sa.Column("region_type", sa.Text, nullable=False),
-    sa.Column("requires_filter", sa.Boolean, nullable=False),
-    sa.Column("filter_field", sa.Text),
-    sa.Column("filter_value", sa.Text),
-    sa.Column("filter_strategy", sa.Text),
-    sa.Column("parent_code", sa.Text),
-    sa.Column("state_code", sa.Text),
-    sa.Column("state_name", sa.Text),
-    sa.Column("default_dataset_name", sa.Text, nullable=False),
-    prefixes=["TEMPORARY"],
-    postgresql_on_commit="DROP",
-)
-
-STAGING_TABLES = (
-    STAGE_CATALOG_MODELS,
-    STAGE_CATALOG_VARIABLES,
-    STAGE_CATALOG_PARAMETER_NODES,
-    STAGE_CATALOG_PARAMETERS,
-    STAGE_CATALOG_PARAMETER_VALUES,
-    STAGE_CATALOG_DATASETS,
-    STAGE_CATALOG_REGIONS,
-)
 
 
 def _optional_json(value: object) -> Jsonb | None:
@@ -319,76 +201,98 @@ def _region_rows(
 
 def _catalog_rows(
     country: CountryCatalog,
-) -> dict[Table, Iterator[tuple[object, ...]]]:
+) -> dict[type[SQLModel], Iterator[tuple[object, ...]]]:
     dataset_names = {dataset.id: dataset.name for dataset in country.datasets}
     return {
-        STAGE_CATALOG_MODELS: _model_rows(country),
-        STAGE_CATALOG_VARIABLES: _variable_rows(country),
-        STAGE_CATALOG_PARAMETER_NODES: _parameter_node_rows(country),
-        STAGE_CATALOG_PARAMETERS: _parameter_rows(country),
-        STAGE_CATALOG_PARAMETER_VALUES: _parameter_value_rows(country),
-        STAGE_CATALOG_DATASETS: _dataset_rows(country),
-        STAGE_CATALOG_REGIONS: _region_rows(country, dataset_names),
+        StagedModel: _model_rows(country),
+        StagedVariable: _variable_rows(country),
+        StagedParameterNode: _parameter_node_rows(country),
+        StagedParameter: _parameter_rows(country),
+        StagedParameterValue: _parameter_value_rows(country),
+        StagedDataset: _dataset_rows(country),
+        StagedRegion: _region_rows(country, dataset_names),
     }
 
 
+def table_name(model: type[SQLModel]) -> str:
+    """Return the name of the table the mapped class ``model`` maps."""
+    name = model.__tablename__
+    if not isinstance(name, str):
+        msg = f"{model.__name__} names no table"
+        raise TypeError(msg)
+    return name
+
+
+def column_names(model: type[SQLModel]) -> list[str]:
+    """Return the names of the mapped class's columns, in their declared order."""
+    mapper: Mapper[Any] = sa.inspect(model)
+    return [column.name for column in mapper.columns]
+
+
 def copy_rows(
-    connection: Connection,
+    session: Session,
     *,
-    table: Table,
+    model: type[SQLModel],
     rows: Iterable[Sequence[object]],
 ) -> int:
-    """Write one bounded source stream through Psycopg COPY."""
-    raw_connection = connection.connection.driver_connection
+    """Write one bounded source stream into ``model``'s table through Psycopg COPY.
+
+    Each row gives the model's columns in their declared order. COPY runs on
+    the psycopg connection beneath the Session's Connection, so it is part of
+    the Session's transaction.
+    """
+    driver_connection = session.connection().connection.driver_connection
+    if driver_connection is None:
+        msg = "the publishing Session's connection is closed"
+        raise CatalogPublicationError(msg)
     statement = sql.SQL("COPY {} ({}) FROM STDIN").format(
-        sql.Identifier(table.name),
-        sql.SQL(", ").join(sql.Identifier(column.name) for column in table.columns),
+        sql.Identifier(table_name(model)),
+        sql.SQL(", ").join([sql.Identifier(name) for name in column_names(model)]),
     )
     count = 0
-    with raw_connection.cursor() as cursor, cursor.copy(statement) as copy:
+    with driver_connection.cursor() as cursor, cursor.copy(statement) as copy:
         for row in rows:
             copy.write_row(row)
             count += 1
     return count
 
 
-def create_staging_tables(connection: Connection) -> None:
-    """Create the temporary staging tables, which Postgres drops at commit."""
-    STAGING_METADATA.create_all(connection, checkfirst=False)
+def create_staging_tables(session: Session) -> None:
+    """Create the temporary staging tables, which Postgres drops at commit.
+
+    They are created on the Connection the Session holds, in its transaction.
+    """
+    STAGING_METADATA.create_all(session.connection(), checkfirst=False)
 
 
 def stage_catalog(
-    connection: Connection,
+    session: Session,
     catalog: NormalizedCatalog,
     *,
-    checkpoint: Callable[[str, Connection], None] | None = None,
+    checkpoint: Callable[[str, Session], None] | None = None,
 ) -> dict[str, int]:
     """COPY every country's records into the staging tables and return rows per table.
 
     Raise CatalogPublicationError if the copied counts differ from the
     catalog's own counts.
     """
-    observed = {table.name: 0 for table in STAGING_TABLES}
+    observed: dict[type[SQLModel], int] = dict.fromkeys(STAGING_MODELS, 0)
     for country in catalog.countries:
-        for table, rows in _catalog_rows(country).items():
-            observed[table.name] += copy_rows(
-                connection,
-                table=table,
-                rows=rows,
-            )
+        for model, rows in _catalog_rows(country).items():
+            observed[model] += copy_rows(session, model=model, rows=rows)
             if checkpoint is not None:
-                checkpoint("during_copy", connection)
+                checkpoint("during_copy", session)
     expected = catalog.entity_counts()
-    expected_by_table = {
-        STAGE_CATALOG_MODELS.name: expected["models"],
-        STAGE_CATALOG_VARIABLES.name: expected["variables"],
-        STAGE_CATALOG_PARAMETER_NODES.name: expected["parameter_nodes"],
-        STAGE_CATALOG_PARAMETERS.name: expected["parameters"],
-        STAGE_CATALOG_PARAMETER_VALUES.name: expected["parameter_values"],
-        STAGE_CATALOG_DATASETS.name: expected["datasets"],
-        STAGE_CATALOG_REGIONS.name: expected["regions"],
+    expected_by_model = {
+        StagedModel: expected["models"],
+        StagedVariable: expected["variables"],
+        StagedParameterNode: expected["parameter_nodes"],
+        StagedParameter: expected["parameters"],
+        StagedParameterValue: expected["parameter_values"],
+        StagedDataset: expected["datasets"],
+        StagedRegion: expected["regions"],
     }
-    if observed != expected_by_table:
+    if observed != expected_by_model:
         msg = "COPY row counts differ from the catalog"
         raise CatalogPublicationError(msg)
-    return observed
+    return {table_name(model): count for model, count in observed.items()}

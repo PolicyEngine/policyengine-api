@@ -12,18 +12,17 @@ the run the answer names, whichever run is the report's newest.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
+from sqlalchemy import delete, func, select
+from sqlmodel import col
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import ReportRun, User, UserReportRunAssociation
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.services.v2.identity.services import (
     convert_unauthenticated_user_in_session,
@@ -42,6 +41,7 @@ from policyengine_api.services.v2.user_reports.types import (
     UserReportCreateFields,
     UserReportUpdateInput,
 )
+from tests.integration.simulation_rows import add_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
@@ -73,46 +73,47 @@ from tests.integration.user_report_run_support import (
 from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from tests.integration.stored_report_rows import CatalogRows
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(v2_owner_sessions: sessionmaker[Session]) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles, v2_sessions_as_role: Callable[[str], sessionmaker[Session]]
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 def test_a_create_that_joins_a_run_answers_that_run_not_the_reports_newest(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="succeeded"
+            session, catalog, joined_status="succeeded"
         )
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
     )
@@ -129,14 +130,16 @@ def test_a_create_that_joins_a_run_answers_that_run_not_the_reports_newest(
 
 
 def test_a_rerun_while_a_run_is_under_way_answers_201_with_that_run(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
     )
@@ -152,10 +155,12 @@ def test_a_rerun_while_a_run_is_under_way_answers_201_with_that_run(
 
 
 def test_a_budget_window_rerun_answers_the_window_run_it_joined(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
         window_run_ids = []
         first_year_run_ids = []
         for days_later in (0, 1):
@@ -165,15 +170,13 @@ def test_a_budget_window_rerun_answers_the_window_run_it_joined(
                 created_at=STARTED_AT + timedelta(days=days_later),
                 forced=days_later == 1,
             )
-            window_run_id = store_budget_window_run(
-                connection, catalog, window, settings
-            )
+            window_run_id = store_budget_window_run(session, catalog, window, settings)
             window_run_ids.append(window_run_id)
             for year in WINDOW_YEARS:
                 year_run = store_report_run(
-                    connection,
+                    session,
                     catalog,
-                    store_year_simulations(connection, catalog, window, year),
+                    store_year_simulations(session, catalog, window, year),
                     RunSettings(
                         versions=CURRENT_VERSIONS,
                         status="pending",
@@ -192,7 +195,7 @@ def test_a_budget_window_rerun_answers_the_window_run_it_joined(
         budget_window_run_id=window_run_ids[0],
     )
     simulation_service = JoiningSimulationService(
-        owner_engine, catalog, joined_run=joined
+        owner_sessions, catalog, joined_run=joined
     )
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -206,23 +209,21 @@ def test_a_budget_window_rerun_answers_the_window_run_it_joined(
 
 
 @pytest.fixture
-def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
+def browsers(owner_sessions: sessionmaker[Session]) -> Iterator[list[UUID]]:
     """Name signed-out browsers' users, and delete them and their records after."""
     browser_ids = [uuid4() for _ in range(2)]
     yield browser_ids
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": browser_ids}
-        )
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(col(User.id).in_(browser_ids)))
 
 
 def test_a_create_with_a_signed_out_browsers_credential_records_its_run(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
     asked_at = datetime.now(UTC)
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -233,7 +234,7 @@ def test_a_create_with_a_signed_out_browsers_credential_records_its_run(
 
     assert response.status_code == 201, response.text
     run_id = UUID(response.json()["result"]["item"]["run"]["id"])
-    (record,) = stored_records(owner_engine, browsers)
+    (record,) = stored_records(owner_sessions, browsers)
     assert (record.user_id, record.report_run_id, record.trigger) == (
         browsers[0],
         run_id,
@@ -243,17 +244,17 @@ def test_a_create_with_a_signed_out_browsers_credential_records_its_run(
 
 
 def test_two_users_who_join_one_run_each_record_it(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
     )
@@ -269,7 +270,7 @@ def test_two_users_who_join_one_run_each_record_it(
     ]
 
     assert [answer.status_code for answer in answers] == [201, 201]
-    records = stored_records(owner_engine, browsers)
+    records = stored_records(owner_sessions, browsers)
     assert {(record.user_id, record.report_run_id) for record in records} == {
         (browsers[0], joined_run_id),
         (browsers[1], joined_run_id),
@@ -277,17 +278,17 @@ def test_two_users_who_join_one_run_each_record_it(
 
 
 def test_a_user_asking_again_for_a_run_they_have_keeps_their_first_record(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         report, joined_run_id, _forced_run_id = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(report_id=report.report_id, report_run_id=joined_run_id),
     )
@@ -297,7 +298,7 @@ def test_a_user_asking_again_for_a_run_they_have_keeps_their_first_record(
         json=report_body(catalog.policy_id),
         headers=as_browser(browsers[0]),
     )
-    (first_record,) = stored_records(owner_engine, browsers)
+    (first_record,) = stored_records(owner_sessions, browsers)
 
     again = client.post(
         f"/v2/reports/{report.report_id}/runs?country_id=us",
@@ -306,19 +307,19 @@ def test_a_user_asking_again_for_a_run_they_have_keeps_their_first_record(
     )
 
     assert (first.status_code, again.status_code) == (201, 201)
-    assert stored_records(owner_engine, browsers) == [first_record]
+    assert stored_records(owner_sessions, browsers) == [first_record]
     assert first_record.trigger == "initial"
 
 
 def test_a_rerun_records_a_manual_request_for_the_run_it_ended_on(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         f"/v2/reports/{report.report_id}/runs?country_id=us",
@@ -328,50 +329,50 @@ def test_a_rerun_records_a_manual_request_for_the_run_it_ended_on(
 
     assert response.status_code == 201, response.text
     run_id = UUID(response.json()["result"]["item"]["run"]["id"])
-    (record,) = stored_records(owner_engine, browsers)
+    (record,) = stored_records(owner_sessions, browsers)
     assert (record.report_run_id, record.trigger) == (run_id, "manual")
     (rerun,) = simulation_service.reruns
     assert rerun.force is False
 
 
 def test_a_request_without_a_user_credential_records_nothing(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
     )
 
     assert response.status_code == 201, response.text
-    run_id = response.json()["result"]["item"]["run"]["id"]
-    with owner_engine.begin() as connection:
-        recorded = connection.execute(
-            text(
-                "SELECT count(*) FROM user_report_run_associations WHERE "
-                "report_run_id = :id"
-            ),
-            {"id": run_id},
+    run_id = UUID(response.json()["result"]["item"]["run"]["id"])
+    with owner_sessions.begin() as session:
+        recorded = session.execute(
+            select(func.count())
+            .select_from(UserReportRunAssociation)
+            .where(col(UserReportRunAssociation.report_run_id) == run_id)
         ).scalar_one()
     assert recorded == 0
 
 
 def test_a_browser_credential_naming_a_signed_in_user_is_refused_before_asking(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     signed_in_user_id = browsers[0]
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO users (id, user_type, primary_country) VALUES "
-                "(:id, 'standard', 'us')"
-            ),
-            {"id": signed_in_user_id},
+    with owner_sessions.begin() as session:
+        add_row(
+            session,
+            User,
+            id=signed_in_user_id,
+            user_type="standard",
+            primary_country="us",
         )
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us",
@@ -382,13 +383,15 @@ def test_a_browser_credential_naming_a_signed_in_user_is_refused_before_asking(
     assert response.status_code == 401, response.text
     assert response.headers["WWW-Authenticate"] == "Bearer"
     assert simulation_service.reports == []
-    assert stored_records(owner_engine, browsers) == []
+    assert stored_records(owner_sessions, browsers) == []
 
 
 def test_a_malformed_browser_credential_is_refused_before_asking(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us",
@@ -401,28 +404,28 @@ def test_a_malformed_browser_credential_is_refused_before_asking(
 
 
 def test_a_saved_reports_last_run_at_is_its_owners_newest_request(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     # An admin, who may force a re-run, so each re-run is a new run.
     owner, owner_id = store_signed_in_user(
-        runtime_sessions, owner_engine, user_type="admin"
+        runtime_sessions, owner_sessions, user_type="admin"
     )
     browsers.append(owner_id)
     other_user_id = browsers[0]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     saved_report_id = store_saved_report(
-        owner_engine, user_id=owner_id, report_id=report.report_id
+        owner_sessions, user_id=owner_id, report_id=report.report_id
     )
     others_saved_report_id = store_saved_report(
-        owner_engine, user_id=other_user_id, report_id=report.report_id
+        owner_sessions, user_id=other_user_id, report_id=report.report_id
     )
     client = client_for(
         runtime_sessions,
-        JoiningSimulationService(owner_engine, catalog),
+        JoiningSimulationService(owner_sessions, catalog),
         requester=owner,
     )
 
@@ -434,19 +437,19 @@ def test_a_saved_reports_last_run_at_is_its_owners_newest_request(
         assert response.status_code == 201, response.text
 
     newest_request = max(
-        record.requested_at for record in stored_records(owner_engine, [owner_id])
+        record.requested_at for record in stored_records(owner_sessions, [owner_id])
     )
-    assert saved_report_last_run_at(owner_engine, saved_report_id) == newest_request
-    assert saved_report_last_run_at(owner_engine, others_saved_report_id) is None
+    assert saved_report_last_run_at(owner_sessions, saved_report_id) == newest_request
+    assert saved_report_last_run_at(owner_sessions, others_saved_report_id) is None
 
 
 def test_a_run_whose_record_cannot_be_written_answers_503_naming_it(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
 
     response = client_for(
         runtime_sessions,
@@ -461,33 +464,32 @@ def test_a_run_whose_record_cannot_be_written_answers_503_naming_it(
     assert response.status_code == 503, response.text
     body = response.json()
     report_id = catalog.report_ids[-1]
-    with owner_engine.begin() as connection:
-        run_id = connection.execute(
-            text("SELECT id FROM report_runs WHERE report_id = :id"),
-            {"id": report_id},
+    with owner_sessions.begin() as session:
+        run_id = session.execute(
+            select(col(ReportRun.id)).where(col(ReportRun.report_id) == report_id)
         ).scalar_one()
     assert body["report_id"] == str(report_id)
     assert body["run_id"] == str(run_id)
     assert f"run_id={run_id}" in body["message"]
-    assert stored_records(owner_engine, browsers) == []
+    assert stored_records(owner_sessions, browsers) == []
 
 
 def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     browser_id = browsers[0]
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         alone_report, alone_run_id, _ = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
         shared_report, shared_run_id, _ = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
         accounts_own_report, accounts_own_run_id, _ = store_joined_and_newer_forced_run(
-            connection, catalog, joined_status="pending"
+            session, catalog, joined_status="pending"
         )
     account = UserPrincipal(issuer="https://users.example.test/", subject="auth0|merge")
     with runtime_sessions.begin() as session:
@@ -498,35 +500,31 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
     account_asked_at = datetime(2026, 1, 1, tzinfo=UTC)
     # Later than any request the browser makes in this test.
     account_asked_for_its_own_at = datetime(2030, 1, 1, tzinfo=UTC)
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         for run_id, requested_at in (
             (shared_run_id, account_asked_at),
             (accounts_own_run_id, account_asked_for_its_own_at),
         ):
-            connection.execute(
-                text(
-                    "INSERT INTO user_report_run_associations (id, user_id, "
-                    "report_run_id, requested_at, trigger) VALUES (:id, "
-                    ":user_id, :run_id, :requested_at, 'initial')"
-                ),
-                {
-                    "id": uuid4(),
-                    "user_id": account_id,
-                    "run_id": run_id,
-                    "requested_at": requested_at,
-                },
+            add_row(
+                session,
+                UserReportRunAssociation,
+                id=uuid4(),
+                user_id=account_id,
+                report_run_id=run_id,
+                requested_at=requested_at,
+                trigger="initial",
             )
     account_saved_report_id = store_saved_report(
-        owner_engine, user_id=account_id, report_id=alone_report.report_id
+        owner_sessions, user_id=account_id, report_id=alone_report.report_id
     )
     browser_saved_report_id = store_saved_report(
-        owner_engine, user_id=browser_id, report_id=shared_report.report_id
+        owner_sessions, user_id=browser_id, report_id=shared_report.report_id
     )
     # The browser saved a report it never asked to run, but the account did.
     browsers_unrun_saved_report_id = store_saved_report(
-        owner_engine, user_id=browser_id, report_id=accounts_own_report.report_id
+        owner_sessions, user_id=browser_id, report_id=accounts_own_report.report_id
     )
-    simulation_service = JoiningSimulationService(owner_engine, catalog)
+    simulation_service = JoiningSimulationService(owner_sessions, catalog)
     client = client_for(runtime_sessions, simulation_service)
     for report, run_id in (
         (alone_report, alone_run_id),
@@ -543,7 +541,7 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
         assert response.status_code == 201, response.text
     browser_asked_at = {
         record.report_run_id: record.requested_at
-        for record in stored_records(owner_engine, [browser_id])
+        for record in stored_records(owner_sessions, [browser_id])
     }
 
     with runtime_sessions.begin() as session:
@@ -555,7 +553,7 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
         )
 
     assert conversion.outcome is AccountConversionOutcome.MERGED
-    records = stored_records(owner_engine, [account_id, browser_id])
+    records = stored_records(owner_sessions, [account_id, browser_id])
     # A run the account had already asked for keeps the account's record.
     assert {
         (record.user_id, record.report_run_id, record.requested_at)
@@ -571,40 +569,40 @@ def test_a_sign_in_merge_moves_the_browsers_run_records_into_the_account(
     # moved in, and the browser's moved saved reports take the account's
     # records, whatever time they held before.
     assert (
-        saved_report_last_run_at(owner_engine, account_saved_report_id)
+        saved_report_last_run_at(owner_sessions, account_saved_report_id)
         == browser_asked_at[alone_run_id]
     )
     assert (
-        saved_report_last_run_at(owner_engine, browser_saved_report_id)
+        saved_report_last_run_at(owner_sessions, browser_saved_report_id)
         == account_asked_at
     )
     assert (
-        saved_report_last_run_at(owner_engine, browsers_unrun_saved_report_id)
+        saved_report_last_run_at(owner_sessions, browsers_unrun_saved_report_id)
         == account_asked_for_its_own_at
     )
 
 
 def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     browsers: list[UUID],
 ) -> None:
     owner_id = browsers[0]
     owner = UnauthenticatedPrincipal(user_id=owner_id)
-    with owner_engine.begin() as connection:
-        first_report = store_report(connection, catalog)
-        second_report = store_report(connection, catalog)
-        never_run_report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        first_report = store_report(session, catalog)
+        second_report = store_report(session, catalog)
+        never_run_report = store_report(session, catalog)
     client = client_for(
-        runtime_sessions, JoiningSimulationService(owner_engine, catalog)
+        runtime_sessions, JoiningSimulationService(owner_sessions, catalog)
     )
     saved_reports = V2UserReportService(
         UserReportDatabaseSession(runtime_sessions), default_legacy_references()
     )
     callers_time = datetime(2020, 1, 1, tzinfo=UTC)
     rerun_as_browser(client, first_report.report_id, owner_id)
-    first_request = newest_request(owner_engine, owner_id)
+    first_request = newest_request(owner_sessions, owner_id)
 
     saved = saved_reports.create_user_report(
         principal=owner,
@@ -623,7 +621,7 @@ def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
         ),
     )
     rerun_as_browser(client, second_report.report_id, owner_id)
-    second_request = newest_request(owner_engine, owner_id)
+    second_request = newest_request(owner_sessions, owner_id)
     repointed = saved_reports.patch_user_report(
         principal=owner,
         country_id="us",
@@ -652,17 +650,17 @@ def test_saving_or_repointing_a_report_takes_its_owners_newest_request(
 
 @pytest.mark.parametrize("request_kind", ["create", "rerun"])
 def test_a_run_that_cannot_be_read_back_is_named_in_the_502(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     request_kind: str,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     # The answer names a run the report doesn't have, so reading it back fails.
     unreadable_run_id = uuid4()
     simulation_service = JoiningSimulationService(
-        owner_engine,
+        owner_sessions,
         catalog,
         joined_run=JoinedRun(
             report_id=report.report_id, report_run_id=unreadable_run_id

@@ -11,17 +11,14 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-import sqlalchemy as sa
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
+    Dynamic,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
@@ -50,9 +47,17 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyCatalogValidationError,
     PolicySetsDynamicParametersError,
 )
+from tests.fixtures.database_sessions import (
+    drop_registry_tables,
+    drop_tables,
+    sqlite_v2_sessions,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.elasticities.income"
 MARGINAL_TAX_RATE_DELTA = "simulation.marginal_tax_rate_delta"
@@ -79,16 +84,21 @@ class Catalog:
         session.commit()
 
 
+# The registry every v2 model is mapped on, SQLModel's own.
+V2_REGISTRY = TaxBenefitModel._sa_registry
+
+
 @pytest.fixture
-def session() -> Iterator[Session]:
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    database_session = Session(engine)
-    try:
+def sessions() -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of an in-memory SQLite copy of the v2 schema."""
+    with sqlite_v2_sessions() as v2_sessions:
+        yield v2_sessions
+
+
+@pytest.fixture
+def session(sessions: sessionmaker[Session]) -> Iterator[Session]:
+    with sessions() as database_session:
         yield database_session
-    finally:
-        database_session.close()
-        engine.dispose()
 
 
 @pytest.fixture
@@ -230,45 +240,45 @@ def test_a_policy_without_dynamic_parameters_is_still_bound(
     ]
 
 
-def test_a_dynamic_storage_that_cannot_be_read_is_a_storage_error() -> None:
+def test_a_dynamic_storage_that_cannot_be_read_is_a_storage_error(
+    sessions: sessionmaker[Session],
+) -> None:
     # A database without the v2 tables fails every read with OperationalError.
     # A create's first read is the catalog query, which reports its own error.
-    engine = create_engine("sqlite://")
+    with sessions.begin() as session:
+        drop_registry_tables(session, V2_REGISTRY)
     service = V2DynamicService(
-        DynamicDatabaseSession(sessionmaker(engine, class_=Session)),
+        DynamicDatabaseSession(sessions),
         running_policyengine_version=RUNNING_VERSION,
     )
-    try:
-        with pytest.raises(DynamicStorageError) as failure:
-            service.get_dynamic(country_id="us", dynamic_id=UUID(int=3))
-        with pytest.raises(MetadataCatalogUnavailableError):
-            service.create_dynamic(
-                NativeDynamicCreationInput(
-                    country_id="us",
-                    tax_benefit_model_id=UUID(int=1),
-                    parameter_values=[
-                        {
-                            "parameter_id": UUID(int=2),
-                            "value": 0.25,
-                            "start_date": "2026-01-01T00:00:00Z",
-                        }
-                    ],
-                )
+
+    with pytest.raises(DynamicStorageError) as failure:
+        service.get_dynamic(country_id="us", dynamic_id=UUID(int=3))
+    with pytest.raises(MetadataCatalogUnavailableError):
+        service.create_dynamic(
+            NativeDynamicCreationInput(
+                country_id="us",
+                tax_benefit_model_id=UUID(int=1),
+                parameter_values=[
+                    {
+                        "parameter_id": UUID(int=2),
+                        "value": 0.25,
+                        "start_date": "2026-01-01T00:00:00Z",
+                    }
+                ],
             )
-    finally:
-        engine.dispose()
+        )
 
     assert isinstance(failure.value.__cause__, OperationalError)
 
 
 def test_a_dynamic_that_cannot_be_written_is_a_storage_error(
-    session: Session, catalog: Catalog
+    sessions: sessionmaker[Session], catalog: Catalog
 ) -> None:
-    engine = session.get_bind()
-    with engine.begin() as connection:
-        connection.execute(sa.text("DROP TABLE dynamics"))
+    with sessions.begin() as session:
+        drop_tables(session, Dynamic)
     service = V2DynamicService(
-        DynamicDatabaseSession(sessionmaker(engine, class_=Session)),
+        DynamicDatabaseSession(sessions),
         running_policyengine_version=RUNNING_VERSION,
     )
 

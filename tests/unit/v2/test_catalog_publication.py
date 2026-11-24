@@ -14,34 +14,30 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
+from sqlalchemy.orm import registry
 from sqlalchemy.sql.elements import TextClause
+from sqlmodel import Field, SQLModel
 
+from policyengine_api.data.v2 import database
 from policyengine_api.data.v2.catalog import (
     publication,
     publication_inserts,
     publication_reconciliation,
     publication_staging,
-    publication_tables,
     publication_types,
 )
 from policyengine_api.data.v2.catalog.publication_parameter_tree import (
     catalog_parameter_tree,
 )
+from policyengine_api.data.v2.catalog.publication_staging_base import (
+    STAGING_MODELS,
+    TEMPORARY_UNTIL_COMMIT,
+    StagingBase,
+)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from policyengine_api.data.v2.models import (
-    Dataset,
-    Parameter,
-    ParameterNode,
-    ParameterValue,
-    Region,
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
-    Variable,
-)
 from tests.fixtures.v2_catalog import normalized_catalog
 
 REPO = Path(__file__).parents[3]
@@ -86,12 +82,24 @@ class FakeDriverConnection:
 
 
 class FakeConnection:
+    """Stands in for the SQLAlchemy Connection a Session holds."""
+
     def __init__(self) -> None:
         self.connection = type(
             "ConnectionProxy",
             (),
             {"driver_connection": FakeDriverConnection()},
         )()
+
+
+class FakeSession:
+    """Stands in for the publishing Session, which hands out its Connection."""
+
+    def __init__(self) -> None:
+        self.held_connection = FakeConnection()
+
+    def connection(self) -> FakeConnection:
+        return self.held_connection
 
 
 def test_expected_publication_revision_is_the_alembic_head() -> None:
@@ -101,29 +109,19 @@ def test_expected_publication_revision_is_the_alembic_head() -> None:
     assert script.get_current_head() == V2_ALEMBIC_HEAD_REVISION
 
 
-class _ScalarResult:
-    def __init__(self, value=None, values=()):
-        self.value = value
-        self.values = values
+class _RevisionSession:
+    """Stands in for a Session that reads the stored revisions."""
 
-    def scalar_one(self):
-        return self.value
+    def __init__(self, revisions=()):
+        self.revisions = revisions
 
-    def scalars(self):
-        return iter(self.values)
-
-
-class _RevisionConnection:
-    def __init__(self, *, dialect: str, revisions=()):
-        self.dialect = type("Dialect", (), {"name": dialect})()
-        self.result = _ScalarResult(values=revisions)
-
-    def execute(self, _statement):
-        return self.result
+    def scalars(self, _statement):
+        return iter(self.revisions)
 
 
 class _Inspector:
-    def __init__(self, *, table_exists: bool):
+    def __init__(self, *, dialect: str = "postgresql", table_exists: bool = True):
+        self.dialect = type("Dialect", (), {"name": dialect})()
         self.table_exists = table_exists
 
     def has_table(self, table_name: str) -> bool:
@@ -132,48 +130,53 @@ class _Inspector:
 
 
 def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> None:
-    with pytest.raises(publication.CatalogPublicationError, match="PostgreSQL"):
-        publication._verify_expected_revision(_RevisionConnection(dialect="sqlite"))
+    with (
+        patch.object(
+            database, "v2_schema_inspector", return_value=_Inspector(dialect="sqlite")
+        ),
+        pytest.raises(publication.CatalogPublicationError, match="PostgreSQL"),
+    ):
+        publication._verify_expected_revision(_RevisionSession())
 
     with (
         patch.object(
-            publication.sa, "inspect", return_value=_Inspector(table_exists=False)
+            database,
+            "v2_schema_inspector",
+            return_value=_Inspector(table_exists=False),
         ),
         pytest.raises(publication.CatalogPublicationError, match="table is absent"),
     ):
-        publication._verify_expected_revision(_RevisionConnection(dialect="postgresql"))
+        publication._verify_expected_revision(_RevisionSession())
 
     with (
-        patch.object(
-            publication.sa, "inspect", return_value=_Inspector(table_exists=True)
-        ),
+        patch.object(database, "v2_schema_inspector", return_value=_Inspector()),
         pytest.raises(publication.CatalogPublicationError, match="expected"),
     ):
         publication._verify_expected_revision(
-            _RevisionConnection(
-                dialect="postgresql",
-                revisions=("wrong-revision",),
-            )
+            _RevisionSession(revisions=("wrong-revision",))
         )
 
 
+class _CopyBase(SQLModel, registry=registry()):
+    """A declarative base of its own, so the test's table is on no real one."""
+
+
+class _CopiedRow(_CopyBase, table=True):
+    """A table COPY writes into."""
+
+    __tablename__ = "stage_catalog_models"
+
+    id: int = Field(primary_key=True)
+    name: str
+
+
 def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
-    connection = FakeConnection()
+    session = FakeSession()
     rows = ((index, f"row-{index}") for index in range(3))
-    copy_table = sa.Table(
-        "stage_catalog_models",
-        sa.MetaData(),
-        sa.Column("id", sa.Integer),
-        sa.Column("name", sa.Text),
-    )
 
-    count = publication_staging.copy_rows(
-        connection,
-        table=copy_table,
-        rows=rows,
-    )
+    count = publication_staging.copy_rows(session, model=_CopiedRow, rows=rows)
 
-    cursor = connection.connection.driver_connection.selected_cursor
+    cursor = session.held_connection.connection.driver_connection.selected_cursor
     assert count == 3
     assert cursor.statement.as_string() == (
         'COPY "stage_catalog_models" ("id", "name") FROM STDIN'
@@ -187,32 +190,17 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
 
 def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     dialect = postgresql.dialect()
-    assert (
-        Dataset.__table__,
-        TaxBenefitModel.__table__,
-        TaxBenefitModelVersion.__table__,
-        Parameter.__table__,
-        ParameterNode.__table__,
-        ParameterValue.__table__,
-        Region.__table__,
-        Variable.__table__,
-    ) == (
-        publication_tables.DATASETS,
-        publication_tables.MODELS,
-        publication_tables.MODEL_VERSIONS,
-        publication_tables.PARAMETERS,
-        publication_tables.PARAMETER_NODES,
-        publication_tables.PARAMETER_VALUES,
-        publication_tables.REGIONS,
-        publication_tables.VARIABLES,
-    )
-    staging_ddl = tuple(
-        str(CreateTable(table).compile(dialect=dialect))
-        for table in publication_staging.STAGING_TABLES
+    # The staging tables are mapped classes on their own registry, apart from
+    # the v2 models that Alembic compares, and each is TEMPORARY, dropped at
+    # commit (test_database_access_boundaries checks the DDL publication sends).
+    staging_registry = StagingBase._sa_registry
+    assert {mapper.class_ for mapper in staging_registry.mappers} == set(STAGING_MODELS)
+    assert StagingBase.metadata is not SQLModel.metadata
+    assert {mapper.class_ for mapper in SQLModel._sa_registry.mappers}.isdisjoint(
+        STAGING_MODELS
     )
     assert all(
-        "CREATE TEMPORARY TABLE" in statement and "ON COMMIT DROP" in statement
-        for statement in staging_ddl
+        model.__table_args__ == TEMPORARY_UNTIL_COMMIT for model in STAGING_MODELS
     )
 
     inserts = publication_inserts.SET_BASED_INSERT_STATEMENTS
@@ -267,18 +255,18 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
         def scalar_one(self):
             return None
 
-    class Connection:
+    class RecordingSession:
         statement = None
 
         def execute(self, statement):
             self.statement = statement
             return Result()
 
-    connection = Connection()
-    publication._acquire_publication_lock(connection)
-    assert not isinstance(connection.statement, TextClause)
+    session = RecordingSession()
+    publication._acquire_publication_lock(session)
+    assert not isinstance(session.statement, TextClause)
     compiled_lock = str(
-        connection.statement.compile(
+        session.statement.compile(
             dialect=dialect,
             compile_kwargs={"literal_binds": True},
         )
@@ -478,7 +466,7 @@ def _kept_region_records(
     monkeypatch.setattr(
         publication,
         "count_region_differences",
-        lambda _connection, _country: differences,
+        lambda _session, _country: differences,
     )
     monkeypatch.setattr(publication, "count_stored_regions", lambda *_args: 4)
     # An earlier test's Alembic logging setup may have disabled existing loggers.
@@ -548,7 +536,7 @@ def _time_period_update_records(
     monkeypatch.setattr(
         publication,
         "update_stored_time_periods",
-        lambda _connection, _country: update,
+        lambda _session, _country: update,
     )
     # An earlier test's Alembic logging setup may have disabled existing loggers.
     monkeypatch.setattr(publication.LOGGER, "disabled", False)

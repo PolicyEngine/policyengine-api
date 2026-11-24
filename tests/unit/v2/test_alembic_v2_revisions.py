@@ -10,12 +10,16 @@ from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from sqlalchemy import inspect
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import User
 
-V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
+# Every v2 table, by the mapped classes on the v2 models' registry.
+V2_TABLE_NAMES = frozenset(
+    mapper.class_.__tablename__ for mapper in inspect(User).registry.mappers
+)
 
 
 POST_BASELINE_TABLE_NAMES = frozenset(

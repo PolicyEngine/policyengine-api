@@ -133,7 +133,7 @@ def _build_remote_engine() -> Engine:
     return engine
 
 
-def get_v1_engine() -> Engine:
+def _v1_engine() -> Engine:
     """Return the process-owned Cloud SQL engine; never select SQLite."""
     if _cloud_sql_state.engine is None:
         _cloud_sql_state.engine = _build_remote_engine()
@@ -143,7 +143,7 @@ def get_v1_engine() -> Engine:
 def get_v1_session_factory() -> sessionmaker[Session]:
     """Return one configured Session factory for the Cloud SQL engine."""
     if _cloud_sql_state.session_factory is None:
-        _cloud_sql_state.session_factory = build_session_factory(get_v1_engine())
+        _cloud_sql_state.session_factory = build_session_factory(_v1_engine())
     return _cloud_sql_state.session_factory
 
 

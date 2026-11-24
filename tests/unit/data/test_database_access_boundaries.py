@@ -20,16 +20,24 @@ import ast
 import re
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
+from sqlalchemy import create_mock_engine
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.schema import CreateTable
 
-from policyengine_api.data.v2.catalog.publication_staging import STAGING_METADATA
+from policyengine_api.data.v2.catalog.publication_staging import (
+    create_staging_tables,
+    table_name,
+)
+from policyengine_api.data.v2.catalog.publication_staging_base import STAGING_MODELS
 from scripts.rules.file_length import is_excluded
 from scripts.rules.load import load_registry
 
 if TYPE_CHECKING:
+    from sqlalchemy.engine.mock import MockConnection
+    from sqlalchemy.sql.ddl import ExecutableDDLElement
+    from sqlmodel import Session
+
     from scripts.rules.model import RuleException
 
 PROJECT_ROOT = Path(__file__).parents[3]
@@ -498,18 +506,47 @@ def test_non_test_code_changes_schema_only_through_alembic() -> None:
     )
 
 
+class _DdlRecordingSession:
+    """Stands in for the publishing Session, on a connection that records DDL.
+
+    SQLAlchemy's mock engine compiles each statement it is given and runs none,
+    so no database is needed.
+    """
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+        self.recorder = create_mock_engine("postgresql+psycopg://", self._record)
+
+    def _record(self, statement: ExecutableDDLElement, *_arguments: object) -> None:
+        self.statements.append(
+            str(statement.compile(dialect=postgresql.dialect())).strip()
+        )
+
+    def connection(self) -> MockConnection:
+        return self.recorder
+
+
 def test_publication_staging_tables_are_temporary_and_dropped_at_commit() -> None:
-    assert STAGING_METADATA.tables, "STAGING_METADATA declares no staging tables"
-    for table in STAGING_METADATA.tables.values():
-        create_statement = str(
-            CreateTable(table).compile(dialect=postgresql.dialect())
-        ).strip()
-        assert create_statement.startswith(f"CREATE TEMPORARY TABLE {table.name} "), (
-            f"staging table {table.name} must be TEMPORARY"
+    session = _DdlRecordingSession()
+
+    create_staging_tables(cast("Session", session))
+
+    assert session.statements, "create_staging_tables creates no staging tables"
+    created = set()
+    for create_statement in session.statements:
+        created_table = re.match(
+            r"CREATE (?:TEMPORARY )?TABLE (\w+) ", create_statement
+        )
+        assert created_table is not None, create_statement
+        name = created_table.group(1)
+        assert create_statement.startswith(f"CREATE TEMPORARY TABLE {name} "), (
+            f"staging table {name} must be TEMPORARY"
         )
         assert create_statement.endswith("ON COMMIT DROP"), (
-            f"staging table {table.name} must be dropped at commit"
+            f"staging table {name} must be dropped at commit"
         )
+        created.add(name)
+    assert created == {table_name(model) for model in STAGING_MODELS}
 
 
 def test_rule_proof_sqlalchemy_and_alembic_only() -> None:

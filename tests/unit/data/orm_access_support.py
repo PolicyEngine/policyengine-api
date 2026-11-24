@@ -124,6 +124,10 @@ SESSION_FACTORY_MODULES = frozenset(
         "policyengine_api/data/orm_pool_events.py",
         "policyengine_api/data/v2/database.py",
         "tests/fixtures/database_sessions.py",
+        # The tests of orm_pool_events drive the pool it listens to: they
+        # invalidate, detach and recycle connections and hold two at once,
+        # which no Session offers. Their statements still run in Sessions.
+        "tests/unit/data/test_orm_pool_events.py",
     }
 )
 ENGINE_NAMES = frozenset(
