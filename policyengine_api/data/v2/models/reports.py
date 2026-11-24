@@ -81,9 +81,12 @@ class Report(TimestampedModel, table=True):
 
     A report is shared by everyone who asks for it, so it describes no one
     caller: a report's name and description are on each user's saved report.
-    The table's ``label``, ``description`` and ``user_id`` are left out of this
-    model, so API v1 neither loads nor writes them and a release keeps working
-    while a later revision drops them.
+    The table's ``label``, ``description`` and ``user_id`` stay SQLModel
+    fields, as rule ``api.data.orm-only`` requires of every column, and
+    ``exclude_properties`` leaves them out of the mapper, so API v1 neither
+    loads nor writes them: a value given to the constructor is never stored,
+    and the class attributes are the table's columns, not values to read. A
+    release keeps working while a later revision drops them.
 
     The simulation service finds a report by ``definition_key``, the SHA-256
     of what it compares (its country, type, each side's policy and dynamic,
@@ -100,15 +103,6 @@ class Report(TimestampedModel, table=True):
         "exclude_properties": ("label", "description", "user_id")
     }
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops them.
-        sa.Column("label", sa.String(255)),
-        sa.Column("description", sa.String),
-        sa.Column(
-            "user_id",
-            sa.Uuid,
-            sa.ForeignKey("users.id", ondelete="SET NULL"),
-            index=True,
-        ),
         sa.CheckConstraint(
             "year IS NULL OR year BETWEEN 1900 AND 2200",
             name="ck_reports_year",
@@ -136,8 +130,19 @@ class Report(TimestampedModel, table=True):
         sa.Index("ix_reports_dataset_independent_key", "dataset_independent_key"),
     )
 
+    # In the table but left out of the mapper (``exclude_properties``) until a
+    # revision drops them.
+    label: str | None = Field(default=None, max_length=255)
+    description: str | None = None
     country: str = Field(max_length=16)
     type: str | None = Field(default=None, max_length=128)
+    # In the table but left out of the mapper, like ``label``.
+    user_id: UUID | None = Field(
+        default=None,
+        foreign_key="users.id",
+        ondelete="SET NULL",
+        index=True,
+    )
     tax_benefit_model_id: UUID = Field(
         foreign_key="tax_benefit_models.id",
         ondelete="RESTRICT",
@@ -227,10 +232,6 @@ class BudgetWindowRun(TimestampedModel, table=True):
     __tablename__ = "budget_window_runs"
     __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("trigger",)}
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops it: a shared run
-        # answers more than one request, and each user's trigger is on their
-        # record of it.
-        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
         sa.UniqueConstraint("id", "report_id", name="uq_budget_window_runs_id_report"),
         sa.CheckConstraint(
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
@@ -260,6 +261,13 @@ class BudgetWindowRun(TimestampedModel, table=True):
         index=True,
     )
     policyengine_version: str | None = Field(default=None, max_length=128)
+    # In the table but left out of the mapper (``exclude_properties``) until a
+    # revision drops it: a shared run answers more than one request, and each
+    # user's trigger is on their record of it.
+    trigger: ReportRunTrigger | None = Field(
+        default=None,
+        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
+    )
     recalculate: bool = False
     status: ReportRunStatus = Field(
         default=ReportRunStatus.PENDING,
@@ -289,9 +297,11 @@ class ReportRun(TimestampedModel, table=True):
     it used. Its labour supply response has its own two tables. Its cliff impact
     is its two simulation runs' (``CliffImpact``), and each user's trigger is on
     their record of the run. The table's four older cliff columns and
-    ``trigger`` are declared in ``__table_args__`` and left out of the mapper, so
-    API v1 neither loads nor writes them and a release keeps working while a
-    later revision drops them.
+    ``trigger`` stay SQLModel fields, as rule ``api.data.orm-only`` requires of
+    every column, and ``exclude_properties`` leaves them out of the mapper, so
+    API v1 neither loads nor writes them: a value given to the constructor is
+    never stored, and the class attributes are the table's columns, not values
+    to read. A release keeps working while a later revision drops them.
 
     Outside budget windows, a report has at most one run that hasn't failed
     for each pair of package versions, which identical requests join; a
@@ -310,12 +320,6 @@ class ReportRun(TimestampedModel, table=True):
         )
     }
     __table_args__ = (
-        # Kept in the table, unmapped, until a revision drops them.
-        sa.Column("trigger", enum_type(ReportRunTrigger, "v2_report_run_trigger")),
-        sa.Column("baseline_cliff_gap", sa.Float),
-        sa.Column("baseline_cliff_share", sa.Float),
-        sa.Column("reform_cliff_gap", sa.Float),
-        sa.Column("reform_cliff_share", sa.Float),
         sa.UniqueConstraint(
             "report_id",
             "idempotency_key",
@@ -400,6 +404,13 @@ class ReportRun(TimestampedModel, table=True):
         default=ReportRunStatus.PENDING,
         sa_type=enum_type(ReportRunStatus, "v2_report_run_status"),
     )
+    # In the table but left out of the mapper (``exclude_properties``) until a
+    # revision drops it: a shared run answers more than one request, and each
+    # user's trigger is on their record of it.
+    trigger: ReportRunTrigger | None = Field(
+        default=None,
+        sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
+    )
     idempotency_key: UUID | None = Field(default=None)
     modal_call_id: str | None = Field(default=None, max_length=255)
     started_at: datetime | None = Field(
@@ -412,6 +423,12 @@ class ReportRun(TimestampedModel, table=True):
     )
     error_message: str | None = None
     markdown: str | None = Field(default=None, sa_type=sa.Text)
+    # In the table but left out of the mapper (``exclude_properties``) until a
+    # revision drops them.
+    baseline_cliff_gap: float | None = None
+    baseline_cliff_share: float | None = None
+    reform_cliff_gap: float | None = None
+    reform_cliff_share: float | None = None
     spm_provenance: dict[str, Any] | None = Field(
         default=None,
         sa_type=sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),

@@ -25,27 +25,27 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import sqlalchemy as sa
 from pydantic import ValidationError
+from sqlmodel import col
 
-from policyengine_api.data.v2.catalog.publication_tables import (
-    MODEL_VERSIONS,
-    MODELS,
-)
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
     SPMAvailabilityRecording,
 )
+from policyengine_api.data.v2.models import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.spm import SPMSelection
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.engine import CursorResult
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
@@ -136,7 +136,7 @@ def fetch_simulation_versions(
 
 
 def record_spm_availability(
-    connection: Connection,
+    session: Session,
     *,
     model_name: str,
     version: str,
@@ -146,43 +146,52 @@ def record_spm_availability(
 
     Return whether the version was changed.
     """
-    model_ids = sa.select(MODELS.c.id).where(MODELS.c.name == model_name)
-    result = connection.execute(
-        sa.update(MODEL_VERSIONS)
-        .where(
-            MODEL_VERSIONS.c.model_id.in_(model_ids),
-            MODEL_VERSIONS.c.version == version,
-            MODEL_VERSIONS.c.spm_availability.is_(None),
-        )
-        .values(spm_availability=dict(availability))
+    model_ids = sa.select(col(TaxBenefitModel.id)).where(
+        col(TaxBenefitModel.name) == model_name
     )
-    return bool(result.rowcount)
+    result = session.execute(
+        sa.update(TaxBenefitModelVersion)
+        .where(
+            col(TaxBenefitModelVersion.model_id).in_(model_ids),
+            col(TaxBenefitModelVersion.version) == version,
+            col(TaxBenefitModelVersion.spm_availability).is_(None),
+        )
+        .values(spm_availability=dict(availability)),
+        # No version row is loaded in the Session, so none needs refreshing.
+        execution_options={"synchronize_session": False},
+    )
+    return bool(cast("CursorResult[Any]", result).rowcount)
 
 
 def read_unrecorded_versions(
-    connection: Connection, versions: Iterable[tuple[str, str]]
+    session: Session, versions: Iterable[tuple[str, str]]
 ) -> set[tuple[str, str]]:
     """Return the (model name, version) pairs whose SPM availability is unrecorded."""
     requested = list(versions)
     if not requested:
         return set()
-    rows = connection.execute(
-        sa.select(MODELS.c.name, MODEL_VERSIONS.c.version)
-        .join(MODEL_VERSIONS, MODEL_VERSIONS.c.model_id == MODELS.c.id)
+    rows = session.execute(
+        sa.select(col(TaxBenefitModel.name), col(TaxBenefitModelVersion.version))
+        .join(
+            TaxBenefitModelVersion,
+            col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+        )
         .where(
-            sa.tuple_(MODELS.c.name, MODEL_VERSIONS.c.version).in_(requested),
-            MODEL_VERSIONS.c.spm_availability.is_(None),
+            sa.tuple_(
+                col(TaxBenefitModel.name), col(TaxBenefitModelVersion.version)
+            ).in_(requested),
+            col(TaxBenefitModelVersion.spm_availability).is_(None),
         )
     ).all()
     return {(row.name, row.version) for row in rows}
 
 
 def _still_unrecorded(
-    connection: Connection, catalog: NormalizedCatalog
+    session: Session, catalog: NormalizedCatalog
 ) -> tuple[tuple[str, str], ...]:
     """Return the catalog's versions, by country, whose availability is unrecorded."""
     unrecorded = read_unrecorded_versions(
-        connection,
+        session,
         [
             (country.model.name, country.model_version.version)
             for country in catalog.countries
@@ -196,7 +205,7 @@ def _still_unrecorded(
 
 
 def record_published_spm_availability(
-    engine: Engine,
+    sessions: sessionmaker[Session],
     catalog: NormalizedCatalog,
     environ: Mapping[str, str] | None = None,
     *,
@@ -215,8 +224,8 @@ def record_published_spm_availability(
     try:
         versions = fetch_versions(url)
     except CatalogPublicationError as error:
-        with engine.begin() as connection:
-            not_recorded = _still_unrecorded(connection, catalog)
+        with sessions.begin() as session:
+            not_recorded = _still_unrecorded(session, catalog)
         if not_recorded:
             LOGGER.warning(
                 "SPM availability was not recorded; the next publication run "
@@ -227,14 +236,14 @@ def record_published_spm_availability(
             not_recorded=not_recorded, versions_unreadable=str(error)
         )
     recorded: list[tuple[str, str, bool]] = []
-    with engine.begin() as connection:
+    with sessions.begin() as session:
         for country in catalog.countries:
             version = country.model_version.version
             availability = spm_availability(
                 country.country_id, catalog.policyengine_version, versions
             )
             if availability is not None and record_spm_availability(
-                connection,
+                session,
                 model_name=country.model.name,
                 version=version,
                 availability=availability,
@@ -242,5 +251,5 @@ def record_published_spm_availability(
                 recorded.append(
                     (country.country_id, version, bool(availability["available"]))
                 )
-        not_recorded = _still_unrecorded(connection, catalog)
+        not_recorded = _still_unrecorded(session, catalog)
     return SPMAvailabilityRecording(recorded=tuple(recorded), not_recorded=not_recorded)

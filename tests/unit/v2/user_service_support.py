@@ -8,12 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-import sqlalchemy as sa
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session, create_engine
-
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Household,
     LegacyHouseholdMapping,
     LegacyPolicyMapping,
@@ -31,10 +26,14 @@ from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.legacy_refs.validators import (
     require_legacy_references,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterator, Mapping
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 ISSUER = "https://auth.example.test/"
 ALICE = UserPrincipal(issuer=ISSUER, subject="google-oauth2|alice")
@@ -112,24 +111,16 @@ class V2Store:
 
 @contextmanager
 def v2_store() -> Iterator[V2Store]:
-    """Create an isolated SQLite v2 schema with mirrored v1 records."""
-    engine = create_engine("sqlite://")
+    """Create an isolated SQLite v2 schema with mirrored v1 records.
 
-    @sa.event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-        # SQLAlchemy's documented pysqlite recipe: let SQLAlchemy own BEGIN so
-        # provisioning savepoints behave as they do on Postgres.
-        dbapi_connection.isolation_level = None
+    SQLite enforces its foreign keys, and provisioning's savepoints behave as
+    they do on PostgreSQL.
+    """
+    with sqlite_v2_sessions(foreign_keys=True) as sessions:
+        yield _store_mirrored_records(sessions)
 
-    @sa.event.listens_for(engine, "begin")
-    def begin_transaction(connection) -> None:
-        connection.exec_driver_sql("BEGIN")
 
-    V2_METADATA.create_all(engine)
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def _store_mirrored_records(sessions: sessionmaker[Session]) -> V2Store:
     with sessions() as session:
         add_listed_countries(session)
     with sessions.begin() as session:
@@ -198,14 +189,10 @@ def v2_store() -> Iterator[V2Store]:
             ]
         )
         session.flush()
-        store = V2Store(
+        return V2Store(
             sessions=sessions,
             policy_id=policy.id,
             uk_policy_id=uk_policy.id,
             household_id=household.id,
             uk_household_id=uk_household.id,
         )
-    try:
-        yield store
-    finally:
-        engine.dispose()

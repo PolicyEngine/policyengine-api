@@ -5,107 +5,59 @@ expected. MySQL counts only the rows whose values changed unless the connection
 sets the CLIENT.FOUND_ROWS flag, so an UPDATE that writes values the row already
 holds reports 0 rows without it.
 
-Use the local, Alembic-migrated target required by test_mysql_policy_dual_write.
-The Cloud SQL connector is replaced by one that opens pymysql connections to
-that server, passing on the connection arguments the engine gives it as the
-real connector does. Only the row each test creates is removed during cleanup.
+Use the local, Alembic-migrated MySQL database that ``ALEMBIC_DATABASE_URL``
+names. API v1's own engine is built as in production, with a stand-in for the
+Cloud SQL connector that opens pymysql connections to that server and passes on
+the connection arguments the engine gives it, as the real connector does
+(``v1_cloud_sql_sessions``). Only the row each test creates is removed during
+cleanup.
 """
 
 from __future__ import annotations
 
-import pymysql
+from typing import TYPE_CHECKING, Any, cast
+
 import pytest
-from sqlalchemy import Engine, create_engine, delete, select, update
-from sqlalchemy.engine import URL, make_url
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm.exc import StaleDataError
-from sqlalchemy.pool import NullPool
 
-from policyengine_api.data import orm, orm_pool_events
+from policyengine_api.data import orm
 from policyengine_api.data.v1_models import ReportOutput
-from tests.integration.test_mysql_policy_dual_write import _mysql_url
+from tests.fixtures.database_sessions import v1_cloud_sql_sessions
 
-MYSQL_DEFAULT_PORT = 3306
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy import CursorResult
+    from sqlalchemy.orm import Session, sessionmaker
+    from sqlalchemy.sql.dml import Update
 
 
-class LocalMySqlConnector:
-    """Stands in for the Cloud SQL connector, connecting to the local test server.
+@pytest.fixture
+def v1_engine_sessions(
+    monkeypatch: pytest.MonkeyPatch, disposable_v1_database_url: str
+) -> Iterator[sessionmaker[Session]]:
+    """Yield API v1's Session factory, on the engine orm._build_remote_engine builds."""
+    with v1_cloud_sql_sessions(monkeypatch, disposable_v1_database_url) as sessions:
+        yield sessions
 
-    The real connector's pymysql path passes every argument other than the
-    instance name and driver on to pymysql, so this one does the same.
+
+@pytest.fixture
+def sessions_without_found_rows(
+    monkeypatch: pytest.MonkeyPatch, disposable_v1_database_url: str
+) -> Iterator[sessionmaker[Session]]:
+    """Yield Session factories on the v1 engine, its connections with no client flags.
+
+    Only the CLIENT.FOUND_ROWS flag the engine passes to each connection
+    differs from API v1's engine: it is replaced by none.
     """
-
-    def __init__(self, database_url: URL, **connector_options):
-        self.database_url = database_url
-        self.connector_options = connector_options
-
-    def connect(self, *, instance_connection_string, driver, **driver_arguments):
-        assert driver == "pymysql"
-        return pymysql.connect(
-            host=self.database_url.host,
-            port=self.database_url.port or MYSQL_DEFAULT_PORT,
-            **driver_arguments,
-        )
-
-    def close(self):
-        pass
+    monkeypatch.setattr(orm, "MYSQL_CLIENT_FOUND_ROWS_FLAG", 0)
+    with v1_cloud_sql_sessions(monkeypatch, disposable_v1_database_url) as sessions:
+        yield sessions
 
 
-@pytest.fixture
-def mysql_database_url() -> URL:
-    return make_url(_mysql_url())
-
-
-@pytest.fixture
-def v1_remote_engine(monkeypatch, mysql_database_url):
-    """Yield the engine orm._build_remote_engine builds, connected to local MySQL."""
-    monkeypatch.setattr(orm, "_cloud_sql_state", orm._CloudSqlState())
-    monkeypatch.setattr(
-        orm,
-        "Connector",
-        lambda **connector_options: LocalMySqlConnector(
-            mysql_database_url, **connector_options
-        ),
-    )
-    monkeypatch.setenv("POLICYENGINE_DB_INSTANCE_CONNECTION_NAME", "local:test:mysql")
-    monkeypatch.setenv("POLICYENGINE_DB_USER", mysql_database_url.username)
-    monkeypatch.setenv("POLICYENGINE_DB_NAME", mysql_database_url.database)
-    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", mysql_database_url.password)
-    engine = orm._build_remote_engine()
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-        # Building the engine sends the connector's logs to the runtime; undo
-        # that, so later tests in this process see the logger unchanged.
-        orm_pool_events.stop_recording_connector_refresh_logs()
-
-
-@pytest.fixture
-def engine_without_found_rows(mysql_database_url):
-    """Yield an engine whose creator opens pymysql connections with no client flags."""
-
-    def connect_without_found_rows():
-        return pymysql.connect(
-            host=mysql_database_url.host,
-            port=mysql_database_url.port or MYSQL_DEFAULT_PORT,
-            user=mysql_database_url.username,
-            password=mysql_database_url.password,
-            database=mysql_database_url.database,
-        )
-
-    engine = create_engine(
-        "mysql+pymysql://",
-        creator=connect_without_found_rows,
-        poolclass=NullPool,
-    )
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-
-
-def _create_pending_report_output(engine: Engine) -> int:
-    with orm.build_session_factory(engine).begin() as session:
+def _create_pending_report_output(sessions: sessionmaker[Session]) -> int:
+    with sessions.begin() as session:
         report_output = ReportOutput(
             country_id="us",
             simulation_1_id=0,
@@ -117,23 +69,52 @@ def _create_pending_report_output(engine: Engine) -> int:
         return report_output.id
 
 
-def _delete_report_output(engine: Engine, report_output_id: int) -> None:
-    with engine.begin() as connection:
-        connection.execute(
-            delete(ReportOutput).where(ReportOutput.id == report_output_id)
-        )
-
-
-def _complete_report_output_already_completed_by_sql(
-    engine: Engine, report_output_id: int
+def _delete_report_output(
+    sessions: sessionmaker[Session], report_output_id: int
 ) -> None:
-    """Have the ORM write a status that SQL set earlier in the same transaction.
+    with sessions.begin() as session:
+        session.execute(delete(ReportOutput).where(ReportOutput.id == report_output_id))
 
-    The ORM loads the row while it is pending, a Core UPDATE then sets it
-    complete without the ORM seeing it, and the ORM sets complete again and
-    flushes. MySQL finds the row but changes nothing.
+
+def _set_complete(report_output_id: int) -> Update:
+    """Return an ORM UPDATE that sets the row complete behind any loaded object."""
+    return (
+        update(ReportOutput)
+        .where(ReportOutput.id == report_output_id)
+        .values(status="complete")
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _row_count(session: Session, statement: Update) -> int:
+    """Run an UPDATE in the Session and return the row count MySQL reports."""
+    result = cast("CursorResult[Any]", session.execute(statement))
+    return result.rowcount
+
+
+def _rows_reported_for_unchanged_update(
+    sessions: sessionmaker[Session], report_output_id: int
+) -> int:
+    """Return the row count of an ORM UPDATE that writes the values the row holds.
+
+    The first UPDATE sets the pending row complete and the second sets it
+    complete again. Closing the Session rolls both back.
     """
-    with orm.build_session_factory(engine).begin() as session:
+    with sessions() as session:
+        assert _row_count(session, _set_complete(report_output_id)) == 1
+        return _row_count(session, _set_complete(report_output_id))
+
+
+def _complete_report_output_already_completed_by_statement(
+    sessions: sessionmaker[Session], report_output_id: int
+) -> None:
+    """Have the ORM write a status that an UPDATE set earlier in the same transaction.
+
+    The ORM loads the row while it is pending, an ORM UPDATE statement then sets
+    it complete without changing the loaded object, and the object sets complete
+    again and flushes. MySQL finds the row but changes nothing.
+    """
+    with sessions.begin() as session:
         report_output = session.scalar(
             select(ReportOutput)
             .where(ReportOutput.id == report_output_id)
@@ -141,38 +122,46 @@ def _complete_report_output_already_completed_by_sql(
         )
         assert report_output is not None
         assert report_output.status == "pending"
-        session.connection().execute(
-            update(ReportOutput.__table__)
-            .where(ReportOutput.__table__.c.id == report_output_id)
-            .values(status="complete")
-        )
+        session.execute(_set_complete(report_output_id))
         report_output.status = "complete"
         session.flush()
 
 
 def test_orm_update_to_unchanged_values_raises_without_found_rows(
-    engine_without_found_rows,
-):
-    report_output_id = _create_pending_report_output(engine_without_found_rows)
+    sessions_without_found_rows: sessionmaker[Session],
+) -> None:
+    report_output_id = _create_pending_report_output(sessions_without_found_rows)
     try:
+        assert (
+            _rows_reported_for_unchanged_update(
+                sessions_without_found_rows, report_output_id
+            )
+            == 0
+        )
         with pytest.raises(StaleDataError, match="0 were matched"):
-            _complete_report_output_already_completed_by_sql(
-                engine_without_found_rows, report_output_id
+            _complete_report_output_already_completed_by_statement(
+                sessions_without_found_rows, report_output_id
             )
     finally:
-        _delete_report_output(engine_without_found_rows, report_output_id)
+        _delete_report_output(sessions_without_found_rows, report_output_id)
 
 
-def test_v1_engine_orm_update_to_unchanged_values_succeeds(v1_remote_engine):
-    report_output_id = _create_pending_report_output(v1_remote_engine)
+def test_v1_engine_orm_update_to_unchanged_values_succeeds(
+    v1_engine_sessions: sessionmaker[Session],
+) -> None:
+    report_output_id = _create_pending_report_output(v1_engine_sessions)
     try:
-        _complete_report_output_already_completed_by_sql(
-            v1_remote_engine, report_output_id
+        assert (
+            _rows_reported_for_unchanged_update(v1_engine_sessions, report_output_id)
+            == 1
+        )
+        _complete_report_output_already_completed_by_statement(
+            v1_engine_sessions, report_output_id
         )
 
-        with orm.build_session_factory(v1_remote_engine)() as session:
+        with v1_engine_sessions() as session:
             report_output = session.get(ReportOutput, report_output_id)
             assert report_output is not None
             assert report_output.status == "complete"
     finally:
-        _delete_report_output(v1_remote_engine, report_output_id)
+        _delete_report_output(v1_engine_sessions, report_output_id)

@@ -2,7 +2,9 @@
 
 The deploy upgrades the database before new code takes traffic, so the release
 serving during that upgrade must not name a column it removes. The tables keep
-the columns until then: only the models stop selecting and writing them.
+the columns until then: each stays a SQLModel field, as rule
+``api.data.orm-only`` requires of every column, and ``exclude_properties``
+leaves it out of the mapper, so the models neither select nor write it.
 """
 
 import pytest
@@ -10,12 +12,12 @@ import sqlalchemy as sa
 from sqlmodel import select
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     BudgetWindowRun,
     Report,
     ReportRun,
     User,
 )
+from tests.unit.v2.v2_schema_reading import stored_v2_table
 
 UNMAPPED_COLUMNS = [
     (Report, "label"),
@@ -36,31 +38,36 @@ def test_a_whole_row_read_names_no_unmapped_column(
 
 
 @pytest.mark.parametrize(("model", "column_name"), UNMAPPED_COLUMNS)
-def test_a_model_has_no_attribute_for_an_unmapped_column(
+def test_the_mapper_leaves_out_an_unmapped_column(
     model: type, column_name: str
 ) -> None:
-    assert column_name not in sa.inspect(model).column_attrs
-    assert column_name not in model.model_fields
-    assert not hasattr(model, column_name)
+    mapper = sa.inspect(model)
+
+    assert column_name in mapper.exclude_properties
+    assert column_name not in mapper.column_attrs
 
 
 @pytest.mark.parametrize(("model", "column_name"), UNMAPPED_COLUMNS)
 def test_the_table_keeps_an_unmapped_column_until_a_revision_drops_it(
     model: type, column_name: str
 ) -> None:
-    column = V2_METADATA.tables[model.__tablename__].c[column_name]
+    stored_column = stored_v2_table(model.__tablename__).columns[column_name]
 
-    assert column.nullable
-    assert column.server_default is None
+    assert stored_column.nullable
+    assert model.model_fields[column_name].default is None
 
 
 def test_the_reports_user_key_and_index_stay_with_the_column() -> None:
-    reports = V2_METADATA.tables["reports"]
+    reports = stored_v2_table("reports")
 
-    (user_key,) = reports.c.user_id.foreign_keys
-    assert user_key.target_fullname == "users.id"
+    (user_key,) = (
+        foreign_key
+        for foreign_key in reports.foreign_keys
+        if foreign_key.columns == ("user_id",)
+    )
+    assert user_key.targets == ("users.id",)
     assert user_key.ondelete == "SET NULL"
-    assert "ix_reports_user_id" in {index.name for index in reports.indexes}
+    assert reports.index_columns["ix_reports_user_id"] == ("user_id",)
 
 
 def test_reports_and_users_have_no_relationship() -> None:

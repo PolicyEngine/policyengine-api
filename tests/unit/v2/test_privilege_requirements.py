@@ -33,7 +33,7 @@ def _connector(directory: Path, name: str, source: str) -> Path:
 
 def _needed(path: Path) -> set[tuple[str, TablePrivilege]]:
     return {
-        (requirement.table, requirement.privilege)
+        (requirement.table_name, requirement.privilege)
         for requirement in required_privileges(path, TABLE_BY_MODEL)
     }
 
@@ -126,7 +126,7 @@ def test_a_row_lock_needs_update_on_the_selected_table_only(tmp_path: Path) -> N
 
     assert (
         RequiredPrivilege(
-            table="legacy_policy_mappings",
+            table_name="legacy_policy_mappings",
             privilege=TablePrivilege.UPDATE,
             connector="reads.py",
             reason="read_mapping locks rows with with_for_update",

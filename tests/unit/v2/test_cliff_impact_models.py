@@ -6,6 +6,10 @@ calculation that hasn't failed, so two requests asking for its cliffs at once
 start one calculation; a failed calculation never counts, and the next request
 starts another. The result inherits its run's versions, and is linked to the
 run, not to any report.
+
+Columns are read from the model's mapper, constraints and indexes from SQLite's
+copy of the schema, and the partial index from the model's declaration
+(tests/unit/v2/v2_schema_reading.py).
 """
 
 from collections.abc import Iterator
@@ -18,10 +22,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     CliffImpact,
     SimulationRun,
     SimulationStatus,
+)
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+from tests.unit.v2.v2_schema_reading import (
+    declared_index,
+    model_columns,
+    stored_v2_table,
 )
 
 CLIFF_IMPACT_COLUMNS = frozenset(
@@ -43,56 +52,40 @@ UNFAILED_CALCULATIONS = "status <> 'failed'"
 FINISHED_STATUSES = frozenset({SimulationStatus.SUCCEEDED, SimulationStatus.FAILED})
 
 
-def _cliff_impacts() -> sa.Table:
-    return V2_METADATA.tables["cliff_impacts"]
-
-
-def _checks() -> dict[str, str]:
-    return {
-        str(constraint.name): str(constraint.sqltext)
-        for constraint in _cliff_impacts().constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
-
-
-def _indexes() -> dict[str, sa.Index]:
-    return {str(index.name): index for index in _cliff_impacts().indexes}
-
-
 def test_cliff_impacts_hold_one_calculation_of_a_simulation_run() -> None:
     """The run it calculates, the calculation's state and the two numbers."""
-    cliff_impacts = _cliff_impacts()
+    cliff_impacts = model_columns(CliffImpact)
 
-    assert set(cliff_impacts.c.keys()) == CLIFF_IMPACT_COLUMNS
-    assert not cliff_impacts.c.simulation_run_id.nullable
-    (run_key,) = cliff_impacts.c.simulation_run_id.foreign_keys
-    assert run_key.target_fullname == "simulation_runs.id"
+    assert set(cliff_impacts.keys()) == CLIFF_IMPACT_COLUMNS
+    assert not cliff_impacts.simulation_run_id.nullable
+    run_key = stored_v2_table("cliff_impacts").foreign_key("simulation_run_id")
+    assert run_key.target == "simulation_runs.id"
     # The result is part of its run, as poverty and inequality rows are.
     assert run_key.ondelete == "CASCADE"
-    status = cliff_impacts.c.status
+    status = cliff_impacts.status
     assert not status.nullable
     assert isinstance(status.type, sa.Enum)
     # A cliff calculation has a simulation run's states, in the same type.
     assert status.type.name == "v2_simulation_status"
     assert status.type.enums == ["pending", "running", "succeeded", "failed"]
-    assert cliff_impacts.c.modal_call_id.type.length == 255
+    assert cliff_impacts.modal_call_id.type.length == 255
     for timestamp in ("started_at", "completed_at"):
-        assert cliff_impacts.c[timestamp].nullable
-        assert cliff_impacts.c[timestamp].type.timezone
+        assert cliff_impacts[timestamp].nullable
+        assert cliff_impacts[timestamp].type.timezone
     for number in ("cliff_gap", "cliff_share"):
-        assert cliff_impacts.c[number].nullable
-        assert isinstance(cliff_impacts.c[number].type, sa.Float)
+        assert cliff_impacts[number].nullable
+        assert isinstance(cliff_impacts[number].type, sa.Float)
     # No version of its own: it inherits its run's.
     assert {
         "tax_benefit_model_version_id",
         "country_package_version",
         "policyengine_version",
         "report_run_id",
-    }.isdisjoint(cliff_impacts.c.keys())
+    }.isdisjoint(cliff_impacts.keys())
 
 
 def test_only_a_succeeded_cliff_calculation_has_a_result() -> None:
-    assert _checks() == {
+    assert stored_v2_table("cliff_impacts").checks == {
         "ck_cliff_impacts_finished_completion": (
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL"
         ),
@@ -105,8 +98,7 @@ def test_only_a_succeeded_cliff_calculation_has_a_result() -> None:
 
 def test_a_simulation_run_has_one_cliff_calculation_that_has_not_failed() -> None:
     """The partial unique index the simulation service names on conflict."""
-    indexes = _indexes()
-    unfailed = indexes["uq_cliff_impacts_unfailed"]
+    unfailed = declared_index(CliffImpact, "uq_cliff_impacts_unfailed")
 
     assert unfailed.unique
     assert tuple(column.name for column in unfailed.columns) == ("simulation_run_id",)
@@ -117,8 +109,8 @@ def test_a_simulation_run_has_one_cliff_calculation_that_has_not_failed() -> Non
     # The run's key, for its cascade and for reads that include failed rows,
     # and the stuck-run sweep's search by state and age.
     assert {
-        name: tuple(column.name for column in index.columns)
-        for name, index in indexes.items()
+        name: index.columns
+        for name, index in stored_v2_table("cliff_impacts").indexes.items()
         if not index.unique
     } == {
         "ix_cliff_impacts_simulation_run_id": ("simulation_run_id",),
@@ -129,7 +121,7 @@ def test_a_simulation_run_has_one_cliff_calculation_that_has_not_failed() -> Non
 def test_a_simulation_runs_cliff_calculations_go_with_it() -> None:
     relationship = sa.inspect(SimulationRun).relationships["cliff_impacts"]
 
-    assert relationship.mapper.local_table is _cliff_impacts()
+    assert relationship.mapper.class_ is CliffImpact
     assert "delete" in relationship.cascade
     assert sa.inspect(CliffImpact).relationships["simulation_run"].mapper.class_ is (
         SimulationRun
@@ -138,11 +130,8 @@ def test_a_simulation_runs_cliff_calculations_go_with_it() -> None:
 
 @pytest.fixture
 def sqlite_session() -> Iterator[Session]:
-    engine = sa.create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    with Session(engine) as session:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         yield session
-    engine.dispose()
 
 
 def _cliff_calculation(

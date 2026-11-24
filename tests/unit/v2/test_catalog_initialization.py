@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ast
 import json
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -27,6 +29,9 @@ from tests.fixtures.v2_catalog import (
     normalized_catalog,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 ENVIRONMENT = {
     V2_DATA_WRITE_DATABASE_URL: (
         "postgresql+psycopg://data-writer:test-password@db."
@@ -40,12 +45,22 @@ ENVIRONMENT = {
 }
 
 
-class FakeEngine:
-    def __init__(self) -> None:
-        self.disposed = False
+class FakeSessions:
+    """Stands in for the Session factories of one initialization attempt.
 
-    def dispose(self) -> None:
-        self.disposed = True
+    ``closed`` records that the context ``sessions_builder`` opened has ended,
+    as ``unpooled_v2_sessions`` then disposes of its engine.
+    """
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    @contextmanager
+    def opened(self) -> Iterator[FakeSessions]:
+        try:
+            yield self
+        finally:
+            self.closed = True
 
 
 def _evidence() -> PublicationEvidence:
@@ -60,23 +75,23 @@ def _evidence() -> PublicationEvidence:
     )
 
 
-def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> None:
-    engine = FakeEngine()
+def test_initialization_uses_only_data_write_settings_and_closes_sessions() -> None:
+    sessions = FakeSessions()
     observed = {}
 
     def build(settings):
         observed["username"] = settings.connection.url.username
-        return engine
+        return sessions.opened()
 
-    def publish(selected_engine, catalog):
-        observed["engine"] = selected_engine
+    def publish(selected_sessions, catalog):
+        observed["sessions"] = selected_sessions
         observed["version"] = catalog.policyengine_version
         return _evidence()
 
-    def verify(selected_engine, catalog, environ):
-        assert "engine" not in observed
+    def verify(selected_sessions, catalog, environ):
+        assert "sessions" not in observed
         observed["verified"] = (
-            selected_engine,
+            selected_sessions,
             catalog.policyengine_version,
             environ,
         )
@@ -85,15 +100,16 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
         recorded=(("us", "1.450.0", True),)
     )
 
-    def record_spm(selected_engine, catalog, environ):
-        assert "engine" in observed
-        observed["spm"] = (selected_engine, catalog.policyengine_version, environ)
+    def record_spm(selected_sessions, catalog, environ):
+        assert "sessions" in observed
+        assert not sessions.closed
+        observed["spm"] = (selected_sessions, catalog.policyengine_version, environ)
         return recording
 
     result = initialization.initialize_catalog(
         ENVIRONMENT,
         extractor=normalized_catalog,
-        engine_builder=build,
+        sessions_builder=build,
         steps=initialization.PublicationSteps(
             verify_region_data=verify,
             publish=publish,
@@ -104,22 +120,22 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
     assert result == replace(_evidence(), spm_availability=recording)
     assert observed == {
         "username": "data-writer",
-        "verified": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
-        "engine": engine,
+        "verified": (sessions, POLICYENGINE_VERSION, ENVIRONMENT),
+        "sessions": sessions,
         "version": POLICYENGINE_VERSION,
-        "spm": (engine, POLICYENGINE_VERSION, ENVIRONMENT),
+        "spm": (sessions, POLICYENGINE_VERSION, ENVIRONMENT),
     }
-    assert engine.disposed
+    assert sessions.closed
 
 
-def test_region_data_failure_publishes_nothing_and_disposes_engine() -> None:
-    engine = FakeEngine()
+def test_region_data_failure_publishes_nothing_and_closes_sessions() -> None:
+    sessions = FakeSessions()
 
-    def reject(_engine, _catalog, _environ):
+    def reject(_sessions, _catalog, _environ):
         msg = "the certified dataset d has no household column c"
         raise RegionDataVerificationError(msg)
 
-    def refuse_publication(_engine, _catalog):
+    def refuse_publication(_sessions, _catalog):
         msg = "publication must not start"
         raise AssertionError(msg)
 
@@ -127,12 +143,12 @@ def test_region_data_failure_publishes_nothing_and_disposes_engine() -> None:
         initialization.initialize_catalog(
             ENVIRONMENT,
             extractor=normalized_catalog,
-            engine_builder=lambda _settings: engine,
+            sessions_builder=lambda _settings: sessions.opened(),
             steps=initialization.PublicationSteps(
                 verify_region_data=reject, publish=refuse_publication
             ),
         )
-    assert engine.disposed
+    assert sessions.closed
 
 
 def test_installed_verification_reads_artifacts_with_the_hugging_face_token(
@@ -190,12 +206,12 @@ def test_uk_verification_requires_the_hugging_face_token_before_reading(
 def test_default_verification_checks_only_countries_not_yet_published(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = FakeEngine()
+    sessions = FakeSessions()
     catalog = normalized_catalog()
     observed = {}
 
-    def find_unpublished(selected_engine, selected_catalog):
-        observed["found"] = (selected_engine, selected_catalog)
+    def find_unpublished(selected_sessions, selected_catalog):
+        observed["found"] = (selected_sessions, selected_catalog)
         return ("uk",)
 
     def verify(selected_catalog, countries, environ):
@@ -204,10 +220,10 @@ def test_default_verification_checks_only_countries_not_yet_published(
     monkeypatch.setattr(initialization, "unpublished_countries", find_unpublished)
     monkeypatch.setattr(initialization, "verify_installed_region_data", verify)
 
-    initialization.verify_unpublished_region_data(engine, catalog, ENVIRONMENT)
+    initialization.verify_unpublished_region_data(sessions, catalog, ENVIRONMENT)
 
     assert observed == {
-        "found": (engine, catalog),
+        "found": (sessions, catalog),
         "verified": (catalog, ("uk",), ENVIRONMENT),
     }
 
@@ -231,20 +247,20 @@ def test_main_reports_a_region_data_failure_with_its_message(
     assert "which 1 uk region filters on" in failure.err
 
 
-def test_extraction_failure_opens_no_engine() -> None:
+def test_extraction_failure_opens_no_sessions() -> None:
     def fail_extraction():
         msg = "extraction failed"
         raise RuntimeError(msg)
 
-    def reject_engine(_settings):
-        msg = "engine must not be built"
+    def reject_sessions(_settings):
+        msg = "no Session factory may be built"
         raise AssertionError(msg)
 
     with pytest.raises(RuntimeError, match="extraction failed"):
         initialization.initialize_catalog(
             ENVIRONMENT,
             extractor=fail_extraction,
-            engine_builder=reject_engine,
+            sessions_builder=reject_sessions,
         )
 
 

@@ -8,9 +8,6 @@ import sys
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.pool import NullPool
-
 from policyengine_api.data.v2.catalog.certified_data_inspection import (
     HuggingFaceDataInspector,
 )
@@ -40,6 +37,10 @@ from policyengine_api.data.v2.settings import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+    from contextlib import AbstractContextManager
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.publication_types import (
         SPMAvailabilityRecording,
@@ -54,9 +55,16 @@ HUGGING_FACE_CREDENTIAL_VARIABLE = "HUGGING_FACE_TOKEN"
 PRIVATE_DATA_COUNTRIES = frozenset({"uk"})
 
 
-def build_data_write_engine(settings: V2DatabaseSettings) -> Engine:
-    """Build an isolated, unpooled engine for one initialization attempt."""
-    return create_engine(settings.connection.url, poolclass=NullPool)
+def data_write_sessions(
+    settings: V2DatabaseSettings,
+) -> AbstractContextManager[sessionmaker[Session]]:
+    """Return the Session factories of one initialization attempt, as a context.
+
+    Their engine keeps no connection pool and is disposed of on exit.
+    """
+    from policyengine_api.data.v2.database import unpooled_v2_sessions
+
+    return unpooled_v2_sessions(settings.connection.url)
 
 
 def verify_installed_region_data(
@@ -90,7 +98,7 @@ def verify_installed_region_data(
 
 
 def verify_unpublished_region_data(
-    engine: Engine,
+    sessions: sessionmaker[Session],
     catalog: NormalizedCatalog,
     environ: Mapping[str, str] | None = None,
 ) -> None:
@@ -100,7 +108,7 @@ def verify_unpublished_region_data(
     with what is stored, so their artifacts are not read.
     """
     verify_installed_region_data(
-        catalog, unpublished_countries(engine, catalog), environ
+        catalog, unpublished_countries(sessions, catalog), environ
     )
 
 
@@ -115,13 +123,13 @@ class PublicationSteps:
     """
 
     verify_region_data: Callable[
-        [Engine, NormalizedCatalog, Mapping[str, str] | None], None
+        [sessionmaker[Session], NormalizedCatalog, Mapping[str, str] | None], None
     ] = verify_unpublished_region_data
-    publish: Callable[[Engine, NormalizedCatalog], PublicationEvidence] = (
-        publish_catalog
-    )
+    publish: Callable[
+        [sessionmaker[Session], NormalizedCatalog], PublicationEvidence
+    ] = publish_catalog
     record_spm_availability: Callable[
-        [Engine, NormalizedCatalog, Mapping[str, str] | None],
+        [sessionmaker[Session], NormalizedCatalog, Mapping[str, str] | None],
         SPMAvailabilityRecording,
     ] = record_published_spm_availability
 
@@ -130,27 +138,27 @@ def initialize_catalog(
     environ: Mapping[str, str] | None = None,
     *,
     extractor: Callable[[], NormalizedCatalog] = extract_installed_catalog,
-    engine_builder: Callable[[V2DatabaseSettings], Engine] = build_data_write_engine,
+    sessions_builder: Callable[
+        [V2DatabaseSettings], AbstractContextManager[sessionmaker[Session]]
+    ] = data_write_sessions,
     steps: PublicationSteps | None = None,
 ) -> PublicationEvidence:
     """Load only row-write settings, extract fully, verify, then publish explicitly.
 
     After publishing, record each version's SPM availability, which the
     evidence returned reports. The simulation service's URL, which that
-    needs, is checked before anything else.
+    needs, is checked before anything else. Every step uses the Session
+    factories ``sessions_builder`` opens, which it closes when they end.
     """
     selected_steps = steps or PublicationSteps()
     settings = load_v2_data_write_database_settings(environ)
     simulation_entrypoint_url(os.environ if environ is None else environ)
     catalog = extractor()
-    engine = engine_builder(settings)
-    try:
-        selected_steps.verify_region_data(engine, catalog, environ)
-        evidence = selected_steps.publish(engine, catalog)
-        recording = selected_steps.record_spm_availability(engine, catalog, environ)
+    with sessions_builder(settings) as sessions:
+        selected_steps.verify_region_data(sessions, catalog, environ)
+        evidence = selected_steps.publish(sessions, catalog)
+        recording = selected_steps.record_spm_availability(sessions, catalog, environ)
         return replace(evidence, spm_availability=recording)
-    finally:
-        engine.dispose()
 
 
 def _error_payload(error: Exception) -> dict[str, object]:

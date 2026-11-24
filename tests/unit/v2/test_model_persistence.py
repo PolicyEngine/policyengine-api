@@ -1,15 +1,17 @@
 """Canonical SQLModel persistence and bounded SQLAlchemy escape-hatch tests."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Country,
     Dynamic,
     Household,
@@ -26,22 +28,18 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
 )
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
 
 
-def _relational_sqlite_engine():
-    engine = create_engine("sqlite://")
-
-    @sa.event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    V2_METADATA.create_all(engine)
-    with Session(engine) as session:
-        add_listed_countries(session)
-    return engine
+@contextmanager
+def _relational_sqlite_session() -> Iterator[Session]:
+    """Yield a Session of a SQLite v2 schema that enforces foreign keys."""
+    with sqlite_v2_sessions(foreign_keys=True) as sessions:
+        with sessions(expire_on_commit=True) as session:
+            add_listed_countries(session)
+        with sessions(expire_on_commit=True) as session:
+            yield session
 
 
 def _policy_graph(*, content_hash: str = "a" * 64):
@@ -69,8 +67,6 @@ def _policy_graph(*, content_hash: str = "a" * 64):
 def test_ordinary_persistence_uses_sqlmodel_session_select_and_exec() -> None:
     # SQLite exists only as an injected, in-memory unit-test fixture. Runtime
     # v2 settings reject it and application code never selects it.
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
     model = TaxBenefitModel(name="test-country", description="Test model")
     version = TaxBenefitModelVersion(
         model=model,
@@ -79,7 +75,7 @@ def test_ordinary_persistence_uses_sqlmodel_session_select_and_exec() -> None:
         metadata_time_periods=[2026],
     )
 
-    with Session(engine) as session:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         session.add(version)
         session.commit()
         statement = select(TaxBenefitModelVersion).where(
@@ -90,8 +86,6 @@ def test_ordinary_persistence_uses_sqlmodel_session_select_and_exec() -> None:
         assert stored.model.name == "test-country"
         assert stored.id == version.id
 
-    engine.dispose()
-
 
 def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
     assert set(DIRECT_SQLALCHEMY_EXCEPTIONS) == {
@@ -101,15 +95,14 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
         "transaction_conflict_recovery",
-        "table_only_columns_awaiting_removal",
+        "columns_left_out_of_the_mapper",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
 
 def test_user_primary_country_must_be_a_listed_country() -> None:
-    engine = _relational_sqlite_engine()
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         user = User(
             first_name="Ada",
             last_name="Lovelace",
@@ -129,18 +122,15 @@ def test_user_primary_country_must_be_a_listed_country() -> None:
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_a_country_row_lets_records_use_a_household_only_country() -> None:
-    engine = _relational_sqlite_engine()
     household_only_country = Country(
         id="be",
         household_enabled=True,
         society_wide_enabled=False,
     )
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add(User(primary_country="be"))
         with pytest.raises(IntegrityError):
             session.commit()
@@ -169,13 +159,10 @@ def test_a_country_row_lets_records_use_a_household_only_country() -> None:
         stored_country = session.exec(select(UserHouseholdAssociation.country_id)).one()
         assert stored_country == "be"
 
-    engine.dispose()
-
 
 def test_a_listed_country_cannot_be_deleted_while_records_use_it() -> None:
-    engine = _relational_sqlite_engine()
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add(User(primary_country="uk"))
         session.commit()
 
@@ -183,57 +170,50 @@ def test_a_listed_country_cannot_be_deleted_while_records_use_it() -> None:
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_a_society_wide_country_must_also_be_household_capable() -> None:
-    engine = _relational_sqlite_engine()
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add(
             Country(id="be", household_enabled=False, society_wide_enabled=True)
         )
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_only_unauthenticated_users_may_omit_a_primary_country() -> None:
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-
-    with Session(engine) as session:
-        session.add(User(user_type="unauthenticated"))
-        session.commit()
-    for invalid in (
-        User(),
-        User(user_type="standard"),
-        User(user_type="guest", primary_country="us"),
-    ):
-        with Session(engine) as session:
-            session.add(invalid)
-            with pytest.raises(IntegrityError):
-                session.commit()
-    with engine.begin() as connection:
-        # Writers that predate user_type rely on its server default.
-        connection.execute(
-            sa.text(
-                "INSERT INTO users (id, created_at, primary_country) "
-                "VALUES ('00000000000000000000000000000001', CURRENT_TIMESTAMP, 'us')"
+    with sqlite_v2_sessions() as sessions:
+        with sessions(expire_on_commit=True) as session:
+            session.add(User(user_type="unauthenticated"))
+            session.commit()
+        for invalid in (
+            User(),
+            User(user_type="standard"),
+            User(user_type="guest", primary_country="us"),
+        ):
+            with sessions(expire_on_commit=True) as session:
+                session.add(invalid)
+                with pytest.raises(IntegrityError):
+                    session.commit()
+        with sessions.begin() as session:
+            # Writers that predate user_type rely on its server default: the
+            # INSERT names only these columns, leaving out every default.
+            session.execute(
+                sa.insert(User).from_select(
+                    ["id", "created_at", "primary_country"],
+                    sa.select(
+                        sa.literal(UUID(int=1), sa.Uuid),
+                        sa.func.current_timestamp(),
+                        sa.literal("us"),
+                    ),
+                    include_defaults=False,
+                )
             )
-        )
-        stored_types = connection.execute(
-            sa.text("SELECT user_type FROM users ORDER BY user_type")
-        ).scalars()
-        assert list(stored_types) == ["standard", "unauthenticated"]
-
-    engine.dispose()
+            stored_types = session.exec(select(User.user_type).order_by(User.user_type))
+            assert list(stored_types) == ["standard", "unauthenticated"]
 
 
 def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> None:
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
     model = TaxBenefitModel(name="canonical-values")
     version = TaxBenefitModelVersion(
         model=model,
@@ -247,7 +227,7 @@ def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> 
     )
     start_date = datetime(2026, 1, 1, tzinfo=UTC)
 
-    with Session(engine) as session:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         session.add_all(
             [
                 ParameterValue(
@@ -265,11 +245,8 @@ def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> 
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_policy_content_hash_is_unique_per_canonicalization_version() -> None:
-    engine = _relational_sqlite_engine()
     model, version, _parameter, policy = _policy_graph()
     duplicate = Policy(
         country_id="us",
@@ -279,16 +256,13 @@ def test_policy_content_hash_is_unique_per_canonicalization_version() -> None:
         content_hash=policy.content_hash,
     )
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add_all([policy, duplicate])
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
-    engine = _relational_sqlite_engine()
     model, version, parameter, policy = _policy_graph(content_hash="b" * 64)
     dynamic = Dynamic(
         country_id="us",
@@ -299,7 +273,7 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
     )
     start = datetime(2026, 1, 1, tzinfo=UTC)
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add_all([parameter, policy])
         session.commit()
         session.add(dynamic)
@@ -348,15 +322,12 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_user_policy_allows_duplicates_but_requires_policy_country() -> None:
-    engine = _relational_sqlite_engine()
     _model, _version, _parameter, policy = _policy_graph(content_hash="c" * 64)
     user = User(primary_country="us")
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add_all([policy, user])
         session.commit()
         first = UserPolicy(
@@ -386,14 +357,11 @@ def test_user_policy_allows_duplicates_but_requires_policy_country() -> None:
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_legacy_policy_mapping_allows_many_sources_for_one_policy() -> None:
-    engine = _relational_sqlite_engine()
     _model, _version, _parameter, policy = _policy_graph(content_hash="d" * 64)
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         session.add(policy)
         session.commit()
         session.add_all(
@@ -427,15 +395,12 @@ def test_legacy_policy_mapping_allows_many_sources_for_one_policy() -> None:
         with pytest.raises(IntegrityError):
             session.commit()
 
-    engine.dispose()
-
 
 def test_legacy_user_policy_mapping_destination_is_unique_and_cascades() -> None:
-    engine = _relational_sqlite_engine()
     _model, _version, _parameter, policy = _policy_graph(content_hash="e" * 64)
     user = User(primary_country="us")
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         association = UserPolicy(
             country_id="us",
             user=user,
@@ -478,13 +443,10 @@ def test_legacy_user_policy_mapping_destination_is_unique_and_cascades() -> None
         stored_policy = session.get(Policy, policy.id)
         assert stored_policy is not None
 
-    engine.dispose()
-
 
 def test_legacy_user_mapping_is_one_to_one_and_profile_fields_are_optional() -> None:
-    engine = _relational_sqlite_engine()
 
-    with Session(engine) as session:
+    with _relational_sqlite_session() as session:
         user = User(primary_country="us")
         session.add(user)
         session.commit()
@@ -509,8 +471,6 @@ def test_legacy_user_mapping_is_one_to_one_and_profile_fields_are_optional() -> 
         )
         with pytest.raises(IntegrityError):
             session.commit()
-
-    engine.dispose()
 
 
 def test_v2_models_do_not_create_a_parallel_sqlalchemy_orm_layer() -> None:

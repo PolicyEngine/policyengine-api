@@ -4,7 +4,7 @@ Revision ``fbb7488ebe8a`` reshapes the dormant ``user_simulation_associations``
 and ``user_report_associations`` tables (dropping their v2 foreign keys and
 legacy columns and adding a required ``country_id``). Before it is applied,
 those tables must be empty. This command reports the row counts of all four
-v2 user-association tables through SQLAlchemy in a read-only, rolled-back
+v2 user-association tables through an ORM Session in a read-only, rolled-back
 transaction and fails when the revision is pending and a dormant table still
 holds rows. It never writes, and it never prints the database URL.
 
@@ -21,13 +21,7 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from alembic.config import Config
-from alembic.migration import MigrationContext
-from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, Engine, func, inspect, select
-from sqlalchemy.exc import NoInspectionAvailable
-from sqlalchemy.pool import NullPool
-from sqlmodel import create_engine
+from sqlalchemy import func, select
 
 from policyengine_api.data.v2.models import (
     UserHouseholdAssociation,
@@ -35,6 +29,7 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
 )
+from policyengine_api.data.v2.pending_revisions import v2_revision_is_pending
 from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     V2DatabaseSettings,
@@ -43,9 +38,12 @@ from policyengine_api.data.v2.settings import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
+    from contextlib import AbstractContextManager
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 USER_ASSOCIATION_MIGRATION_REVISION = "fbb7488ebe8a"
-V2_ALEMBIC_CONFIG = "alembic-v2.ini"
 
 
 class ScalarExecutor(Protocol):
@@ -151,60 +149,51 @@ def require_empty_dormant_associations(
         raise RetainedDormantAssociationError(counts)
 
 
-def user_association_migration_is_pending(connection: Connection) -> bool:
+def user_association_migration_is_pending(session: Session) -> bool:
     """Return whether the Stage 12A revision is in the upgrade path."""
-    current_heads = MigrationContext.configure(connection).get_current_heads()
-    revisions = ScriptDirectory.from_config(
-        Config(V2_ALEMBIC_CONFIG)
-    ).iterate_revisions("heads", current_heads)
-    return USER_ASSOCIATION_MIGRATION_REVISION in {
-        migration.revision for migration in revisions
-    }
+    return v2_revision_is_pending(session, USER_ASSOCIATION_MIGRATION_REVISION)
 
 
-def build_qualification_engine(settings: V2DatabaseSettings) -> Engine:
-    """Build an isolated connection pool for one qualification attempt."""
-    return create_engine(settings.connection.url, poolclass=NullPool)
+def open_qualification_sessions(
+    settings: V2DatabaseSettings,
+) -> AbstractContextManager[sessionmaker[Session]]:
+    """Open Session factories for one qualification attempt.
+
+    Their engine keeps no pool, and every transaction is READ ONLY: Postgres
+    enforces the read-only session characteristic, which is applied before
+    the transaction begins and reset on release.
+    """
+    from policyengine_api.data.v2.database import unpooled_v2_read_only_sessions
+
+    return unpooled_v2_read_only_sessions(settings.connection.url)
 
 
-def _existing_tables(connection: Connection) -> list[str] | None:
-    try:
-        return inspect(connection).get_table_names(schema="public")
-    except NoInspectionAvailable:
-        return None
+def _public_tables(session: Session) -> list[str]:
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    return v2_schema_inspector(session).get_table_names(schema="public")
 
 
 def qualify_user_association_migration(
     environ: Mapping[str, str] | None = None,
     *,
-    engine_builder: Callable[[V2DatabaseSettings], Engine] = (
-        build_qualification_engine
-    ),
-    pending_checker: Callable[[Connection], bool] = (
+    session_factories: Callable[
+        [V2DatabaseSettings], AbstractContextManager[sessionmaker[Session]]
+    ] = open_qualification_sessions,
+    pending_checker: Callable[[Session], bool] = (
         user_association_migration_is_pending
     ),
 ) -> UserAssociationQualification:
-    """Report counts and stop when a pending reshape would affect rows."""
+    """Report counts and stop when a pending reshape would affect rows.
+
+    The revision check and the rows are read in one READ ONLY transaction,
+    rolled back when the session closes.
+    """
     settings = load_v2_migration_database_settings(environ)
-    engine = engine_builder(settings)
-    try:
-        with engine.connect() as connection:
-            # Postgres enforces the read-only session characteristic; it is
-            # applied before the transaction begins and reset on release.
-            connection.execution_options(postgresql_readonly=True)
-            transaction = connection.begin()
-            try:
-                migration_pending = pending_checker(connection)
-                counts = read_user_association_counts(
-                    connection, _existing_tables(connection)
-                )
-                require_empty_dormant_associations(
-                    counts, migration_pending=migration_pending
-                )
-            finally:
-                transaction.rollback()
-    finally:
-        engine.dispose()
+    with session_factories(settings) as sessions, sessions() as session:
+        migration_pending = pending_checker(session)
+        counts = read_user_association_counts(session, _public_tables(session))
+        require_empty_dormant_associations(counts, migration_pending=migration_pending)
     return UserAssociationQualification(
         environment=settings.target.environment,
         project_ref=settings.target.project_ref,

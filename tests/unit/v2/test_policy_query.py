@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Parameter,
     ParameterValue,
     Policy,
@@ -23,12 +23,25 @@ from policyengine_api.services.v2.policies.services import (
 from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlmodel import Session
 
 
-def _stored_policies():
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    session = Session(engine)
+@contextmanager
+def _stored_policies() -> Iterator[
+    tuple[Session, TaxBenefitModel, Policy, Policy, Policy]
+]:
+    """Yield a Session of a database storing three policies, the model and them."""
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
+        yield (session, *_store_policies(session))
+
+
+def _store_policies(session: Session) -> tuple[TaxBenefitModel, Policy, Policy, Policy]:
+    """Store a model's two US policies and a UK policy; return the model and them."""
     model = TaxBenefitModel(name="policyengine-us")
     version = TaxBenefitModelVersion(
         model=model,
@@ -98,12 +111,11 @@ def _stored_policies():
         ]
     )
     session.commit()
-    return engine, session, model, first, second, other_country
+    return model, first, second, other_country
 
 
 def test_detail_joins_parameter_names_and_orders_complete_values() -> None:
-    engine, session, _model, first, _second, _other = _stored_policies()
-    try:
+    with _stored_policies() as (session, _model, first, _second, _other):
         result = read_complete_policy(session, country_id="us", policy_id=first.id)
 
         assert result.id == first.id
@@ -114,24 +126,18 @@ def test_detail_joins_parameter_names_and_orders_complete_values() -> None:
             "gov.zeta",
         ]
         assert [value.value for value in result.parameter_values] == [0, 1, 2]
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_detail_uses_country_as_part_of_resource_identity() -> None:
-    engine, session, _model, first, _second, _other = _stored_policies()
-    try:
-        with pytest.raises(PolicyNotFoundError):
-            read_complete_policy(session, country_id="uk", policy_id=first.id)
-    finally:
-        session.close()
-        engine.dispose()
+    with (
+        _stored_policies() as (session, _model, first, _second, _other),
+        pytest.raises(PolicyNotFoundError),
+    ):
+        read_complete_policy(session, country_id="uk", policy_id=first.id)
 
 
 def test_empty_policy_has_an_empty_nested_collection() -> None:
-    engine, session, _model, _first, second, _other = _stored_policies()
-    try:
+    with _stored_policies() as (session, _model, _first, second, _other):
         assert (
             read_complete_policy(
                 session,
@@ -140,14 +146,10 @@ def test_empty_policy_has_an_empty_nested_collection() -> None:
             ).parameter_values
             == ()
         )
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_collection_filters_orders_paginates_and_returns_complete_items() -> None:
-    engine, session, model, first, second, _other = _stored_policies()
-    try:
+    with _stored_policies() as (session, model, first, second, _other):
         first_page = read_policy_page(
             session,
             country_id="us",
@@ -170,14 +172,10 @@ def test_collection_filters_orders_paginates_and_returns_complete_items() -> Non
         assert [item.id for item in second_page.items] == [second.id]
         assert second_page.has_more is False
         assert all(item.country_id == "us" for item in first_page.items)
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_model_filter_is_exact() -> None:
-    engine, session, _model, _first, _second, _other = _stored_policies()
-    try:
+    with _stored_policies() as (session, _model, _first, _second, _other):
         result = read_policy_page(
             session,
             country_id="us",
@@ -187,6 +185,3 @@ def test_model_filter_is_exact() -> None:
         )
         assert result.items == ()
         assert result.has_more is False
-    finally:
-        session.close()
-        engine.dispose()

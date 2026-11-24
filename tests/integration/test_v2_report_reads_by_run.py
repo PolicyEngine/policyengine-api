@@ -3,7 +3,7 @@
 ``GET /v2/reports/{report_id}?run_id=`` answers that run of the report, its
 status, versions and result, whichever run is the newest: a report run of an
 economy or household report, or a budget-window run of a budget window. The
-routes run as the Public API's runtime role.
+routes run as API v1's runtime role.
 """
 
 from __future__ import annotations
@@ -17,13 +17,10 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import Household
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -35,7 +32,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 from tests.fixtures.economy_results import us_economy_result
-from tests.integration.simulation_rows import insert_row
+from tests.integration.simulation_rows import add_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
@@ -49,10 +46,12 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -65,27 +64,29 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
+def client(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> TestClient:
     """Serve the report routes as the runtime role."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    sessions = sessionmaker(runtime_engine, class_=Session)
+    sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
@@ -99,28 +100,27 @@ def client(managed_v2_roles, v2_engine_as_role) -> Iterator[TestClient]:
         specification=RouteImplementation.FLASK_FALLBACK,
         metadata=RouteImplementation.FLASK_FALLBACK,
     )
-    yield TestClient(
+    return TestClient(
         create_asgi_app(
             Flask(__name__), dependencies=dependencies, route_settings=settings
         )
     )
-    runtime_engine.dispose()
 
 
 def test_an_economy_report_is_read_with_the_run_named_rather_than_its_newest(
-    owner_engine: Engine, catalog: CatalogRows, client: TestClient
+    owner_sessions: sessionmaker[Session], catalog: CatalogRows, client: TestClient
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         named = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
             result=us_economy_result(),
         )
         newest = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -151,23 +151,23 @@ def test_an_economy_report_is_read_with_the_run_named_rather_than_its_newest(
 
 
 def test_a_run_that_is_not_one_of_the_reports_own_is_not_found(
-    owner_engine: Engine, catalog: CatalogRows, client: TestClient
+    owner_sessions: sessionmaker[Session], catalog: CatalogRows, client: TestClient
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-        store_report_run(connection, catalog, report, RunSettings(CURRENT_VERSIONS))
-        other_report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+        store_report_run(session, catalog, report, RunSettings(CURRENT_VERSIONS))
+        other_report = store_report(session, catalog)
         other_run = store_report_run(
-            connection, catalog, other_report, RunSettings(CURRENT_VERSIONS)
+            session, catalog, other_report, RunSettings(CURRENT_VERSIONS)
         )
-        window = store_report(connection, catalog, budget_window_size=2)
+        window = store_report(session, catalog, budget_window_size=2)
         window_run_id = store_budget_window_run(
-            connection, catalog, window, RunSettings(CURRENT_VERSIONS)
+            session, catalog, window, RunSettings(CURRENT_VERSIONS)
         )
         year_run = store_report_run(
-            connection,
+            session,
             catalog,
-            store_year_simulations(connection, catalog, window, WINDOW_YEARS[0]),
+            store_year_simulations(session, catalog, window, WINDOW_YEARS[0]),
             RunSettings(
                 CURRENT_VERSIONS,
                 budget_window_year=BudgetWindowYear(
@@ -200,10 +200,10 @@ def test_a_run_that_is_not_one_of_the_reports_own_is_not_found(
 
 
 def test_a_budget_window_is_read_with_the_window_run_named_and_its_years(
-    owner_engine: Engine, catalog: CatalogRows, client: TestClient
+    owner_sessions: sessionmaker[Session], catalog: CatalogRows, client: TestClient
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
         window_run_ids = []
         for days_later, status in ((0, "failed"), (1, "pending")):
             settings = RunSettings(
@@ -211,15 +211,13 @@ def test_a_budget_window_is_read_with_the_window_run_named_and_its_years(
                 status=status,
                 created_at=STARTED_AT + timedelta(days=days_later),
             )
-            window_run_id = store_budget_window_run(
-                connection, catalog, window, settings
-            )
+            window_run_id = store_budget_window_run(session, catalog, window, settings)
             window_run_ids.append(window_run_id)
             for year in WINDOW_YEARS:
                 store_report_run(
-                    connection,
+                    session,
                     catalog,
-                    store_year_simulations(connection, catalog, window, year),
+                    store_year_simulations(session, catalog, window, year),
                     RunSettings(
                         versions=CURRENT_VERSIONS,
                         status=status,
@@ -245,29 +243,29 @@ def test_a_budget_window_is_read_with_the_window_run_named_and_its_years(
 
 
 def test_a_household_report_is_read_with_the_run_named(
-    owner_engine: Engine, catalog: CatalogRows, client: TestClient
+    owner_sessions: sessionmaker[Session], catalog: CatalogRows, client: TestClient
 ) -> None:
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         household_id = uuid4()
-        insert_row(
-            connection,
-            "households",
+        add_row(
+            session,
+            Household,
             id=household_id,
             country_id=catalog.country,
-            household_data="{}",
+            household_data={},
             canonicalization_version=1,
             content_hash=uuid4().hex * 2,
         )
         catalog.household_ids.append(household_id)
-        report = store_report(connection, catalog, household_id=household_id)
+        report = store_report(session, catalog, household_id=household_id)
         named = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS, status="pending"),
         )
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(

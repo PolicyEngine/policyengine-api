@@ -11,8 +11,7 @@ from sqlmodel import Field, SQLModel
 
 # These are the complete direct-SQLAlchemy categories permitted in the v2
 # table layer. Each remains underneath canonical SQLModel table classes and
-# Field/Relationship declarations, apart from table-only columns awaiting
-# removal; no parallel declarative model exists.
+# Field/Relationship declarations; no parallel declarative model exists.
 DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
     {
         "timezone_aware_timestamps": (
@@ -40,10 +39,11 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "Concurrent report idempotency requires a savepoint and bounded "
             "IntegrityError recovery around the database uniqueness constraint."
         ),
-        "table_only_columns_awaiting_removal": (
-            "A column API v1 no longer uses stays in its table, outside the "
-            "SQLModel fields and the mapper, until other writers have stopped "
-            "and a later revision drops it; API v1 doesn't load it meanwhile."
+        "columns_left_out_of_the_mapper": (
+            "A column API v1 no longer uses stays a SQLModel field of its "
+            "table, left out of the mapper by exclude_properties, until other "
+            "writers have stopped and a later revision drops it; API v1 neither "
+            "loads nor writes it meanwhile."
         ),
     }
 )

@@ -1,6 +1,6 @@
 """Create, read and list household reports through /v2/reports on migrated PostgreSQL.
 
-The routes run as the Public API's runtime role, so the tests prove its
+The routes run as API v1's runtime role, so the tests prove its
 declared privileges cover every read: the countries row, the stored household
 and policies the checks read, and the reports, simulations, runs and
 calculated households the reads return (rule
@@ -12,7 +12,6 @@ is made household-only for each test and restored afterwards.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -23,13 +22,16 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import (
+    Household,
+    Report,
+    ReportRun,
+    Simulation,
+    SimulationRun,
+)
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -62,7 +64,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
-from tests.integration.simulation_rows import insert_row
+from tests.integration.simulation_rows import add_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     household_only_catalog,
@@ -70,13 +72,15 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.services.v2.simulation_service.types import (
         HouseholdReportCreationInput,
     )
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -129,17 +133,17 @@ class StoredHouseholdReport:
 
 
 def store_household(
-    connection: Connection, catalog: CatalogRows, *, default_year: int | None = 2026
+    session: Session, catalog: CatalogRows, *, default_year: int | None = 2026
 ) -> UUID:
     """Store a household in the catalog's country; ``delete_catalog`` removes it."""
     household_id = uuid4()
-    insert_row(
-        connection,
-        "households",
+    add_row(
+        session,
+        Household,
         id=household_id,
         country_id=catalog.country,
         default_year=default_year,
-        household_data=json.dumps(STORED_HOUSEHOLD),
+        household_data=STORED_HOUSEHOLD,
         canonicalization_version=1,
         content_hash=uuid4().hex * 2,
     )
@@ -160,7 +164,7 @@ class SimulationRunToStore:
 
 
 def store_household_simulation(
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     household_id: UUID,
     *,
@@ -169,9 +173,9 @@ def store_household_simulation(
 ) -> tuple[UUID, UUID]:
     """Store a household simulation and one run; return both IDs."""
     simulation_id = uuid4()
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=simulation_id,
         simulation_type="household",
         household_id=household_id,
@@ -181,9 +185,11 @@ def store_household_simulation(
     )
     catalog.simulation_ids.append(simulation_id)
     run_id = uuid4()
-    insert_row(
-        connection,
-        "simulation_runs",
+    # A run without a calculated household holds SQL NULL, not JSON null.
+    calculated = {} if run.document is None else {"household_result": run.document}
+    add_row(
+        session,
+        SimulationRun,
         id=run_id,
         simulation_id=simulation_id,
         year=2026,
@@ -191,7 +197,7 @@ def store_household_simulation(
         status=run.status,
         started_at=STARTED_AT,
         completed_at=STARTED_AT + timedelta(minutes=1) if run.finished else None,
-        household_result=None if run.document is None else json.dumps(run.document),
+        **calculated,
         **CURRENT_VERSIONS,
     )
     return simulation_id, run_id
@@ -229,7 +235,7 @@ class HouseholdReportToStore:
 
 
 def store_household_report(
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     household_id: UUID,
     report: HouseholdReportToStore | None = None,
@@ -243,21 +249,21 @@ def store_household_report(
     with_reform = report.with_reform
     baseline_run, reform_run = report.runs()
     baseline_id, baseline_run_id = store_household_simulation(
-        connection, catalog, household_id, policy_id=None, run=baseline_run
+        session, catalog, household_id, policy_id=None, run=baseline_run
     )
     reform_id = reform_run_id = None
     if with_reform:
         reform_id, reform_run_id = store_household_simulation(
-            connection,
+            session,
             catalog,
             household_id,
             policy_id=catalog.policy_id,
             run=reform_run,
         )
     report_id = uuid4()
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
         country=catalog.country,
         tax_benefit_model_id=catalog.model_id,
@@ -266,13 +272,13 @@ def store_household_report(
         reform_simulation_id=reform_id,
         household_id=household_id,
         year=2026,
-        inputs=json.dumps({}),
+        inputs={},
     )
     catalog.report_ids.append(report_id)
     report_run_id = uuid4()
-    insert_row(
-        connection,
-        "report_runs",
+    add_row(
+        session,
+        ReportRun,
         id=report_run_id,
         report_id=report_id,
         baseline_simulation_run_id=baseline_run_id,
@@ -293,7 +299,7 @@ def store_household_report(
 class StoringHouseholdReportService:
     """Store what the simulation service would create for a household report."""
 
-    engine: Engine
+    owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     household_reports: list[HouseholdReportCreationInput] = field(default_factory=list)
 
@@ -301,9 +307,9 @@ class StoringHouseholdReportService:
         self, report: HouseholdReportCreationInput
     ) -> SubmittedReport:
         self.household_reports.append(report)
-        with self.engine.begin() as connection:
+        with self.owner_sessions.begin() as session:
             stored = store_household_report(
-                connection,
+                session,
                 self.catalog,
                 report.household_id,
                 HouseholdReportToStore(status="pending"),
@@ -314,25 +320,24 @@ class StoringHouseholdReportService:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(v2_owner_sessions: sessionmaker[Session]) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def household_only_uk(owner_engine: Engine) -> Iterator[CatalogRows]:
+def household_only_uk(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
     """Make the UK household-only, store a UK catalog, and restore both after."""
-    with household_only_catalog(owner_engine, "uk") as uk_catalog:
+    with household_only_catalog(owner_sessions, "uk") as uk_catalog:
         yield uk_catalog
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 def client_for(
@@ -384,12 +389,14 @@ def household_body(household_id: UUID, policy_id: UUID) -> dict[str, Any]:
 
 
 def test_a_household_report_answers_both_calculated_households(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     catalog = household_only_uk
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, catalog)
-        stored = store_household_report(connection, catalog, household_id)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
+        stored = store_household_report(session, catalog, household_id)
 
     response = client_for(runtime_sessions).get(
         f"/v2/reports/{stored.report_id}?country_id=uk"
@@ -408,12 +415,14 @@ def test_a_household_report_answers_both_calculated_households(
 
 
 def test_a_household_report_of_the_baseline_alone_answers_no_reform(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, household_only_uk)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, household_only_uk)
         stored = store_household_report(
-            connection,
+            session,
             household_only_uk,
             household_id,
             HouseholdReportToStore(with_reform=False),
@@ -432,12 +441,14 @@ def test_a_household_report_of_the_baseline_alone_answers_no_reform(
 
 
 def test_a_failed_household_report_answers_each_sides_failure(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, household_only_uk)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, household_only_uk)
         stored = store_household_report(
-            connection,
+            session,
             household_only_uk,
             household_id,
             # Both sides are calculated: the baseline succeeded, the reform's
@@ -464,12 +475,14 @@ def test_a_failed_household_report_answers_each_sides_failure(
 
 
 def test_a_succeeded_household_report_missing_a_calculation_answers_500(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, household_only_uk)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, household_only_uk)
         stored = store_household_report(
-            connection,
+            session,
             household_only_uk,
             household_id,
             HouseholdReportToStore(
@@ -494,15 +507,17 @@ def test_a_succeeded_household_report_missing_a_calculation_answers_500(
 
 
 def test_household_reports_are_listed_beside_economy_reports(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     catalog = household_only_uk
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, catalog)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
         household_report = store_household_report(
-            connection, catalog, household_id, HouseholdReportToStore(status="running")
+            session, catalog, household_id, HouseholdReportToStore(status="running")
         )
-        economy_report = store_report(connection, catalog)
+        economy_report = store_report(session, catalog)
 
     response = client_for(runtime_sessions).get(
         "/v2/reports?country_id=uk"
@@ -521,12 +536,14 @@ def test_household_reports_are_listed_beside_economy_reports(
 
 
 def test_a_household_only_country_creates_a_household_report(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     catalog = household_only_uk
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, catalog)
-    simulation_service = StoringHouseholdReportService(owner_engine, catalog)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, catalog)
+    simulation_service = StoringHouseholdReportService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=uk",
@@ -544,9 +561,13 @@ def test_a_household_only_country_creates_a_household_report(
 
 
 def test_a_household_the_country_does_not_store_is_not_sent(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringHouseholdReportService(owner_engine, household_only_uk)
+    simulation_service = StoringHouseholdReportService(
+        owner_sessions, household_only_uk
+    )
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=uk",
@@ -558,11 +579,15 @@ def test_a_household_the_country_does_not_store_is_not_sent(
 
 
 def test_a_household_with_no_default_year_is_not_sent(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        household_id = store_household(connection, household_only_uk, default_year=None)
-    simulation_service = StoringHouseholdReportService(owner_engine, household_only_uk)
+    with owner_sessions.begin() as session:
+        household_id = store_household(session, household_only_uk, default_year=None)
+    simulation_service = StoringHouseholdReportService(
+        owner_sessions, household_only_uk
+    )
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=uk",
@@ -577,7 +602,7 @@ def test_a_household_with_no_default_year_is_not_sent(
 
 
 def test_a_household_only_country_still_refuses_economy_reports(
-    household_only_uk: CatalogRows, runtime_sessions: Any
+    household_only_uk: CatalogRows, runtime_sessions: sessionmaker[Session]
 ) -> None:
     response = client_for(runtime_sessions).post(
         "/v2/reports?country_id=uk",

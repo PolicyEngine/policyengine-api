@@ -45,14 +45,20 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import bindparam, text
-from sqlalchemy.pool import NullPool
-from sqlmodel import create_engine
+from sqlalchemy import Text, case, cast, false, func, or_, select, text, true
+from sqlmodel import col
 
 from policyengine_api.data.v2.migration_target import (
     V2AlembicSettings,
     load_v2_alembic_settings,
-    qualify_v2_connection,
+    qualify_v2_target,
+)
+from policyengine_api.data.v2.postgres_system_catalog import (
+    PgAttribute,
+    PgClass,
+    PgDefaultAcl,
+    PgNamespace,
+    PgRoles,
 )
 from policyengine_api.data.v2.privilege_plans import (
     SCHEMA,
@@ -82,8 +88,11 @@ from policyengine_api.data.v2.settings import V2ConfigurationError
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+    from contextlib import AbstractContextManager
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.sql.selectable import LateralFromClause
+    from sqlmodel import Session
 
 # Names other modules import from here; the planning and reporting half lives
 # in privilege_plans.
@@ -123,118 +132,121 @@ GITHUB_STEP_SUMMARY = "GITHUB_STEP_SUMMARY"
 
 # --- Database access -------------------------------------------------------
 
-_GRANTED_PRIVILEGES = text(
-    """
-    SELECT grantee_role.rolname AS role_name,
-           table_class.relname AS table_name,
-           acl_entry.privilege_type AS privilege
-    FROM pg_class AS table_class
-    JOIN pg_namespace AS table_namespace
-      ON table_namespace.oid = table_class.relnamespace
-    CROSS JOIN LATERAL aclexplode(table_class.relacl) AS acl_entry
-    JOIN pg_roles AS grantee_role ON grantee_role.oid = acl_entry.grantee
-    WHERE table_namespace.nspname = :schema
-      AND table_class.relkind IN ('r', 'p', 'S', 'v', 'm')
-      AND grantee_role.rolname IN :roles
-    """
-).bindparams(bindparam("roles", expanding=True))
-
-_EXISTING_ROLES = text(
-    "SELECT rolname FROM pg_roles WHERE rolname IN :roles"
-).bindparams(bindparam("roles", expanding=True))
-
-_PUBLIC_TABLES = text(
-    """
-    SELECT table_class.relname
-    FROM pg_class AS table_class
-    JOIN pg_namespace AS table_namespace
-      ON table_namespace.oid = table_class.relnamespace
-    WHERE table_namespace.nspname = :schema AND table_class.relkind IN ('r', 'p')
-    """
-)
-
-_DEFAULT_PRIVILEGES = text(
-    """
-    SELECT pg_get_userbyid(default_acl.defaclrole) AS creating_role,
-           coalesce(acl_namespace.nspname, '') AS schema_name,
-           CASE default_acl.defaclobjtype
-             WHEN 'r' THEN 'tables' WHEN 'S' THEN 'sequences'
-             WHEN 'f' THEN 'functions' WHEN 'T' THEN 'types'
-             WHEN 'n' THEN 'schemas' ELSE default_acl.defaclobjtype::text
-           END AS object_type,
-           coalesce(grantee_role.rolname, 'PUBLIC') AS grantee,
-           acl_entry.privilege_type AS privilege
-    FROM pg_default_acl AS default_acl
-    LEFT JOIN pg_namespace AS acl_namespace
-      ON acl_namespace.oid = default_acl.defaclnamespace
-    CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) AS acl_entry
-    LEFT JOIN pg_roles AS grantee_role ON grantee_role.oid = acl_entry.grantee
-    WHERE coalesce(grantee_role.rolname, '') IN :roles
-       OR pg_get_userbyid(default_acl.defaclrole) IN :roles
-    """
-).bindparams(bindparam("roles", expanding=True))
-
-_GRANTED_COLUMN_PRIVILEGES = text(
-    """
-    SELECT grantee_role.rolname AS role_name,
-           table_class.relname AS table_name,
-           table_column.attname AS column_name,
-           acl_entry.privilege_type AS privilege
-    FROM pg_attribute AS table_column
-    JOIN pg_class AS table_class ON table_class.oid = table_column.attrelid
-    JOIN pg_namespace AS table_namespace
-      ON table_namespace.oid = table_class.relnamespace
-    CROSS JOIN LATERAL aclexplode(table_column.attacl) AS acl_entry
-    JOIN pg_roles AS grantee_role ON grantee_role.oid = acl_entry.grantee
-    WHERE table_namespace.nspname = :schema
-      AND table_class.relkind IN ('r', 'p', 'v', 'm')
-      AND table_column.attnum > 0
-      AND NOT table_column.attisdropped
-      AND grantee_role.rolname IN :roles
-    """
-).bindparams(bindparam("roles", expanding=True))
-
-_HAS_TABLE_PRIVILEGE = text(
-    "SELECT has_table_privilege(:role, :qualified_table, :privilege)"
-)
-
-_HAS_COLUMN_PRIVILEGE = text(
-    "SELECT has_column_privilege(:role, :qualified_table, :column, :privilege)"
-)
+# The relkind of the objects whose grants are read: tables, partitioned tables,
+# sequences, views and materialized views; for column grants, the same less
+# sequences; and the objects that hold rows, tables and partitioned tables.
+_GRANTABLE_RELATION_KINDS = ("r", "p", "S", "v", "m")
+_COLUMN_RELATION_KINDS = ("r", "p", "v", "m")
+_TABLE_RELATION_KINDS = ("r", "p")
+# pg_default_acl's object type codes, named as ALTER DEFAULT PRIVILEGES names them.
+_DEFAULT_ACL_OBJECT_TYPES = {
+    "r": "tables",
+    "S": "sequences",
+    "f": "functions",
+    "T": "types",
+    "n": "schemas",
+}
+# The grantee aclexplode reports for a privilege granted to PUBLIC: no role.
+_PUBLIC_GRANTEE = "PUBLIC"
 
 
-def read_existing_roles(connection: Connection, roles: Collection[str]) -> set[str]:
+def _acl_entries(access_control_list: object, name: str) -> LateralFromClause:
+    """Return the entries of an access control list, one row each (``aclexplode``).
+
+    Each row has the entry's ``grantee`` role oid and ``privilege_type``.
+    """
+    return (
+        func.aclexplode(access_control_list)
+        .table_valued("grantee", "privilege_type")
+        .lateral(name)
+    )
+
+
+def _quote(session: Session) -> Callable[[str], str]:
+    """Return the session's dialect's identifier quoting."""
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    quote: Callable[[str], str] = v2_schema_inspector(
+        session
+    ).dialect.identifier_preparer.quote
+    return quote
+
+
+def read_existing_roles(session: Session, roles: Collection[str]) -> set[str]:
     """Return which of ``roles`` exist."""
-    return set(connection.execute(_EXISTING_ROLES, {"roles": list(roles)}).scalars())
+    role_name = col(PgRoles.rolname)
+    return set(session.scalars(select(role_name).where(role_name.in_(list(roles)))))
 
 
-def read_public_tables(connection: Connection) -> set[str]:
+def read_public_tables(session: Session) -> set[str]:
     """Return every table in the public schema."""
-    return set(connection.execute(_PUBLIC_TABLES, {"schema": SCHEMA}).scalars())
+    return set(
+        session.scalars(
+            select(col(PgClass.relname))
+            .join(PgNamespace, col(PgNamespace.oid) == col(PgClass.relnamespace))
+            .where(
+                col(PgNamespace.nspname) == SCHEMA,
+                col(PgClass.relkind).in_(_TABLE_RELATION_KINDS),
+            )
+        )
+    )
 
 
 def read_granted_privileges(
-    connection: Connection, roles: Collection[str]
+    session: Session, roles: Collection[str]
 ) -> dict[str, dict[str, set[str]]]:
     """Return the roles' direct grants on public tables, views and sequences."""
+    acl_entry = _acl_entries(PgClass.relacl, "acl_entry")
+    statement = (
+        select(
+            col(PgRoles.rolname).label("role_name"),
+            col(PgClass.relname).label("table_name"),
+            acl_entry.c.privilege_type.label("privilege"),
+        )
+        .join(PgNamespace, col(PgNamespace.oid) == col(PgClass.relnamespace))
+        .join(acl_entry, true())
+        .join(PgRoles, col(PgRoles.oid) == acl_entry.c.grantee)
+        .where(
+            col(PgNamespace.nspname) == SCHEMA,
+            col(PgClass.relkind).in_(_GRANTABLE_RELATION_KINDS),
+            col(PgRoles.rolname).in_(list(roles)),
+        )
+    )
     granted: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-    for row in connection.execute(
-        _GRANTED_PRIVILEGES, {"schema": SCHEMA, "roles": list(roles)}
-    ):
+    for row in session.execute(statement):
         granted[row.role_name][row.table_name].add(row.privilege)
     return {role: dict(tables) for role, tables in granted.items()}
 
 
 def read_granted_column_privileges(
-    connection: Connection, roles: Collection[str]
+    session: Session, roles: Collection[str]
 ) -> dict[str, dict[str, dict[str, set[str]]]]:
     """Return the roles' direct grants on columns of public tables and views."""
+    acl_entry = _acl_entries(PgAttribute.attacl, "acl_entry")
+    statement = (
+        select(
+            col(PgRoles.rolname).label("role_name"),
+            col(PgClass.relname).label("table_name"),
+            col(PgAttribute.attname).label("column_name"),
+            acl_entry.c.privilege_type.label("privilege"),
+        )
+        .select_from(PgAttribute)
+        .join(PgClass, col(PgClass.oid) == col(PgAttribute.attrelid))
+        .join(PgNamespace, col(PgNamespace.oid) == col(PgClass.relnamespace))
+        .join(acl_entry, true())
+        .join(PgRoles, col(PgRoles.oid) == acl_entry.c.grantee)
+        .where(
+            col(PgNamespace.nspname) == SCHEMA,
+            col(PgClass.relkind).in_(_COLUMN_RELATION_KINDS),
+            col(PgAttribute.attnum) > 0,
+            col(PgAttribute.attisdropped).is_(false()),
+            col(PgRoles.rolname).in_(list(roles)),
+        )
+    )
     granted: dict[str, dict[str, dict[str, set[str]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(set))
     )
-    for row in connection.execute(
-        _GRANTED_COLUMN_PRIVILEGES, {"schema": SCHEMA, "roles": list(roles)}
-    ):
+    for row in session.execute(statement):
         granted[row.role_name][row.table_name][row.column_name].add(row.privilege)
     return {
         role: {table: dict(columns) for table, columns in tables.items()}
@@ -243,11 +255,41 @@ def read_granted_column_privileges(
 
 
 def read_default_privileges(
-    connection: Connection, roles: Collection[str]
+    session: Session, roles: Collection[str]
 ) -> list[DefaultPrivilege]:
     """Return default privileges that involve the managed roles."""
+    acl_entry = _acl_entries(PgDefaultAcl.defaclacl, "acl_entry")
+    creating_role = func.pg_get_userbyid(col(PgDefaultAcl.defaclrole))
+    object_type_code = cast(col(PgDefaultAcl.defaclobjtype), Text)
+    grantee_role_name = col(PgRoles.rolname)
+    statement = (
+        select(
+            creating_role.label("creating_role"),
+            func.coalesce(col(PgNamespace.nspname), "").label("schema_name"),
+            case(
+                _DEFAULT_ACL_OBJECT_TYPES,
+                value=object_type_code,
+                else_=object_type_code,
+            ).label("object_type"),
+            func.coalesce(grantee_role_name, _PUBLIC_GRANTEE).label("grantee"),
+            acl_entry.c.privilege_type.label("privilege"),
+        )
+        .select_from(PgDefaultAcl)
+        .outerjoin(
+            PgNamespace,
+            col(PgNamespace.oid) == col(PgDefaultAcl.defaclnamespace),
+        )
+        .join(acl_entry, true())
+        .outerjoin(PgRoles, col(PgRoles.oid) == acl_entry.c.grantee)
+        .where(
+            or_(
+                func.coalesce(grantee_role_name, "").in_(list(roles)),
+                creating_role.in_(list(roles)),
+            )
+        )
+    )
     grouped: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
-    for row in connection.execute(_DEFAULT_PRIVILEGES, {"roles": list(roles)}):
+    for row in session.execute(statement):
         grouped[(row.creating_role, row.schema_name, row.object_type, row.grantee)].add(
             row.privilege
         )
@@ -265,17 +307,17 @@ def read_default_privileges(
     ]
 
 
-def create_missing_roles(connection: Connection, roles: Iterable[str]) -> list[str]:
+def create_missing_roles(session: Session, roles: Iterable[str]) -> list[str]:
     """Create each missing role as NOLOGIN; only for the disposable test database."""
-    missing = sorted(set(roles) - read_existing_roles(connection, list(roles)))
-    quote = connection.dialect.identifier_preparer.quote
+    missing = sorted(set(roles) - read_existing_roles(session, list(roles)))
+    quote = _quote(session)
     for role in missing:
-        connection.execute(text(f"CREATE ROLE {quote(safe_identifier(role))} NOLOGIN"))
+        session.execute(text(f"CREATE ROLE {quote(safe_identifier(role))} NOLOGIN"))
     return missing
 
 
 def apply_declared_privileges(
-    connection: Connection,
+    session: Session,
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     *,
     roles_awaiting_creation: Collection[str] = (),
@@ -293,53 +335,49 @@ def apply_declared_privileges(
     plan = plan_reconciliation(
         declared,
         GrantedPrivileges(
-            tables=read_granted_privileges(connection, roles),
-            columns=read_granted_column_privileges(connection, roles),
+            tables=read_granted_privileges(session, roles),
+            columns=read_granted_column_privileges(session, roles),
         ),
-        existing_roles=read_existing_roles(connection, roles),
-        existing_tables=read_public_tables(connection),
+        existing_roles=read_existing_roles(session, roles),
+        existing_tables=read_public_tables(session),
         roles_awaiting_creation=roles_awaiting_creation,
     )
     if plan.can_apply:
-        quote = connection.dialect.identifier_preparer.quote
+        quote = _quote(session)
         for statement in revoke_statements(plan, quote) + grant_statements(plan, quote):
-            connection.execute(text(statement))
-    return plan, read_default_privileges(connection, roles)
+            session.execute(text(statement))
+    return plan, read_default_privileges(session, roles)
 
 
 def skipped_roles(
-    connection: Connection,
+    session: Session,
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     roles_awaiting_creation: Collection[str],
 ) -> tuple[str, ...]:
     """Return the declared roles awaiting creation that don't exist yet."""
-    existing_roles = read_existing_roles(connection, list(declared))
+    existing_roles = read_existing_roles(session, list(declared))
     return tuple(
         sorted((set(declared) & set(roles_awaiting_creation)) - existing_roles)
     )
 
 
 def _privilege_checks(
-    connection: Connection, roles: Collection[str]
+    session: Session, roles: Collection[str]
 ) -> tuple[Callable[[str, str, str], bool], Callable[[str, str, str, str], bool]]:
     """Return checks of a role's effective table and column privileges.
 
     A missing role or table holds nothing.
     """
-    existing_roles = read_existing_roles(connection, roles)
-    existing_tables = read_public_tables(connection)
+    existing_roles = read_existing_roles(session, roles)
+    existing_tables = read_public_tables(session)
 
     def has_privilege(role: str, table: str, privilege: str) -> bool:
         if role not in existing_roles or table not in existing_tables:
             return False
+        qualified_table = f"{SCHEMA}.{safe_identifier(table)}"
         return bool(
-            connection.execute(
-                _HAS_TABLE_PRIVILEGE,
-                {
-                    "role": role,
-                    "qualified_table": f"{SCHEMA}.{safe_identifier(table)}",
-                    "privilege": privilege,
-                },
+            session.execute(
+                select(func.has_table_privilege(role, qualified_table, privilege))
             ).scalar_one()
         )
 
@@ -348,15 +386,14 @@ def _privilege_checks(
     ) -> bool:
         if role not in existing_roles or table not in existing_tables:
             return False
+        qualified_table = f"{SCHEMA}.{safe_identifier(table)}"
         return bool(
-            connection.execute(
-                _HAS_COLUMN_PRIVILEGE,
-                {
-                    "role": role,
-                    "qualified_table": f"{SCHEMA}.{safe_identifier(table)}",
-                    "column": safe_identifier(column),
-                    "privilege": privilege,
-                },
+            session.execute(
+                select(
+                    func.has_column_privilege(
+                        role, qualified_table, safe_identifier(column), privilege
+                    )
+                )
             ).scalar_one()
         )
 
@@ -364,7 +401,7 @@ def _privilege_checks(
 
 
 def check_declared_privileges(
-    connection: Connection,
+    session: Session,
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
 ) -> list[PrivilegeEntry]:
     """Return every declared privilege a role doesn't effectively hold.
@@ -372,16 +409,16 @@ def check_declared_privileges(
     A missing role or table counts as missing every privilege declared for it;
     leave out the roles ``skipped_roles`` returns to skip them.
     """
-    has_privilege, has_column_privilege = _privilege_checks(connection, list(declared))
+    has_privilege, has_column_privilege = _privilege_checks(session, list(declared))
     return verification_failures(declared, has_privilege, has_column_privilege)
 
 
 def check_table_wide_overrides(
-    connection: Connection,
+    session: Session,
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
 ) -> list[PrivilegeEntry]:
     """Return each column privilege a role also holds on the whole table."""
-    has_privilege, _has_column_privilege = _privilege_checks(connection, list(declared))
+    has_privilege, _has_column_privilege = _privilege_checks(session, list(declared))
     return table_wide_overrides(declared, has_privilege)
 
 
@@ -413,7 +450,7 @@ def _write_summary(environ: Mapping[str, str], summary: str) -> None:
 
 
 def _verify(
-    connection: Connection,
+    session: Session,
     declared: Mapping[str, Mapping[str, frozenset[DeclaredPrivilege]]],
     roles_awaiting_creation: Collection[str],
     environment: str,
@@ -427,10 +464,10 @@ def _verify(
     The roles skipped, the privileges missing and the whole-table privileges
     are written to stdout and the job summary under one heading.
     """
-    skipped = skipped_roles(connection, declared, roles_awaiting_creation)
+    skipped = skipped_roles(session, declared, roles_awaiting_creation)
     checked = {role: tables for role, tables in declared.items() if role not in skipped}
-    failures = check_declared_privileges(connection, checked)
-    overrides = check_table_wide_overrides(connection, checked)
+    failures = check_declared_privileges(session, checked)
+    overrides = check_table_wide_overrides(session, checked)
     heading = f"## v2 table privileges ({environment})\n\n"
     skipped_note = f"{skipped_roles_line(skipped)}\n\n" if skipped else ""
     if failures or overrides:
@@ -450,8 +487,13 @@ def _verify(
     return 0
 
 
-def _build_engine(settings: V2AlembicSettings) -> Engine:
-    return create_engine(settings.url, poolclass=NullPool)
+def open_reconciliation_sessions(
+    settings: V2AlembicSettings,
+) -> AbstractContextManager[sessionmaker[Session]]:
+    """Open Session factories for the target, on an engine with no pool."""
+    from policyengine_api.data.v2.database import unpooled_v2_sessions
+
+    return unpooled_v2_sessions(settings.url)
 
 
 def run(
@@ -459,9 +501,14 @@ def run(
     *,
     create_roles: bool = False,
     environ: Mapping[str, str] | None = None,
-    engine_builder: Callable[[V2AlembicSettings], Engine] = _build_engine,
+    session_factories: Callable[
+        [V2AlembicSettings], AbstractContextManager[sessionmaker[Session]]
+    ] = open_reconciliation_sessions,
 ) -> int:
-    """Run ``apply`` or ``verify`` against the configured v2 database."""
+    """Run ``apply`` or ``verify`` against the configured v2 database.
+
+    Everything runs in one transaction, which commits when the mode finishes.
+    """
     values = os.environ if environ is None else environ
     settings = load_v2_alembic_settings(values)
     environment = _deployment_environment(values, settings)
@@ -470,31 +517,27 @@ def run(
         raise V2ConfigurationError(msg)
     declared = declared_privileges(environment)
     awaiting = ROLES_AWAITING_PROVISIONING
-    engine = engine_builder(settings)
-    try:
-        with engine.begin() as connection:
-            qualify_v2_connection(connection, settings)
-            if mode == "verify":
-                return _verify(connection, declared, awaiting, environment, values)
-            if create_roles:
-                created = create_missing_roles(connection, declared)
-                if created:
-                    print("Created roles: " + ", ".join(created))
-            plan, defaults = apply_declared_privileges(
-                connection, declared, roles_awaiting_creation=awaiting
-            )
-            _write_summary(
-                values,
-                render_summary(
-                    plan,
-                    defaults,
-                    deployment_environment=environment,
-                    applied=plan.can_apply,
-                ),
-            )
-            return 0 if plan.can_apply else 1
-    finally:
-        engine.dispose()
+    with session_factories(settings) as sessions, sessions.begin() as session:
+        qualify_v2_target(session, settings)
+        if mode == "verify":
+            return _verify(session, declared, awaiting, environment, values)
+        if create_roles:
+            created = create_missing_roles(session, declared)
+            if created:
+                print("Created roles: " + ", ".join(created))
+        plan, defaults = apply_declared_privileges(
+            session, declared, roles_awaiting_creation=awaiting
+        )
+        _write_summary(
+            values,
+            render_summary(
+                plan,
+                defaults,
+                deployment_environment=environment,
+                applied=plan.can_apply,
+            ),
+        )
+        return 0 if plan.can_apply else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

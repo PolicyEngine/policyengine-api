@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING
 from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
+from sqlmodel import Session
 
 from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
-    qualify_v2_connection,
+    qualify_v2_target,
     validate_v2_head_schema,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import V2_METADATA, V2_TABLE_NAMES
 
 if TYPE_CHECKING:
     from alembic.runtime.environment import NameFilterType
@@ -42,7 +43,12 @@ def _include_application_object(
 
 
 def _configure(connection: Connection) -> None:
-    qualify_v2_connection(connection, settings)
+    # Inside run_migrations_online's engine.begin(), each Session joins that
+    # transaction, and closing it leaves the transaction to the environment.
+    # On a connection passed in with no transaction open, a Session begins
+    # its own, and closing it rolls that transaction back.
+    with Session(bind=connection) as session:
+        qualify_v2_target(session, settings)
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -60,7 +66,8 @@ def _configure(connection: Connection) -> None:
     current_heads = frozenset(migration_context.get_current_heads())
     script_heads = frozenset(script.get_heads())
     if current_heads != previous_heads and current_heads == script_heads:
-        validate_v2_head_schema(connection, target_metadata)
+        with Session(bind=connection) as session:
+            validate_v2_head_schema(session, V2_TABLE_NAMES)
 
 
 def run_migrations_offline() -> None:
@@ -75,8 +82,10 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Migrate the caller's connection, or else a new engine in one transaction.
 
-    The new engine's transaction commits, so the target qualification's reads
-    cannot leave the completed migration to be rolled back.
+    On a new engine, the target qualification, the migration and, when the
+    migration reaches the script heads, the head schema check share one
+    transaction, which commits only when all of them succeed: a failed
+    ``validate_v2_head_schema`` rolls the migration back.
     """
     provided_connection = config.attributes.get("connection")
     if provided_connection is not None:
@@ -85,11 +94,13 @@ def run_migrations_online() -> None:
 
     engine = create_engine(settings.url, poolclass=pool.NullPool)
     try:
-        # Persistent target qualification performs live reads before Alembic
-        # enters its migration transaction. SQLAlchemy 2.x autobegins on
-        # those reads, so the environment must own a committing transaction;
-        # otherwise a standalone command closes the connection and silently
-        # rolls the completed migration back.
+        # engine.begin() opens the one transaction the qualification's reads,
+        # the migration and validate_v2_head_schema run in. Alembic's
+        # begin_transaction joins it rather than committing on its own.
+        # _configure runs the head schema check only when the migration moved
+        # the database to the script heads: then the migration commits only
+        # when the check passes, and engine.begin() rolls it back when the
+        # check raises. Any other migration commits once it completes.
         with engine.begin() as connection:
             _configure(connection)
     finally:

@@ -7,20 +7,13 @@ the catalog is written and everything removed as the superuser.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, or_, select
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
+from sqlalchemy import delete, or_, select
 
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     Dynamic,
     LegacyPolicyMapping,
@@ -30,7 +23,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.v2.dynamics.database_session import (
     DynamicDatabaseSession,
 )
@@ -44,7 +36,12 @@ from policyengine_api.services.v2.policies.services import V2PolicyService
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 RUNNING_VERSION = "5.2.0"
 US_INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.elasticities.income"
@@ -53,21 +50,6 @@ US_TAX_RATE = "gov.irs.income.rate"
 UK_INCOME_ELASTICITY = "gov.simulation.labour_supply_responses.income_elasticity"
 UK_OLD_INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.income_elasticity"
 UK_TAX_RATE = "gov.hmrc.income_tax.rate"
-
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST, ""),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("dynamic persistence tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
 
 
 @dataclass(frozen=True)
@@ -101,15 +83,17 @@ def _store_catalog(
     )
 
 
-def _remove_catalog(engine, catalog: StoredCatalog) -> None:
-    with engine.begin() as connection:
+def _remove_catalog(
+    v2_owner_sessions: sessionmaker[Session], catalog: StoredCatalog
+) -> None:
+    with v2_owner_sessions.begin() as session:
         dynamic_ids = select(Dynamic.id).where(
             Dynamic.tax_benefit_model_id == catalog.model_id
         )
         policy_ids = select(Policy.id).where(
             Policy.tax_benefit_model_id == catalog.model_id
         )
-        connection.execute(
+        session.execute(
             delete(LegacyPolicyMapping).where(
                 or_(
                     LegacyPolicyMapping.policy_id.in_(policy_ids),
@@ -117,7 +101,7 @@ def _remove_catalog(engine, catalog: StoredCatalog) -> None:
                 )
             )
         )
-        connection.execute(
+        session.execute(
             delete(ParameterValue).where(
                 or_(
                     ParameterValue.policy_id.in_(policy_ids),
@@ -125,68 +109,56 @@ def _remove_catalog(engine, catalog: StoredCatalog) -> None:
                 )
             )
         )
-        connection.execute(
+        session.execute(
             delete(Dynamic).where(Dynamic.tax_benefit_model_id == catalog.model_id)
         )
-        connection.execute(
+        session.execute(
             delete(Policy).where(Policy.tax_benefit_model_id == catalog.model_id)
         )
-        connection.execute(
+        session.execute(
             delete(Parameter).where(
                 Parameter.tax_benefit_model_version_id == catalog.version_id
             )
         )
-        connection.execute(
+        session.execute(
             delete(TaxBenefitModelVersion).where(
                 TaxBenefitModelVersion.id == catalog.version_id
             )
         )
-        connection.execute(
+        session.execute(
             delete(TaxBenefitModel).where(TaxBenefitModel.id == catalog.model_id)
         )
 
 
 @pytest.fixture
-def superuser_engine() -> Iterator[object]:
-    engine = create_engine(_disposable_url())
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture
 def runtime_sessions(
-    managed_v2_roles, v2_engine_as_role
-) -> Iterator[sessionmaker[Session]]:
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
     """Open sessions as API v1's runtime role."""
-    runtime_engine = v2_engine_as_role(managed_v2_roles.runtime)
-    try:
-        yield sessionmaker(runtime_engine, class_=Session, expire_on_commit=False)
-    finally:
-        runtime_engine.dispose()
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 @pytest.fixture
-def us_catalog(superuser_engine) -> Iterator[StoredCatalog]:
-    with Session(superuser_engine) as session, session.begin():
+def us_catalog(v2_owner_sessions: sessionmaker[Session]) -> Iterator[StoredCatalog]:
+    with v2_owner_sessions.begin() as session:
         catalog = _store_catalog(
             session, "us", [US_INCOME_ELASTICITY, US_MTR_DELTA, US_TAX_RATE]
         )
     try:
         yield catalog
     finally:
-        _remove_catalog(superuser_engine, catalog)
+        _remove_catalog(v2_owner_sessions, catalog)
 
 
 @pytest.fixture
-def uk_catalog(superuser_engine) -> Iterator[StoredCatalog]:
-    with Session(superuser_engine) as session, session.begin():
+def uk_catalog(v2_owner_sessions: sessionmaker[Session]) -> Iterator[StoredCatalog]:
+    with v2_owner_sessions.begin() as session:
         catalog = _store_catalog(session, "uk", [UK_INCOME_ELASTICITY, UK_TAX_RATE])
     try:
         yield catalog
     finally:
-        _remove_catalog(superuser_engine, catalog)
+        _remove_catalog(v2_owner_sessions, catalog)
 
 
 def _dynamic_service(sessions: sessionmaker[Session]) -> V2DynamicService:
@@ -251,7 +223,7 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
 
 
 def test_identical_dynamic_content_is_stored_once_and_read_back(
-    runtime_sessions, us_catalog, superuser_engine
+    runtime_sessions, us_catalog, v2_owner_sessions
 ) -> None:
     service = _dynamic_service(runtime_sessions)
 
@@ -271,7 +243,7 @@ def test_identical_dynamic_content_is_stored_once_and_read_back(
         (US_INCOME_ELASTICITY, 0.25),
         (US_MTR_DELTA, 500),
     }
-    with Session(superuser_engine) as session:
+    with v2_owner_sessions() as session:
         stored = session.scalars(
             select(Dynamic).where(Dynamic.tax_benefit_model_id == us_catalog.model_id)
         ).all()
@@ -295,7 +267,7 @@ def test_a_dynamic_is_read_only_in_its_own_country(
 
 
 def test_the_copy_splits_a_us_policy_into_a_policy_and_a_dynamic(
-    runtime_sessions, us_catalog, superuser_engine
+    runtime_sessions, us_catalog, v2_owner_sessions
 ) -> None:
     service = _policy_service(runtime_sessions)
     snapshot = _snapshot(
@@ -317,7 +289,7 @@ def test_the_copy_splits_a_us_policy_into_a_policy_and_a_dynamic(
     assert retry.policy_id == first.policy_id
     assert retry.dynamic_id == first.dynamic_id
     assert retry.mapping_created is False
-    with Session(superuser_engine) as session:
+    with v2_owner_sessions() as session:
         assert _stored_names(session, policy_id=first.policy_id) == {US_TAX_RATE}
         assert _stored_names(session, dynamic_id=first.dynamic_id) == {
             US_INCOME_ELASTICITY,
@@ -336,7 +308,7 @@ def test_the_copy_splits_a_us_policy_into_a_policy_and_a_dynamic(
 
 
 def test_the_copy_rewrites_the_uk_old_spelling_into_the_dynamic(
-    runtime_sessions, uk_catalog, superuser_engine
+    runtime_sessions, uk_catalog, v2_owner_sessions
 ) -> None:
     service = _policy_service(runtime_sessions)
     dynamic_values_only = service.mirror_legacy_policy(
@@ -354,7 +326,7 @@ def test_the_copy_rewrites_the_uk_old_spelling_into_the_dynamic(
     assert same_values_new_spelling.dynamic_created is False
     assert no_dynamic_values.dynamic_id is None
     assert no_dynamic_values.dynamic_created is False
-    with Session(superuser_engine) as session:
+    with v2_owner_sessions() as session:
         # A v1 policy holding only dynamic values maps to an empty policy.
         assert _stored_names(session, policy_id=dynamic_values_only.policy_id) == set()
         assert _stored_names(session, dynamic_id=dynamic_values_only.dynamic_id) == {
@@ -367,10 +339,10 @@ def test_the_copy_rewrites_the_uk_old_spelling_into_the_dynamic(
 
 
 def test_a_copy_made_before_the_split_keeps_its_mapping_without_a_dynamic(
-    runtime_sessions, us_catalog, superuser_engine
+    runtime_sessions, us_catalog, v2_owner_sessions
 ) -> None:
     snapshot = _snapshot("us", 9301, {US_INCOME_ELASTICITY: {"2026": 0.25}})
-    with Session(superuser_engine) as session, session.begin():
+    with v2_owner_sessions.begin() as session:
         earlier_copy = Policy(
             country_id="us",
             tax_benefit_model_id=us_catalog.model_id,
