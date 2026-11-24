@@ -6,7 +6,9 @@ its baseline and reform simulation runs, results are keyed by run, and a
 household job calculates one household for one year under one policy.
 
 Columns are read from the models' mappers, and keys, constraints and indexes
-from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py).
+from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py), as are
+the columns a mapper leaves out, such as a report run's four older cliff
+columns.
 """
 
 from uuid import uuid4

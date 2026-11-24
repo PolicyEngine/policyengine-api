@@ -308,6 +308,14 @@ and `refused(session, ...)`.
   helper such as `insert_row(connection, "table", **values)` becomes
   `add_row(session, Model, **values)`, given a mapped class. A JSON column
   takes the Python value, such as `[2026]`, not its JSON text.
+- **Columns a mapper leaves out**: a column kept in its table but left out of
+  the model's mapper (`exclude_properties`), such as a report run's four older
+  cliff columns until a revision drops them, has no statement through the
+  model: `update(Model).values(column=...)` raises `AttributeError`. A test
+  that sets one maps it on a class of a registry of its own, as
+  `tests.integration.privilege_statements.ReportRunColumns` does, and reads it
+  from SQLite's copy of the schema (`StoredTable.columns` in
+  `tests.unit.v2.v2_schema_reading`) or from the database's `Inspector`.
 - **Postgres functions**: `func`, as in
   `session.execute(select(func.current_database(), func.current_user()))`,
   `func.pg_backend_pid()` and `func.has_table_privilege(...)`.

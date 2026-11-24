@@ -17,7 +17,10 @@ inserts, and refused updates of tables where the role may not update
 which map only the columns they name. The other refused updates use the
 models: both simulation roles may update ``updated_at`` on the run, budget-window
 run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
-have no ``updated_at``.
+have no ``updated_at``. A column a model's mapper leaves out, such as a report
+run's four older cliff columns until a revision drops them, has no statement
+through the model, so its writes and refusals go through the class that maps
+it, ``ReportRunColumns``.
 """
 
 from __future__ import annotations
@@ -57,7 +60,6 @@ from policyengine_api.data.v2.privileges import (
 )
 from tests.fixtures.database_sessions import act_as
 from tests.integration.privilege_statements import (
-    REPORT_RUN_CLIFF_COLUMNS,
     BudgetWindowRunColumns,
     CliffImpactColumns,
     HouseholdColumns,
@@ -626,6 +628,10 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
     )
 
 
+# The class that maps the columns each model's mapper leaves out.
+UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {ReportRun: ReportRunColumns}
+
+
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
 def test_each_simulation_role_updates_exactly_its_declared_columns(
     session: Session, managed_v2_roles: ManagedV2Roles, role_kind: str
@@ -633,9 +639,10 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
     """Every column of the run tables is updatable exactly when it is declared.
 
     Setting a column of a model other than ``updated_at`` also sets
-    ``updated_at``, which both roles may update on each of these tables. The
-    report run's four older cliff columns, which ``ReportRun``'s mapper leaves
-    out, are set through ``ReportRunColumns``, which sets only the column.
+    ``updated_at``, which both roles may update on each of these tables. A
+    column the model's mapper leaves out (``exclude_properties``) is set
+    through the class in ``UNMAPPED_COLUMN_CLASSES``, which sets only the
+    column; a model with such a column and no class there fails the test.
     """
     role = getattr(managed_v2_roles, role_kind)
     declared = declared_privileges(managed_v2_roles.deployment_environment)[role]
@@ -655,16 +662,17 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
             and privilege.privilege is TablePrivilege.UPDATE
             for column in privilege.columns
         }
-        statement_models = [
+        columns_to_update: list[tuple[type[Any], str]] = [
             (model, column_attribute.key)
             for column_attribute in inspect(model).column_attrs
         ]
-        if model is ReportRun:
-            statement_models.extend(
-                (ReportRunColumns, column_name)
-                for column_name in REPORT_RUN_CLIFF_COLUMNS
+        unmapped_columns = sorted(inspect(model).exclude_properties or ())
+        if unmapped_columns:
+            columns_class = UNMAPPED_COLUMN_CLASSES[model]
+            columns_to_update.extend(
+                (columns_class, column_name) for column_name in unmapped_columns
             )
-        for statement_model, column_name in statement_models:
+        for statement_model, column_name in columns_to_update:
             column = getattr(statement_model, column_name)
             # The privilege is checked when the statement starts, so no row is
             # needed.

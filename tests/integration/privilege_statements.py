@@ -13,6 +13,10 @@ of them sends exactly the columns it names, so a refusal fails only for those
 columns. Each class maps one table, with the columns of every test that
 refuses a statement on it; a statement sends only the columns it sets. No
 code creates tables from these classes: Alembic creates them from the models.
+
+``ReportRunColumns`` also maps the four older cliff columns ``ReportRun``'s
+mapper leaves out until a revision drops them. No model maps them, so every
+test that writes them, or is refused them, sends its statement through it.
 """
 
 # No ``from __future__ import annotations``: SQLAlchemy reads the classes'
