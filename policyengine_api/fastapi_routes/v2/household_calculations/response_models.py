@@ -163,8 +163,8 @@ HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
         "description": (
-            "The household, policy, dynamic or calculation does not exist in "
-            "the country."
+            "The household, policy or dynamic a submission names is not stored "
+            "in its country, or the calculation does not exist."
         ),
     },
     422: {

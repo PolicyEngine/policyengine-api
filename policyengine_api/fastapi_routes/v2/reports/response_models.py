@@ -502,7 +502,7 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "have (code missing_parameters, which names them; the policies are "
             "checked before the dynamics, the baseline's first); or the "
             "simulation service cannot run the report: its "
-            "422, or its 400 for a region or dataset it does not have. The "
+            "422, or its 400 for a region, dynamic or dataset it does not have. The "
             "message says which; for the simulation service's refusal, it gives "
             "the service's code, when it gave one, and its reason, but not its "
             "status."

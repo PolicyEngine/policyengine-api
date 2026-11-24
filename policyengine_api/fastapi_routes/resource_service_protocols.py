@@ -196,12 +196,13 @@ class V2HouseholdCalculationResourceService(Protocol):
         """Send a stored household's calculation to the simulation service.
 
         Raise ``HouseholdCalculationCountryError`` for a country without
-        household calculations, ``HouseholdNotFoundError`` or
-        ``PolicyNotFoundError`` for a record not stored in that country,
-        ``HouseholdCalculationYearError`` for a household without a default
-        year, ``PolicyParametersMissingError`` for a policy setting parameters
-        the running catalog version lacks, and the simulation service errors
-        when it refuses the calculation.
+        household calculations, ``HouseholdNotFoundError``,
+        ``PolicyNotFoundError`` or ``DynamicNotFoundError`` for a record not
+        stored in that country, ``HouseholdCalculationYearError`` for a
+        household without a default year, ``PolicyParametersMissingError``
+        (``DynamicParametersMissingError`` for a dynamic) for one setting
+        parameters the running catalog version lacks, and the simulation
+        service errors when it refuses the calculation.
         """
         ...
 

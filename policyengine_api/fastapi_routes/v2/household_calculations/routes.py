@@ -2,8 +2,8 @@
 
 The calculation runs on the simulation service, which records it as a job in
 ``household_jobs``; the routes need no account. Submitting sends the
-simulation service the stored household's and policy's IDs once the Public
-API's own checks pass; reading reads the job from the database and never
+simulation service the stored household's, policy's and dynamic's IDs once
+API v1's own checks pass; reading reads the job from the database and never
 calls the simulation service.
 """
 
