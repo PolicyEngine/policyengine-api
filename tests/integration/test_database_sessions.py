@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import bindparam, delete, func, select
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import col
 
@@ -23,7 +23,9 @@ from policyengine_api.data.v2.database import (
 )
 from policyengine_api.data.v2.models import (
     Country,
+    Household,
     Region,
+    Report,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
@@ -35,6 +37,7 @@ from tests.fixtures.database_sessions import (
     drop_role,
     grant,
     grant_declared_v2_privileges,
+    query_plan,
     schema_inspector,
     truncate,
 )
@@ -189,6 +192,44 @@ def test_the_schema_inspector_reads_a_session_or_its_factory(
 
     assert {"reports", "alembic_version"} <= set(tables)
     assert set(from_factory) == set(tables)
+
+
+def test_query_plan_explains_a_statement_with_an_in_list(
+    owner_session: Session,
+) -> None:
+    """``in_()`` sends its list as one expanding parameter, rendered at execution."""
+    lookup = select(col(Report.id)).where(col(Report.id).in_([uuid4(), uuid4()]))
+
+    plan = query_plan(owner_session, lookup)
+
+    assert "on reports" in plan
+
+
+def test_query_plan_explains_a_statement_with_a_literal_parameter(
+    owner_session: Session,
+) -> None:
+    """A ``literal_execute`` parameter is written into the SQL when it runs."""
+    lookup = select(col(Report.id)).where(
+        col(Report.year) == bindparam("year", 2026, literal_execute=True)
+    )
+
+    plan = query_plan(owner_session, lookup)
+
+    assert "on reports" in plan
+    assert "2026" in plan
+
+
+def test_query_plan_explains_a_statement_with_a_json_parameter(
+    owner_session: Session,
+) -> None:
+    """A JSON parameter is sent as its JSON text, as the column's type sends it."""
+    lookup = select(col(Household.id)).where(
+        col(Household.household_data) == {"people": {"you": {}}}
+    )
+
+    plan = query_plan(owner_session, lookup)
+
+    assert "on households" in plan
 
 
 def test_declared_privileges_are_granted_again_without_error(

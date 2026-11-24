@@ -123,8 +123,8 @@ class RuleTableTest(unittest.TestCase):
                 "Fix: write [[rule.exception]].",
                 "[ex.layers.malformed] schema: unknown key 'extra' in "
                 "ex.layers.malformed.exception. Fix: remove it or use one of "
-                "['category', 'expires', 'issue', 'match', 'path', 'reason', "
-                "'removal'].",
+                "['category', 'expires', 'function', 'issue', 'match', 'path', "
+                "'reason', 'removal'].",
                 f"{MALFORMED}.exception.expires must be a date. "
                 "Fix: write it as YYYY-MM-DD.",
                 f"{MALFORMED}.downgrade needs a 'reason'. "
@@ -188,6 +188,73 @@ class RuleTableTest(unittest.TestCase):
                 exceptions=(RuleException("pkg/*.py", "legacy", date(2026, 12, 31)),),
                 downgrade_reason="too noisy",
             ),
+        )
+
+
+NARROWED_EXCEPTION = {
+    "path": "pkg/store.py",
+    "reason": "GRANT has no ORM form",
+    "match": "text(statement)",
+    "category": "no-orm-form",
+    "function": "Reconciler.apply",
+}
+
+
+class ExceptionFunctionTest(unittest.TestCase):
+    """An exception's ``function`` narrows it to findings inside that function."""
+
+    def _parsed_exceptions(
+        self, exception: dict[str, object]
+    ) -> tuple[list[str], tuple[RuleException, ...]]:
+        raw = tomllib.loads(REGISTRY)
+        rule = {**SINGLE_TABLES_RULE, "exception": exception}
+        del rule["baseline"]
+        raw["rule"] = [rule]
+        registry, violations = parse(raw)
+        assert registry is not None
+        parsed = registry.rule("ex.layers.single-tables")
+        assert parsed is not None
+        return [str(violation) for violation in violations], parsed.exceptions
+
+    def test_an_exception_reads_the_function_it_is_narrowed_to(self) -> None:
+        violations, exceptions = self._parsed_exceptions(NARROWED_EXCEPTION)
+
+        self.assertEqual(violations, [])
+        self.assertEqual(
+            exceptions,
+            (
+                RuleException(
+                    path="pkg/store.py",
+                    reason="GRANT has no ORM form",
+                    match="text(statement)",
+                    category="no-orm-form",
+                    function="Reconciler.apply",
+                ),
+            ),
+        )
+
+    def test_an_exception_without_a_function_reads_none(self) -> None:
+        exception = {
+            key: value for key, value in NARROWED_EXCEPTION.items() if key != "function"
+        }
+
+        violations, exceptions = self._parsed_exceptions(exception)
+
+        self.assertEqual(violations, [])
+        self.assertIsNone(exceptions[0].function)
+
+    def test_a_function_must_be_a_non_empty_string(self) -> None:
+        violations, _exceptions = self._parsed_exceptions(
+            {**NARROWED_EXCEPTION, "function": ""}
+        )
+
+        self.assertEqual(
+            violations,
+            [
+                "[ex.layers.single-tables] schema: "
+                "ex.layers.single-tables.exception.function must be a non-empty "
+                "string. Fix: set function."
+            ],
         )
 
 

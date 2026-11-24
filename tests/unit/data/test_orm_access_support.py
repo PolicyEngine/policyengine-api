@@ -549,8 +549,134 @@ def test_a_statement_on_a_session_is_not_reported(call: str) -> None:
     assert _checks({STORE: source}, STORE) == []
 
 
-def test_a_connection_outside_sqlalchemy_is_not_reported() -> None:
-    assert _checks({ROUTES: "value = connection.execute(statement)"}, ROUTES) == []
+@pytest.mark.parametrize(
+    ("call", "summary"),
+    [
+        (
+            "sqlite_connection.execute('PRAGMA foreign_keys = ON')",
+            "sqlite_connection.execute('PRAGMA foreign_keys = ON')",
+        ),
+        (
+            "connection.execute('SELECT 1', parameters)",
+            "connection.execute('SELECT 1', ...)",
+        ),
+        ("conn.scalar('SELECT 1')", "conn.scalar('SELECT 1')"),
+        ("connection.execute(statement, parameters)", "connection.execute(...)"),
+        ("connection.execute(statement, timeout=5)", "connection.execute(...)"),
+    ],
+)
+def test_a_statement_outside_a_session_reports_its_constant_arguments(
+    call: str, summary: str
+) -> None:
+    """A constant statement is reported, so an exception can name that statement."""
+    source = f"import sqlalchemy\n\nvalue = {call}"
+
+    assert _checks({STORE: source}, STORE) == [(CORE_CONNECTION, summary)]
+
+
+def test_an_exception_for_one_constant_statement_allows_no_other() -> None:
+    source = """
+    import sqlalchemy
+
+    sqlite_connection.execute("PRAGMA foreign_keys = ON")
+    sqlite_connection.execute("DELETE FROM reports")
+    """
+    findings = orm_access_findings({STORE: dedent(source)})
+    exceptions = [
+        _construct_exception(
+            STORE, "sqlite_connection.execute('PRAGMA foreign_keys = ON')"
+        )
+    ]
+
+    assert [
+        finding.source for finding in undeclared_findings(findings, exceptions)
+    ] == ["sqlite_connection.execute('DELETE FROM reports')"]
+
+
+@pytest.mark.parametrize(
+    ("call", "expected"),
+    [
+        (
+            "session.connection().exec_driver_sql('DELETE FROM reports')",
+            [
+                (
+                    RAW_SQL,
+                    "session.connection().exec_driver_sql('DELETE FROM reports')",
+                ),
+                (CORE_CONNECTION, "session.connection()"),
+            ],
+        ),
+        ("session.get_bind()", [(CORE_CONNECTION, "session.get_bind()")]),
+        ("engine.raw_connection()", [(CORE_CONNECTION, "engine.raw_connection()")]),
+        (
+            "database.exec_driver_sql('SELECT 1')",
+            [(RAW_SQL, "database.exec_driver_sql('SELECT 1')")],
+        ),
+    ],
+)
+def test_connections_and_driver_sql_are_reported_without_a_sqlalchemy_import(
+    call: str, expected: list[tuple[str, str]]
+) -> None:
+    """These method names mean SQLAlchemy whatever the module imports."""
+    assert _checks({ROUTES: f"value = {call}"}, ROUTES) == expected
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "connection.execute(statement)",
+        "connection.scalars(statement)",
+        "socket.connect()",
+        "connect(url)",
+        "driver.cursor()",
+        "cache_engine.begin()",
+    ],
+)
+def test_ambiguous_method_names_are_not_reported_outside_sqlalchemy(call: str) -> None:
+    """Other libraries share these names, so they count only beside sqlalchemy."""
+    assert _checks({ROUTES: f"value = {call}"}, ROUTES) == []
+
+
+@pytest.mark.parametrize(
+    ("imports", "call", "summary"),
+    [
+        ("import psycopg", "psycopg.connect(url)", "psycopg.connect(url)"),
+        ("import psycopg2", "psycopg2.connect(url)", "psycopg2.connect(url)"),
+        ("import pymysql", "pymysql.connect(host='localhost')", "pymysql.connect(...)"),
+        (
+            "import sqlite3",
+            "sqlite3.connect(':memory:')",
+            "sqlite3.connect(':memory:')",
+        ),
+        (
+            "import mysql.connector",
+            "mysql.connector.connect(user='root')",
+            "mysql.connector.connect(...)",
+        ),
+        ("import psycopg as pg", "pg.connect(url)", "pg.connect(url)"),
+        ("from psycopg import connect", "connect(url)", "connect(url)"),
+        (
+            "from mysql import connector",
+            "connector.connect(user='root')",
+            "connector.connect(...)",
+        ),
+    ],
+)
+def test_a_database_drivers_connect_is_reported_outside_a_session_factory_module(
+    imports: str, call: str, summary: str
+) -> None:
+    source = f"{imports}\n\ndriver_connection = {call}\n"
+
+    assert _checks({ROUTES: source}, ROUTES) == [(CORE_CONNECTION, summary)]
+    assert _checks({SESSION_FACTORY: source}, SESSION_FACTORY) == []
+
+
+def test_a_statement_on_a_driver_connection_is_reported_where_it_connects() -> None:
+    source = "import psycopg\n\npsycopg.connect(url).execute('DELETE FROM reports')\n"
+
+    assert _checks({ROUTES: source}, ROUTES) == [
+        (CORE_CONNECTION, "psycopg.connect(url)")
+    ]
 
 
 def test_a_session_factory_module_hands_out_no_engine_or_connection() -> None:
@@ -607,11 +733,18 @@ def test_only_a_session_factory_module_reads_a_session_factorys_engine() -> None
         ("sa.literal_column('count(*)')", "sa.literal_column('count(*)')"),
         ("session.exec_driver_sql('SELECT 1')", "session.exec_driver_sql('SELECT 1')"),
         ("driver_connection.cursor()", "driver_connection.cursor()"),
+        ("sa.DDL('DROP TABLE reports')", "sa.DDL('DROP TABLE reports')"),
+        (
+            "sa.schema.DDL('ALTER TABLE reports ADD note text')",
+            "sa.schema.DDL('ALTER TABLE reports ADD note text')",
+        ),
+        ("DDL('DROP TABLE reports')", "DDL('DROP TABLE reports')"),
     ],
 )
 def test_raw_sql_is_reported(source: str, summary: str) -> None:
     store = f"""
     import sqlalchemy as sa
+    from sqlalchemy.schema import DDL
 
     statement = {source}
     """
@@ -972,14 +1105,98 @@ def test_a_name_assigned_a_mapped_class_or_its_table_name_is_not_a_table() -> No
     assert _checks({STORE: store}, STORE) == []
 
 
-def _finding(file: str, source: str, line: int = 1) -> Finding:
-    return Finding(file, line, RAW_SQL, source)
+def _finding(
+    file: str, source: str, line: int = 1, *, function: str | None = None
+) -> Finding:
+    if function is None:
+        return Finding(file, line, RAW_SQL, source)
+    return Finding(file, line, RAW_SQL, source, function=function)
 
 
-def _construct_exception(path: str, match: str | None) -> RuleException:
+def _construct_exception(
+    path: str, match: str | None, *, function: str | None = None
+) -> RuleException:
+    if function is None:
+        return RuleException(
+            path=path, reason="no ORM form", match=match, category=NO_ORM_FORM
+        )
     return RuleException(
-        path=path, reason="no ORM form", match=match, category=NO_ORM_FORM
+        path=path,
+        reason="no ORM form",
+        match=match,
+        category=NO_ORM_FORM,
+        function=function,
     )
+
+
+def test_each_finding_names_the_function_it_is_in() -> None:
+    source = """
+    import sqlalchemy as sa
+
+    module_statement = sa.text("SELECT 1")
+
+    def reconcile():
+        return sa.text("SELECT 2")
+
+    class Reconciler:
+        class_statement = sa.text("SELECT 3")
+
+        def apply(self):
+            def build():
+                return sa.text("SELECT 4")
+
+            return sa.text("SELECT 5")
+
+    async def read():
+        return sa.text("SELECT 6")
+    """
+
+    findings = orm_access_findings({STORE: dedent(source)})
+
+    assert [(finding.source, finding.function) for finding in findings] == [
+        ("sa.text('SELECT 1')", None),
+        ("sa.text('SELECT 2')", "reconcile"),
+        ("sa.text('SELECT 3')", "Reconciler"),
+        ("sa.text('SELECT 4')", "Reconciler.apply.build"),
+        ("sa.text('SELECT 5')", "Reconciler.apply"),
+        ("sa.text('SELECT 6')", "read"),
+    ]
+
+
+def test_a_finding_in_a_function_names_it_when_described() -> None:
+    in_function = _finding(STORE, "text(statement)", line=3, function="apply_grants")
+
+    assert str(in_function) == f"{STORE}:3: raw SQL: text(statement) in apply_grants"
+    assert str(_finding(STORE, "text(statement)", line=3)) == (
+        f"{STORE}:3: raw SQL: text(statement)"
+    )
+
+
+def test_an_exception_with_a_function_allows_findings_only_in_that_function() -> None:
+    granting = _finding(STORE, "text(statement)", line=3, function="apply_grants")
+    reading = _finding(STORE, "text(statement)", line=9, function="read_roles")
+    module_level = _finding(STORE, "text(statement)", line=12)
+    exceptions = [
+        _construct_exception(STORE, "text(statement)", function="apply_grants")
+    ]
+
+    assert undeclared_findings([granting, reading, module_level], exceptions) == [
+        reading,
+        module_level,
+    ]
+
+
+def test_an_exception_with_a_function_is_unused_without_a_finding_there() -> None:
+    findings = [_finding(STORE, "text(statement)", function="read_roles")]
+    in_its_function = _construct_exception(
+        STORE, "text(statement)", function="read_roles"
+    )
+    elsewhere = _construct_exception(STORE, "text(statement)", function="apply_grants")
+    anywhere_in_the_module = _construct_exception(STORE, "text(statement)")
+
+    assert unused_exceptions(
+        findings, [in_its_function, elsewhere, anywhere_in_the_module]
+    ) == [elsewhere]
 
 
 def test_an_exception_allows_every_finding_with_its_file_and_source() -> None:
@@ -1032,11 +1249,12 @@ def test_a_path_exception_takes_its_files_out_of_the_check(tmp_path: Path) -> No
 def test_exception_problems_name_each_unusable_exception(tmp_path: Path) -> None:
     (tmp_path / "migrations").mkdir()
     (tmp_path / "migrations" / "env.py").write_text("", encoding="utf-8")
-    (tmp_path / "store.py").write_text("", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "store.py").write_text("", encoding="utf-8")
     exceptions = [
-        _construct_exception("store.py", "text('SELECT 1')"),
-        _construct_exception("store.py", None),
-        _construct_exception("missing.py", "text('SELECT 1')"),
+        _construct_exception("tests/store.py", "text('SELECT 1')"),
+        _construct_exception("tests/store.py", None),
+        _construct_exception("tests/missing.py", "text('SELECT 1')"),
         RuleException(
             path="migrations/*.py", reason="revisions", category=MIGRATION_REVISION
         ),
@@ -1049,19 +1267,81 @@ def test_exception_problems_name_each_unusable_exception(tmp_path: Path) -> None
         RuleException(
             path="scripts/*.py", reason="scripts", category=MIGRATION_REVISION
         ),
-        RuleException(path="store.py", reason="no category"),
-        RuleException(path="store.py", reason="driver", category="driver-access"),
+        RuleException(path="tests/store.py", reason="no category"),
+        RuleException(path="tests/store.py", reason="driver", category="driver-access"),
     ]
 
     assert exception_problems(
-        exceptions, ["migrations/env.py", "store.py"], tmp_path
+        exceptions, ["migrations/env.py", "tests/store.py"], tmp_path
     ) == [
-        "exception for store.py names no construct: set match to the finding's source",
-        "exception for missing.py must name one existing file",
+        "exception for tests/store.py names no construct: set match to the "
+        "finding's source",
+        "exception for tests/missing.py must name one existing file",
         "exception for migrations/*.py skips whole files, so it takes no match",
         "exception for scripts/*.py matches no file the rule test reads: remove it",
-        "exception for store.py has unknown category None: use one of "
+        "exception for tests/store.py has unknown category None: use one of "
         "['no-orm-form', 'migration-revision']",
-        "exception for store.py has unknown category 'driver-access': use one of "
-        "['no-orm-form', 'migration-revision']",
+        "exception for tests/store.py has unknown category 'driver-access': use "
+        "one of ['no-orm-form', 'migration-revision']",
+    ]
+
+
+def test_exceptions_outside_tests_or_naming_no_sql_text_need_a_function(
+    tmp_path: Path,
+) -> None:
+    """Production entries, and entries whose match holds no SQL, name a function.
+
+    An entry whose match is a bare call, a call on variables or an attribute
+    read would otherwise allow every such call in the module.
+    """
+    for file in ("policyengine_api/store.py", "scripts/migrate.py", "tests/rows.py"):
+        (tmp_path / file).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / file).write_text("", encoding="utf-8")
+    store, script, rows = (
+        "policyengine_api/store.py",
+        "scripts/migrate.py",
+        "tests/rows.py",
+    )
+    exceptions = [
+        _construct_exception(store, "sa.text(f'ANALYZE {tables}')"),
+        _construct_exception(store, "text(statement)", function="apply_grants"),
+        _construct_exception(script, "session.connection()"),
+        _construct_exception(rows, "text(statement)"),
+        _construct_exception(rows, "session.get_bind()"),
+        _construct_exception(rows, "mapper.local_table"),
+        _construct_exception(rows, "session.get_bind()", function="Rows.dialect"),
+        _construct_exception(rows, "text(f'TRUNCATE {tables} CASCADE')"),
+        _construct_exception(
+            rows, "sqlite_connection.execute('PRAGMA foreign_keys = ON')"
+        ),
+    ]
+
+    assert exception_problems(exceptions, [], tmp_path) == [
+        f"exception for {store} (sa.text(f'ANALYZE {{tables}}')) needs a "
+        "function: set function to the enclosing function of its finding",
+        f"exception for {script} (session.connection()) needs a function: set "
+        "function to the enclosing function of its finding",
+        f"exception for {rows} (text(statement)) needs a function: set function "
+        "to the enclosing function of its finding",
+        f"exception for {rows} (session.get_bind()) needs a function: set "
+        "function to the enclosing function of its finding",
+        f"exception for {rows} (mapper.local_table) needs a function: set "
+        "function to the enclosing function of its finding",
+    ]
+
+
+def test_a_path_exception_takes_no_function(tmp_path: Path) -> None:
+    (tmp_path / "migrations").mkdir()
+    (tmp_path / "migrations" / "env.py").write_text("", encoding="utf-8")
+    exceptions = [
+        RuleException(
+            path="migrations/*.py",
+            reason="revisions",
+            category=MIGRATION_REVISION,
+            function="run_migrations_online",
+        )
+    ]
+
+    assert exception_problems(exceptions, ["migrations/env.py"], tmp_path) == [
+        "exception for migrations/*.py skips whole files, so it takes no function"
     ]

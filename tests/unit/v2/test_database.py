@@ -4,8 +4,10 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session, select
 
+from policyengine_api.data.v1_models import Policy
 from policyengine_api.data.v2 import database
 from policyengine_api.data.v2.models import TaxBenefitModel
 from policyengine_api.data.v2.settings import (
@@ -17,7 +19,12 @@ from policyengine_api.data.v2.settings import (
     load_v2_migration_database_settings,
     load_v2_runtime_database_settings,
 )
-from tests.fixtures.database_sessions import sqlite_v2_sessions
+from tests.fixtures.database_sessions import sqlite_v1_sessions, sqlite_v2_sessions
+
+# A PostgreSQL URL no test connects to: building an engine opens no connection.
+UNCONNECTED_POSTGRES_URL = (
+    "postgresql+psycopg://reader:test-password@127.0.0.1:5432/policyengine"
+)
 
 
 def _environment(*, username: str = "runtime") -> dict[str, str]:
@@ -164,6 +171,33 @@ def test_read_sessions_refuse_to_write_rows() -> None:
 
         with sessions() as session:
             assert session.exec(select(TaxBenefitModel)).all() == []
+
+
+def test_unpooled_read_only_sessions_make_every_transaction_read_only() -> None:
+    """Every Session's engine has SQLAlchemy's ``postgresql_readonly`` option.
+
+    With it, psycopg begins each of the engine's transactions READ ONLY, so
+    PostgreSQL refuses any write the qualification commands might send.
+    """
+    with (
+        database.unpooled_v2_read_only_sessions(UNCONNECTED_POSTGRES_URL) as sessions,
+        sessions() as session,
+    ):
+        bind = session.bind
+        assert bind is not None
+        assert bind.get_execution_options().get("postgresql_readonly") is True
+
+
+def test_schema_inspector_reads_a_plain_sqlalchemy_session_in_its_transaction() -> None:
+    """A Session that isn't SQLModel's is read as a Session, not as a factory."""
+    with sqlite_v1_sessions() as sessions, sessions() as session:
+        assert isinstance(session, OrmSession)
+        assert not isinstance(session, Session)
+
+        inspector = database.v2_schema_inspector(session)
+
+        assert Policy.__tablename__ in inspector.get_table_names()
+        assert session.in_transaction()
 
 
 def test_only_the_metadata_reader_opens_read_sessions() -> None:

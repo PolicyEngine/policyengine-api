@@ -13,15 +13,22 @@ from tests.fixtures.v2_metadata_service_helpers import insert_country
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
 
 @pytest.fixture
-def catalog_session() -> Iterator[Session]:
+def catalog_sessions() -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of a database holding the US and UK catalogs."""
     with sqlite_v2_sessions() as sessions:
         with sessions.begin() as session:
             for country in normalized_catalog().countries:
                 insert_country(session, country, include_model=True)
+        yield sessions
 
-        with sessions() as session:
-            yield session
+
+@pytest.fixture
+def catalog_session(catalog_sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Return a Session of the catalog database, closed after the test."""
+    with catalog_sessions() as session:
+        yield session

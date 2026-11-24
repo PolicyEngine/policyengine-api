@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy.engine import URL
 
 import scripts.v1_database_migration as migration
+from policyengine_api.constants import REPO
 from scripts.v1_database_migration import (
     DatabaseState,
     build_database_url,
@@ -15,9 +21,69 @@ from scripts.v1_database_migration import (
     upgrade_database,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 # Fake credentials; the first holds characters that URLs must escape.
 FAKE_PASSWORD_WITH_URL_CHARACTERS = "p@ss:/word"
 FAKE_PASSWORD = "p@ssword"
+# The database URLs .github/scripts/migrate_v1_cloud_sql.sh unsets before it
+# runs the script, so only the credentials it fetched reach the database.
+UNSET_DATABASE_URL_NAMES = ("ALEMBIC_DATABASE_URL", "STAGE7_EXISTING_DATABASE_URL")
+# Imports the script, then prints the named variables as JSON on its last line.
+IMPORT_SCRIPT_AND_REPORT_VARIABLES = """
+import json
+import os
+import sys
+
+import scripts.v1_database_migration
+
+print(json.dumps({name: os.environ.get(name) for name in sys.argv[1:]}))
+"""
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
+
+def test_importing_the_script_loads_no_dotenv_file(tmp_path: Path) -> None:
+    """A .env file can't give the script back a database URL the deploy unset.
+
+    Run through ``python -c``, python-dotenv searches for ``.env`` from the
+    working directory, so a default ``load_dotenv()`` anywhere in the script's
+    imports would find the file written here.
+    """
+    (tmp_path / ".env").write_text(
+        "".join(
+            f"{name}=mysql+pymysql://from-dotenv@127.0.0.1:3307/policyengine\n"
+            for name in UNSET_DATABASE_URL_NAMES
+        ),
+        encoding="utf-8",
+    )
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in UNSET_DATABASE_URL_NAMES
+    }
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO), *filter(None, [os.environ.get("PYTHONPATH")])]
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            IMPORT_SCRIPT_AND_REPORT_VARIABLES,
+            *UNSET_DATABASE_URL_NAMES,
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    reported_variables = json.loads(completed.stdout.splitlines()[-1])
+    assert reported_variables == dict.fromkeys(UNSET_DATABASE_URL_NAMES)
 
 
 def test_database_url_uses_sqlalchemy_url_without_stringifying_credentials():
