@@ -215,6 +215,7 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "test_alembic_v2_withheld_area_codes.py" in lifecycle_script
     assert "test_alembic_v2_shared_report_keys.py" in lifecycle_script
     assert "test_alembic_v2_cliff_impacts.py" in lifecycle_script
+    assert "test_alembic_v2_dynamics.py" in lifecycle_script
     assert "redis:7.2-alpine" not in workflow
     assert "RUNTIME_CACHE_TEST_URL" not in workflow
     assert "test_v2_catalog_installed.py" not in workflow
@@ -249,6 +250,20 @@ def test_reusable_v2_integration_check_runs_the_users_report_run_tests():
         "test_v2_user_report_views.py",
     ):
         assert privileges_applied < workflow.index(module), module
+
+
+def test_reusable_v2_integration_check_runs_the_dynamic_persistence_tests():
+    """The dynamic persistence tests run after the managed roles get their privileges.
+
+    The dynamics revision's migration tests downgrade and upgrade the schema,
+    which would drop tables the job granted privileges on, so they run in the
+    lifecycle job instead.
+    """
+    workflow = _workflow("v2-integration-check.yml")
+
+    privileges_applied = workflow.index("reconcile_v2_privileges.py apply")
+    assert privileges_applied < workflow.index("test_v2_dynamic_persistence.py")
+    assert "test_alembic_v2_dynamics.py" not in workflow
 
 
 def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():

@@ -40,8 +40,10 @@ CHANGED_TABLES = frozenset({"dynamics", "legacy_policy_mappings", "parameter_val
 @pytest.fixture
 def engine() -> Iterator[Engine]:
     """Yield an engine on a database at head, and leave it at head."""
+    # Check that the target is the disposable database before migrating it.
+    database_url = disposable_v2_url()
     command.upgrade(alembic_v2_config(), "head")
-    database_engine = create_engine(disposable_v2_url())
+    database_engine = create_engine(database_url)
     try:
         yield database_engine
     finally:
@@ -323,7 +325,10 @@ def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
     engine: Engine,
 ) -> None:
     config = alembic_v2_config()
-    command.upgrade(config, DYNAMICS_REVISION)
+    # The fixture upgrades to the head before the test, and the head can be
+    # later than the dynamics revision, so a downgrade reaches it; an upgrade
+    # to an older revision does nothing.
+    command.downgrade(config, DYNAMICS_REVISION)
     with engine.begin() as connection:
         rows = insert_public_api_rows(connection)
         dynamic_id = _insert_dynamic(connection, rows)
@@ -331,6 +336,8 @@ def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
         with pytest.raises(IntegrityError, match="name"):
             command.downgrade(config, PREVIOUS_REVISION)
         assert _current_revision(engine) == DYNAMICS_REVISION
+        mapping_columns = inspect(engine).get_columns("legacy_policy_mappings")
+        assert "dynamic_id" in {column["name"] for column in mapping_columns}
     finally:
         with engine.begin() as connection:
             connection.execute(
