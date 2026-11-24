@@ -326,6 +326,9 @@ def test_storing_a_report_run_writes_none_of_its_cliff_columns() -> None:
         country_package_version="1.0.0",
         policyengine_version="4.2.0",
         baseline_cliff_gap=1.5,
+        baseline_cliff_share=0.1,
+        reform_cliff_gap=2.5,
+        reform_cliff_share=0.2,
     )
 
     with (

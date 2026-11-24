@@ -1,7 +1,7 @@
 """Read a v2 report's cliffs from its simulation runs' cliff calculations.
 
-The routes run as the Public API's runtime role, so the tests prove its
-``SELECT`` on ``cliff_impacts`` covers the read (rule
+The routes run as API v1's runtime role, so the tests prove its ``SELECT`` on
+``cliff_impacts`` covers the read (rule
 ``api.v2.runtime-privileges-tested-as-runtime-role``). The database owner
 stores each run's cliff calculations here, commits them, and the catalog's
 deletion removes them with their runs.
@@ -18,10 +18,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
@@ -35,6 +31,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from tests.fixtures.database_sessions import recorded_statements
 from tests.fixtures.economy_results import uk_economy_result, us_economy_result
 from tests.integration.stored_report_rows import (
     STARTED_AT,
@@ -47,10 +44,12 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -68,57 +67,44 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalogs(owner_engine: Engine) -> Iterator[dict[str, CatalogRows]]:
+def catalogs(
+    owner_sessions: sessionmaker[Session],
+) -> Iterator[dict[str, CatalogRows]]:
     """Store a US and a UK catalog, and delete them and their reports after."""
-    with owner_engine.begin() as connection:
-        stored = {
-            country: store_catalog(connection, country) for country in ("us", "uk")
-        }
+    with owner_sessions.begin() as session:
+        stored = {country: store_catalog(session, country) for country in ("us", "uk")}
     yield stored
-    with owner_engine.begin() as connection:
+    with owner_sessions.begin() as session:
         for catalog in stored.values():
-            delete_catalog(connection, catalog)
+            delete_catalog(session, catalog)
 
 
 @pytest.fixture
-def runtime_engine(managed_v2_roles, v2_engine_as_role) -> Iterator[Engine]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 @pytest.fixture
-def runtime_statements(runtime_engine: Engine) -> list[str]:
-    """Collect each SQL statement the runtime role runs during the test."""
-    statements: list[str] = []
-
-    def record_statement(
-        _connection, _cursor, statement, _parameters, _context, _executemany
-    ) -> None:
-        statements.append(statement)
-
-    event.listen(runtime_engine, "before_cursor_execute", record_statement)
-    return statements
-
-
-@pytest.fixture
-def client(runtime_engine: Engine) -> TestClient:
+def client(runtime_sessions: sessionmaker[Session]) -> TestClient:
     """Serve the report routes as the runtime role."""
-    sessions = sessionmaker(runtime_engine, class_=Session)
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
         v2_stored_report_service_factory=lambda: V2StoredReportService(
-            StoredReportDatabaseSession(sessions), current_versions=current_versions
+            StoredReportDatabaseSession(runtime_sessions),
+            current_versions=current_versions,
         ),
     )
     settings = RouteImplementationSettings(
@@ -140,16 +126,18 @@ def read_report(client: TestClient, report_id: object, country: str) -> Any:
 
 
 def test_a_succeeded_run_reads_its_simulation_runs_cliff_results(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
     output = us_economy_result()
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         # The result's cliff impact is stored as each simulation run's
         # succeeded cliff calculation.
         store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=CURRENT_VERSIONS),
@@ -168,54 +156,30 @@ def test_a_succeeded_run_reads_its_simulation_runs_cliff_results(
     }
 
 
-def test_a_report_runs_own_cliff_columns_are_not_read(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
-) -> None:
-    catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-        run_ids = store_report_run(
-            connection,
-            catalog,
-            report,
-            RunSettings(versions=CURRENT_VERSIONS),
-            result=uk_economy_result(),
-        )
-        # The report run's own columns hold cliffs; its simulation runs have none.
-        connection.execute(
-            text(
-                "UPDATE report_runs SET baseline_cliff_gap = 1.0, "
-                "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-                "reform_cliff_share = 0.2 WHERE id = :id"
-            ),
-            {"id": run_ids.report_run_id},
-        )
-
-    item = read_report(client, report.report_id, "uk")
-
-    assert item["status"] == "succeeded"
-    assert item["result"]["cliff_impact"] is None
-    assert item["cliffs"]["status"] == "not_calculated"
-
-
 def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     client: TestClient,
-    runtime_statements: list[str],
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    """No statement the read sends names a report run's own cliff columns.
+
+    So values in them can't reach a read. The mapper leaves them out, and no
+    ORM statement can set them for a test to read back.
+    """
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
         store_report_run(
-            connection,
+            session,
             catalogs["us"],
             report,
             RunSettings(versions=CURRENT_VERSIONS),
             result=us_economy_result(),
         )
 
-    read_report(client, report.report_id, "us")
-    runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
+    with recorded_statements(runtime_sessions) as runtime_statements:
+        read_report(client, report.report_id, "us")
+        runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
 
     assert runs.status_code == 200, runs.text
     report_run_loads = [
@@ -230,29 +194,29 @@ def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
 
 
 def test_a_run_still_calculating_reads_each_sides_cliff_progress(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["us"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         run_ids = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=CURRENT_VERSIONS, status="running"),
         )
-        store_cliff_calculation(
-            connection, run_ids.baseline_simulation_run_id, "running"
-        )
+        store_cliff_calculation(session, run_ids.baseline_simulation_run_id, "running")
         # A failed calculation never counts: the newer pending one is read.
         store_cliff_calculation(
-            connection,
+            session,
             run_ids.reform_simulation_run_id,
             "failed",
             error_message=FAILURE,
         )
         store_cliff_calculation(
-            connection,
+            session,
             run_ids.reform_simulation_run_id,
             "pending",
             created_at=STARTED_AT + timedelta(minutes=5),
@@ -269,33 +233,35 @@ def test_a_run_still_calculating_reads_each_sides_cliff_progress(
 
 
 def test_a_side_whose_calculations_all_failed_says_why_the_newest_failed(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
     catalog = catalogs["uk"]
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         run_ids = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=CURRENT_VERSIONS),
             result=uk_economy_result(),
         )
         store_cliff_calculation(
-            connection,
+            session,
             run_ids.baseline_simulation_run_id,
             "succeeded",
             cliff_gap=1_000_000.0,
             cliff_share=0.02,
         )
         store_cliff_calculation(
-            connection,
+            session,
             run_ids.reform_simulation_run_id,
             "failed",
             error_message="modal_call_ended: the call ended without a result",
         )
         store_cliff_calculation(
-            connection,
+            session,
             run_ids.reform_simulation_run_id,
             "failed",
             created_at=STARTED_AT + timedelta(minutes=5),
@@ -313,10 +279,12 @@ def test_a_side_whose_calculations_all_failed_says_why_the_newest_failed(
 
 
 def test_a_report_with_no_run_reads_no_cliffs(
-    owner_engine: Engine, catalogs: dict[str, CatalogRows], client: TestClient
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalogs["us"])
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalogs["us"])
 
     item = read_report(client, report.report_id, "us")
 

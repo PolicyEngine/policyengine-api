@@ -62,10 +62,13 @@ STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
 # The year of a report store_report stores, unless it is given another.
 STORED_REPORT_YEAR = 2026
 # The mapped class of each table the simulation service's writer stores
-# result rows in, by the table's name in ``economy_result_rows``.
+# result rows in, by the table's name in ``economy_result_rows``, and of
+# ``cliff_impacts``, where it gives each simulation run's succeeded cliff
+# calculation.
 RESULT_MODELS: dict[str, type[Any]] = {
     model.__tablename__: model
     for model in (
+        CliffImpact,
         LaborSupplyResponse,
         LaborSupplyDecileResponse,
         BudgetSummary,
