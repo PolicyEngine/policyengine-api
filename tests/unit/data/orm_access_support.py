@@ -116,10 +116,12 @@ DECLARATIVE_BASE_MODULES = frozenset(
     }
 )
 # The modules that may create and hold an engine, open a Connection and attach
-# pool events, to hand out Session factories: API v1's, API v2's and the tests'.
+# pool events, to hand out Session factories: API v1's (with the listeners
+# that record its pool's events), API v2's and the tests'.
 SESSION_FACTORY_MODULES = frozenset(
     {
         "policyengine_api/data/orm.py",
+        "policyengine_api/data/orm_pool_events.py",
         "policyengine_api/data/v2/database.py",
         "tests/fixtures/database_sessions.py",
     }

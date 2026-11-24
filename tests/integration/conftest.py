@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import os
 import time
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -10,6 +14,16 @@ from tests.integration.deployed_api_credentials import (
     MissingServerCredentialError,
     deployed_api_client,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+# The database fixtures import the tests' session factories when they run, so
+# the tests of deployed services load no database code.
 
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
@@ -86,13 +100,6 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
     ``reconcile_v2_privileges.py apply --create-missing-roles``. Repeating it
     here grants nothing more there, and lets the tests run locally on their own.
     """
-    from sqlalchemy import create_engine
-    from sqlalchemy.pool import NullPool
-
-    from policyengine_api.data.v2.privilege_reconciliation import (
-        apply_declared_privileges,
-        create_missing_roles,
-    )
     from policyengine_api.data.v2.privileges import (
         MODAL_WORKER_ROLE,
         RUNTIME_ROLE,
@@ -100,18 +107,14 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
         declared_privileges,
         stage12_role,
     )
+    from tests.fixtures import database_sessions
 
     deployment_environment = (
         os.environ.get("DEPLOYMENT_ENVIRONMENT", "").strip() or "test"
     )
-    declared = declared_privileges(deployment_environment)
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        with engine.begin() as connection:
-            create_missing_roles(connection, declared)
-            plan, _default_privileges = apply_declared_privileges(connection, declared)
-    finally:
-        engine.dispose()
+    plan = database_sessions.grant_declared_v2_privileges(
+        disposable_v2_database_url, declared_privileges(deployment_environment)
+    )
     if not plan.can_apply:
         pytest.fail(
             "the disposable v2 database lacks declared roles or tables: "
@@ -127,12 +130,57 @@ def managed_v2_roles(disposable_v2_database_url: str) -> ManagedV2Roles:
 
 
 @pytest.fixture(scope="session")
+def v2_owner_sessions(
+    disposable_v2_database_url: str,
+) -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of the disposable v2 database's owner (superuser)."""
+    from tests.fixtures import database_sessions
+
+    with database_sessions.v2_owner_sessions(disposable_v2_database_url) as sessions:
+        yield sessions
+
+
+@pytest.fixture(scope="session")
+def v2_sessions_as_role(
+    disposable_v2_database_url: str, managed_v2_roles: ManagedV2Roles
+) -> Iterator[Callable[[str], sessionmaker[Session]]]:
+    """Return a builder of Session factories whose connections act as one role.
+
+    Every statement is checked against that role's privileges, as in staging
+    and production, instead of the disposable database's owner's. The managed
+    roles exist and hold their declared privileges; a test may name a role it
+    created. The factories' engines are disposed of after the test session.
+    """
+    from tests.fixtures import database_sessions
+
+    with ExitStack() as factories:
+
+        def build(role: str) -> sessionmaker[Session]:
+            return factories.enter_context(
+                database_sessions.v2_role_sessions(disposable_v2_database_url, role)
+            )
+
+        yield build
+
+
+@pytest.fixture(scope="session")
+def v1_sessions(disposable_v1_database_url: str) -> Iterator[sessionmaker[OrmSession]]:
+    """Return API v1's Session factories of the disposable MySQL database."""
+    from tests.fixtures import database_sessions
+
+    with database_sessions.v1_sessions(disposable_v1_database_url) as sessions:
+        yield sessions
+
+
+@pytest.fixture(scope="session")
 def v2_engine_as_role(disposable_v2_database_url: str, managed_v2_roles):
     """Return a builder of engines whose connections act as one managed role.
 
     Each new connection runs ``SET ROLE`` and commits it, so every statement on
     it is checked against that role's privileges, as in staging and production,
-    instead of the disposable database's superuser.
+    instead of the disposable database's superuser. Only for the tests that
+    still build engines, which rule api.data.orm-only reports: use
+    ``v2_sessions_as_role``.
     """
     from psycopg import sql
     from sqlalchemy import create_engine, event

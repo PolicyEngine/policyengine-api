@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import atexit
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.settings import (
@@ -19,7 +21,10 @@ from policyengine_api.data.v2.settings import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy import Engine
+    from sqlalchemy.engine import URL, Inspector
 
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
@@ -118,6 +123,51 @@ def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
     )
     event.listen(factory, "before_flush", _refuse_flush)
     return factory
+
+
+@contextmanager
+def unpooled_v2_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
+    """Yield v2 Session factories for one command's work on the database at ``url``.
+
+    For commands that run once, such as catalog initialization and privilege
+    reconciliation, given ``V2DatabaseSettings.connection.url`` or
+    ``V2AlembicSettings.url``. Their engine keeps no connection pool, so no
+    connection outlives its Session, and is disposed of on exit.
+    """
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        yield build_v2_session_factory(engine)
+    finally:
+        engine.dispose()
+
+
+@contextmanager
+def unpooled_v2_read_only_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
+    """Yield v2 Session factories whose transactions are all READ ONLY.
+
+    For the migration qualification commands, which only read: PostgreSQL
+    refuses any write in their transactions (psycopg's read-only mode, set
+    through SQLAlchemy's ``postgresql_readonly`` option). Like
+    ``unpooled_v2_sessions``, the engine keeps no pool.
+    """
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        yield build_v2_session_factory(
+            engine.execution_options(postgresql_readonly=True)
+        )
+    finally:
+        engine.dispose()
+
+
+def v2_schema_inspector(source: Session | sessionmaker[Session]) -> Inspector:
+    """Return SQLAlchemy's Inspector of the v2 database a Session or factory uses.
+
+    A Session's Inspector reads the schema inside the Session's transaction,
+    as the migration target checks need.
+    """
+    bind = source.connection() if isinstance(source, Session) else source.kw["bind"]
+    inspector: Inspector = inspect(bind)
+    return inspector
 
 
 def _discard_inherited_state(current_pid: int) -> None:

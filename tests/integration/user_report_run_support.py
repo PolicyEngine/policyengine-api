@@ -2,8 +2,9 @@
 
 ``JoiningSimulationService`` answers creates and re-runs as the simulation
 service does once identical requests share runs: with a run it names, or
-with a new pending run it stores. The helpers serve the report routes as the
-Public API's runtime role and read users' records and saved reports back.
+with a new pending run it stores. The helpers serve the report routes as
+API v1's runtime role and read users' records and saved reports back, through
+Sessions of the disposable database's owner.
 """
 
 from __future__ import annotations
@@ -15,10 +16,18 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import text
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import OperationalError
+from sqlmodel import col
 
 from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.data.v2.models import (
+    Report,
+    User,
+    UserReportAssociation,
+    UserReportRunAssociation,
+)
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
 from policyengine_api.migration_flags import (
@@ -81,7 +90,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from contextlib import AbstractContextManager
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
     from policyengine_api.services.v2.identity.types import AccountPrincipal
@@ -122,10 +131,11 @@ class JoiningSimulationService:
     create stores a new report with a pending run, and a re-run a new pending
     run of the report, as before, marked forced for a forced re-run. With
     ``during_call``, each create and re-run first runs it, as something
-    another request does while the simulation service is asked.
+    another request does while the simulation service is asked. It stores
+    through ``owner_sessions``.
     """
 
-    engine: Engine
+    owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     joined_run: JoinedRun | None = None
     during_call: Callable[[], None] | None = None
@@ -141,10 +151,10 @@ class JoiningSimulationService:
                 report_id=self.joined_run.report_id,
                 report_run_id=self.joined_run.report_run_id,
             )
-        with self.engine.begin() as connection:
-            stored = store_report(connection, self.catalog)
+        with self.owner_sessions.begin() as session:
+            stored = store_report(session, self.catalog)
             run_ids = store_report_run(
-                connection,
+                session,
                 self.catalog,
                 stored,
                 RunSettings(versions=CURRENT_VERSIONS, status="pending"),
@@ -166,9 +176,9 @@ class JoiningSimulationService:
                 report_id=self.joined_run.report_id,
                 budget_window_run_id=self.joined_run.budget_window_run_id,
             )
-        with self.engine.begin() as connection:
+        with self.owner_sessions.begin() as session:
             window = store_window(
-                connection,
+                session,
                 self.catalog,
                 years=tuple(
                     range(report.year, report.year + report.budget_window_size)
@@ -189,16 +199,15 @@ class JoiningSimulationService:
                 report_run_id=self.joined_run.report_run_id,
                 budget_window_run_id=self.joined_run.budget_window_run_id,
             )
-        with self.engine.begin() as connection:
-            simulations = connection.execute(
-                text(
-                    "SELECT baseline_simulation_id, reform_simulation_id FROM "
-                    "reports WHERE id = :id"
-                ),
-                {"id": rerun.report_id},
+        with self.owner_sessions.begin() as session:
+            simulations = session.execute(
+                select(
+                    col(Report.baseline_simulation_id),
+                    col(Report.reform_simulation_id),
+                ).where(col(Report.id) == rerun.report_id)
             ).one()
             run_ids = store_report_run(
-                connection,
+                session,
                 self.catalog,
                 StoredReport(
                     report_id=rerun.report_id,
@@ -288,23 +297,23 @@ def report_body(policy_id: UUID) -> dict[str, Any]:
 
 
 def store_joined_and_newer_forced_run(
-    connection: Any, catalog: CatalogRows, *, joined_status: str
+    session: Session, catalog: CatalogRows, *, joined_status: str
 ) -> tuple[StoredReport, UUID, UUID]:
     """Store a report with a run to join and a newer forced run beside it.
 
     A succeeded run to join has its result stored. Return the report, the
     run to join and the forced run, which is the report's newest.
     """
-    report = store_report(connection, catalog)
+    report = store_report(session, catalog)
     joined = store_report_run(
-        connection,
+        session,
         catalog,
         report,
         RunSettings(versions=CURRENT_VERSIONS, status=joined_status),
         result=us_economy_result() if joined_status == "succeeded" else None,
     )
     forced = store_report_run(
-        connection,
+        session,
         catalog,
         report,
         RunSettings(
@@ -331,15 +340,23 @@ def as_browser(browser_id: UUID) -> dict[str, str]:
     return {UNAUTHENTICATED_USER_HEADER: str(browser_id)}
 
 
-def stored_records(engine: Engine, user_ids: list[UUID]) -> list[RunRecord]:
-    with engine.begin() as connection:
-        rows = connection.execute(
-            text(
-                "SELECT user_id, report_run_id, trigger, requested_at FROM "
-                "user_report_run_associations WHERE user_id = ANY(:ids) "
-                "ORDER BY requested_at, user_id"
-            ),
-            {"ids": user_ids},
+def stored_records(
+    owner_sessions: sessionmaker[Session], user_ids: list[UUID]
+) -> list[RunRecord]:
+    """Return the users' stored requests for report runs, oldest first."""
+    with owner_sessions.begin() as session:
+        rows = session.execute(
+            select(
+                col(UserReportRunAssociation.user_id),
+                col(UserReportRunAssociation.report_run_id),
+                col(UserReportRunAssociation.trigger),
+                col(UserReportRunAssociation.requested_at),
+            )
+            .where(col(UserReportRunAssociation.user_id).in_(user_ids))
+            .order_by(
+                col(UserReportRunAssociation.requested_at),
+                col(UserReportRunAssociation.user_id),
+            )
         ).all()
     return [
         RunRecord(
@@ -352,34 +369,40 @@ def stored_records(engine: Engine, user_ids: list[UUID]) -> list[RunRecord]:
     ]
 
 
-def store_saved_report(engine: Engine, *, user_id: UUID, report_id: UUID) -> UUID:
+def store_saved_report(
+    owner_sessions: sessionmaker[Session], *, user_id: UUID, report_id: UUID
+) -> UUID:
     """Save the report for the user, with no last run time, and return its ID."""
     saved_report_id = uuid4()
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO users (id, user_type) VALUES (:id, 'unauthenticated') "
-                "ON CONFLICT (id) DO NOTHING"
-            ),
-            {"id": user_id},
+    with owner_sessions.begin() as session:
+        session.execute(
+            insert(User)
+            .values(id=user_id, user_type="unauthenticated")
+            .on_conflict_do_nothing(index_elements=[col(User.id)])
         )
-        connection.execute(
-            text(
-                "INSERT INTO user_report_associations (id, user_id, report_id, "
-                "country_id, name) VALUES (:id, :user_id, :report_id, 'us', "
-                "'My report')"
-            ),
-            {"id": saved_report_id, "user_id": user_id, "report_id": report_id},
+        session.execute(
+            insert(UserReportAssociation).values(
+                id=saved_report_id,
+                user_id=user_id,
+                report_id=report_id,
+                country_id="us",
+                name="My report",
+            )
         )
     return saved_report_id
 
 
-def saved_report_last_run_at(engine: Engine, saved_report_id: UUID) -> datetime | None:
-    with engine.begin() as connection:
-        return connection.execute(
-            text("SELECT last_run_at FROM user_report_associations WHERE id = :id"),
-            {"id": saved_report_id},
+def saved_report_last_run_at(
+    owner_sessions: sessionmaker[Session], saved_report_id: UUID
+) -> datetime | None:
+    """Return when the saved report was last run, or None."""
+    with owner_sessions.begin() as session:
+        last_run_at: datetime | None = session.execute(
+            select(col(UserReportAssociation.last_run_at)).where(
+                col(UserReportAssociation.id) == saved_report_id
+            )
         ).scalar_one()
+    return last_run_at
 
 
 def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> None:
@@ -392,8 +415,11 @@ def rerun_as_browser(client: TestClient, report_id: UUID, browser_id: UUID) -> N
     assert response.status_code == 201, response.text
 
 
-def newest_request(engine: Engine, user_id: UUID) -> datetime:
-    return max(record.requested_at for record in stored_records(engine, [user_id]))
+def newest_request(owner_sessions: sessionmaker[Session], user_id: UUID) -> datetime:
+    """Return when the user last asked for a report run."""
+    return max(
+        record.requested_at for record in stored_records(owner_sessions, [user_id])
+    )
 
 
 @dataclass(frozen=True)
@@ -406,7 +432,7 @@ class StoredWindow:
 
 
 def store_window(
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     *,
     years: tuple[int, ...],
@@ -415,16 +441,16 @@ def store_window(
 ) -> StoredWindow:
     """Store a window run of ``report`` (a new window if None) with a run per year."""
     window = (
-        store_report(connection, catalog, budget_window_size=len(years), year=years[0])
+        store_report(session, catalog, budget_window_size=len(years), year=years[0])
         if report is None
         else report
     )
-    window_run_id = store_budget_window_run(connection, catalog, window, settings)
+    window_run_id = store_budget_window_run(session, catalog, window, settings)
     year_run_ids = tuple(
         store_report_run(
-            connection,
+            session,
             catalog,
-            store_year_simulations(connection, catalog, window, year),
+            store_year_simulations(session, catalog, window, year),
             RunSettings(
                 versions=settings.versions,
                 status=settings.status,
@@ -458,17 +484,23 @@ ADMIN_ISSUER = "https://users.example.test/"
 
 
 def store_signed_in_user(
-    sessions: Any, engine: Engine, *, user_type: str = "standard"
+    sessions: Any,
+    owner_sessions: sessionmaker[Session],
+    *,
+    user_type: str = "standard",
 ) -> tuple[UserPrincipal, UUID]:
-    """Provision a signed-in user of ``user_type``; return its principal and ID."""
+    """Provision a signed-in user of ``user_type``; return its principal and ID.
+
+    ``sessions`` provision the user as the runtime role does, and
+    ``owner_sessions`` then give it its type.
+    """
     principal = UserPrincipal(issuer=ADMIN_ISSUER, subject=f"auth0|{uuid4()}")
     with sessions.begin() as session:
         user_id = resolve_principal_user_in_session(
             session, principal, country_id="us"
         ).user_id
-    with engine.begin() as connection:
-        connection.execute(
-            text("UPDATE users SET user_type = :user_type WHERE id = :id"),
-            {"user_type": user_type, "id": user_id},
+    with owner_sessions.begin() as session:
+        session.execute(
+            update(User).where(col(User.id) == user_id).values(user_type=user_type)
         )
     return principal, user_id

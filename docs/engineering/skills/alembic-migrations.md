@@ -211,7 +211,9 @@ Two kinds of module have a role of their own:
 
 - **Session-factory modules** are the only modules that may create or hold an
   Engine, open a Connection or attach pool events:
-  `policyengine_api/data/orm.py`, `policyengine_api/data/v2/database.py`, and
+  `policyengine_api/data/orm.py` (with `policyengine_api/data/orm_pool_events.py`,
+  whose listeners record the v1 pool's events),
+  `policyengine_api/data/v2/database.py`, and
   `tests/fixtures/database_sessions.py` for the tests. They hand out Session
   factories, never an Engine or a Connection. When a module needs its own
   engine settings, such as `NullPool`, a deploy-time role or a separate URL,
@@ -221,7 +223,44 @@ Two kinds of module have a role of their own:
   `MetaData`: `policyengine_api/data/v1_models.py`,
   `policyengine_api/data/v2/models/__init__.py`, and
   `policyengine_api/data/v2/catalog/publication_staging_base.py`, the
-  publication staging tables' own declarative base.
+  publication staging tables' own declarative base (SQLModel classes on a
+  `registry()` of their own, so `api.v2.single-orm-layer` holds).
+
+### Session factories
+
+Commands and scripts that run once take their Session factories from the
+session-factory modules:
+
+| Function | What it gives |
+| --- | --- |
+| `orm.unpooled_v1_sessions(url)` | A context manager yielding API v1 Session factories for the database at `url`, on an engine with no pool, disposed of on exit. For the household mirror command and the v1 schema migration. |
+| `orm.v1_schema_inspector(source)` | SQLAlchemy's `Inspector` of the database a v1 Session (inside its transaction) or Session factory uses. |
+| `v2.database.unpooled_v2_sessions(url)` | The same for API v2, given `V2DatabaseSettings.connection.url` or `V2AlembicSettings.url`: catalog initialization and privilege reconciliation. |
+| `v2.database.unpooled_v2_read_only_sessions(url)` | The same, with every transaction `READ ONLY` (`postgresql_readonly`): the migration qualification commands. |
+| `v2.database.v2_schema_inspector(source)` | SQLAlchemy's `Inspector` of the database a v2 Session or Session factory uses, as the migration target checks need. |
+
+Tests take theirs from `tests/fixtures/database_sessions.py`, or from the
+integration fixtures built on it (`tests/integration/conftest.py`):
+
+| Function or fixture | What it gives or does |
+| --- | --- |
+| `v2_owner_sessions(url)`; fixture `v2_owner_sessions` | Session factories of the disposable v2 PostgreSQL database's owner, its superuser. |
+| `v2_role_sessions(url, role)`; fixture `v2_sessions_as_role(role)` | Session factories whose every connection starts as `role` (PostgreSQL's `role` startup option), so every statement is checked against its privileges. |
+| `v1_sessions(url)`; fixture `v1_sessions` | API v1's Session factories of the disposable MySQL database. |
+| `sqlite_v2_sessions(foreign_keys=False)` | Session factories of a new in-memory SQLite copy of the v2 schema, whose savepoints behave as on PostgreSQL (Python 3.12's sqlite3 `autocommit=False`); with `foreign_keys`, SQLite enforces the foreign keys. |
+| `sqlite_v1_sessions(json_serializer=None)` | API v1's Session factories of a new in-memory SQLite copy of its schema, with SQLite numbering policies. |
+| `serve_v1_sessions(monkeypatch, sessions)` | Makes `orm.get_v1_session_factory()` open `sessions`' connections for the test. |
+| `act_as(session, role)`, `act_as_owner(session)` | Act as `role`, or as the database's owner again, until the transaction ends. |
+| `schema_inspector(source)` | SQLAlchemy's `Inspector` of the database a Session or Session factory uses. |
+| `recorded_statements(source)` | A context manager yielding the list of SQL statements sent through a Session or Session factory inside it. |
+| `delete_all_rows(session, registry)` | Deletes every row of every table a registry's mapped classes map, such as `V1Base.registry`. |
+| `truncate(session, *models)` | `TRUNCATE ... CASCADE` of the models' tables. |
+| `create_role(session, role)`, `drop_role(session, role)` | Create a role that can't log in; drop what it owns and was granted, then the role. |
+| `grant(session, privileges, on=Model, to=role)` | `GRANT privileges ON TABLE` the model's table `TO` the role. |
+| `grant_declared_v2_privileges(url, declared)` | Creates the missing managed roles and grants their declared privileges, as `reconcile_v2_privileges.py apply --create-missing-roles` does. |
+
+`tests/integration/simulation_rows.py` has `add_row(session, Model, **values)`
+and `refused(session, ...)`.
 
 ### Writing each kind of statement
 
@@ -231,23 +270,28 @@ Two kinds of module have a role of their own:
   and `update(Model)`, `delete(Model)`, `select(Model)` and
   `select(Model.column)` in `session.execute` or `session.scalars`. A test
   helper such as `insert_row(connection, "table", **values)` becomes
-  `add_row(session, Model, **values)`, given a mapped class.
+  `add_row(session, Model, **values)`, given a mapped class. A JSON column
+  takes the Python value, such as `[2026]`, not its JSON text.
 - **Postgres functions**: `func`, as in
   `session.execute(select(func.current_database(), func.current_user()))`,
   `func.pg_backend_pid()` and `func.has_table_privilege(...)`.
+- **Postgres settings**: `select(func.set_config(name, value, true()))` sets
+  one until the transaction ends, as `SET LOCAL` does; read-only transactions
+  use SQLAlchemy's `postgresql_readonly` option
+  (`unpooled_v2_read_only_sessions`).
 - **Schema reads**: SQLAlchemy's `Inspector`, which a function in a
   session-factory module returns for a Session factory or a Session. Never
   select from `information_schema` or `pg_catalog` with SQL text.
-- **Roles in tests**: `act_as(session, role)` and `act_as_owner(session)` in
-  the test session module, which run `SET ROLE` and `RESET ROLE` inside the
-  session's transaction (a named exception), or a Session factory whose
-  engine runs `SET ROLE` when it connects. Setup rows stay in the same
-  rolled-back transaction where a test relies on that.
+- **Roles in tests**: `act_as(session, role)` and `act_as_owner(session)` set
+  the `role` setting with `set_config` inside the session's transaction, as
+  `SET LOCAL ROLE` and `RESET ROLE` do; or a role's Session factory
+  (`v2_sessions_as_role`), whose connections start as the role. Setup rows
+  stay in the same rolled-back transaction where a test relies on that.
 - **Refusals**: `refused(session, ...)` runs the statements inside it in
   `session.begin_nested()` and expects the error.
-- **TRUNCATE in test cleanup**: one helper in the test session module (a
-  named exception), or `delete(Model)` in dependency order where that is as
-  simple.
+- **TRUNCATE in test cleanup**: `truncate(session, *models)` in the test
+  session module (a named exception), or `delete(Model)` in dependency order
+  where that is as simple.
 - **COPY**: the publication staging tables are mapped classes on their own
   declarative base, not `V2_METADATA`, so Alembic never sees them. They stay
   `TEMPORARY` with `ON COMMIT DROP`. COPY through the driver connection stays
@@ -263,17 +307,19 @@ The rule's exceptions are its `[[rule.exception]]` entries in
 - **`no-orm-form`**: one construct in one module that SQLAlchemy's ORM has no
   form for. `path` names the module, and `match` is the finding's source
   exactly as the check reports it, the text after its kind, such as
-  `text('RESET ROLE')`. The entry allows every finding in that module with
-  that source.
+  `text(f'DROP ROLE {quoted_role}')`. The entry allows every finding in that
+  module with that source.
 - **`migration-revision`**: a path pattern the rule test doesn't read.
 
 The rule test fails on a finding no entry names, on an entry that names no
 finding, and on an entry with an unknown category, a `no-orm-form` entry
 without a `match` or an existing file, or a `migration-revision` entry that
 names no file. Only statements SQLAlchemy can't express get an entry: `GRANT`
-and `REVOKE`, `CREATE`, `ALTER` and `DROP ROLE`, `SET ROLE` and `RESET ROLE`,
-`TRUNCATE`, `COPY`, and Postgres session settings. Keep them in as few modules
-as possible: the test session module, `privilege_reconciliation.py` and
+and `REVOKE`, `CREATE`, `ALTER` and `DROP ROLE` (with `DROP OWNED BY`),
+`TRUNCATE`, `COPY`, and connection settings no SQL function sets, such as
+SQLite's `foreign_keys`. Roles and Postgres settings inside a transaction
+need none: `set_config` sets them. Keep the entries in as few modules as
+possible: the test session module, `privilege_reconciliation.py` and
 `publication_staging.py`. The entries:
 
 1. **Alembic environments and revisions** (`migration-revision`),
@@ -281,6 +327,16 @@ as possible: the test session module, `privilege_reconciliation.py` and
    a Connection, and the revisions are where schema changes belong
    (`api.data.sqlalchemy-and-alembic-only`), so the rule test doesn't read
    them.
+2. **The rule's own check for unmapped tables** (`no-orm-form`, two
+   entries), in `tests/unit/data/orm_access_support.py`: it reads which
+   table each mapped class maps (`mapper.local_table`) and the tables a
+   declarative base's metadata holds (`class_registry.metadata.tables`). It
+   runs no statement.
+3. **The tests' statements with no ORM form** (`no-orm-form`, six entries),
+   in `tests/fixtures/database_sessions.py`: SQLite's `PRAGMA foreign_keys`
+   on each new in-memory connection; `TRUNCATE ... CASCADE` for cleanup; and
+   `CREATE ROLE`, `DROP OWNED BY`, `DROP ROLE` and `GRANT` for the privilege
+   tests' temporary roles.
 
 A new exception is a rule change: add a `[[rule.exception]]` entry to the rule
 in `rules/registry.toml`, explain here why the ORM can't express the

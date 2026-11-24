@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import atexit
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 from google.cloud.sql.connector import Connector, IPTypes
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from policyengine_api.data.orm_pool_events import record_pool_events
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.engine import URL, Inspector
     from sqlalchemy.engine.interfaces import DBAPIConnection
 
 load_dotenv()
@@ -68,6 +73,31 @@ def get_remote_database_config() -> dict[str, str]:
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:
     """Return SQLAlchemy's standard configurable Session factory."""
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+
+
+@contextmanager
+def unpooled_v1_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
+    """Yield v1 Session factories for one command's work on the database at ``url``.
+
+    For commands and scripts that run once, such as the household mirror
+    command and the v1 schema migration. Their engine keeps no connection
+    pool, so no connection outlives its Session, and is disposed of on exit.
+    """
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        yield build_session_factory(engine)
+    finally:
+        engine.dispose()
+
+
+def v1_schema_inspector(source: Session | sessionmaker[Session]) -> Inspector:
+    """Return SQLAlchemy's Inspector of the v1 database a Session or factory uses.
+
+    A Session's Inspector reads the schema inside the Session's transaction.
+    """
+    bind = source.connection() if isinstance(source, Session) else source.kw["bind"]
+    inspector: Inspector = inspect(bind)
+    return inspector
 
 
 def _build_remote_engine() -> Engine:

@@ -652,6 +652,54 @@ path = "migrations/**/*.py"
 category = "migration-revision"
 reason = "migrations/ holds the Alembic environments and the revisions Alembic generates. The environments run Alembic's migration context on a Connection, and the revisions are where schema changes belong (api.data.sqlalchemy-and-alembic-only), so the rule test doesn't read them."
 
+[[rule.exception]]
+path = "tests/unit/data/orm_access_support.py"
+match = "mapper.local_table"
+category = "no-orm-form"
+reason = "The rule's check for tables without a mapped class reads which table each mapped class maps. It runs no statement."
+
+[[rule.exception]]
+path = "tests/unit/data/orm_access_support.py"
+match = "class_registry.metadata.tables"
+category = "no-orm-form"
+reason = "The rule's check for tables without a mapped class reads the tables a declarative base's metadata holds, to find those no class maps. It runs no statement."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "sqlite_connection.execute(...)"
+category = "no-orm-form"
+reason = "SQLite enforces foreign keys only once a connection sets PRAGMA foreign_keys, a connection setting SQLAlchemy has no API for. The in-memory SQLite test databases set it on each connection before its first transaction."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'TRUNCATE {tables} CASCADE')"
+category = "no-orm-form"
+reason = "TRUNCATE has no ORM form. Test cleanup empties a table and every table that refers to it at once, as the catalog tests do after publishing."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'CREATE ROLE {quoted_role} NOLOGIN')"
+category = "no-orm-form"
+reason = "Roles have no ORM form. Privilege tests create a temporary role that can't log in."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'DROP OWNED BY {quoted_role}')"
+category = "no-orm-form"
+reason = "Roles have no ORM form. Privilege tests drop what a temporary role owns and was granted, so the role can be dropped."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'DROP ROLE {quoted_role}')"
+category = "no-orm-form"
+reason = "Roles have no ORM form. Privilege tests drop the temporary roles they create."
+
+[[rule.exception]]
+path = "tests/fixtures/database_sessions.py"
+match = "text(f'GRANT {privileges} ON TABLE {table} TO {quoted_role}')"
+category = "no-orm-form"
+reason = "Grants have no ORM form. Privilege tests grant a temporary role privileges the manifest doesn't declare, to check that verification reports them."
+
 [[rule]]
 id = "api.legacy.removed-layers-stay-removed"
 category = "runtime-layers"
