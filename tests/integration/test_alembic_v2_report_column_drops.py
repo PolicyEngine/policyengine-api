@@ -52,6 +52,8 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
+
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
 REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
 DROPPED_COLUMNS = {
@@ -192,7 +194,9 @@ def _without_dropped_schema(
     return expected
 
 
-def _privilege_environment(database_url: str, managed_v2_roles: Any) -> dict[str, str]:
+def _privilege_environment(
+    database_url: str, managed_v2_roles: ManagedV2Roles
+) -> dict[str, str]:
     """Return what the deploy's privilege steps read."""
     return {
         V2_MIGRATION_DATABASE_URL: database_url,
@@ -205,7 +209,7 @@ def _privilege_environment(database_url: str, managed_v2_roles: Any) -> dict[str
 def sessions(
     v2_owner_sessions: sessionmaker[Session],
     disposable_v2_database_url: str,
-    managed_v2_roles: Any,
+    managed_v2_roles: ManagedV2Roles,
 ) -> Iterator[sessionmaker[Session]]:
     """Yield the owner's Session factories; leave the database at the v2 head.
 
@@ -394,7 +398,7 @@ def test_rows_survive_the_drop_and_a_downgrade_restores_columns_without_values(
 def test_the_deploys_privilege_steps_pass_after_the_upgrade(
     sessions: sessionmaker[Session],
     disposable_v2_database_url: str,
-    managed_v2_roles: Any,
+    managed_v2_roles: ManagedV2Roles,
 ) -> None:
     """``apply`` and ``verify`` pass when the Modal worker held the cliff grants."""
     config = alembic_v2_config()

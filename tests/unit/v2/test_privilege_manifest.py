@@ -223,8 +223,7 @@ def _missing(relative_path: str, role: str) -> list[str]:
 def _column_keys_by_table() -> dict[str, set[str]]:
     """Return the names of each v2 table's columns, as SQLite's copy stores them.
 
-    A grant is on the table's columns, which include those a mapper leaves
-    out, such as a report run's four older cliff columns.
+    A grant is on the table's columns, which include any a mapper leaves out.
     """
     return {name: set(table.columns) for name, table in stored_v2_schema().items()}
 

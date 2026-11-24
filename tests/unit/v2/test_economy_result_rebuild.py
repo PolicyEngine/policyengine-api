@@ -6,9 +6,10 @@ reverses that writer. ``economy_result_rows_golden.json`` holds what the
 writer itself stored at a named commit
 (``scripts/generate_economy_result_golden.py``), so a rebuild that matches it
 reverses the real writer, and a change in the writer fails once the file is
-generated again. A report run's own cliff columns are not read: a result's
-cliff impact comes from its two simulation runs' cliff calculations, so the
-golden rows rebuild their results without one, whatever those columns hold.
+generated again. The cliff columns the writer stored on its report run,
+which revision 4e30076d4b9f drops, are left out: a result's cliff impact
+comes from its two simulation runs' cliff calculations, so the golden rows
+rebuild their results without one, whatever those columns held.
 """
 
 from __future__ import annotations

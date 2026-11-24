@@ -315,10 +315,10 @@ and `refused(session, ...)`.
   through the model: `update(Model).values(column=...)` raises
   `AttributeError`, a constructor value is never stored, and `Model.column`
   is the table's Core column, which the rule rules out even in a `select`. A
-  test that sets or selects one maps it on a class of a registry of its own,
-  as the classes in `tests.integration.privilege_statements` do, and reads its
-  declaration from SQLite's copy of the schema (`StoredTable.columns` in
-  `tests.unit.v2.v2_schema_reading`) or from the database's `Inspector`.
+  test that sets or selects one maps it on a column-only class of a registry
+  of its own, of the kind `tests.integration.privilege_statements` holds, and
+  reads its declaration from SQLite's copy of the schema (`StoredTable.columns`
+  in `tests.unit.v2.v2_schema_reading`) or from the database's `Inspector`.
 - **Postgres functions**: `func`, as in
   `session.execute(select(func.current_database(), func.current_user()))`,
   `func.pg_backend_pid()` and `func.has_table_privilege(...)`.
