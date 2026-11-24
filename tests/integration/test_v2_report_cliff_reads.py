@@ -33,6 +33,11 @@ from policyengine_api.services.v2.stored_reports.database_session import (
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
 from tests.fixtures.database_sessions import recorded_statements
 from tests.fixtures.economy_results import uk_economy_result, us_economy_result
+from tests.integration.privilege_statements import (
+    REPORT_RUN_CLIFF_COLUMNS,
+    ReportRunColumns,
+    update_row,
+)
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     RunSettings,
@@ -54,12 +59,6 @@ if TYPE_CHECKING:
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
 FAILURE = "cliff_calculation_failed: the calculation raised an error"
-REPORT_RUN_CLIFF_COLUMNS = (
-    "baseline_cliff_gap",
-    "baseline_cliff_share",
-    "reform_cliff_gap",
-    "reform_cliff_share",
-)
 
 
 def current_versions(country_id: str) -> PackageVersions:
@@ -156,17 +155,49 @@ def test_a_succeeded_run_reads_its_simulation_runs_cliff_results(
     }
 
 
+def test_a_report_runs_own_cliff_columns_are_not_read(
+    owner_sessions: sessionmaker[Session],
+    catalogs: dict[str, CatalogRows],
+    client: TestClient,
+) -> None:
+    catalog = catalogs["uk"]
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+        run_ids = store_report_run(
+            session,
+            catalog,
+            report,
+            RunSettings(versions=CURRENT_VERSIONS),
+            result=uk_economy_result(),
+        )
+        # The report run's own columns hold cliffs; its simulation runs have
+        # none. ReportRun's mapper leaves these columns out, so they are set
+        # through ReportRunColumns.
+        session.execute(
+            update_row(
+                ReportRunColumns,
+                run_ids.report_run_id,
+                baseline_cliff_gap=1.0,
+                baseline_cliff_share=0.1,
+                reform_cliff_gap=2.0,
+                reform_cliff_share=0.2,
+            )
+        )
+
+    item = read_report(client, report.report_id, "uk")
+
+    assert item["status"] == "succeeded"
+    assert item["result"]["cliff_impact"] is None
+    assert item["cliffs"]["status"] == "not_calculated"
+
+
 def test_reading_a_report_and_its_runs_names_no_report_run_cliff_column(
     owner_sessions: sessionmaker[Session],
     catalogs: dict[str, CatalogRows],
     client: TestClient,
     runtime_sessions: sessionmaker[Session],
 ) -> None:
-    """No statement the read sends names a report run's own cliff columns.
-
-    So values in them can't reach a read. The mapper leaves them out, and no
-    ORM statement can set them for a test to read back.
-    """
+    """No statement the read sends names a report run's own cliff columns."""
     with owner_sessions.begin() as session:
         report = store_report(session, catalogs["us"])
         store_report_run(
