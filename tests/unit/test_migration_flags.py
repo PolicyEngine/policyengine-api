@@ -180,6 +180,11 @@ def test_explicit_migration_context_rejects_invalid_database_sources(
             "/v2/user-policies/00000000-0000-0000-0000-000000000001",
             "policy",
         ),
+        ("/v2/user-dynamics", "policy"),
+        (
+            "/v2/user-dynamics/00000000-0000-0000-0000-000000000001",
+            "policy",
+        ),
         ("/v2/user-households", "household"),
         ("/v2/household-calculations", "household"),
         (

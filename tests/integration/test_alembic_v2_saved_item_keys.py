@@ -131,7 +131,6 @@ def _insert_report(session: Session, rows: PublicApiRows) -> UUID:
         session,
         Report,
         id=report_id,
-        label="Saved report",
         country="us",
         tax_benefit_model_id=rows.model_id,
         inputs={},

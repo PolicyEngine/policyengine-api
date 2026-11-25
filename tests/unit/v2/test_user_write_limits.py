@@ -49,11 +49,19 @@ UUID_PATH_VALUE = "00000000-0000-0000-0000-000000000001"
 def _services() -> tuple[dict[str, RecordingService], dict[str, Any]]:
     services = {
         name: RecordingService()
-        for name in ("account", "policy", "household", "simulation", "report")
+        for name in (
+            "account",
+            "policy",
+            "dynamic",
+            "household",
+            "simulation",
+            "report",
+        )
     }
     factories = {
         "v2_account_service_factory": lambda: services["account"],
         "v2_user_policy_service_factory": lambda: services["policy"],
+        "v2_user_dynamic_service_factory": lambda: services["dynamic"],
         "v2_user_household_service_factory": lambda: services["household"],
         "v2_user_simulation_service_factory": lambda: services["simulation"],
         "v2_user_report_service_factory": lambda: services["report"],

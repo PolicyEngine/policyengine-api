@@ -7,14 +7,20 @@ report_run_results.py`` in PolicyEngine/policyengine-sim-api (last changed in
 its rows is tested against the same mapping. Its ``withheld_area_codes`` rows
 follow the writer as PolicyEngine/policyengine-sim-api#1068 changes it
 (``46c38f07``): one row per code a result's ``constituency_withheld_codes``
-and ``local_authority_withheld_codes`` list. Each row is a dict of the
-table's columns; ``id`` and ``created_at`` are left for the caller.
+and ``local_authority_withheld_codes`` list. A result's ``cliff_impact`` is
+the one exception: the four cliff columns that writer stored on the report
+run are left out, since revision 4e30076d4b9f drops them, and it becomes a
+succeeded ``cliff_impacts`` row for each side's simulation run, the rows API
+v1 reads.
+Each row is a dict of the table's columns; ``id`` and
+``created_at`` are left for the caller.
 """
 
 from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -366,24 +372,13 @@ class StoredEconomyResult:
 def economy_result_rows(
     output: dict[str, Any], *, run_ids: RunIds, country: str
 ) -> StoredEconomyResult:
-    """Return the rows the simulation service's writer stores ``output`` as."""
+    """Return the rows ``output`` is read from, as the module docstring describes."""
     report_keys = {
         "report_run_id": run_ids.report_run_id,
         "baseline_simulation_run_id": run_ids.baseline_simulation_run_id,
         "reform_simulation_run_id": run_ids.reform_simulation_run_id,
     }
-    cliffs = output.get("cliff_impact")
     report_run_columns = {
-        "baseline_cliff_gap": None
-        if cliffs is None
-        else cliffs["baseline"]["cliff_gap"],
-        "baseline_cliff_share": (
-            None if cliffs is None else cliffs["baseline"]["cliff_share"]
-        ),
-        "reform_cliff_gap": None if cliffs is None else cliffs["reform"]["cliff_gap"],
-        "reform_cliff_share": None
-        if cliffs is None
-        else cliffs["reform"]["cliff_share"],
         "spm_provenance": output.get("spm_provenance"),
         "data_version": output["data_version"],
     }
@@ -406,8 +401,35 @@ def economy_result_rows(
                 output.get("local_authority_impact"), report_keys, "local_authority"
             ),
             "withheld_area_codes": _withheld_rows(output, report_keys),
+            "cliff_impacts": _cliff_rows(output, run_ids),
         },
     )
+
+
+# When a stored cliff calculation started and finished.
+CLIFF_CALCULATION_STARTED_AT = datetime(2026, 11, 17, 9, tzinfo=UTC)
+CLIFF_CALCULATION_COMPLETED_AT = CLIFF_CALCULATION_STARTED_AT + timedelta(minutes=1)
+
+
+def _cliff_rows(output: dict[str, Any], run_ids: RunIds) -> list[dict[str, Any]]:
+    """Return each simulation run's succeeded cliff calculation, if it has cliffs."""
+    cliffs = output.get("cliff_impact")
+    if cliffs is None:
+        return []
+    return [
+        {
+            "simulation_run_id": simulation_run_id,
+            "status": "succeeded",
+            "started_at": CLIFF_CALCULATION_STARTED_AT,
+            "completed_at": CLIFF_CALCULATION_COMPLETED_AT,
+            "cliff_gap": cliffs[side]["cliff_gap"],
+            "cliff_share": cliffs[side]["cliff_share"],
+        }
+        for side, simulation_run_id in (
+            ("baseline", run_ids.baseline_simulation_run_id),
+            ("reform", run_ids.reform_simulation_run_id),
+        )
+    ]
 
 
 def _labor_supply_rows(output: dict[str, Any], run_ids: RunIds) -> list[dict[str, Any]]:

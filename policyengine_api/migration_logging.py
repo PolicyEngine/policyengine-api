@@ -52,6 +52,7 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
     {
         "policies",
         "user-policies",
+        "user-dynamics",
         "households",
         "user-households",
         "user-simulations",
@@ -67,6 +68,7 @@ V2_SUPABASE_RESOURCE_SEGMENTS = frozenset(
 V2_USER_RESOURCE_SEGMENTS = frozenset(
     {
         "user-policies",
+        "user-dynamics",
         "user-households",
         "user-simulations",
         "user-reports",

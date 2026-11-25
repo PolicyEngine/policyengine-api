@@ -133,14 +133,13 @@ class BudgetWindowRunColumns:
     id: Mapped[UUID] = mapped_column(primary_key=True)
     report_id: Mapped[UUID]
     tax_benefit_model_version_id: Mapped[UUID]
-    trigger: Mapped[str | None] = mapped_column(_type_of(BudgetWindowRun, "trigger"))
     recalculate: Mapped[bool]
     status: Mapped[str] = mapped_column(_type_of(BudgetWindowRun, "status"))
 
 
 @named_column_tables.mapped
 class ReportRunColumns:
-    """A new report run's columns."""
+    """A new report run's columns, and its data version."""
 
     __tablename__ = "report_runs"
 
@@ -150,7 +149,7 @@ class ReportRunColumns:
     country_package_version: Mapped[str]
     policyengine_version: Mapped[str]
     status: Mapped[str] = mapped_column(_type_of(ReportRun, "status"))
-    trigger: Mapped[str | None] = mapped_column(_type_of(ReportRun, "trigger"))
+    data_version: Mapped[str | None]
 
 
 @named_column_tables.mapped

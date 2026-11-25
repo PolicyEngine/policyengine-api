@@ -6,7 +6,8 @@ its baseline and reform simulation runs, results are keyed by run, and a
 household job calculates one household for one year under one policy.
 
 Columns are read from the models' mappers, and keys, constraints and indexes
-from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py).
+from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py), as are
+the columns revision 4e30076d4b9f dropped, which no table holds.
 """
 
 import sqlalchemy as sa
@@ -16,10 +17,14 @@ from policyengine_api.data.v2.models import (
     BudgetWindowRun,
     LaborSupplyDecileResponse,
     LaborSupplyResponse,
+    Report,
     ReportRun,
     SimulationRun,
+    User,
 )
-from tests.fixtures.database_sessions import v2_schema_statements
+from tests.fixtures.database_sessions import (
+    v2_schema_statements,
+)
 from tests.unit.v2.v2_schema_reading import (
     StoredForeignKeyColumn,
     model_columns,
@@ -30,7 +35,7 @@ from tests.unit.v2.v2_schema_reading import (
 )
 
 RUN_STATUSES = ["pending", "running", "succeeded", "failed"]
-# The baseline's and reform's cliff gap and share, stored together or not at all.
+# A report run's cliffs are its simulation runs' cliff results, not its columns.
 CLIFF_IMPACT_COLUMNS = (
     "baseline_cliff_gap",
     "baseline_cliff_share",
@@ -99,7 +104,6 @@ PUBLIC_API_FOREIGN_KEYS = {
         "RESTRICT",
     ),
     ("simulations", "region_id"): ("regions", "SET NULL"),
-    ("reports", "user_id"): ("users", "SET NULL"),
     ("reports", "tax_benefit_model_id"): ("tax_benefit_models", "RESTRICT"),
     ("reports", "policy_id"): ("policies", "SET NULL"),
     ("reports", "household_id"): ("households", "RESTRICT"),
@@ -274,20 +278,31 @@ def test_report_runs_record_their_modal_call() -> None:
     assert "report_run_comparisons" not in stored_v2_schema()
 
 
-def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
+def test_report_runs_record_their_spm_receipt_and_data_version_but_no_cliffs() -> None:
     """The comparison parts with no result table are typed, except the receipt."""
     report_runs = model_columns("report_runs")
+    stored_columns = stored_v2_table("report_runs").columns
 
-    for column_name in CLIFF_IMPACT_COLUMNS:
-        assert report_runs[column_name].nullable, column_name
-        assert isinstance(report_runs[column_name].type, sa.Float), column_name
-    assert "ck_report_runs_cliff_impact_complete" in _check_names("report_runs")
+    assert set(stored_columns).isdisjoint(CLIFF_IMPACT_COLUMNS)
+    assert "ck_report_runs_cliff_impact_complete" not in _check_names("report_runs")
     assert report_runs.spm_provenance.nullable
     spm_type = report_runs.spm_provenance.type
     assert isinstance(spm_type.dialect_impl(postgresql.dialect()), postgresql.JSONB)
     assert report_runs.data_version.nullable
     assert report_runs.data_version.type.length == 128
     assert {"labor_supply_result", "cliff_impact_result"}.isdisjoint(report_runs.keys())
+
+
+def test_report_runs_load_and_write_none_of_their_cliff_columns() -> None:
+    """A run's cliffs are its simulation runs', so the model has no cliff columns."""
+    loaded_columns = str(sa.select(ReportRun).compile(dialect=postgresql.dialect()))
+
+    assert [name for name in CLIFF_IMPACT_COLUMNS if name in loaded_columns] == []
+    assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(
+        sa.inspect(ReportRun).column_attrs.keys()
+    )
+    assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(ReportRun.model_fields)
+    assert [name for name in CLIFF_IMPACT_COLUMNS if hasattr(ReportRun, name)] == []
 
 
 def test_labor_supply_responses_have_one_typed_row_per_report_run() -> None:
@@ -459,14 +474,12 @@ def test_budget_window_runs_record_each_calculation_of_a_window() -> None:
         "started_at",
         "completed_at",
         "policyengine_version",
-        "trigger",
     }
     assert set(windows.keys()) == {"id"} | required | optional
     assert all(not windows[name].nullable for name in required)
     assert all(windows[name].nullable for name in optional)
-    # A window run has a report run's states and starts for a report run's reasons.
+    # A window run has a report run's states.
     assert windows.status.type.name == "v2_report_run_status"
-    assert windows.trigger.type.name == "v2_report_run_trigger"
     report_key = _foreign_key("budget_window_runs", "report_id")
     assert report_key.target == "reports.id"
     assert report_key.ondelete == "CASCADE"
@@ -611,9 +624,12 @@ def test_simulation_tables_keep_foreign_keys_to_the_rows_they_name() -> None:
     assert set(tables) >= SIMULATION_SIDE_TABLES
 
 
-def test_reports_index_their_owner_for_account_deletion() -> None:
-    """Deleting a user clears ``reports.user_id``, which an index finds."""
-    assert ("user_id",) in _indexes("reports").values()
+def test_reports_name_no_user() -> None:
+    """A shared report has no owner, so deleting a user leaves it untouched."""
+    assert "user_id" not in stored_v2_table("reports").columns
+    assert ("user_id",) not in _indexes("reports").values()
+    assert "user" not in Report.__sqlmodel_relationships__
+    assert "reports" not in User.__sqlmodel_relationships__
 
 
 def test_the_catalog_versions_runs_and_jobs_use_are_indexed() -> None:

@@ -502,7 +502,6 @@ def test_republish_preserves_existing_run_and_dataset_version_records(
             region_id=region.id,
         )
         report = Report(
-            label="Existing report",
             country="us",
             tax_benefit_model_id=model.id,
             dataset_id=input_dataset.id,

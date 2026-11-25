@@ -21,13 +21,13 @@ from policyengine_api.data.v2.models.base import IdentifiedModel, utc_now
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import (
+        UserDynamic,
         UserHouseholdAssociation,
         UserPolicy,
         UserReportAssociation,
         UserReportRunAssociation,
         UserSimulationAssociation,
     )
-    from policyengine_api.data.v2.models.reports import Report
 
 
 class UserType(StrEnum):
@@ -79,8 +79,8 @@ class User(IdentifiedModel, table=True):
 
     A signed-in user, of any type but ``unauthenticated``, always has a
     primary country. Deleting a user deletes their sign-in identities, saved
-    associations and records of the report runs they asked for; reports they
-    own are kept without an owner.
+    associations and records of the report runs they asked for; the reports
+    and runs themselves are shared, name no user and stay.
     """
 
     __tablename__ = "users"
@@ -115,7 +115,6 @@ class User(IdentifiedModel, table=True):
         sa_column_kwargs={"server_default": UserType.STANDARD.value},
     )
 
-    reports: list["Report"] = Relationship(back_populates="user")
     identities: list["UserIdentity"] = Relationship(
         back_populates="user",
         cascade_delete=True,
@@ -125,6 +124,10 @@ class User(IdentifiedModel, table=True):
         cascade_delete=True,
     )
     policy_associations: list["UserPolicy"] = Relationship(
+        back_populates="user",
+        cascade_delete=True,
+    )
+    dynamic_associations: list["UserDynamic"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )

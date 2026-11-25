@@ -19,6 +19,7 @@ SQLModel.metadata.naming_convention = {
 
 # Import in dependency order so every reviewed table registers exactly once.
 from policyengine_api.data.v2.models.associations import (  # noqa: E402
+    UserDynamic,
     UserHouseholdAssociation,
     UserPolicy,
     UserReportAssociation,
@@ -185,6 +186,7 @@ __all__ = [
     "TaxBenefitModelVersion",
     "UKAreaType",
     "User",
+    "UserDynamic",
     "UserHouseholdAssociation",
     "UserIdentity",
     "UserInvitation",

@@ -47,6 +47,9 @@ from policyengine_api.fastapi_routes.v2.reports.routes import build_v2_report_ro
 from policyengine_api.fastapi_routes.v2.simulations.routes import (
     build_v2_simulation_router,
 )
+from policyengine_api.fastapi_routes.v2.user_dynamics.routes import (
+    build_v2_user_dynamic_router,
+)
 from policyengine_api.fastapi_routes.v2.user_households.routes import (
     build_v2_user_household_router,
 )
@@ -79,6 +82,7 @@ def build_v2_router(
     router.include_router(build_v2_user_simulation_router(dependencies))
     router.include_router(build_v2_user_household_router(dependencies))
     router.include_router(build_v2_user_policy_router(dependencies))
+    router.include_router(build_v2_user_dynamic_router(dependencies))
     router.include_router(build_v2_household_router(dependencies))
     router.include_router(build_v2_household_calculation_router(dependencies))
     router.include_router(build_v2_policy_router(dependencies))

@@ -17,7 +17,10 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.report_run_records.types import (
         CheckedRequester,
     )
-    from policyengine_api.services.v2.stored_reports.types import StoredReportRows
+    from policyengine_api.services.v2.stored_reports.types import (
+        ReportKind,
+        StoredReportRows,
+    )
 
 # A report run, or a budget window's budget-window run.
 RunT = TypeVar("RunT")
@@ -62,6 +65,22 @@ class ForcedRerunRequiresSignInError(PermissionError):
 
 class ForcedRerunRequiresAdminError(PermissionError):
     """A forced re-run's user is below admin; only an admin user may force one."""
+
+
+class CliffsNotAvailableError(ValueError):
+    """A re-run asked for cliffs of a report that has none.
+
+    Only an economy report's simulation runs have cliff calculations: a
+    household report's and a budget window's have none.
+    """
+
+
+def require_cliffs_available(kind: ReportKind, *, include_cliffs: bool) -> None:
+    """Raise CliffsNotAvailableError when a re-run of a ``kind`` asks for cliffs."""
+    if include_cliffs and kind != "economy":
+        name = "a household report" if kind == "household" else "a budget window"
+        msg = f"include_cliffs: {name} has no cliff impacts, so it cannot be true"
+        raise CliffsNotAvailableError(msg)
 
 
 FORCED_RERUN_SIGN_IN_MESSAGE = (

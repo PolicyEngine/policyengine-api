@@ -1,3 +1,25 @@
+## [5.56.0] - 2026-11-25
+
+### Added
+
+- Let users save named dynamics, as they save policies: `user_dynamics` holds the owner (a signed-in user or a signed-out browser), the country, a dynamic stored in that country, and a name and description. `POST /v2/user-dynamics` saves one (201), refusing an unknown dynamic (404) and another country's (400); `GET /v2/user-dynamics` lists the caller's saved dynamics, optionally for one `dynamic_id`; and `GET`, `PATCH` (rename, or repoint to another dynamic) and `DELETE` `/v2/user-dynamics/{association_id}` act on one, answering 404 for another user's. Saved dynamics are deleted with their user, move to the account at sign-in, and are listed in `dynamics` in `GET /v2/me/export` and the admin saved-items read. A dynamic that users have saved can't be deleted. API v1 doesn't copy v1 saved policies into saved dynamics, since it no longer writes v1 saved policies; the migration of existing rows creates them.
+
+
+## [5.55.0] - 2026-11-25
+
+### Removed
+
+- The v2 database no longer stores a label, description or user on reports, a trigger on report runs or budget-window runs, or cliff results on report runs. A report's name and description are on each user's saved report, each user's trigger is on their record of the run, and cliffs are each simulation run's cliff results.
+- `/v2/reports` run items and budget-window run items no longer have a `trigger` field: a run is shared between requests, and each user's trigger is on their record of it. API v1 no longer selects or writes the per-user columns of reports, report runs and budget-window runs, which a later database revision drops.
+
+
+## [5.54.1] - 2026-11-25
+
+### Changed
+
+- `/v2/reports` reads a report run's cliff impact from its two simulation runs' cliff results, never from the report run's own cliff columns, and each economy report read gives `cliffs`: how far each side's cliff calculation has got. `POST /v2/reports/{report_id}/runs` takes `include_cliffs`, which a household report or budget window refuses with 422. A simulation service that doesn't calculate cliffs per simulation run refuses `include_cliffs: true` with 422, on creates and re-runs alike.
+
+
 ## [5.54.0] - 2026-11-24
 
 ### Added

@@ -110,7 +110,6 @@ def _find_or_create_report(public_api_rows: PublicApiRows, key: str) -> Executab
         postgresql.insert(Report)
         .values(
             id=uuid4(),
-            label="Report",
             country="us",
             tax_benefit_model_id=public_api_rows.model_id,
             year=2026,
@@ -176,7 +175,6 @@ def _find_or_create_report_run(
             report_id=report_id,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             forced=forced,
             **versions,
         )
@@ -210,7 +208,6 @@ def _find_or_create_window_run(
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
             policyengine_version=policyengine_version,
-            trigger="initial",
             recalculate=recalculate,
             status="pending",
         )
@@ -327,7 +324,6 @@ def _report(session: Session, public_api_rows: PublicApiRows) -> UUID:
         session,
         Report,
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -459,15 +455,39 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
 
 
 @pytest.mark.parametrize(
-    ("table", "key_columns"),
+    ("table", "key_columns", "constraint"),
     [
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY.upper()}),
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY[:63]}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY.upper()},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY[:63]},
+            "ck_simulations_definition_key",
+        ),
         # Lowercase, 64 characters, but not hexadecimal.
-        ("simulations", {"key_version": 1, "definition_key": "g" * 64}),
-        ("simulations", {"key_version": 0, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": None, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": 1, "definition_key": None}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": "g" * 64},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 0, "definition_key": NATIONAL_KEY},
+            "ck_simulations_key_version",
+        ),
+        (
+            "simulations",
+            {"key_version": None, "definition_key": NATIONAL_KEY},
+            "ck_simulations_keys_complete",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": None},
+            "ck_simulations_keys_complete",
+        ),
         (
             "reports",
             {
@@ -475,6 +495,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": None,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -483,6 +504,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": None,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -491,6 +513,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY.upper(),
             },
+            "ck_reports_dataset_independent_key",
         ),
     ],
 )
@@ -499,6 +522,7 @@ def test_a_malformed_or_incomplete_key_is_refused(
     public_api_rows: PublicApiRows,
     table: str,
     key_columns: dict[str, object],
+    constraint: str,
 ) -> None:
     columns: dict[str, object] = (
         {
@@ -508,7 +532,6 @@ def test_a_malformed_or_incomplete_key_is_refused(
         }
         if table == "simulations"
         else {
-            "label": "Report",
             "country": "us",
             "tax_benefit_model_id": public_api_rows.model_id,
             "inputs": {},
@@ -516,7 +539,9 @@ def test_a_malformed_or_incomplete_key_is_refused(
     )
     columns |= {"id": uuid4(), "year": 2026, **key_columns}
 
-    with refused(session, IntegrityError, match="violates check constraint"):
+    with refused(
+        session, IntegrityError, match=f'violates check constraint "{constraint}"'
+    ):
         add_row(session, KEYED_MODELS[table], **columns)
 
 
@@ -593,7 +618,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             id=window_run_id,
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
-            trigger="initial",
             recalculate=False,
             status="pending",
         )
@@ -606,7 +630,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             year=2026,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 
@@ -665,7 +688,7 @@ def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
 def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
     session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    """A report without a label, and runs without a trigger, are stored as such."""
+    """The service stores reports and runs with no label, user or trigger."""
     simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
     act_as(session, managed_v2_roles.simulation_service)
     baseline_run_id = _simulation_run(session, public_api_rows, simulation_id)
@@ -701,13 +724,13 @@ def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
 
     act_as(session, managed_v2_roles.runtime)
     stored = session.execute(
-        select(col(Report.label), col(ReportRun.trigger), col(BudgetWindowRun.trigger))
+        select(col(Report.id), col(ReportRun.id), col(BudgetWindowRun.id))
         .select_from(Report)
         .join(ReportRun, col(ReportRun.report_id) == col(Report.id))
         .join(BudgetWindowRun, col(BudgetWindowRun.report_id) == col(Report.id))
         .where(col(Report.id) == report_id)
     ).one()
-    assert tuple(stored) == (None, None, None)
+    assert tuple(stored) == (report_id, report_run_id, window_run_id)
 
 
 def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(

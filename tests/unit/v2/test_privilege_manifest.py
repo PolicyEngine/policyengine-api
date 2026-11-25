@@ -39,6 +39,7 @@ from policyengine_api.data.v2.privileges import (
     stage12_role,
     update_columns,
 )
+from tests.unit.v2.v2_schema_reading import stored_v2_schema
 
 PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
@@ -76,10 +77,6 @@ WORKER_RESULT_COLUMNS = {
     "simulation_runs": frozenset({"output_uri", "output_sha256", "household_result"}),
     "report_runs": frozenset(
         {
-            "baseline_cliff_gap",
-            "baseline_cliff_share",
-            "reform_cliff_gap",
-            "reform_cliff_share",
             "spm_provenance",
             "data_version",
         }
@@ -128,7 +125,6 @@ RUN_DEFINITION_COLUMNS = {
             "year",
             "country_package_version",
             "policyengine_version",
-            "trigger",
             "idempotency_key",
             "forced",
         }
@@ -151,7 +147,6 @@ RUN_DEFINITION_COLUMNS = {
             "report_id",
             "tax_benefit_model_version_id",
             "policyengine_version",
-            "trigger",
             "recalculate",
         }
     ),
@@ -226,11 +221,11 @@ def _missing(relative_path: str, role: str) -> list[str]:
 
 
 def _column_keys_by_table() -> dict[str, set[str]]:
-    """Return the keys of each v2 table's columns, read through its mapper."""
-    return {
-        mapper.class_.__tablename__: {column.key for column in mapper.columns}
-        for mapper in V2_REGISTRY.mappers
-    }
+    """Return the names of each v2 table's columns, as SQLite's copy stores them.
+
+    A grant is on the table's columns, which include any a mapper leaves out.
+    """
+    return {name: set(table.columns) for name, table in stored_v2_schema().items()}
 
 
 def test_every_v2_table_has_an_entry_for_every_managed_role() -> None:
@@ -532,3 +527,23 @@ def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
     assert declared[SIMULATION_SERVICE_ROLE]["dynamics"] == READ
     assert declared[MODAL_WORKER_ROLE]["dynamics"] == READ
     assert declared[CATALOG_WRITER_ROLE]["dynamics"] == NO_ACCESS
+
+
+def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:
+    """Users' saved dynamics are written as saved policies are, by API v1 alone.
+
+    API v1 creates, renames, repoints and deletes a user's saved dynamics, and
+    moves a browser's saved dynamics to the account it signs in to, so it holds
+    every privilege it holds on ``user_policies``. The simulation service, its
+    Modal workers and the catalog writer never read them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_dynamics"] == READ_WRITE
+    assert (
+        declared[RUNTIME_ROLE]["user_dynamics"]
+        == declared[RUNTIME_ROLE]["user_policies"]
+    )
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_dynamics"] == NO_ACCESS, role

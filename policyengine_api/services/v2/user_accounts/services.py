@@ -120,6 +120,9 @@ def export_user_in_session(
     """
     # Imported here: v2 services load only when used (ruff's
     # banned-module-level-imports in pyproject.toml).
+    from policyengine_api.services.v2.user_dynamics.services import (
+        read_all_user_dynamics,
+    )
     from policyengine_api.services.v2.user_households.services import (
         read_all_user_households,
     )
@@ -137,6 +140,7 @@ def export_user_in_session(
     return AccountExport(
         user=account_read(user, email=email),
         policies=read_all_user_policies(session, user_id=user_id),
+        dynamics=read_all_user_dynamics(session, user_id=user_id),
         households=read_all_user_households(session, user_id=user_id),
         simulations=read_all_user_simulations(session, user_id=user_id),
         reports=read_all_user_reports(session, user_id=user_id),
@@ -264,6 +268,7 @@ class V2AccountService:
                 return AccountExport(
                     user=None,
                     policies=(),
+                    dynamics=(),
                     households=(),
                     simulations=(),
                     reports=(),

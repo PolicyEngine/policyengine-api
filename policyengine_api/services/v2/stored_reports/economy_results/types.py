@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     # The tables' models, named apart from the result parts they hold.
     from policyengine_api.data.v2.models import BudgetSummary as BudgetSummaryRow
+    from policyengine_api.data.v2.models import CliffImpact as CliffImpactRow
     from policyengine_api.data.v2.models import (
         CongressionalDistrictImpact as CongressionalDistrictImpactRow,
     )
@@ -325,8 +326,11 @@ class EconomyResult(EconomyResultModel):
     and ``local_authority_withheld_codes`` are a local-area report's sorted
     codes of the areas each level withheld, empty when it withheld none; for
     every other report they are null and left out of the JSON, as the
-    simulation service leaves them out. ``labor_supply_response`` and
-    ``cliff_impact`` are null when the run did not compute them.
+    simulation service leaves them out. ``labor_supply_response`` is null
+    when the run did not compute it, and ``cliff_impact`` until both
+    simulation runs' cliff calculations have succeeded: a run's cliffs are
+    calculated apart from it, and the report's ``cliffs`` says how far they
+    have got.
     """
 
     spm_provenance: SPMComparisonProvenance | None
@@ -359,17 +363,26 @@ class EconomyResult(EconomyResultModel):
 class ReportRunResultColumns:
     """The result columns of the report run itself.
 
-    ``country_package_version`` is the run's; the four cliff columns are all
-    set or all null.
+    ``country_package_version`` is the run's. A report run's cliffs are its
+    simulation runs' (``cliff_impacts``).
     """
 
     country_package_version: str
     data_version: str | None
     spm_provenance: dict[str, JsonValue] | None
-    baseline_cliff_gap: float | None
-    baseline_cliff_share: float | None
-    reform_cliff_gap: float | None
-    reform_cliff_share: float | None
+
+
+@dataclass(frozen=True)
+class ReportRunCliffRows:
+    """Each side's cliff calculation of the simulation run the report run names.
+
+    It is the run's calculation that hasn't failed, of which it has at most
+    one, else its newest failed one, else None. A report run naming one
+    simulation run on both sides has the same calculation on each.
+    """
+
+    baseline: CliffImpactRow | None
+    reform: CliffImpactRow | None
 
 
 @dataclass(frozen=True)
@@ -377,10 +390,11 @@ class EconomyResultRows:
     """Every result row of one report run, as the database connectors read them.
 
     The comparison tables' rows are the report run's; the poverty and
-    inequality rows are those of its baseline and reform simulation runs.
-    ``on_local_area_dataset`` says whether the run is a local-area report's,
-    whose ``withheld_area_codes`` rows are read and list every area its
-    writer withheld; for any other run they are not read.
+    inequality rows, and the cliff calculations, are those of its baseline
+    and reform simulation runs. ``on_local_area_dataset`` says whether the
+    run is a local-area report's, whose ``withheld_area_codes`` rows are
+    read and list every area its writer withheld; for any other run they are
+    not read.
     """
 
     country_id: str
@@ -398,5 +412,6 @@ class EconomyResultRows:
     congressional_district_impacts: tuple[CongressionalDistrictImpactRow, ...]
     constituency_impacts: tuple[ConstituencyImpactRow, ...]
     local_authority_impacts: tuple[LocalAuthorityImpactRow, ...]
+    cliff_calculations: ReportRunCliffRows
     on_local_area_dataset: bool = False
     withheld_area_codes: tuple[WithheldAreaCodeRow, ...] = ()

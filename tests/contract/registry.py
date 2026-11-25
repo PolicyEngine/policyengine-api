@@ -278,6 +278,17 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
+        name="user_dynamic_associations_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="Users' saved dynamics",
+        requests=_user_association_requests(
+            "user-dynamics",
+            route_group="policy",
+            item_fields=_association_item_fields("dynamic_id", "name", "description"),
+            patch_fields=("dynamic_id", "name", "description"),
+        ),
+    ),
+    WorkflowContract(
         name="household_save_read",
         current_contract="api_v1_compatible",
         future_owner_pr="PR 11: Household Migration",
@@ -556,6 +567,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                         "message",
                         "result.user",
                         "result.policies",
+                        "result.dynamics",
                         "result.households",
                         "result.simulations",
                         "result.reports",

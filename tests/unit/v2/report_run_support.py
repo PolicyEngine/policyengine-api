@@ -44,7 +44,6 @@ def report_runs_read() -> ReportRunsRead:
             report_run_read(
                 id=NEW_RUN_ID,
                 status="pending",
-                trigger="manual",
                 country_package_version=CURRENT_VERSIONS.country_package_version,
                 policyengine_version=CURRENT_VERSIONS.policyengine_version,
                 created_at=CREATED_AT + timedelta(days=3),
@@ -75,7 +74,6 @@ def budget_window_runs_read() -> BudgetWindowRunsRead:
             budget_window_run_read(
                 id=NEW_WINDOW_RUN_ID,
                 status="pending",
-                trigger="manual",
                 recalculate=True,
                 created_at=rerun_at,
                 started_at=None,
@@ -87,7 +85,6 @@ def budget_window_runs_read() -> BudgetWindowRunsRead:
                         baseline_simulation_run_id=UUID(int=year * 2 + 10_000),
                         reform_simulation_run_id=UUID(int=year * 2 + 10_001),
                         status="pending",
-                        trigger="manual",
                         created_at=rerun_at,
                         started_at=None,
                         completed_at=None,
@@ -119,11 +116,16 @@ class FakeReportRunService(FakeReportService):
         country_id: str,
         report_id: UUID,
         force: bool,
+        include_cliffs: bool = False,
         requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         self.requesters.append(requester)
         self._answer(
-            "rerun_report", country_id=country_id, report_id=report_id, force=force
+            "rerun_report",
+            country_id=country_id,
+            report_id=report_id,
+            force=force,
+            include_cliffs=include_cliffs,
         )
         return self.report if self.rerun is None else self.rerun
 

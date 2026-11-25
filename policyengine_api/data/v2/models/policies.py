@@ -10,7 +10,7 @@ from policyengine_api.data.v2.models.base import TimestampedModel
 from policyengine_api.data.v2.models.metadata import TaxBenefitModel
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.models.associations import UserPolicy
+    from policyengine_api.data.v2.models.associations import UserDynamic, UserPolicy
     from policyengine_api.data.v2.models.households import HouseholdJob
     from policyengine_api.data.v2.models.metadata import (
         ParameterValue,
@@ -102,8 +102,9 @@ class Dynamic(TimestampedModel, table=True):
     policy: every parameter under ``gov.simulation.``, plus the US's
     top-level ``simulation.`` (``policyengine_api.dynamic_parameters``). It
     is stored and hashed as a policy is, bound to one catalog version, with
-    no name or description: a user's saved dynamics name it. Its parameter
-    values are deleted with it.
+    no name or description: a user's saved dynamics (``user_dynamics``) name
+    it. Its parameter values are deleted with it; dynamics that users have
+    saved cannot be deleted.
     """
 
     __tablename__ = "dynamics"
@@ -156,3 +157,4 @@ class Dynamic(TimestampedModel, table=True):
     )
     simulations: list["Simulation"] = Relationship(back_populates="dynamic")
     household_jobs: list["HouseholdJob"] = Relationship(back_populates="dynamic")
+    user_associations: list["UserDynamic"] = Relationship(back_populates="dynamic")

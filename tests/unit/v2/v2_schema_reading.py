@@ -8,7 +8,8 @@ structural tests read the schema two ways:
 - Each table's keys, constraints and indexes come from an in-memory SQLite copy
   of the schema (``stored_v2_schema``), read with SQLAlchemy's Inspector, which
   reads what the database holds. SQLite keeps every name, column list, delete
-  rule, check condition and index the models declare.
+  rule, check condition and index the models declare. Its columns also hold
+  any a mapper leaves out (``exclude_properties``) until a revision drops it.
 
 What only PostgreSQL receives, such as a partial index's PostgreSQL condition,
 is read from the model's ``__table_args__`` (``declared_index``).
@@ -90,6 +91,15 @@ class StoredForeignKey:
 
 
 @dataclass(frozen=True)
+class StoredColumn:
+    """A stored column: its name, its type as the database reports it, and nulls."""
+
+    name: str
+    type: sa.types.TypeEngine[Any]
+    nullable: bool
+
+
+@dataclass(frozen=True)
 class StoredIndex:
     """A stored index: its name, columns and whether it is unique."""
 
@@ -100,9 +110,10 @@ class StoredIndex:
 
 @dataclass(frozen=True)
 class StoredTable:
-    """A table as the database stores it: its keys, constraints and indexes."""
+    """A table as the database stores it: its columns, keys, constraints and indexes."""
 
     name: str
+    columns: Mapping[str, StoredColumn]
     primary_key_name: str | None
     primary_key: tuple[str, ...]
     foreign_keys: tuple[StoredForeignKey, ...]
@@ -189,6 +200,14 @@ def _stored_table(inspector: Inspector, table_name: str) -> StoredTable:
     primary_key = inspector.get_pk_constraint(table_name)
     return StoredTable(
         name=table_name,
+        columns={
+            column["name"]: StoredColumn(
+                name=column["name"],
+                type=column["type"],
+                nullable=bool(column["nullable"]),
+            )
+            for column in inspector.get_columns(table_name)
+        },
         primary_key_name=primary_key["name"],
         primary_key=tuple(primary_key["constrained_columns"]),
         foreign_keys=tuple(

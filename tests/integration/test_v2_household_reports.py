@@ -307,7 +307,6 @@ def store_household_report(
         session,
         Report,
         id=report_id,
-        label="My household under the reform",
         country=catalog.country,
         tax_benefit_model_id=catalog.model_id,
         policy_id=catalog.policy_id if with_reform else None,
@@ -327,7 +326,6 @@ def store_household_report(
         baseline_simulation_run_id=baseline_run_id,
         reform_simulation_run_id=reform_run_id,
         status=status,
-        trigger="initial",
         started_at=STARTED_AT,
         completed_at=(
             STARTED_AT + timedelta(minutes=1)

@@ -44,8 +44,8 @@ name in that annotation at module level. Query dependencies are module-level
 aliases, such as `CountryQueryDependency`. The signed-in user routes also depend
 on `require_user`, the authenticator `NativeRouteDependencies` injects into each
 router, which exists only inside the router builder. Their modules
-(`fastapi_routes/v2/me`, `user_households`, `user_policies`, `user_reports` and
-`user_simulations`) don't use `from __future__ import annotations`, so
+(`fastapi_routes/v2/me`, `user_dynamics`, `user_households`, `user_policies`,
+`user_reports` and `user_simulations`) don't use `from __future__ import annotations`, so
 `Annotated[AccountPrincipal, Depends(require_user)]` is evaluated where the
 handler is defined, and the names their other annotations use are imported at
 runtime. With the future import, FastAPI would silently treat `principal` as a

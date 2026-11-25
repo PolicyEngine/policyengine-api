@@ -139,6 +139,7 @@ def test_database_session_modules_do_not_construct_queries(
         "identity/services.py",
         "legacy_refs/services.py",
         "user_accounts/services.py",
+        "user_dynamics/services.py",
         "user_households/services.py",
         "user_policies/services.py",
         "user_reports/services.py",

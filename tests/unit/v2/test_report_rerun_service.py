@@ -14,7 +14,6 @@ from policyengine_api.data.v2.models import (
     BudgetWindowRun,
     Report,
     ReportRunStatus,
-    ReportRunTrigger,
 )
 from policyengine_api.services.v2.simulation_service.types import (
     PackageVersions,
@@ -74,7 +73,6 @@ class RecordingSimulationService:
 def stored_rows(**report_columns: object) -> StoredReportRows:
     report = Report(
         id=REPORT_ID,
-        label="Reform",
         country="us",
         tax_benefit_model_id=uuid4(),
         year=2026,
@@ -147,7 +145,6 @@ def test_a_window_run_with_no_year_lists_no_years_and_no_versions() -> None:
         updated_at=STORED_AT,
         report_id=REPORT_ID,
         tax_benefit_model_version_id=uuid4(),
-        trigger=ReportRunTrigger.MANUAL,
         recalculate=True,
         status=ReportRunStatus.PENDING,
     )
@@ -162,7 +159,7 @@ def test_a_window_run_with_no_year_lists_no_years_and_no_versions() -> None:
     assert runs.kind == "budget_window"
     (run,) = runs.runs
     assert run.id == window_run.id
-    assert (run.trigger, run.recalculate, run.status) == ("manual", True, "pending")
+    assert (run.recalculate, run.status) == (True, "pending")
     assert run.years == ()
     assert run.country_package_version is None
     assert run.policyengine_version is None

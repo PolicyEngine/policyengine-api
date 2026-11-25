@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 103,
+    "request_count": 113,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 19
+    "workflow_count": 20
   },
   "route_groups": [
     {
@@ -53,7 +53,8 @@
         "policies",
         "dynamics",
         "user-policy",
-        "user-policies"
+        "user-policies",
+        "user-dynamics"
       ],
       "sim_flow": null
     },
@@ -439,6 +440,187 @@
           ],
           "method": "DELETE",
           "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": []
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "Users' saved dynamics",
+      "name": "user_dynamic_associations_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "POST",
+          "path": "/v2/user-dynamics?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "GET",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "GET",
+          "path": "/v2/user-dynamics?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "Authorization"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": []
+        },
+        {
+          "expected_status": 201,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "POST",
+          "path": "/v2/user-dynamics?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "GET",
+          "path": "/v2/user-dynamics?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "PATCH",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.dynamic_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "headers": [
+            "PolicyEngine-Unauthenticated-User"
+          ],
+          "method": "DELETE",
+          "path": "/v2/user-dynamics/{association_id}?country_id=us",
           "route_group": "policy",
           "stable_response_fields": []
         }
@@ -1286,6 +1468,7 @@
             "message",
             "result.user",
             "result.policies",
+            "result.dynamics",
             "result.households",
             "result.simulations",
             "result.reports"
@@ -1304,6 +1487,7 @@
             "message",
             "result.user",
             "result.policies",
+            "result.dynamics",
             "result.households",
             "result.simulations",
             "result.reports"

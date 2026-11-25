@@ -102,7 +102,6 @@ def store_economy_report(
     )
     stored = Report(
         id=uuid4() if report.report_id is None else report.report_id,
-        label="A stored report",
         country=place.country,
         tax_benefit_model_id=place.model_id,
         baseline_simulation_id=simulations[0].id,
