@@ -70,16 +70,20 @@ USER_INVITATIONS_REVISION = "f519a77ba122"
 # The dynamics revision, on the user invitations revision, and parent of the
 # cliff impacts revision.
 DYNAMICS_REVISION = "9d1d12a7ac58"
-# The cliff impacts revision, on the dynamics revision.
+# The cliff impacts revision, on the dynamics revision, and parent of the
+# report column drops revision.
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
+# The report column drops revision, on the cliff impacts revision.
+REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
-    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
+    assert V2_ALEMBIC_HEAD_REVISION == REPORT_COLUMN_DROPS_REVISION
     assert [revision.revision for revision in script.walk_revisions()] == [
+        REPORT_COLUMN_DROPS_REVISION,
         CLIFF_IMPACTS_REVISION,
         DYNAMICS_REVISION,
         USER_INVITATIONS_REVISION,
@@ -1230,7 +1234,6 @@ def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> 
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION == CLIFF_IMPACTS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -1265,3 +1268,60 @@ def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> 
         assert ".drop(op.get_bind())" not in body
     assert "op.alter_column(" not in upgrade
     assert "op.add_column(" not in upgrade
+
+
+def test_report_column_drops_revision_drops_only_the_named_columns() -> None:
+    """The revision after cliff impacts drops what shared report rows don't hold.
+
+    It is generated, removes the nine columns with the key, index and check
+    that depend on them, writes no data, and its downgrade adds the columns
+    back, empty.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{REPORT_COLUMN_DROPS_REVISION}_*.py"
+    )
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    dropped_columns = [
+        ("budget_window_runs", "trigger"),
+        ("report_runs", "baseline_cliff_gap"),
+        ("report_runs", "baseline_cliff_share"),
+        ("report_runs", "reform_cliff_gap"),
+        ("report_runs", "reform_cliff_share"),
+        ("report_runs", "trigger"),
+        ("reports", "description"),
+        ("reports", "label"),
+        ("reports", "user_id"),
+    ]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{CLIFF_IMPACTS_REVISION}["']""",
+        revision,
+    )
+    drop_column_call = r"""op\.drop_column\(\s*["'](\w+)["'],\s*["'](\w+)["']"""
+    add_column_call = (
+        r"""op\.add_column\(\s*["'](\w+)["'],\s*sa\.Column\(\s*["'](\w+)["']"""
+    )
+    assert sorted(re.findall(drop_column_call, upgrade)) == dropped_columns
+    assert sorted(re.findall(add_column_call, downgrade)) == dropped_columns
+    # The one correction restores the parentheses autogenerate strips.
+    assert revision.count("Post-generation correction:") == 1
+    assert (
+        "'(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)'"
+    ) in downgrade
+    assert "ix_reports_user_id" in upgrade
+    assert "fk_reports_user_id_users" in upgrade
+    assert "ck_report_runs_cliff_impact_complete" in upgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.drop_table(" not in body

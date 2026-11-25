@@ -77,10 +77,6 @@ WORKER_RESULT_COLUMNS = {
     "simulation_runs": frozenset({"output_uri", "output_sha256", "household_result"}),
     "report_runs": frozenset(
         {
-            "baseline_cliff_gap",
-            "baseline_cliff_share",
-            "reform_cliff_gap",
-            "reform_cliff_share",
             "spm_provenance",
             "data_version",
         }
@@ -129,7 +125,6 @@ RUN_DEFINITION_COLUMNS = {
             "year",
             "country_package_version",
             "policyengine_version",
-            "trigger",
             "idempotency_key",
             "forced",
         }
@@ -152,7 +147,6 @@ RUN_DEFINITION_COLUMNS = {
             "report_id",
             "tax_benefit_model_version_id",
             "policyengine_version",
-            "trigger",
             "recalculate",
         }
     ),
@@ -229,8 +223,7 @@ def _missing(relative_path: str, role: str) -> list[str]:
 def _column_keys_by_table() -> dict[str, set[str]]:
     """Return the names of each v2 table's columns, as SQLite's copy stores them.
 
-    A grant is on the table's columns, which include those a mapper leaves
-    out, such as a report run's four older cliff columns.
+    A grant is on the table's columns, which include any a mapper leaves out.
     """
     return {name: set(table.columns) for name, table in stored_v2_schema().items()}
 

@@ -9,8 +9,7 @@ structural tests read the schema two ways:
   of the schema (``stored_v2_schema``), read with SQLAlchemy's Inspector, which
   reads what the database holds. SQLite keeps every name, column list, delete
   rule, check condition and index the models declare. Its columns also hold
-  those a mapper leaves out (``exclude_properties``), such as a report run's
-  four older cliff columns, which stay in the table until a revision drops them.
+  any a mapper leaves out (``exclude_properties``) until a revision drops it.
 
 What only PostgreSQL receives, such as a partial index's PostgreSQL condition,
 is read from the model's ``__table_args__`` (``declared_index``).

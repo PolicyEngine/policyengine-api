@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
+    Report,
     User,
     UserHouseholdAssociation,
     UserIdentity,
@@ -82,6 +83,12 @@ from policyengine_api.services.v2.user_simulations.services import (
 )
 from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationCreateFields,
+)
+from tests.fixtures.database_sessions import schema_inspector
+from tests.integration.simulation_rows import (
+    add_row,
+    delete_public_api_rows,
+    insert_public_api_rows,
 )
 from tests.unit.v2.user_service_support import default_legacy_references
 
@@ -746,6 +753,54 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
                 ).scalar_one()
                 == 0
             )
+
+
+def test_account_deletion_leaves_reports_which_name_no_user(
+    sessions, v2_owner_sessions: sessionmaker[Session]
+) -> None:
+    """A report is shared, so deleting an account neither needs nor changes it."""
+
+    class NoOpDeleter:
+        def prepare_deletion(self) -> None:
+            return None
+
+        def delete_user(self, subject: str) -> None:
+            return None
+
+    report_id = uuid4()
+    with v2_owner_sessions.begin() as session:
+        public_api_rows = insert_public_api_rows(session)
+        add_row(
+            session,
+            Report,
+            id=report_id,
+            country="us",
+            tax_benefit_model_id=public_api_rows.model_id,
+            inputs={},
+        )
+    try:
+        principal = _principal(sessions, "google-oauth2|report-reader")
+        accounts = V2AccountService(
+            AccountDatabaseSession(sessions),
+            auth0_user_deleter_factory=NoOpDeleter,
+        )
+        user_id = accounts.get_account(principal=principal, country_id="us").id
+
+        accounts.delete_account(principal=principal)
+
+        report_columns = {
+            column["name"]
+            for column in schema_inspector(v2_owner_sessions).get_columns("reports")
+        }
+        assert "user_id" not in report_columns
+        with sessions() as session:
+            assert session.get(User, user_id) is None
+        with v2_owner_sessions() as session:
+            assert session.get(Report, report_id) is not None
+    finally:
+        with v2_owner_sessions.begin() as session:
+            session.execute(delete(Report).where(Report.id == report_id))
+            delete_public_api_rows(session, public_api_rows)
 
 
 @pytest.mark.usefixtures("sessions")

@@ -39,12 +39,6 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "Concurrent report idempotency requires a savepoint and bounded "
             "IntegrityError recovery around the database uniqueness constraint."
         ),
-        "columns_left_out_of_the_mapper": (
-            "A column API v1 no longer uses stays a SQLModel field of its "
-            "table, left out of the mapper by exclude_properties, until other "
-            "writers have stopped and a later revision drops it; API v1 neither "
-            "loads nor writes it meanwhile."
-        ),
     }
 )
 

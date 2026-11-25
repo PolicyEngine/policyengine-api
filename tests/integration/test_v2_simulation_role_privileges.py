@@ -17,11 +17,10 @@ inserts, and refused updates of tables where the role may not update
 which map only the columns they name. The other refused updates use the
 models: both simulation roles may update ``updated_at`` on the run, budget-window
 run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
-have no ``updated_at``. A column a model's mapper leaves out, such as a report
-run's ``trigger`` and four older cliff columns, or a budget-window run's
-``trigger``, until a revision drops them, has no statement through the model,
-so its writes and refusals go through the class that maps it,
-``ReportRunColumns`` or ``BudgetWindowRunColumns``.
+have no ``updated_at``. A column a model's mapper leaves out
+(``exclude_properties``) would have no statement through the model, so its
+writes and refusals would go through a class that maps it; since revision
+``4e30076d4b9f`` no model leaves a column out.
 """
 
 from __future__ import annotations
@@ -263,7 +262,7 @@ def test_the_simulation_service_creates_rows_and_records_only_its_calls(
         update_row(SimulationRun, ids["run"], started_at=func.now()),
         update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
         update_row(SimulationRun, ids["run"], year=2027),
-        update_row(ReportRunColumns, ids["report_run"], baseline_cliff_gap=1.0),
+        update_row(ReportRunColumns, ids["report_run"], data_version="1.0.0"),
         insert(PovertyColumns).values(
             id=uuid4(),
             simulation_run_id=ids["run"],
@@ -315,16 +314,6 @@ def test_modal_workers_write_their_run_status_and_results_only(
             updated_at=func.now(),
         )
     )
-    session.execute(
-        update_row(
-            ReportRunColumns,
-            ids["report_run"],
-            baseline_cliff_gap=1.0,
-            baseline_cliff_share=0.1,
-            reform_cliff_gap=2.0,
-            reform_cliff_share=0.2,
-        )
-    )
     add_row(
         session,
         LaborSupplyDecileResponse,
@@ -358,7 +347,6 @@ def test_modal_workers_write_their_run_status_and_results_only(
             id=uuid4(),
             report_id=ids["report"],
             tax_benefit_model_version_id=public_api_rows.version_id,
-            trigger="manual",
             recalculate=True,
             status="pending",
         ),
@@ -550,7 +538,6 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
     assert started_windows == [window_id, failing_window_id]
     assert (succeeded_window, failed_window) == (window_id, failing_window_id)
     for statement in (
-        update_row(BudgetWindowRunColumns, window_id, trigger="manual"),
         update_row(BudgetWindowRun, window_id, recalculate=False),
         update_row(
             BudgetWindowRun,
@@ -620,16 +607,13 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
             country_package_version="1.0.0",
             policyengine_version="4.0.0",
             status="pending",
-            trigger="initial",
         ),
     )
 
 
-# The class that maps the columns each model's mapper leaves out.
-UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {
-    BudgetWindowRun: BudgetWindowRunColumns,
-    ReportRun: ReportRunColumns,
-}
+# The class that maps the columns each model's mapper leaves out. Since
+# revision 4e30076d4b9f no model leaves a column out.
+UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {}
 
 
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])

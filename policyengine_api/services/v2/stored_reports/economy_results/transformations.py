@@ -25,8 +25,7 @@ This reverses the simulation service's writer
 - ``constituency_withheld_codes`` and ``local_authority_withheld_codes``,
   for a local-area report only, from ``withheld_area_codes``, sorted.
 - ``cliff_impact`` from each simulation run's cliff calculation
-  (``cliff_impacts``), once both have succeeded, and never from the report
-  run's own four cliff columns.
+  (``cliff_impacts``), once both have succeeded.
 - ``spm_provenance``, ``data_version`` and ``model_version`` from the report
   run's own columns; the SPM receipts are read as
   ``SPMComparisonProvenance``.

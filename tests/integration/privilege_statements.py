@@ -13,12 +13,6 @@ of them sends exactly the columns it names, so a refusal fails only for those
 columns. Each class maps one table, with the columns of every test that
 refuses a statement on it; a statement sends only the columns it sets. No
 code creates tables from these classes: Alembic creates them from the models.
-
-``ReportColumns`` also maps ``label``, ``ReportRunColumns`` ``trigger`` and the
-four older cliff columns, and ``BudgetWindowRunColumns`` its ``trigger``: the
-models' mappers leave them out until a revision drops them. No model maps
-them, so every test that reads or writes them, or is refused them, sends its
-statement through these classes.
 """
 
 # No ``from __future__ import annotations``: SQLAlchemy reads the classes'
@@ -37,7 +31,6 @@ from policyengine_api.data.v2.models import (
     CliffImpact,
     ReportRun,
     Simulation,
-    UserReportRunAssociation,
     WithheldAreaCode,
 )
 
@@ -68,13 +61,12 @@ class SimulationColumns:
 
 @named_column_tables.mapped
 class ReportColumns:
-    """A report's key version, and its label, which its mapper leaves out."""
+    """A report's key version."""
 
     __tablename__ = "reports"
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     key_version: Mapped[int | None]
-    label: Mapped[str | None]
 
 
 @named_column_tables.mapped
@@ -134,27 +126,20 @@ class LaborSupplyDecileResponseColumns:
 
 @named_column_tables.mapped
 class BudgetWindowRunColumns:
-    """A new budget-window run's columns, and ``trigger``, which its mapper omits."""
+    """A new budget-window run's columns."""
 
     __tablename__ = "budget_window_runs"
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     report_id: Mapped[UUID]
     tax_benefit_model_version_id: Mapped[UUID]
-    trigger: Mapped[str | None] = mapped_column(
-        _type_of(UserReportRunAssociation, "trigger")
-    )
     recalculate: Mapped[bool]
     status: Mapped[str] = mapped_column(_type_of(BudgetWindowRun, "status"))
 
 
 @named_column_tables.mapped
 class ReportRunColumns:
-    """A new report run's columns, ``trigger`` and the four older cliff columns.
-
-    ``ReportRun``'s mapper leaves ``trigger`` and the cliff columns out until a
-    revision drops them, so statements that set them go through this class.
-    """
+    """A new report run's columns, and its data version."""
 
     __tablename__ = "report_runs"
 
@@ -164,23 +149,7 @@ class ReportRunColumns:
     country_package_version: Mapped[str]
     policyengine_version: Mapped[str]
     status: Mapped[str] = mapped_column(_type_of(ReportRun, "status"))
-    trigger: Mapped[str | None] = mapped_column(
-        _type_of(UserReportRunAssociation, "trigger")
-    )
-    baseline_cliff_gap: Mapped[float | None]
-    baseline_cliff_share: Mapped[float | None]
-    reform_cliff_gap: Mapped[float | None]
-    reform_cliff_share: Mapped[float | None]
-
-
-# The four older cliff columns ``ReportRun``'s mapper leaves out, which only
-# ``ReportRunColumns`` maps.
-REPORT_RUN_CLIFF_COLUMNS = (
-    "baseline_cliff_gap",
-    "baseline_cliff_share",
-    "reform_cliff_gap",
-    "reform_cliff_share",
-)
+    data_version: Mapped[str | None]
 
 
 @named_column_tables.mapped

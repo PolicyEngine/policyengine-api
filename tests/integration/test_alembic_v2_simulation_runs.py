@@ -44,7 +44,6 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import schema_inspector
 from tests.fixtures.integration.alembic_v2 import table_columns
-from tests.integration.privilege_statements import ReportRunColumns, update_row
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
@@ -108,7 +107,6 @@ PUBLIC_API_FOREIGN_KEYS = {
         "RESTRICT",
     ),
     ("simulations", "region_id"): ("regions", "SET NULL"),
-    ("reports", "user_id"): ("users", "SET NULL"),
     ("reports", "tax_benefit_model_id"): ("tax_benefit_models", "RESTRICT"),
     ("reports", "policy_id"): ("policies", "SET NULL"),
     ("reports", "household_id"): ("households", "RESTRICT"),
@@ -274,9 +272,6 @@ def test_head_keeps_the_foreign_keys_to_the_public_api_tables(
     }
 
     assert public_api_keys == PUBLIC_API_FOREIGN_KEYS
-    assert {"ix_reports_user_id"} <= {
-        index["name"] for index in inspector.get_indexes("reports")
-    }
 
 
 def _count(session: Session, column: Mapped[Any], value: object) -> int:
@@ -589,7 +584,7 @@ def test_results_are_unique_per_run_and_name_runs_that_exist(
         )
 
 
-def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
+def test_a_report_runs_labor_supply_and_spm_receipt_are_typed(
     session: Session, public_api_rows: PublicApiRows
 ) -> None:
     report_run_id = _insert_report_run(
@@ -644,22 +639,6 @@ def test_a_report_runs_labor_supply_and_cliff_impact_are_typed(
             report_run_id=report_run_id,
             decile=1,
         )
-    # ReportRun's mapper leaves the four cliff columns out until a revision
-    # drops them, so they are set through ReportRunColumns.
-    with refused(session, match="ck_report_runs_cliff_impact_complete"):
-        session.execute(
-            update_row(ReportRunColumns, report_run_id, baseline_cliff_gap=1.0)
-        )
-    session.execute(
-        update_row(
-            ReportRunColumns,
-            report_run_id,
-            baseline_cliff_gap=1.0,
-            baseline_cliff_share=0.1,
-            reform_cliff_gap=2.0,
-            reform_cliff_share=0.2,
-        )
-    )
     _update_report_run(
         session,
         report_run_id,
