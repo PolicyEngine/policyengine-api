@@ -770,7 +770,8 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the report column drops revision (`4e30076d4b9f`) adds
+  downgrades run first: the users' saved dynamics revision (`d417fe8b1b17`)
+  drops every saved dynamic, the report column drops revision (`4e30076d4b9f`) adds
   the dropped report columns back empty, the cliff impacts revision (`bc334f9877b7`) drops
   every simulation run's cliff results, the dynamics revision
   (`9d1d12a7ac58`) needs `dynamics` empty, the user invitations revision
