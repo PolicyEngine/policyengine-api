@@ -1,11 +1,13 @@
 """Which parameters a dynamic holds, and how a v1 policy's values are split.
 
 A dynamic holds the model's assumptions: every parameter under
-``gov.simulation.``, in every country, and the US's top-level
-``simulation.`` tree (C1 · 35, Q1). These are behavioural responses, model
-settings and data assumptions, which a report applies alongside a policy.
-Parameters a country package adds later under these prefixes belong to
-dynamics with no code change.
+``gov.simulation.``, in every country, the US's top-level ``simulation.``
+tree (C1 · 35, Q1) and the UK's ``gov.dynamic.`` (C1 · 46, Q6). These are
+behavioural responses, model settings and data assumptions, which a report
+applies alongside a policy. Parameters a country package adds later under
+these prefixes belong to dynamics with no code change. In policyengine-uk
+2.174.1, ``gov.dynamic.`` holds one parameter,
+``gov.dynamic.obr_labour_supply_assumptions``, a yes/no switch.
 
 The rule is used in three places:
 
@@ -14,8 +16,10 @@ The rule is used in three places:
 - The copy of each v1 policy into v2 splits the v1 policy's values with
   ``split_legacy_policy_json``: these values become a dynamic and the rest
   the policy.
-- The one-time migration splits v1 policies, and v2 copies made before the
-  split existed, with the same functions.
+- The one-time migration splits v1 policies with the same functions, and
+  the policy copy split command
+  (``policyengine_api.services.v2.policy_copy_split``) splits the v2 copies
+  stored before a prefix applied to them.
 
 The UK renamed ``gov.simulation.labor_supply_responses`` to
 ``gov.simulation.labour_supply_responses`` on 2026-05-01. Its catalog has
@@ -39,8 +43,9 @@ if TYPE_CHECKING:
     from policyengine_api.supported_countries import SupportedCountryId
 
 GOV_SIMULATION_PREFIX: Final = "gov.simulation."
+UK_GOV_DYNAMIC_PREFIX: Final = "gov.dynamic."
 DYNAMIC_PARAMETER_PREFIXES: Final[Mapping[SupportedCountryId, tuple[str, ...]]] = {
-    "uk": (GOV_SIMULATION_PREFIX,),
+    "uk": (GOV_SIMULATION_PREFIX, UK_GOV_DYNAMIC_PREFIX),
     "us": (GOV_SIMULATION_PREFIX, "simulation."),
 }
 UK_OLD_LABOUR_SUPPLY_PREFIX: Final = "gov.simulation.labor_supply_responses."

@@ -12,16 +12,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from policyengine_api.services.v2.policy_copy_splits.transformations import (
-    split_stored_policy,
-)
-from policyengine_api.services.v2.policy_copy_splits.types import (
-    PolicyCopyRefusalReason,
-)
-from policyengine_api.services.v2.policy_copy_splits.validators import (
-    PolicyCopySplitRefusedError,
-    merge_dynamic_content,
-)
 
 from policyengine_api.data.v2.models import (
     Dynamic,
@@ -35,6 +25,16 @@ from policyengine_api.services.v2.policies.transformations import (
 )
 from policyengine_api.services.v2.policies.validators import (
     MAXIMUM_POLICY_PARAMETER_VALUES,
+)
+from policyengine_api.services.v2.policy_copy_split.transformations import (
+    split_stored_policy,
+)
+from policyengine_api.services.v2.policy_copy_split.types import (
+    PolicyCopyRefusalReason,
+)
+from policyengine_api.services.v2.policy_copy_split.validators import (
+    PolicyCopySplitRefusedError,
+    merge_dynamic_content,
 )
 
 MODEL_ID = UUID("00000000-0000-0000-0000-00000000a001")

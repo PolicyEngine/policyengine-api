@@ -127,8 +127,9 @@ class V2DynamicParametersErrorResponse(V2ErrorResponse):
     """A refused policy that sets parameters only a dynamic may hold.
 
     ``dynamic_parameters`` names each of the model's assumptions the policy
-    sets, sorted: parameters under ``gov.simulation``, and in the US also
-    ``simulation``. Send them as a dynamic through ``POST /v2/dynamics``.
+    sets, sorted: parameters under ``gov.simulation``, plus ``simulation`` in
+    the US and ``gov.dynamic`` in the UK. Send them as a dynamic through
+    ``POST /v2/dynamics``.
     """
 
     code: Literal["dynamic_parameters"] = "dynamic_parameters"

@@ -15,19 +15,6 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from policyengine_api.services.v2.policy_copy_splits.database_session import (
-    PolicyCopySplitDatabaseSession,
-)
-from policyengine_api.services.v2.policy_copy_splits.services import (
-    V2PolicyCopySplitService,
-    read_policy_copy_ids,
-    split_policy_copy_in_session,
-)
-from policyengine_api.services.v2.policy_copy_splits.types import (
-    PolicyCopyOutcome,
-    PolicyCopyRefusalReason,
-    PolicyCopySplit,
-)
 from sqlalchemy import create_engine, delete, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -58,6 +45,19 @@ from policyengine_api.services.v2.dynamics.services import create_resolved_dynam
 from policyengine_api.services.v2.dynamics.types import ResolvedDynamicCreationInput
 from policyengine_api.services.v2.policies.services import create_resolved_policy
 from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
+from policyengine_api.services.v2.policy_copy_split.database_session import (
+    PolicyCopySplitDatabaseSession,
+)
+from policyengine_api.services.v2.policy_copy_split.services import (
+    V2PolicyCopySplitService,
+    read_policy_copy_ids,
+    split_policy_copy_in_session,
+)
+from policyengine_api.services.v2.policy_copy_split.types import (
+    PolicyCopyOutcome,
+    PolicyCopyRefusalReason,
+    PolicyCopySplit,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -142,7 +142,7 @@ class Scenario:
 
 def _store_catalog(owner_engine: Engine, country_id: str, names: list[str]) -> Scenario:
     with Session(owner_engine) as session:
-        model = TaxBenefitModel(name=f"policyengine-{country_id}-split-{uuid4().hex}")
+        model = TaxBenefitModel(name=f"split-{country_id}-{uuid4().hex[:16]}")
         version = TaxBenefitModelVersion(
             model=model,
             version=CATALOG_VERSION,

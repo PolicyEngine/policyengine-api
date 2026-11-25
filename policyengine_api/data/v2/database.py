@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import atexit
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING
 
 from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.settings import (
@@ -19,7 +21,10 @@ from policyengine_api.data.v2.settings import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
     from sqlalchemy import Engine
+    from sqlalchemy.engine import URL
 
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
@@ -118,6 +123,52 @@ def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
     )
     event.listen(factory, "before_flush", _refuse_flush)
     return factory
+
+
+@contextmanager
+def _unpooled_sessions(
+    url: str | URL, build_factory: Callable[[Engine], sessionmaker[Session]]
+) -> Iterator[sessionmaker[Session]]:
+    """Yield ``build_factory``'s Session factories on a new engine for ``url``.
+
+    The engine keeps no connection pool, so no connection outlives its
+    Session, and is disposed of on exit.
+    """
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        yield build_factory(engine)
+    finally:
+        engine.dispose()
+
+
+@contextmanager
+def unpooled_v2_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
+    """Yield v2 Session factories for one command's work on the database at ``url``.
+
+    For commands that run once, such as the policy copy split
+    (``scripts/split_v2_policy_copies.py --apply``), given
+    ``V2DatabaseSettings.connection.url``. Their engine keeps no connection
+    pool, so no connection outlives its Session, and is disposed of on exit.
+    """
+    with _unpooled_sessions(url, build_v2_session_factory) as sessions:
+        yield sessions
+
+
+def _build_read_only_session_factory(engine: Engine) -> sessionmaker[Session]:
+    return build_v2_session_factory(engine.execution_options(postgresql_readonly=True))
+
+
+@contextmanager
+def unpooled_v2_read_only_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
+    """Yield v2 Session factories whose transactions are all READ ONLY.
+
+    For commands that only read, such as the policy copy split's listing:
+    PostgreSQL refuses any write in their transactions (psycopg's read-only
+    mode, set through SQLAlchemy's ``postgresql_readonly`` option). Like
+    ``unpooled_v2_sessions``, the engine keeps no pool.
+    """
+    with _unpooled_sessions(url, _build_read_only_session_factory) as sessions:
+        yield sessions
 
 
 def _discard_inherited_state(current_pid: int) -> None:

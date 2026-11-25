@@ -48,7 +48,7 @@ PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declar
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
 # Run once, by hand, as a temporary role the operator creates with
 # POLICY_COPY_SPLIT_PRIVILEGES (C1 · 48 and C1 · 49), never as a managed role.
-POLICY_COPY_SPLIT_PACKAGES = frozenset({"policy_copy_splits"})
+POLICY_COPY_SPLIT_PACKAGES = frozenset({"policy_copy_split"})
 TEST_ENVIRONMENT = "staging"
 # The rows the simulation service creates, and the run tables among them.
 SIMULATION_SERVICE_CREATES = frozenset(

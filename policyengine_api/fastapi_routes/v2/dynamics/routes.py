@@ -149,8 +149,9 @@ def build_v2_dynamic_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "Binds the model assumptions to the catalog of policyengine_version, "
             "or of the running PolicyEngine.py version when it names none, and "
             "stores them once per content hash, as policies are stored. Every "
-            "parameter must be under gov.simulation, or in the US also "
-            "simulation; any other answers 422 with code policy_parameters. "
+            "parameter must be under gov.simulation, or also simulation in the "
+            "US and gov.dynamic in the UK; any other answers 422 with code "
+            "policy_parameters. "
             "Answers 201 when it creates the dynamic and 200 when identical "
             "content is already stored. There is no list route."
         ),

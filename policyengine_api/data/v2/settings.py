@@ -23,6 +23,8 @@ V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
 V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE = "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"  # noqa: S105  # an environment variable name, not a secret
 V2_MIGRATION_DATABASE_URL = "V2_MIGRATION_DATABASE_URL"
 V2_DATA_WRITE_DATABASE_URL = "V2_DATA_WRITE_DATABASE_URL"
+# The temporary role C1 · 49 creates to run scripts/split_v2_policy_copies.py.
+V2_POLICY_COPY_SPLIT_DATABASE_URL = "V2_POLICY_COPY_SPLIT_DATABASE_URL"
 V2_SUPABASE_PROJECT_REF = "V2_SUPABASE_PROJECT_REF"
 V2_SUPABASE_ENVIRONMENT = "V2_SUPABASE_ENVIRONMENT"
 
@@ -263,6 +265,22 @@ def load_v2_migration_database_settings(
     return _database_settings(
         _required(values, V2_MIGRATION_DATABASE_URL),
         setting_name=V2_MIGRATION_DATABASE_URL,
+        environ=values,
+    )
+
+
+def load_v2_policy_copy_split_database_settings(
+    environ: Mapping[str, str] | None = None,
+) -> V2DatabaseSettings:
+    """Load the policy copy split command's temporary Postgres identity explicitly.
+
+    The operator creates the role for the run with the grants
+    ``privileges.POLICY_COPY_SPLIT_PRIVILEGES`` declares, and drops it after.
+    """
+    values = _environment(environ)
+    return _database_settings(
+        _required(values, V2_POLICY_COPY_SPLIT_DATABASE_URL),
+        setting_name=V2_POLICY_COPY_SPLIT_DATABASE_URL,
         environ=values,
     )
 

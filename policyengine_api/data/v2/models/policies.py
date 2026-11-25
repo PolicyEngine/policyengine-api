@@ -100,7 +100,8 @@ class Dynamic(TimestampedModel, table=True):
 
     A dynamic holds parameter values a simulation applies alongside its
     policy: every parameter under ``gov.simulation.``, plus the US's
-    top-level ``simulation.`` (``policyengine_api.dynamic_parameters``). It
+    top-level ``simulation.`` and the UK's ``gov.dynamic.``
+    (``policyengine_api.dynamic_parameters``). It
     is stored and hashed as a policy is, bound to one catalog version, with
     no name or description: a user's saved dynamics (``user_dynamics``) name
     it. Its parameter values are deleted with it; dynamics that users have

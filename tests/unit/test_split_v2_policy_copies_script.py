@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from policyengine_api.services.v2.policy_copy_splits.types import (
+
+from policyengine_api.constants import REPO
+from policyengine_api.data.v2.settings import (
+    V2_POLICY_COPY_SPLIT_DATABASE_URL,
+    V2ConfigurationError,
+)
+from policyengine_api.services.v2.policy_copy_split.types import (
     CopyReferences,
     PolicyCopyOutcome,
     PolicyCopyRefusalReason,
@@ -23,12 +29,6 @@ from policyengine_api.services.v2.policy_copy_splits.types import (
     RepointedMapping,
     RepointedSavedPolicy,
     SplitContent,
-)
-
-from policyengine_api.constants import REPO
-from policyengine_api.data.v2.settings import (
-    V2_POLICY_COPY_SPLIT_DATABASE_URL,
-    V2ConfigurationError,
 )
 from scripts import split_v2_policy_copies
 
@@ -294,8 +294,8 @@ def test_loading_the_command_leaves_the_observability_runtime_unbuilt() -> None:
         "import sys\n"
         "import scripts.split_v2_policy_copies\n"
         "import policyengine_api.data.v2.database\n"
-        "import policyengine_api.services.v2.policy_copy_splits.database_session\n"
-        "import policyengine_api.services.v2.policy_copy_splits.services\n"
+        "import policyengine_api.services.v2.policy_copy_split.database_session\n"
+        "import policyengine_api.services.v2.policy_copy_split.services\n"
         "loaded = 'policyengine_api.observability' in sys.modules\n"
         "assert not loaded, 'the observability runtime was imported'\n"
     )
