@@ -914,7 +914,11 @@ version may run a pruned one, and what it answers then depends on its code:
   `/v2/parameters/search-file`, `/v2/model-catalog/variables` and
   `/v2/model-catalog/parameters` for its running version, so also for every
   request without `policyengine_version`. A request that names another pruned
-  version gets 404 with the same header (503 before issue #4243).
+  version gets 404 with the same header (503 before issue #4243). A revision
+  with the dynamic parameter routes (C1 · 51) also answers so on
+  `/v2/dynamic-parameter-values`, `/v2/dynamic-parameter-values/{value_id}`,
+  `/v2/dynamic-parameters/children` and `/v2/model-catalog/dynamic-parameters`.
+  Older revisions have no such routes.
 - An older revision, from before catalog pruning, doesn't read
   `catalog_values_pruned_at`. For its running version, so also for every
   request without `policyengine_version`, it answers `/v2/parameter-values`,

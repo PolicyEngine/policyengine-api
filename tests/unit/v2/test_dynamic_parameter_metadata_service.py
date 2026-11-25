@@ -14,9 +14,6 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
-    DynamicParameterTreeLevel,
-)
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
@@ -27,6 +24,9 @@ from policyengine_api.data.v2.models import (
     ParameterNode,
     ParameterValue,
     Variable,
+)
+from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+    DynamicParameterTreeLevel,
 )
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
@@ -509,9 +509,38 @@ def test_a_selection_kept_from_before_pruning_reads_the_marker_again(
         dynamic_catalog_session, selected_catalogs=selected_catalogs
     ).dynamic_parameters
     assert reads.list_dynamic_parameter_values("us").items
+    # The request's session is done with its rows, so the kept selection holds
+    # detached rows, as a closed request session leaves them in production.
+    dynamic_catalog_session.expunge_all()
     _prune_us_version(dynamic_catalog_session)
 
     with pytest.raises(CatalogValuesPrunedError):
         reads.list_dynamic_parameter_values("us")
     with pytest.raises(CatalogValuesPrunedError):
         reads.get_catalog_dynamic_parameters("us")
+
+
+def test_the_tree_answers_from_a_selection_kept_from_before_pruning(
+    dynamic_catalog_session: Session,
+) -> None:
+    """The tree is built from rows pruning keeps, so a kept selection answers.
+
+    A selection made after the pruning answers CatalogValuesPrunedError, as
+    the policy tree's read does.
+    """
+    selected_catalogs = SelectedCatalogStore()
+    kept = catalog_service(
+        dynamic_catalog_session, selected_catalogs=selected_catalogs
+    ).dynamic_parameters
+    assert kept.list_dynamic_parameter_children("us").items
+    # As above: the kept selection holds detached rows.
+    dynamic_catalog_session.expunge_all()
+    _prune_us_version(dynamic_catalog_session)
+
+    from_kept_selection = kept.list_dynamic_parameter_children("us")
+
+    assert [child.path for child in from_kept_selection.items] == ["gov", "simulation"]
+    with pytest.raises(CatalogValuesPrunedError):
+        catalog_service(
+            dynamic_catalog_session
+        ).dynamic_parameters.list_dynamic_parameter_children("us")

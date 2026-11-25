@@ -12,10 +12,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+
 from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
     DynamicParameterTreeLevel,
 )
-
 from policyengine_api.services.v2.metadata.types import (
     ParameterFilter,
     ParameterValueFilter,

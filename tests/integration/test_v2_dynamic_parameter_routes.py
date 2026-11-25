@@ -14,9 +14,6 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
-    DynamicParameterTreeLevel,
-)
 from sqlmodel import col
 
 from policyengine_api.asgi_factory import create_asgi_app
@@ -38,6 +35,9 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
+)
+from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+    DynamicParameterTreeLevel,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
 from tests.fixtures.v2_catalog import (
@@ -243,15 +243,19 @@ def test_postgres_a_pruned_version_answers_404_from_routes_of_pruned_data(
         published_sessions,
         catalog_with_dynamic_parameters(policyengine_version=PRUNED_VERSION),
     )
+    client = _client(published_sessions)
+    query = f"country_id=us&policyengine_version={PRUNED_VERSION}"
+    pruned_value_id = _result(client, f"/v2/dynamic-parameter-values?{query}")["items"][
+        0
+    ]["id"]
     with published_sessions.begin() as session:
         prune_catalog_version(
             session, _us_version_id(published_sessions, PRUNED_VERSION)
         )
-    client = _client(published_sessions)
-    query = f"country_id=us&policyengine_version={PRUNED_VERSION}"
 
     for path in (
         f"/v2/dynamic-parameter-values?{query}",
+        f"/v2/dynamic-parameter-values/{pruned_value_id}?{query}",
         f"/v2/dynamic-parameters/children?{query}",
         f"/v2/model-catalog/dynamic-parameters?{query}",
     ):
@@ -259,6 +263,37 @@ def test_postgres_a_pruned_version_answers_404_from_routes_of_pruned_data(
         assert response.status_code == 404, (path, response.text)
         assert response.headers["cache-control"] == "no-store"
     assert len(_result(client, f"/v2/dynamic-parameters?{query}")["items"]) == 2
+
+
+def test_postgres_another_versions_ids_are_absent_from_the_selected_version(
+    published_sessions: sessionmaker[Session],
+) -> None:
+    publish_catalog(
+        published_sessions,
+        catalog_with_dynamic_parameters(policyengine_version=PRUNED_VERSION),
+    )
+    client = _client(published_sessions)
+    other_version = f"country_id=us&policyengine_version={PRUNED_VERSION}"
+    other_parameter = _result(client, f"/v2/dynamic-parameters?{other_version}")[
+        "items"
+    ][0]
+    other_value = _result(client, f"/v2/dynamic-parameter-values?{other_version}")[
+        "items"
+    ][0]
+
+    # Without policyengine_version, the running version answers.
+    for path in (
+        f"/v2/dynamic-parameters/{other_parameter['id']}?country_id=us",
+        f"/v2/dynamic-parameter-values/{other_value['id']}?country_id=us",
+    ):
+        response = client.get(path)
+        assert response.status_code == 404, (path, response.text)
+    assert (
+        _result(
+            client, f"/v2/dynamic-parameters/{other_parameter['id']}?{other_version}"
+        )["item"]
+        == other_parameter
+    )
 
 
 def test_postgres_the_dynamic_tree_reads_the_versions_enum_labels(

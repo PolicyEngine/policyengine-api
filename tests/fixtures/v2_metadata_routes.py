@@ -7,15 +7,15 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
-    MetadataCatalogDynamicParametersResult,
-)
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
+)
+from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+    MetadataCatalogDynamicParametersResult,
 )
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
