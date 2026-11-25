@@ -437,6 +437,20 @@ def test_the_value_listing_filters_by_parameter_and_day(
     assert [item.value for item in current.items] == [0.1, 1000]
 
 
+def test_the_value_listing_is_paged(dynamic_catalog_session: Session) -> None:
+    reads = catalog_service(dynamic_catalog_session).dynamic_parameters
+
+    first = reads.list_dynamic_parameter_values("us", limit=1)
+    second = reads.list_dynamic_parameter_values("us", offset=1, limit=1)
+    past_the_end = reads.list_dynamic_parameter_values("us", offset=2)
+
+    assert [item.value for item in first.items] == [0.1]
+    assert first.has_more
+    assert [item.value for item in second.items] == [1000]
+    assert not second.has_more
+    assert past_the_end.items == []
+
+
 def test_the_catalog_read_returns_the_whole_category_with_values_and_labels(
     dynamic_catalog_session: Session,
 ) -> None:
@@ -508,7 +522,7 @@ def test_a_selection_kept_from_before_pruning_reads_the_marker_again(
     reads = catalog_service(
         dynamic_catalog_session, selected_catalogs=selected_catalogs
     ).dynamic_parameters
-    assert reads.list_dynamic_parameter_values("us").items
+    value_id = reads.list_dynamic_parameter_values("us").items[0].id
     # The request's session is done with its rows, so the kept selection holds
     # detached rows, as a closed request session leaves them in production.
     dynamic_catalog_session.expunge_all()
@@ -516,6 +530,8 @@ def test_a_selection_kept_from_before_pruning_reads_the_marker_again(
 
     with pytest.raises(CatalogValuesPrunedError):
         reads.list_dynamic_parameter_values("us")
+    with pytest.raises(CatalogValuesPrunedError):
+        reads.get_dynamic_parameter_value("us", value_id)
     with pytest.raises(CatalogValuesPrunedError):
         reads.get_catalog_dynamic_parameters("us")
 
