@@ -19,11 +19,13 @@ split.
 It exits with 0 when, afterwards, no stored policy sets a model assumption
 (for the listing: when every copy would be deleted), and with 1 otherwise,
 such as when a copy is kept because a simulation, report or household
-calculation names it, or refused. Any other failure, such as missing
-settings, an unreachable database (after 10 seconds) or a lock wait of more
-than 10 seconds, raises, so Python prints its traceback and also exits with
-1; the copies already reported have committed, and running it again
-carries on.
+calculation names it, or refused. A copy that waits more than half a second
+for a lock, or meets a deadlock, is rolled back and tried again, up to five
+times a second apart, so the split gives way to API v1's live writes. Any
+other failure, such as missing settings, an unreachable database (after 10
+seconds) or a copy that still can't get its locks, raises, so Python prints
+its traceback and also exits with 1; the copies already reported have
+committed, and running it again carries on.
 
 It connects as the temporary role ``policyengine_v2_policy_copy_split``,
 which the operator creates with the grants in
@@ -60,7 +62,10 @@ if TYPE_CHECKING:
 
 
 CONNECT_TIMEOUT_SECONDS = 10
-LOCK_TIMEOUT_MILLISECONDS = 10_000
+# Shorter than PostgreSQL's default one-second deadlock_timeout, so in a lock
+# cycle with a live write the split's wait ends first, and the service tries
+# that copy again.
+LOCK_TIMEOUT_MILLISECONDS = 500
 STATEMENT_TIMEOUT_MILLISECONDS = 60_000
 
 
@@ -111,10 +116,9 @@ def splitter_on_temporary_role(*, writable: bool) -> Iterator[PolicyCopySplitter
 def with_time_limits(url: URL) -> URL:
     """Return the URL with a connection timeout, and lock and statement timeouts.
 
-    A lock wait then fails after a while instead of lasting indefinitely
-    while the split holds a copy's row lock, which blocks a live write that
-    names the copy. Earlier copies' transactions have committed by then, and
-    running the command again carries on.
+    A lock wait then ends after half a second instead of lasting while the
+    split holds a copy's locks, which a live write may be waiting for; the
+    service rolls that copy back and tries it again.
     """
     time_limits = (
         f"-c lock_timeout={LOCK_TIMEOUT_MILLISECONDS} "

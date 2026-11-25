@@ -29,8 +29,11 @@ temporary role (C1 · 49), and D4 · 1's migration reuses
 
 from __future__ import annotations
 
+import time
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
+
+from sqlalchemy.exc import OperationalError
 
 from policyengine_api.dynamic_parameters import DYNAMIC_PARAMETER_PREFIXES
 from policyengine_api.services.v2.dynamics.database_connectors.reads import (
@@ -66,7 +69,6 @@ from policyengine_api.services.v2.policy_copy_split.transformations import (
     split_stored_policy,
 )
 from policyengine_api.services.v2.policy_copy_split.types import (
-    CopyReferences,
     ListedRows,
     MappingTarget,
     PolicyCopyOutcome,
@@ -80,6 +82,7 @@ from policyengine_api.services.v2.policy_copy_split.types import (
 )
 from policyengine_api.services.v2.policy_copy_split.validators import (
     PolicyCopySplitRefusedError,
+    is_lock_conflict,
     merge_dynamic_content,
     require_stored_row,
 )
@@ -91,7 +94,7 @@ if TYPE_CHECKING:
 
     from sqlmodel import Session
 
-    from policyengine_api.data.v2.models import LegacyPolicyMapping
+    from policyengine_api.data.v2.models import Dynamic, LegacyPolicyMapping, Policy
     from policyengine_api.services.v2.dynamics.types import (
         ResolvedDynamicCreationInput,
     )
@@ -170,7 +173,6 @@ def _prepare(
     )
     if split is None:
         return None
-    simulations, reports, household_jobs = count_rows_naming_policy(session, policy.id)
     prepared = PreparedPolicyCopySplit(
         policy_id=policy.id,
         country_id=policy.country_id,
@@ -178,9 +180,7 @@ def _prepare(
         split=split,
         mapping_targets=(),
         saved_policy_targets=(),
-        references=CopyReferences(
-            simulations=simulations, reports=reports, household_jobs=household_jobs
-        ),
+        references=count_rows_naming_policy(session, policy.id),
         refusal_reason=None,
     )
     mappings = read_mappings_naming_policy(session, policy.id, lock=lock)
@@ -254,38 +254,128 @@ def _remaining_outcome(prepared: PreparedPolicyCopySplit) -> PolicyCopyOutcome:
     return PolicyCopyOutcome.DELETED
 
 
-def plan_policy_copy_split(
-    session: Session, policy_id: UUID, listed: ListedRows | None = None
-) -> PolicyCopySplit | None:
-    """Return what splitting one copy would change, reading only.
+class _SplitRows(Protocol):
+    """Where one copy's split finds or puts its rows: in a listing, or for real."""
 
-    Rows that don't exist yet have no ID. ``listed`` holds what the listing
-    reported for earlier copies: applying commits each copy before the next,
-    so a row an earlier copy creates is reused, and is reported so. Return
-    None when the policy is no longer stored or sets no model assumption.
+    def policy(self, content: ResolvedPolicyCreationInput) -> SplitContent:
+        """Find, or create or report as new, the policy with this content."""
+        ...
+
+    def dynamic(self, content: ResolvedDynamicCreationInput) -> SplitContent:
+        """Find, or create or report as new, the dynamic with this content."""
+        ...
+
+    def repoint_mapping(
+        self, target: MappingTarget, *, policy: SplitContent, dynamic: SplitContent
+    ) -> None:
+        """Point the mapping at the policy and dynamic."""
+        ...
+
+    def repoint_saved_policy(
+        self, target: SavedPolicyTarget, *, policy: SplitContent
+    ) -> None:
+        """Point the saved policy at the policy."""
+        ...
+
+    def saved_dynamic(
+        self, target: SavedPolicyTarget, *, dynamic: SplitContent
+    ) -> tuple[UUID | None, bool]:
+        """Give the saved policy's owner a saved dynamic naming the dynamic.
+
+        Return the saved dynamic's ID (None when a listing would create it)
+        and whether it is new.
+        """
+        ...
+
+    def delete_copy(self, policy_id: UUID) -> None:
+        """Delete the copy, which nothing names any more."""
+        ...
+
+
+def _split_prepared(
+    prepared: PreparedPolicyCopySplit, rows: _SplitRows, *, applied: bool
+) -> PolicyCopySplit:
+    """Carry out one copy's split through ``rows``, and say what it did.
+
+    A listing and a run both go through here, so they report the same steps.
     """
-    listed = ListedRows() if listed is None else listed
-    prepared = _prepare(session, policy_id, lock=False)
-    if prepared is None:
-        return None
-    if prepared.refusal_reason is not None:
-        return _refused(prepared, applied=False)
+    policy = rows.policy(prepared.split.policy)
+    plain_dynamic = rows.dynamic(prepared.split.dynamic)
+    mappings = []
+    for mapping_target in prepared.mapping_targets:
+        dynamic = rows.dynamic(mapping_target.dynamic)
+        rows.repoint_mapping(mapping_target, policy=policy, dynamic=dynamic)
+        mappings.append(
+            RepointedMapping(
+                country_id=mapping_target.country_id,
+                legacy_policy_id=mapping_target.legacy_policy_id,
+                previous_dynamic_id=mapping_target.previous_dynamic_id,
+                dynamic=dynamic,
+            )
+        )
+    saved_policies = []
+    for saved_policy_target in prepared.saved_policy_targets:
+        dynamic = rows.dynamic(saved_policy_target.dynamic)
+        rows.repoint_saved_policy(saved_policy_target, policy=policy)
+        saved_dynamic_id, saved_dynamic_created = rows.saved_dynamic(
+            saved_policy_target, dynamic=dynamic
+        )
+        saved_policies.append(
+            RepointedSavedPolicy(
+                user_policy_id=saved_policy_target.user_policy_id,
+                dynamic=dynamic,
+                saved_dynamic_id=saved_dynamic_id,
+                saved_dynamic_created=saved_dynamic_created,
+            )
+        )
+    outcome = _remaining_outcome(prepared)
+    if outcome is PolicyCopyOutcome.DELETED:
+        rows.delete_copy(prepared.policy_id)
+    return PolicyCopySplit(
+        old_policy_id=prepared.policy_id,
+        country_id=prepared.country_id,
+        policyengine_version=prepared.policyengine_version,
+        applied=applied,
+        outcome=outcome,
+        policy=policy,
+        dynamic=plain_dynamic,
+        mappings=tuple(mappings),
+        saved_policies=tuple(saved_policies),
+        references=prepared.references,
+        refusal_reason=None,
+    )
 
-    copy_policies: dict[str, SplitContent] = {}
-    copy_dynamics: dict[str, SplitContent] = {}
 
-    def listed_row(
+class _StoredRowReader(Protocol):
+    def __call__(
+        self, session: Session, *, canonicalization_version: int, content_hash: str
+    ) -> Policy | Dynamic | None: ...
+
+
+class _ListedSplitRows:
+    """Report the rows one copy's split would find or create, changing nothing.
+
+    ``listed`` carries what earlier copies in the listing reported: a run
+    commits each copy before the next, so a later copy finds a row an
+    earlier one created, and is reported so. Within one copy, a row is
+    reported the same way each time, as a run reports it.
+    """
+
+    def __init__(self, session: Session, listed: ListedRows) -> None:
+        """Read through ``session``, adding to ``listed``."""
+        self._session = session
+        self._listed = listed
+        self._copy_policies: dict[str, SplitContent] = {}
+        self._copy_dynamics: dict[str, SplitContent] = {}
+
+    def _row(
+        self,
         content: ResolvedPolicyCreationInput,
         *,
         copy_rows: dict[str, SplitContent],
         run_rows: dict[str, SplitContent],
-        stored_id: Callable[[int, str], UUID | None],
+        read_stored: _StoredRowReader,
     ) -> SplitContent:
-        """Report one policy or dynamic as applying this copy would find or create it.
-
-        Within one copy, applying reports a row the same way each time it
-        meets it; a later copy finds the row an earlier copy created.
-        """
         canonical = canonicalize_policy(content)
         if canonical.content_hash in copy_rows:
             return copy_rows[canonical.content_hash]
@@ -295,66 +385,57 @@ def plan_policy_copy_split(
                 id=earlier.id, content_hash=canonical.content_hash, created=False
             )
         else:
-            row_id = stored_id(canonical.version, canonical.content_hash)
+            stored = read_stored(
+                self._session,
+                canonicalization_version=canonical.version,
+                content_hash=canonical.content_hash,
+            )
             row = SplitContent(
-                id=row_id, content_hash=canonical.content_hash, created=row_id is None
+                id=None if stored is None else stored.id,
+                content_hash=canonical.content_hash,
+                created=stored is None,
             )
             run_rows[canonical.content_hash] = row
         copy_rows[canonical.content_hash] = row
         return row
 
-    def stored_policy_id(
-        canonicalization_version: int, content_hash: str
-    ) -> UUID | None:
-        stored = read_policy_by_content_identity(
-            session,
-            canonicalization_version=canonicalization_version,
-            content_hash=content_hash,
-        )
-        return None if stored is None else stored.id
-
-    def stored_dynamic_id(
-        canonicalization_version: int, content_hash: str
-    ) -> UUID | None:
-        stored = read_dynamic_by_content_identity(
-            session,
-            canonicalization_version=canonicalization_version,
-            content_hash=content_hash,
-        )
-        return None if stored is None else stored.id
-
-    def listed_dynamic(content: ResolvedDynamicCreationInput) -> SplitContent:
-        return listed_row(
+    def policy(self, content: ResolvedPolicyCreationInput) -> SplitContent:
+        """Report the policy as stored, or as one this run would create."""
+        return self._row(
             content,
-            copy_rows=copy_dynamics,
-            run_rows=listed.dynamics,
-            stored_id=stored_dynamic_id,
+            copy_rows=self._copy_policies,
+            run_rows=self._listed.policies,
+            read_stored=read_policy_by_content_identity,
         )
 
-    policy = listed_row(
-        prepared.split.policy,
-        copy_rows=copy_policies,
-        run_rows=listed.policies,
-        stored_id=stored_policy_id,
-    )
-    plain_dynamic = listed_dynamic(prepared.split.dynamic)
-    mappings = tuple(
-        RepointedMapping(
-            country_id=target.country_id,
-            legacy_policy_id=target.legacy_policy_id,
-            previous_dynamic_id=target.previous_dynamic_id,
-            dynamic=listed_dynamic(target.dynamic),
+    def dynamic(self, content: ResolvedDynamicCreationInput) -> SplitContent:
+        """Report the dynamic as stored, or as one this run would create."""
+        return self._row(
+            content,
+            copy_rows=self._copy_dynamics,
+            run_rows=self._listed.dynamics,
+            read_stored=read_dynamic_by_content_identity,
         )
-        for target in prepared.mapping_targets
-    )
-    saved_policies = []
-    for target in prepared.saved_policy_targets:
-        dynamic = listed_dynamic(target.dynamic)
+
+    def repoint_mapping(
+        self, target: MappingTarget, *, policy: SplitContent, dynamic: SplitContent
+    ) -> None:
+        """Change nothing: a listing only reports the mapping."""
+
+    def repoint_saved_policy(
+        self, target: SavedPolicyTarget, *, policy: SplitContent
+    ) -> None:
+        """Change nothing: a listing only reports the saved policy."""
+
+    def saved_dynamic(
+        self, target: SavedPolicyTarget, *, dynamic: SplitContent
+    ) -> tuple[UUID | None, bool]:
+        """Report the owner's identical saved dynamic, or one this run would add."""
         existing = (
             None
             if dynamic.id is None
             else read_saved_dynamic_with_name(
-                session,
+                self._session,
                 user_id=target.user_id,
                 country_id=target.country_id,
                 dynamic_id=dynamic.id,
@@ -367,28 +448,137 @@ def plan_policy_copy_split(
             dynamic_content_hash=dynamic.content_hash,
             name=target.name,
         )
-        saved_policies.append(
-            RepointedSavedPolicy(
-                user_policy_id=target.user_policy_id,
-                dynamic=dynamic,
-                saved_dynamic_id=None if existing is None else existing.id,
-                saved_dynamic_created=existing is None
-                and identity not in listed.saved_dynamics,
-            )
+        created = existing is None and identity not in self._listed.saved_dynamics
+        self._listed.saved_dynamics.add(identity)
+        return (None if existing is None else existing.id), created
+
+    def delete_copy(self, policy_id: UUID) -> None:
+        """Change nothing: a listing only reports the deletion."""
+
+
+def _stored_id(content: SplitContent) -> UUID:
+    """Return the ID of a row the run found or created; it always has one."""
+    return require_stored_row(
+        content.id, f"the row with content {content.content_hash}"
+    )
+
+
+class _StoredSplitRows:
+    """Find or create one copy's rows, and change what names the copy."""
+
+    def __init__(self, session: Session) -> None:
+        """Write through ``session``, in the caller's transaction."""
+        self._session = session
+        self._policies: dict[str, SplitContent] = {}
+        self._dynamics: dict[str, SplitContent] = {}
+
+    def policy(self, content: ResolvedPolicyCreationInput) -> SplitContent:
+        """Find or create the policy (C1 · 36's ``create_resolved_policy``)."""
+        from policyengine_api.services.v2.policies.services import (
+            create_resolved_policy,
         )
-        listed.saved_dynamics.add(identity)
-    return PolicyCopySplit(
-        old_policy_id=prepared.policy_id,
-        country_id=prepared.country_id,
-        policyengine_version=prepared.policyengine_version,
+
+        content_hash = _content_hash(content)
+        if content_hash not in self._policies:
+            result = create_resolved_policy(self._session, content)
+            self._policies[content_hash] = SplitContent(
+                id=result.policy_id, content_hash=content_hash, created=result.created
+            )
+        return self._policies[content_hash]
+
+    def dynamic(self, content: ResolvedDynamicCreationInput) -> SplitContent:
+        """Find or create the dynamic (C1 · 36's ``create_resolved_dynamic``)."""
+        from policyengine_api.services.v2.dynamics.services import (
+            create_resolved_dynamic,
+        )
+
+        content_hash = _content_hash(content)
+        if content_hash not in self._dynamics:
+            result = create_resolved_dynamic(self._session, content)
+            self._dynamics[content_hash] = SplitContent(
+                id=result.dynamic_id, content_hash=content_hash, created=result.created
+            )
+        return self._dynamics[content_hash]
+
+    def repoint_mapping(
+        self, target: MappingTarget, *, policy: SplitContent, dynamic: SplitContent
+    ) -> None:
+        """Point the mapping at the policy and dynamic."""
+        repoint_legacy_policy_mapping(
+            self._session,
+            target.mapping_id,
+            policy_id=_stored_id(policy),
+            dynamic_id=_stored_id(dynamic),
+        )
+
+    def repoint_saved_policy(
+        self, target: SavedPolicyTarget, *, policy: SplitContent
+    ) -> None:
+        """Point the saved policy at the policy; its name and description stay."""
+        repoint_saved_policy(
+            self._session, target.user_policy_id, policy_id=_stored_id(policy)
+        )
+
+    def saved_dynamic(
+        self, target: SavedPolicyTarget, *, dynamic: SplitContent
+    ) -> tuple[UUID | None, bool]:
+        """Give the saved policy's owner a saved dynamic naming the dynamic.
+
+        It takes the saved policy's name and no description (C1 · 43's
+        ``create_user_dynamic_in_session``); an identical one the owner
+        already has is reused.
+        """
+        from policyengine_api.services.v2.user_dynamics.services import (
+            create_user_dynamic_in_session,
+        )
+
+        dynamic_id = _stored_id(dynamic)
+        existing = read_saved_dynamic_with_name(
+            self._session,
+            user_id=target.user_id,
+            country_id=target.country_id,
+            dynamic_id=dynamic_id,
+            name=target.name,
+        )
+        if existing is not None:
+            return existing.id, False
+        saved_dynamic = create_user_dynamic_in_session(
+            self._session,
+            UserDynamicCreationInput.model_validate(
+                {
+                    "country_id": target.country_id,
+                    "user_id": target.user_id,
+                    "dynamic_id": dynamic_id,
+                    "name": target.name,
+                    "description": None,
+                }
+            ),
+        )
+        return saved_dynamic.id, True
+
+    def delete_copy(self, policy_id: UUID) -> None:
+        """Delete the copy; its values go with it."""
+        delete_policy(self._session, policy_id)
+
+
+def plan_policy_copy_split(
+    session: Session, policy_id: UUID, listed: ListedRows | None = None
+) -> PolicyCopySplit | None:
+    """Return what splitting one copy would change, reading only.
+
+    Rows that don't exist yet have no ID. ``listed`` holds what the listing
+    reported for earlier copies. Return None when the policy is no longer
+    stored or sets no model assumption.
+    """
+    prepared = _prepare(session, policy_id, lock=False)
+    if prepared is None:
+        return None
+    if prepared.refusal_reason is not None:
+        return _refused(prepared, applied=False)
+    return _split_prepared(
+        prepared,
+        _ListedSplitRows(session, ListedRows() if listed is None else listed),
         applied=False,
-        outcome=_remaining_outcome(prepared),
-        policy=policy,
-        dynamic=plain_dynamic,
-        mappings=mappings,
-        saved_policies=tuple(saved_policies),
-        references=prepared.references,
-        refusal_reason=None,
     )
 
 
@@ -397,125 +587,43 @@ def split_policy_copy_in_session(
 ) -> PolicyCopySplit | None:
     """Split one copy in the caller's transaction, which commits it.
 
-    The copy is locked first, so nothing can start naming it before the
-    transaction ends. Return None when the policy is no longer stored or sets
-    no model assumption. Raise PolicyCopyIntegrityError, and the policy and
-    dynamic creation errors, for stored rows that contradict their keys.
+    The rows it changes are locked first, so nothing can start naming the
+    copy before the transaction ends. Return None when the policy is no
+    longer stored or sets no model assumption. Raise PolicyCopyIntegrityError,
+    and the policy and dynamic creation errors, for stored rows that
+    contradict their keys.
     """
-    from policyengine_api.services.v2.dynamics.services import (
-        create_resolved_dynamic,
-    )
-    from policyengine_api.services.v2.policies.services import (
-        create_resolved_policy,
-    )
-    from policyengine_api.services.v2.user_dynamics.services import (
-        create_user_dynamic_in_session,
-    )
-
     prepared = _prepare(session, policy_id, lock=True)
     if prepared is None:
         return None
     if prepared.refusal_reason is not None:
         return _refused(prepared, applied=True)
-
-    stored_dynamics: dict[str, SplitContent] = {}
-
-    def stored_dynamic(content: ResolvedDynamicCreationInput) -> SplitContent:
-        content_hash = _content_hash(content)
-        if content_hash not in stored_dynamics:
-            result = create_resolved_dynamic(session, content)
-            stored_dynamics[content_hash] = SplitContent(
-                id=result.dynamic_id, content_hash=content_hash, created=result.created
-            )
-        return stored_dynamics[content_hash]
-
-    policy_result = create_resolved_policy(session, prepared.split.policy)
-    plain_dynamic = stored_dynamic(prepared.split.dynamic)
-    mappings = []
-    for mapping_target in prepared.mapping_targets:
-        dynamic = stored_dynamic(mapping_target.dynamic)
-        repoint_legacy_policy_mapping(
-            session,
-            mapping_target.mapping_id,
-            policy_id=policy_result.policy_id,
-            dynamic_id=require_stored_row(dynamic.id, "a stored dynamic's ID"),
-        )
-        mappings.append(
-            RepointedMapping(
-                country_id=mapping_target.country_id,
-                legacy_policy_id=mapping_target.legacy_policy_id,
-                previous_dynamic_id=mapping_target.previous_dynamic_id,
-                dynamic=dynamic,
-            )
-        )
-    saved_policies = []
-    for saved_policy_target in prepared.saved_policy_targets:
-        dynamic = stored_dynamic(saved_policy_target.dynamic)
-        dynamic_id = require_stored_row(dynamic.id, "a stored dynamic's ID")
-        repoint_saved_policy(
-            session,
-            saved_policy_target.user_policy_id,
-            policy_id=policy_result.policy_id,
-        )
-        existing = read_saved_dynamic_with_name(
-            session,
-            user_id=saved_policy_target.user_id,
-            country_id=saved_policy_target.country_id,
-            dynamic_id=dynamic_id,
-            name=saved_policy_target.name,
-        )
-        saved_dynamic_id = (
-            existing.id
-            if existing is not None
-            else create_user_dynamic_in_session(
-                session,
-                UserDynamicCreationInput.model_validate(
-                    {
-                        "country_id": saved_policy_target.country_id,
-                        "user_id": saved_policy_target.user_id,
-                        "dynamic_id": dynamic_id,
-                        "name": saved_policy_target.name,
-                        "description": None,
-                    }
-                ),
-            ).id
-        )
-        saved_policies.append(
-            RepointedSavedPolicy(
-                user_policy_id=saved_policy_target.user_policy_id,
-                dynamic=dynamic,
-                saved_dynamic_id=saved_dynamic_id,
-                saved_dynamic_created=existing is None,
-            )
-        )
-    outcome = _remaining_outcome(prepared)
-    if outcome is PolicyCopyOutcome.DELETED:
-        delete_policy(session, prepared.policy_id)
-    return PolicyCopySplit(
-        old_policy_id=prepared.policy_id,
-        country_id=prepared.country_id,
-        policyengine_version=prepared.policyengine_version,
-        applied=True,
-        outcome=outcome,
-        policy=SplitContent(
-            id=policy_result.policy_id,
-            content_hash=_content_hash(prepared.split.policy),
-            created=policy_result.created,
-        ),
-        dynamic=plain_dynamic,
-        mappings=tuple(mappings),
-        saved_policies=tuple(saved_policies),
-        references=prepared.references,
-        refusal_reason=None,
-    )
+    return _split_prepared(prepared, _StoredSplitRows(session), applied=True)
 
 
 class V2PolicyCopySplitService:
-    """List or apply the split of every stored copy, one transaction per copy."""
+    """List or apply the split of every stored copy, one transaction per copy.
 
-    def __init__(self, database_session: PolicyCopySplitDatabaseSession) -> None:
+    A copy whose transaction meets a lock conflict (the lock timeout ran out,
+    or PostgreSQL found a deadlock) is rolled back and tried again, up to
+    ``attempts`` times, ``retry_delay_seconds`` apart. With the command's
+    lock timeout shorter than PostgreSQL's deadlock_timeout, the split gives
+    way to API v1's live writes in a lock cycle.
+    """
+
+    def __init__(
+        self,
+        database_session: PolicyCopySplitDatabaseSession,
+        *,
+        attempts: int = 5,
+        retry_delay_seconds: float = 1.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         """Open sessions through ``database_session``."""
         self._database_session = database_session
+        self._attempts = attempts
+        self._retry_delay_seconds = retry_delay_seconds
+        self._sleep = sleep
 
     def list_policy_copy_splits(self) -> tuple[PolicyCopySplit, ...]:
         """Return what splitting every copy would change, in one read session."""
@@ -532,10 +640,26 @@ class V2PolicyCopySplitService:
         with self._database_session.read() as session:
             policy_ids = read_policy_copy_ids(session)
         for policy_id in policy_ids:
-            with self._database_session.transaction() as session:
-                split = split_policy_copy_in_session(session, policy_id)
+            split = self._split_with_retries(policy_id)
             if split is not None:
                 yield split
+
+    def _split_with_retries(self, policy_id: UUID) -> PolicyCopySplit | None:
+        """Split one copy, trying it again after a lock conflict.
+
+        Raise the last lock conflict when every attempt meets one, and any
+        other database error at once.
+        """
+        attempt = 1
+        while True:
+            try:
+                with self._database_session.transaction() as session:
+                    return split_policy_copy_in_session(session, policy_id)
+            except OperationalError as error:
+                if attempt >= self._attempts or not is_lock_conflict(error):
+                    raise
+            attempt += 1
+            self._sleep(self._retry_delay_seconds)
 
     def count_policy_copies(self) -> int:
         """Return how many stored policies still set a model assumption."""

@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     )
 
 StoredRow = TypeVar("StoredRow")
+# PostgreSQL's lock_not_available (a lock timeout ran out) and deadlock_detected.
+LOCK_CONFLICT_SQLSTATES = frozenset({"55P03", "40P01"})
 
 
 class PolicyCopySplitRefusedError(ValueError):
@@ -110,3 +112,14 @@ def merge_dynamic_content(
     return ResolvedDynamicCreationInput.model_validate(
         {**dict(split_off), "parameter_values": list(merged.values())}
     )
+
+
+def is_lock_conflict(error: BaseException) -> bool:
+    """Return whether a database error is a lock timeout or a deadlock.
+
+    SQLAlchemy wraps the driver's error in ``orig``, whose ``sqlstate`` names
+    it. A transaction that fails this way changed nothing and can be tried
+    again.
+    """
+    driver_error = getattr(error, "orig", None)
+    return getattr(driver_error, "sqlstate", None) in LOCK_CONFLICT_SQLSTATES

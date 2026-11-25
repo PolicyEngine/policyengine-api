@@ -308,7 +308,12 @@ For each such policy, in one transaction, the command
 legacy mappings and saved policies that name it, then the policy itself
 (`SELECT … FOR UPDATE`, so nothing can start naming it meanwhile), in the
 order API v1's copy of a v1 saved policy takes the same locks, so the two
-wait for each other instead of deadlocking. It then:
+wait for each other instead of deadlocking. Its lock waits end after half a
+second, shorter than PostgreSQL's default one-second `deadlock_timeout`, so
+in any other lock cycle with a live write, such as API v1's sign-in merge
+(which locks a browser's user, then moves its saved policies), the split's
+wait ends first: it rolls back that copy and tries it again, up to five
+times a second apart, and the live write goes ahead. It then:
 
 - finds or creates a policy holding the values that aren't model assumptions,
   empty when there are none, and a dynamic holding the model assumptions,
@@ -325,7 +330,7 @@ wait for each other instead of deadlocking. It then:
   with the saved policy's name and no description, naming the dynamic the
   saved policy's own v1 policy's mapping now names, or else the copy's
   dynamic. When the owner already has a saved dynamic in that country naming
-  the same dynamic with the same name (two empty names count as the same),
+  the same dynamic with the same name (two null names count as the same),
   that one is reused;
 - deletes the copy, and its values with it, once nothing names it.
 
@@ -389,13 +394,26 @@ $$;
 ```
 
 Deleting a policy needs no privilege on `parameter_values`: PostgreSQL runs a
-foreign key's cascade as the table's owner. After the run, drop the role and
-its grants:
+foreign key's cascade as the table's owner. After the run, revoke each grant
+and drop the role, as the login that created it. `DROP OWNED BY` would need
+the role's own privileges, which a login that isn't a superuser lacks on
+PostgreSQL 16 and later, so each grant is revoked by name:
 
 ```sql
 DO $$
 BEGIN
-  DROP OWNED BY policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.dynamics FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.household_jobs FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.legacy_policy_mappings FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.parameter_values FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.parameters FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.policies FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.reports FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.simulations FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.tax_benefit_model_versions FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.user_dynamics FROM policyengine_v2_policy_copy_split;
+  REVOKE ALL ON TABLE public.user_policies FROM policyengine_v2_policy_copy_split;
+  REVOKE USAGE ON SCHEMA public FROM policyengine_v2_policy_copy_split;
   DROP ROLE policyengine_v2_policy_copy_split;
 END
 $$;
@@ -408,7 +426,9 @@ shell for the run only:
 
 - `V2_POLICY_COPY_SPLIT_DATABASE_URL`: the temporary role's
   `postgresql+psycopg://` URL with `sslmode=require` (or `verify-ca` or
-  `verify-full`), on the project's direct host or its pooler;
+  `verify-full`), on the project's direct host or its pooler in session
+  mode on port 5432. Transaction mode (port 6543) is refused, because it
+  doesn't keep the command's timeouts;
 - `V2_SUPABASE_PROJECT_REF` and `V2_SUPABASE_ENVIRONMENT`: the values of the
   GitHub Actions environment variables of the same names, which the command
   checks the URL against.
@@ -433,9 +453,8 @@ as reused, since `--apply` commits each copy before the next.
 
 It exits with 0 when no stored policy sets a model assumption afterwards (for
 the listing: when every listed copy would be deleted), and with 1 otherwise.
-Missing settings or a failed connection raise, and also exit with 1. The
-command adds a 10-second connection timeout, a 10-second lock timeout and a
-60-second statement timeout to the URL, so a wait for a lock that a live
-write holds ends with an error rather than holding the copy's lock
-indefinitely; the copies already reported have committed, and running the
-command again carries on.
+Missing settings, a failed connection, or a copy that still can't get its
+locks after five attempts raise, and also exit with 1; the copies already
+reported have committed, and running the command again carries on. The
+command adds a 10-second connection timeout, a half-second lock timeout and
+a 60-second statement timeout to the URL.

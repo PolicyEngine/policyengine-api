@@ -18,6 +18,7 @@ from policyengine_api.data.v2.models import (
     UserDynamic,
     UserPolicy,
 )
+from policyengine_api.services.v2.policy_copy_split.types import CopyReferences
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -116,7 +117,7 @@ def read_saved_policies_naming_policy(
     return list(session.exec(statement).all())
 
 
-def count_rows_naming_policy(session: Session, policy_id: UUID) -> tuple[int, int, int]:
+def count_rows_naming_policy(session: Session, policy_id: UUID) -> CopyReferences:
     """Return how many simulations, reports and household jobs name the policy."""
     simulations = session.exec(
         select(func.count())
@@ -133,7 +134,9 @@ def count_rows_naming_policy(session: Session, policy_id: UUID) -> tuple[int, in
         .select_from(HouseholdJob)
         .where(col(HouseholdJob.policy_id) == policy_id)
     ).one()
-    return simulations, reports, household_jobs
+    return CopyReferences(
+        simulations=simulations, reports=reports, household_jobs=household_jobs
+    )
 
 
 def read_saved_dynamic_with_name(

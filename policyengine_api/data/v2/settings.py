@@ -276,13 +276,23 @@ def load_v2_policy_copy_split_database_settings(
 
     The operator creates the role for the run with the grants
     ``privileges.POLICY_COPY_SPLIT_PRIVILEGES`` declares, and drops it after.
+    Supavisor's transaction-mode port is refused, as for the runtime: it
+    doesn't keep the command's lock and statement timeouts.
     """
     values = _environment(environ)
-    return _database_settings(
+    settings = _database_settings(
         _required(values, V2_POLICY_COPY_SPLIT_DATABASE_URL),
         setting_name=V2_POLICY_COPY_SPLIT_DATABASE_URL,
         environ=values,
     )
+    if settings.connection.url.port == SUPABASE_TRANSACTION_POOLER_PORT:
+        msg = (
+            f"{V2_POLICY_COPY_SPLIT_DATABASE_URL} must use a direct connection or "
+            "Supavisor session mode on port 5432 so the command's lock and "
+            "statement timeouts are applied"
+        )
+        raise V2ConfigurationError(msg)
+    return settings
 
 
 def load_v2_data_write_database_settings(

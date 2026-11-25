@@ -987,8 +987,8 @@ def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
             split_errors.append(error)
 
     split_thread = threading.Thread(target=run_split)
-    with owner_sessions() as live_copy:
-        live_copy.exec(
+    with owner_sessions() as live_copy_session:
+        live_copy_session.exec(
             select(LegacyPolicyMapping)
             .where(
                 LegacyPolicyMapping.country_id == scenario.country_id,
@@ -1006,8 +1006,8 @@ def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
             legacy_policy_id=legacy_policy_id,
             name="Saved while splitting",
         )
-        live_copy.add(saved_policy)
-        live_copy.commit()
+        live_copy_session.add(saved_policy)
+        live_copy_session.commit()
         saved_policy_id = saved_policy.id
     split_thread.join(timeout=60)
 
@@ -1137,19 +1137,19 @@ def test_the_split_gives_way_to_a_live_sign_in_merge(
             split_errors.append(error)
 
     split_thread = threading.Thread(target=run_split)
-    with owner_sessions() as sign_in:
-        sign_in.exec(
+    with owner_sessions() as sign_in_session:
+        sign_in_session.exec(
             select(User).where(User.id == browser_user_id).with_for_update()
         ).one()
         split_thread.start()
         # Give the split time to wait for the browser user's lock.
         time.sleep(0.3)
-        sign_in.execute(
+        sign_in_session.execute(
             update(UserPolicy)
             .where(col(UserPolicy.user_id) == browser_user_id)
             .values(user_id=account_user_id)
         )
-        sign_in.commit()
+        sign_in_session.commit()
     split_thread.join(timeout=60)
 
     assert not split_thread.is_alive()
