@@ -1,3 +1,11 @@
+## [5.55.0] - 2026-11-25
+
+### Removed
+
+- The v2 database no longer stores a label, description or user on reports, a trigger on report runs or budget-window runs, or cliff results on report runs. A report's name and description are on each user's saved report, each user's trigger is on their record of the run, and cliffs are each simulation run's cliff results.
+- `/v2/reports` run items and budget-window run items no longer have a `trigger` field: a run is shared between requests, and each user's trigger is on their record of it. API v1 no longer selects or writes the per-user columns of reports, report runs and budget-window runs, which a later database revision drops.
+
+
 ## [5.54.1] - 2026-11-25
 
 ### Changed
