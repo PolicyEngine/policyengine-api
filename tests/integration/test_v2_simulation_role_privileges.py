@@ -18,9 +18,10 @@ which map only the columns they name. The other refused updates use the
 models: both simulation roles may update ``updated_at`` on the run, budget-window
 run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
 have no ``updated_at``. A column a model's mapper leaves out, such as a report
-run's four older cliff columns until a revision drops them, has no statement
-through the model, so its writes and refusals go through the class that maps
-it, ``ReportRunColumns``.
+run's ``trigger`` and four older cliff columns, or a budget-window run's
+``trigger``, until a revision drops them, has no statement through the model,
+so its writes and refusals go through the class that maps it,
+``ReportRunColumns`` or ``BudgetWindowRunColumns``.
 """
 
 from __future__ import annotations
@@ -182,7 +183,6 @@ def _create_simulation_rows(
         session,
         Report,
         id=ids["report"],
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -195,7 +195,6 @@ def _create_simulation_rows(
         id=ids["budget_window_run"],
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="initial",
         recalculate=False,
         status="pending",
     )
@@ -208,7 +207,6 @@ def _create_simulation_rows(
         year=2026,
         baseline_simulation_run_id=ids["run"],
         status="pending",
-        trigger="initial",
         **RUN_VERSIONS,
     )
     add_row(
@@ -512,7 +510,6 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
         id=failing_window_id,
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="manual",
         recalculate=True,
         status="pending",
     )
@@ -553,7 +550,7 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
     assert started_windows == [window_id, failing_window_id]
     assert (succeeded_window, failed_window) == (window_id, failing_window_id)
     for statement in (
-        update_row(BudgetWindowRun, window_id, trigger="manual"),
+        update_row(BudgetWindowRunColumns, window_id, trigger="manual"),
         update_row(BudgetWindowRun, window_id, recalculate=False),
         update_row(
             BudgetWindowRun,
@@ -629,7 +626,10 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
 
 
 # The class that maps the columns each model's mapper leaves out.
-UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {ReportRun: ReportRunColumns}
+UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {
+    BudgetWindowRun: BudgetWindowRunColumns,
+    ReportRun: ReportRunColumns,
+}
 
 
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])

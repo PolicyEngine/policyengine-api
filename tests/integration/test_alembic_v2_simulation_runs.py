@@ -345,7 +345,6 @@ def _insert_report_run(
         session,
         Report,
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         inputs={},
@@ -358,7 +357,6 @@ def _insert_report_run(
         baseline_simulation_run_id=baseline_run_id,
         reform_simulation_run_id=reform_run_id,
         status="running",
-        trigger="initial",
         **RUN_VERSIONS,
     )
     return report_run_id
@@ -691,7 +689,6 @@ def _insert_report(
         session,
         Report,
         id=report_id,
-        label="Budget window",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         inputs={},
@@ -710,7 +707,6 @@ def _insert_budget_window_run(
         id=window_run_id,
         report_id=report_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="initial",
         recalculate=False,
         status="running",
     )
@@ -755,7 +751,6 @@ def test_budget_windows_hold_one_report_run_per_year(
                 year=year or 2026,
             ),
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 

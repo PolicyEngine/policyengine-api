@@ -21,7 +21,6 @@ from policyengine_api.data.v2.models import (
     Report,
     ReportRun,
     ReportRunStatus,
-    ReportRunTrigger,
     Simulation,
     SimulationRun,
     SimulationStatus,
@@ -212,8 +211,6 @@ def store_household_report(
     session.add_all([side for side in (baseline, reform) if side is not None])
     session.flush()
     report = Report(
-        label="My household under the reform",
-        description="Doubles the credit",
         country=country,
         tax_benefit_model_id=model.id,
         baseline_simulation_id=baseline.id,
@@ -262,7 +259,6 @@ def store_household_report(
             baseline_simulation_run_id=baseline_run.id,
             reform_simulation_run_id=None if reform_run is None else reform_run.id,
             status=run.status,
-            trigger=ReportRunTrigger.INITIAL,
             created_at=STORED_AT,
             started_at=STORED_AT,
             completed_at=completed_at,
@@ -522,7 +518,6 @@ def store_economy_report(session: Session) -> UUID:
     session.add(model)
     session.flush()
     report = Report(
-        label="Economy",
         country="us",
         tax_benefit_model_id=model.id,
         year=2026,

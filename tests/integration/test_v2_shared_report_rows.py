@@ -50,7 +50,9 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import act_as, act_as_owner, query_plan
 from tests.integration.privilege_statements import (
+    BudgetWindowRunColumns,
     ReportColumns,
+    ReportRunColumns,
     SimulationColumns,
     unfailed,
     update_row,
@@ -110,7 +112,6 @@ def _find_or_create_report(public_api_rows: PublicApiRows, key: str) -> Executab
         postgresql.insert(Report)
         .values(
             id=uuid4(),
-            label="Report",
             country="us",
             tax_benefit_model_id=public_api_rows.model_id,
             year=2026,
@@ -176,7 +177,6 @@ def _find_or_create_report_run(
             report_id=report_id,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             forced=forced,
             **versions,
         )
@@ -210,7 +210,6 @@ def _find_or_create_window_run(
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
             policyengine_version=policyengine_version,
-            trigger="initial",
             recalculate=recalculate,
             status="pending",
         )
@@ -327,7 +326,6 @@ def _report(session: Session, public_api_rows: PublicApiRows) -> UUID:
         session,
         Report,
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -508,7 +506,6 @@ def test_a_malformed_or_incomplete_key_is_refused(
         }
         if table == "simulations"
         else {
-            "label": "Report",
             "country": "us",
             "tax_benefit_model_id": public_api_rows.model_id,
             "inputs": {},
@@ -593,7 +590,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             id=window_run_id,
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
-            trigger="initial",
             recalculate=False,
             status="pending",
         )
@@ -606,7 +602,6 @@ def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
             year=2026,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 
@@ -701,11 +696,18 @@ def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
 
     act_as(session, managed_v2_roles.runtime)
     stored = session.execute(
-        select(col(Report.label), col(ReportRun.trigger), col(BudgetWindowRun.trigger))
-        .select_from(Report)
-        .join(ReportRun, col(ReportRun.report_id) == col(Report.id))
-        .join(BudgetWindowRun, col(BudgetWindowRun.report_id) == col(Report.id))
-        .where(col(Report.id) == report_id)
+        select(
+            ReportColumns.label,
+            ReportRunColumns.trigger,
+            BudgetWindowRunColumns.trigger,
+        )
+        .select_from(ReportColumns)
+        .join(ReportRunColumns, ReportRunColumns.report_id == ReportColumns.id)
+        .join(
+            BudgetWindowRunColumns,
+            BudgetWindowRunColumns.report_id == ReportColumns.id,
+        )
+        .where(ReportColumns.id == report_id)
     ).one()
     assert tuple(stored) == (None, None, None)
 

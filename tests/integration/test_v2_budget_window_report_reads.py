@@ -220,11 +220,8 @@ def test_a_budget_window_reads_its_newest_run_years_and_result(
     assert item["status"] == "succeeded"
     run = item["run"]
     assert run["id"] == str(window_run_id)
-    assert (run["status"], run["trigger"], run["recalculate"]) == (
-        "succeeded",
-        "initial",
-        False,
-    )
+    assert (run["status"], run["recalculate"]) == ("succeeded", False)
+    assert "trigger" not in run
     assert (run["country_package_version"], run["policyengine_version"]) == (
         "1.4.0",
         "4.1.0",

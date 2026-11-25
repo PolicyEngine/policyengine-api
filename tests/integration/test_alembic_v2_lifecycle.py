@@ -841,7 +841,6 @@ def test_baseline_uses_native_uuid_report_run_idempotency(
                 session,
                 Report,
                 id=report_id,
-                label="UUID cast report",
                 country="us",
                 tax_benefit_model_id=public_api_rows.model_id,
                 inputs={},
@@ -855,7 +854,6 @@ def test_baseline_uses_native_uuid_report_run_idempotency(
                 country_package_version="1.0",
                 policyengine_version="1.0",
                 status="pending",
-                trigger="manual",
                 # The key as text, which PostgreSQL stores as a native UUID.
                 idempotency_key=str(request_key),
             )

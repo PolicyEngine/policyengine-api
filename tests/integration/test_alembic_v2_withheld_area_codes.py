@@ -209,7 +209,6 @@ def _insert_report_run(session: Session) -> dict[str, UUID]:
         session,
         Report,
         id=ids["report"],
-        label="Local areas",
         country="uk",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
@@ -223,7 +222,6 @@ def _insert_report_run(session: Session) -> dict[str, UUID]:
         baseline_simulation_run_id=ids["baseline_run"],
         reform_simulation_run_id=ids["reform_run"],
         status="pending",
-        trigger="initial",
         **RUN_VERSIONS,
     )
     return ids
