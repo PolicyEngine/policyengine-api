@@ -53,7 +53,10 @@ from tests.fixtures.v2_catalog import (
     DYNAMIC_PARAMETER_RECORDS,
     catalog_with_dynamic_parameters,
 )
-from tests.integration.catalog_publication_support import emptied_catalog
+from tests.integration.catalog_publication_support import (
+    clear_format_2_fields,
+    emptied_catalog,
+)
 from tests.integration.simulation_rows import add_row
 
 if TYPE_CHECKING:
@@ -560,3 +563,47 @@ def test_republication_writes_format_2_beside_a_stored_format_1_file(
     assert [model for model, *_sizes in evidence.parameter_search_files_written] == [
         "policyengine-us"
     ]
+
+
+def test_a_version_stored_before_format_2_compares_its_dynamic_parameters_too(
+    publication_sessions: sessionmaker[Session],
+    writer_sessions: sessionmaker[Session],
+) -> None:
+    """A version stored before catalog format 2 has no flags in either table.
+
+    Publishing it again compares both parameter tables without format 2's
+    fields, so it passes, and still fails when a dynamic parameter's label
+    differs.
+    """
+    _publish(writer_sessions)
+    with publication_sessions.begin() as session:
+        clear_format_2_fields(session)
+
+    republished = _publish(writer_sessions)
+
+    assert republished.parameter_trees_written == ()
+    with publication_sessions() as session:
+        flags = session.execute(
+            sa.select(col(DynamicParameter.economy), col(DynamicParameter.household))
+        ).all()
+    assert flags
+    assert {tuple(row) for row in flags} == {(None, None)}
+    catalog = catalog_with_dynamic_parameters(policyengine_version=INSTALLED_VERSION)
+    uk = catalog.country("uk")
+    changed = replace(
+        catalog,
+        countries=(
+            catalog.country("us"),
+            replace(
+                uk,
+                parameters=tuple(
+                    replace(parameter, label="Changed label")
+                    if parameter.name == "gov.dynamic.obr_labour_supply_assumptions"
+                    else parameter
+                    for parameter in uk.parameters
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(CatalogPublicationError, match=r"in its dynamic parameters$"):
+        publish_catalog(writer_sessions, changed)

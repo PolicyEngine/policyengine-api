@@ -570,7 +570,7 @@ def test_a_copy_that_loses_the_mapping_race_reports_the_mapped_dynamic(
     )
 
 
-def test_a_policy_parameter_and_an_assumption_of_the_same_name_stay_apart(
+def test_a_model_assumption_found_only_among_policy_parameters_is_missing(
     catalog_session: Session, recorded_writes: RecordedCopyWrites
 ) -> None:
     """The copy looks each part's names up in its own table.

@@ -17,6 +17,8 @@ their own versions of those models, and look only at those versions' rows.
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -907,6 +909,14 @@ def test_the_seed_workflow_s_check_counts_what_the_revision_refuses(
         assert dynamic_parameter_move_is_pending(session)
         before = count_policy_values_naming_dynamic_parameters(session)
     us, uk = stored_countries
+    # Policy values on another country's prefix count for neither.
+    with sessions.begin() as session:
+        look_alike_us = _store_policy(session, us)
+        _store_policy_value(session, us, look_alike_us, US_GOV_DYNAMIC_POLICY_PARAMETER)
+        look_alike_uk = _store_policy(session, uk)
+        _store_policy_value(session, uk, look_alike_uk, UK_SIMULATION_POLICY_PARAMETER)
+    with sessions() as session:
+        assert count_policy_values_naming_dynamic_parameters(session) == before
     with sessions.begin() as session:
         us_policy = _store_policy(session, us)
         _store_policy_value(session, us, us_policy, US_MTR_DELTA)
@@ -930,3 +940,79 @@ def test_the_seed_workflow_s_check_counts_what_the_revision_refuses(
     command.upgrade(alembic_v2_config(), "head")
     with sessions() as session:
         assert not dynamic_parameter_move_is_pending(session)
+
+
+def test_the_upgrade_refuses_while_a_dynamic_value_names_a_policy_parameter(
+    sessions: sessionmaker[Session], stored_countries: list[StoredCountry]
+) -> None:
+    """A dynamic's value on a parameter that stays in ``parameters`` would be lost.
+
+    The new tables can't hold it, and every reader after the move reads a
+    dynamic's values from them, so the revision refuses rather than leave it.
+    """
+    us = stored_countries[0]
+    value_id = uuid4()
+    with sessions.begin() as session:
+        add_row(
+            session,
+            ParameterValue,
+            id=value_id,
+            parameter_id=us.parameter_ids[US_POLICY_PARAMETER],
+            dynamic_id=us.dynamic_id,
+            value_json=0.3,
+            start_date=START_2027,
+        )
+    before = _snapshot(sessions, stored_countries)
+
+    with pytest.raises(RuntimeError, match="dynamic values name policy parameters"):
+        command.upgrade(alembic_v2_config(), DYNAMIC_PARAMETER_TABLES_REVISION)
+
+    assert current_revision(sessions) == PARENT_REVISION
+    assert _snapshot(sessions, stored_countries) == before
+    with sessions.begin() as session:
+        session.execute(
+            delete(ParameterValue).where(col(ParameterValue.id) == value_id)
+        )
+    command.upgrade(alembic_v2_config(), DYNAMIC_PARAMETER_TABLES_REVISION)
+    assert current_revision(sessions) == DYNAMIC_PARAMETER_TABLES_REVISION
+
+
+# Long enough for the upgrade to reach its lock before the concurrent
+# transaction commits; a slower start only makes the test weaker, never fail.
+CONCURRENT_COMMIT_DELAY_SECONDS = 3.0
+
+
+def test_a_policy_value_written_while_the_upgrade_waits_is_refused(
+    sessions: sessionmaker[Session], stored_countries: list[StoredCountry]
+) -> None:
+    """The revision locks the parameters it moves before it counts policy values.
+
+    A transaction that writes a policy value naming one, and commits only after
+    the upgrade started, holds a key-share lock on the parameter. The upgrade
+    waits for it, then counts the value and refuses. Without the lock it would
+    count before the commit, then delete the parameter and with it the value.
+    """
+    us = stored_countries[0]
+    committed = threading.Event()
+    with sessions() as writer:
+        policy_id = _store_policy(writer, us)
+        _store_policy_value(writer, us, policy_id, US_ELASTICITY)
+        writer.flush()
+
+        def commit_later() -> None:
+            committed.wait(CONCURRENT_COMMIT_DELAY_SECONDS)
+            writer.commit()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            commit = executor.submit(commit_later)
+            try:
+                with pytest.raises(
+                    RuntimeError, match="policy values name dynamic parameters"
+                ):
+                    command.upgrade(
+                        alembic_v2_config(), DYNAMIC_PARAMETER_TABLES_REVISION
+                    )
+            finally:
+                committed.set()
+                commit.result()
+    assert current_revision(sessions) == PARENT_REVISION
