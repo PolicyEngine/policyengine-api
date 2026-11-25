@@ -437,6 +437,27 @@ def test_the_value_listing_filters_by_parameter_and_day(
     assert [item.value for item in current.items] == [0.1, 1000]
 
 
+def test_a_version_without_dynamic_parameters_answers_with_empty_results(
+    dynamic_catalog_session: Session,
+) -> None:
+    for name in (US_ELASTICITY, US_TAX_RATE_DELTA):
+        dynamic_catalog_session.delete(
+            _dynamic_parameter(dynamic_catalog_session, name)
+        )
+    dynamic_catalog_session.commit()
+    reads = catalog_service(dynamic_catalog_session).dynamic_parameters
+
+    catalog = reads.get_catalog_dynamic_parameters("us")
+
+    assert reads.list_dynamic_parameters("us").items == []
+    assert reads.list_dynamic_parameter_children("us").items == []
+    assert reads.list_dynamic_parameter_values("us").items == []
+    assert catalog.parameters == []
+    assert catalog.node_labels == {}
+    with pytest.raises(MetadataResourceNotFoundError):
+        reads.get_dynamic_parameter_value("us", uuid4())
+
+
 def test_the_value_listing_is_paged(dynamic_catalog_session: Session) -> None:
     reads = catalog_service(dynamic_catalog_session).dynamic_parameters
 
