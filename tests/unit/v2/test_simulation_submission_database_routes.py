@@ -13,13 +13,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Country,
     Dynamic,
     Parameter,
@@ -63,13 +58,15 @@ from policyengine_api.services.v2.stored_simulations.database_session import (
 from policyengine_api.services.v2.stored_simulations.services import (
     V2StoredSimulationService,
 )
+from tests.fixtures.database_sessions import drop_tables, sqlite_v2_sessions
 from tests.unit.v2.stored_report_support import CURRENT_VERSIONS, report_route_client
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from fastapi.testclient import TestClient
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 RUNNING_VERSION = "6.10.0"
 EARLIER_VERSION = "6.9.0"
@@ -102,17 +99,11 @@ class RecordingSimulationService:
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    # One connection shared by every thread, so the route's worker thread
-    # reads the same in-memory database.
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
+def sessions() -> Iterator[sessionmaker[Session]]:
+    # Every Session shares one connection, so the route's worker thread reads
+    # the same in-memory database.
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 def store_catalog_version(
@@ -161,7 +152,7 @@ def store_policy(
 
 
 @pytest.fixture
-def stored_policy_ids(engine: Engine) -> dict[str, UUID]:
+def stored_policy_ids(sessions: sessionmaker[Session]) -> dict[str, UUID]:
     """Store the US with two catalog versions and three policies.
 
     ``outdated_policy`` sets a parameter the running catalog version removed;
@@ -169,7 +160,7 @@ def stored_policy_ids(engine: Engine) -> dict[str, UUID]:
     parameter the running version still has; ``running_policy`` was made on
     the running version.
     """
-    with Session(engine, expire_on_commit=False) as session:
+    with sessions() as session:
         session.add(Country(id="us", household_enabled=True, society_wide_enabled=True))
         model = TaxBenefitModel(name="policyengine-us")
         earlier = store_catalog_version(
@@ -221,14 +212,14 @@ def store_dynamic(
 
 
 @pytest.fixture
-def stored_dynamic_ids(engine: Engine) -> dict[str, UUID]:
+def stored_dynamic_ids(sessions: sessionmaker[Session]) -> dict[str, UUID]:
     """Store the US with two catalog versions, the UK with one, and three dynamics.
 
     ``outdated_dynamic`` sets an assumption the running US catalog version
     removed, ``running_dynamic`` was made on the running US version, and
     ``uk_dynamic`` is the UK's.
     """
-    with Session(engine, expire_on_commit=False) as session:
+    with sessions() as session:
         session.add_all(
             [
                 Country(id="us", household_enabled=True, society_wide_enabled=True),
@@ -265,9 +256,8 @@ def simulation_service() -> RecordingSimulationService:
 
 @pytest.fixture
 def submissions(
-    engine: Engine, simulation_service: RecordingSimulationService
+    sessions: sessionmaker[Session], simulation_service: RecordingSimulationService
 ) -> SimulationSubmissionService:
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
     return SimulationSubmissionService(
         countries=V2CountryService(CountryDatabaseSession(sessions)),
         households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
@@ -284,8 +274,9 @@ def submissions(
 
 
 @pytest.fixture
-def client(engine: Engine, submissions: SimulationSubmissionService) -> TestClient:
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def client(
+    sessions: sessionmaker[Session], submissions: SimulationSubmissionService
+) -> TestClient:
     return report_route_client(
         reports=V2StoredReportService(
             StoredReportDatabaseSession(sessions),
@@ -389,7 +380,7 @@ def test_policies_whose_parameters_all_exist_in_the_running_catalog_are_sent(
 
 @pytest.mark.parametrize("record", ["report", "simulation"])
 def test_a_catalog_that_cannot_be_queried_answers_503(
-    engine: Engine,
+    sessions: sessionmaker[Session],
     client: TestClient,
     stored_policy_ids: dict[str, UUID],
     simulation_service: RecordingSimulationService,
@@ -397,8 +388,8 @@ def test_a_catalog_that_cannot_be_queried_answers_503(
 ) -> None:
     running_policy_id = stored_policy_ids["running_policy"]
     # The policy check's catalog query reads this table; nothing else does.
-    with engine.begin() as connection:
-        connection.execute(text("DROP TABLE tax_benefit_model_versions"))
+    with sessions.begin() as session:
+        drop_tables(session, TaxBenefitModelVersion)
 
     if record == "report":
         response = client.post(

@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
 )
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
@@ -42,13 +41,27 @@ from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyTranslationError,
     parameters_missing_from_model,
 )
-from tests.fixtures.local_v1_database import create_test_v1_schema
+from tests.fixtures.database_sessions import sqlite_v1_sessions, sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlmodel import Session
 
 
-def _session_and_catalog():
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    session = Session(engine)
+@contextmanager
+def _session_and_catalog() -> Iterator[
+    tuple[Session, TaxBenefitModel, TaxBenefitModelVersion, Parameter, Parameter]
+]:
+    """Yield a Session of a catalog version with two parameters, and the catalog."""
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
+        yield (session, *_store_catalog(session))
+
+
+def _store_catalog(
+    session: Session,
+) -> tuple[TaxBenefitModel, TaxBenefitModelVersion, Parameter, Parameter]:
+    """Store a model's catalog version with two parameters; return them."""
     model = TaxBenefitModel(name="policyengine-us")
     version = TaxBenefitModelVersion(
         model=model,
@@ -66,7 +79,7 @@ def _session_and_catalog():
     )
     session.add_all([first, second])
     session.commit()
-    return engine, session, model, version, first, second
+    return model, version, first, second
 
 
 def _snapshot(**changes) -> LegacyPolicySnapshot:
@@ -125,8 +138,7 @@ def test_year_day_and_explicit_range_periods_are_inclusive_utc() -> None:
 
 
 def test_translation_resolves_paths_and_excludes_legacy_identity_and_label() -> None:
-    engine, session, model, version, first, second = _session_and_catalog()
-    try:
+    with _session_and_catalog() as (session, model, version, first, second):
         translated = _translate(session, _snapshot())
 
         assert translated.tax_benefit_model_id == model.id
@@ -137,20 +149,13 @@ def test_translation_resolves_paths_and_excludes_legacy_identity_and_label() -> 
         }
         assert "label" not in type(translated).model_fields
         assert "legacy_policy_id" not in type(translated).model_fields
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_label_does_not_change_translated_core_content() -> None:
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
-    try:
+    with _session_and_catalog() as (session, _model, _version, _first, _second):
         first = _translate(session, _snapshot(label="First"))
         second = _translate(session, _snapshot(label="Second", legacy_policy_id=43))
         assert first == second
-    finally:
-        session.close()
-        engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -179,19 +184,19 @@ def test_new_retry_and_equivalent_label_mirror_the_same_stored_json(
             )
         )
 
-    v1_engine = create_engine("sqlite://", json_serializer=serialize_stored_json)
-    create_test_v1_schema(v1_engine)
-    service = PolicyService(sessionmaker(v1_engine, expire_on_commit=False))
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.COUNTRY_PACKAGE_VERSIONS",
         {"us": "1.0.0"},
     )
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
     request = {
         "gov.example.rate": {"2026-01-01.2100-12-31": request_value},
         "gov.example.amount": {"2026": 100},
     }
-    try:
+    with (
+        sqlite_v1_sessions(json_serializer=serialize_stored_json) as v1_sessions,
+        _session_and_catalog() as (session, _model, _version, _first, _second),
+    ):
+        service = PolicyService(v1_sessions)
         first = service.set_policy(
             "us", "First label", request, prepare_for_mirroring=True
         )
@@ -237,10 +242,6 @@ def test_new_retry_and_equivalent_label_mirror_the_same_stored_json(
             for result in (first, retry, equivalent)
         )
         assert request["gov.example.rate"]["2026-01-01.2100-12-31"] == request_value
-    finally:
-        session.close()
-        engine.dispose()
-        v1_engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -292,33 +293,25 @@ def test_untranslatable_policy_fails_with_a_fixed_reason(
     policy_json: dict[str, object],
     reason: LegacyPolicyTranslationReason,
 ) -> None:
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
-    try:
+    with _session_and_catalog() as (session, _model, _version, _first, _second):
         with pytest.raises(LegacyPolicyTranslationError) as failure:
             _translate(session, _snapshot(policy_json=policy_json))
         assert failure.value.reason is reason
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_policy_with_more_values_than_v2_accepts_fails_as_too_many_values() -> None:
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
     # One more dated value than a v2 policy may hold, with no repeated dates.
     too_many_periods = {
         f"{2026 + offset}-01-01.{2026 + offset}-12-31": offset
         for offset in range(MAXIMUM_POLICY_PARAMETER_VALUES + 1)
     }
-    try:
+    with _session_and_catalog() as (session, _model, _version, _first, _second):
         with pytest.raises(LegacyPolicyTranslationError) as failure:
             _translate(
                 session,
                 _snapshot(policy_json={"gov.example.rate": too_many_periods}),
             )
         assert failure.value.reason is LegacyPolicyTranslationReason.TOO_MANY_VALUES
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def test_parameters_missing_from_model_lists_each_absent_name_once_in_order() -> None:
@@ -341,8 +334,7 @@ def test_parameters_missing_from_model_lists_each_absent_name_once_in_order() ->
 def test_policy_saved_under_another_country_package_translates_to_running_catalog(
     saved_api_version: str,
 ) -> None:
-    engine, session, _model, version, first, second = _session_and_catalog()
-    try:
+    with _session_and_catalog() as (session, _model, version, first, second):
         translated = _translate(session, _snapshot(api_version=saved_api_version))
 
         assert translated.tax_benefit_model_version_id == version.id
@@ -351,9 +343,6 @@ def test_policy_saved_under_another_country_package_translates_to_running_catalo
             second.id,
         }
         assert translated == _translate(session, _snapshot())
-    finally:
-        session.close()
-        engine.dispose()
 
 
 @pytest.mark.parametrize(
@@ -377,16 +366,14 @@ def test_reverse_legacy_range_is_rejected() -> None:
 
 
 def test_unknown_policyengine_version_never_falls_back() -> None:
-    engine, session, _model, _version, _first, _second = _session_and_catalog()
-    try:
-        with pytest.raises(
+    with (
+        _session_and_catalog() as (session, _model, _version, _first, _second),
+        pytest.raises(
             MetadataCatalogNotPublishedError, match=r"running PolicyEngine\.py"
-        ):
-            _translate(
-                session,
-                _snapshot(),
-                running_policyengine_version="4.0.0",
-            )
-    finally:
-        session.close()
-        engine.dispose()
+        ),
+    ):
+        _translate(
+            session,
+            _snapshot(),
+            running_policyengine_version="4.0.0",
+        )

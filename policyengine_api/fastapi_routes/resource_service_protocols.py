@@ -304,11 +304,15 @@ class V2StoredReportResourceService(Protocol):
         country_id: str,
         report_id: UUID,
         force: bool,
+        include_cliffs: bool = False,
         requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         """Run the country's report again; return it with the run the request ended on.
 
         That is the run the simulation service named, created or joined.
+        With ``include_cliffs``, it also starts the cliff calculations an
+        economy report run's simulation runs lack; ``CliffsNotAvailableError``
+        is raised, before anything is asked, for any other kind.
         With a ``requester``, the request is recorded for its user once the
         simulation service has answered, and
         ``StandardUserRequiresSignInError`` is raised, before anything is

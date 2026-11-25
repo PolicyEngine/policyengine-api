@@ -14,10 +14,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
 
 from policyengine_api.data.v2.models import (
     Stage12ComparisonReport,
@@ -39,41 +37,43 @@ from tests.unit.v2.comparison_run_support import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.services.v2.comparison_runs.types import (
         ComparisonReportRecord,
         ComparisonSimulationRecord,
     )
+    from tests.integration.conftest import ManagedV2Roles
 
 
 @pytest.fixture
 def stage12_sessions(
-    disposable_v2_database_url, managed_v2_roles, v2_engine_as_role
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> Iterator[sessionmaker[Session]]:
     """Open sessions as the Stage 12 role; remove this test's rows as the superuser."""
-    stage12_engine = v2_engine_as_role(managed_v2_roles.stage12)
-    cleanup_engine = create_engine(disposable_v2_database_url)
-    factory = sessionmaker(stage12_engine, class_=Session, expire_on_commit=False)
+    factory = v2_sessions_as_role(managed_v2_roles.stage12)
     factory.kw["info"] = {"evaluation_ids": []}
     try:
         yield factory
     finally:
         evaluation_ids = factory.kw["info"]["evaluation_ids"]
         if evaluation_ids:
-            with cleanup_engine.begin() as connection:
-                connection.execute(
+            with v2_owner_sessions.begin() as session:
+                session.execute(
                     delete(Stage12ComparisonSimulation).where(
                         Stage12ComparisonSimulation.evaluation_id.in_(evaluation_ids)
                     )
                 )
-                connection.execute(
+                session.execute(
                     delete(Stage12ComparisonReport).where(
                         Stage12ComparisonReport.evaluation_id.in_(evaluation_ids)
                     )
                 )
-        stage12_engine.dispose()
-        cleanup_engine.dispose()
 
 
 def _new_report(stage12_sessions) -> ComparisonReportRecord:
@@ -102,7 +102,7 @@ def _baseline_simulation(report: ComparisonReportRecord) -> ComparisonSimulation
 
 
 def test_stage12_sessions_act_as_the_stage12_role(
-    stage12_sessions, managed_v2_roles
+    stage12_sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
 ) -> None:
     with stage12_sessions() as session:
         current_role = session.execute(select(func.current_user())).scalar_one()

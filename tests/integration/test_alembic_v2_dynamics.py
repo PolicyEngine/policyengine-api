@@ -10,117 +10,142 @@ the upgrade fails while ``dynamics`` has a row, and the downgrade, which adds
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import String, delete
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Mapped, mapped_column, registry
+from sqlmodel import col
 
-from tests.fixtures.integration.alembic_v2 import alembic_v2_config, disposable_v2_url
+from policyengine_api.data.v2.models import (
+    Dynamic,
+    LegacyPolicyMapping,
+    Parameter,
+    ParameterValue,
+    Policy,
+)
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import alembic_v2_config, table_columns
+from tests.integration.alembic_version_rows import current_revision
 from tests.integration.simulation_rows import (
     PublicApiRows,
+    add_row,
     delete_public_api_rows,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 PREVIOUS_REVISION = "f519a77ba122"
 DYNAMICS_REVISION = "9d1d12a7ac58"
 CHANGED_TABLES = frozenset({"dynamics", "legacy_policy_mappings", "parameter_values"})
 
+previous_revision_tables = registry()
+
+
+@previous_revision_tables.mapped
+class DynamicAtF519a77ba122:
+    """The ``dynamics`` table at revision f519a77ba122, before this revision.
+
+    A dynamic then had a required name and a description. ``created_at`` and
+    ``updated_at``, which the database fills in, aren't mapped.
+    """
+
+    __tablename__ = "dynamics"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None]
+
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    """Yield an engine on a database at head, and leave it at head."""
+def sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the owner's Session factories on a database at head; leave it at head.
+
+    ``v2_owner_sessions`` checks that the target is the disposable database
+    before this migrates it.
+    """
     command.upgrade(alembic_v2_config(), "head")
-    database_engine = create_engine(disposable_v2_url())
     try:
-        yield database_engine
+        yield v2_owner_sessions
     finally:
         command.upgrade(alembic_v2_config(), "head")
-        database_engine.dispose()
 
 
 @pytest.fixture
-def connection(engine: Engine) -> Iterator[Connection]:
-    """Yield a connection at head whose writes are rolled back after the test."""
-    with engine.connect() as database_connection:
-        transaction = database_connection.begin()
+def session(sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Yield a Session at head whose writes are rolled back after the test."""
+    with sessions() as database_session:
         try:
-            yield database_connection
+            yield database_session
         finally:
-            transaction.rollback()
+            database_session.rollback()
 
 
-def _schema(engine: Engine) -> dict[str, dict[str, Any]]:
+def _schema(sessions: sessionmaker[Session]) -> dict[str, dict[str, Any]]:
     """Return each table's columns, keys, checks and indexes, comparably."""
-    inspector = inspect(engine)
-    return {
-        table_name: {
-            "columns": sorted(
-                (column["name"], str(column["type"]), column["nullable"])
-                for column in inspector.get_columns(table_name)
-            ),
-            "foreign_keys": sorted(
-                (
-                    str(key["name"]),
-                    tuple(key["constrained_columns"]),
-                    key["referred_table"],
-                    tuple(key["referred_columns"]),
-                    key["options"].get("ondelete"),
-                )
-                for key in inspector.get_foreign_keys(table_name)
-            ),
-            "unique": sorted(
-                (str(constraint["name"]), tuple(constraint["column_names"]))
-                for constraint in inspector.get_unique_constraints(table_name)
-            ),
-            "checks": sorted(
-                (str(check["name"]), check["sqltext"])
-                for check in inspector.get_check_constraints(table_name)
-            ),
-            "indexes": sorted(
-                (
-                    str(index["name"]),
-                    tuple(str(column) for column in index["column_names"]),
-                    bool(index["unique"]),
-                    str(index.get("dialect_options", {}).get("postgresql_where")),
-                )
-                for index in inspector.get_indexes(table_name)
-            ),
+    with sessions() as session:
+        inspector = schema_inspector(session)
+        return {
+            table_name: {
+                "columns": sorted(
+                    (column["name"], str(column["type"]), column["nullable"])
+                    for column in inspector.get_columns(table_name)
+                ),
+                "foreign_keys": sorted(
+                    (
+                        str(key["name"]),
+                        tuple(key["constrained_columns"]),
+                        key["referred_table"],
+                        tuple(key["referred_columns"]),
+                        key["options"].get("ondelete"),
+                    )
+                    for key in inspector.get_foreign_keys(table_name)
+                ),
+                "unique": sorted(
+                    (str(constraint["name"]), tuple(constraint["column_names"]))
+                    for constraint in inspector.get_unique_constraints(table_name)
+                ),
+                "checks": sorted(
+                    (str(check["name"]), check["sqltext"])
+                    for check in inspector.get_check_constraints(table_name)
+                ),
+                "indexes": sorted(
+                    (
+                        str(index["name"]),
+                        tuple(str(column) for column in index["column_names"]),
+                        bool(index["unique"]),
+                        str(index.get("dialect_options", {}).get("postgresql_where")),
+                    )
+                    for index in inspector.get_indexes(table_name)
+                ),
+            }
+            for table_name in inspector.get_table_names()
         }
-        for table_name in inspector.get_table_names()
-    }
-
-
-def _current_revision(engine: Engine) -> str:
-    with engine.connect() as connection:
-        return str(
-            connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one()
-        )
 
 
 def _insert_dynamic(
-    connection: Connection,
+    session: Session,
     rows: PublicApiRows,
     *,
     content_hash: str = "d" * 64,
     country_id: str = "us",
-) -> object:
+) -> UUID:
     dynamic_id = uuid4()
-    insert_row(
-        connection,
-        "dynamics",
+    add_row(
+        session,
+        Dynamic,
         id=dynamic_id,
         country_id=country_id,
         tax_benefit_model_id=rows.model_id,
@@ -131,11 +156,11 @@ def _insert_dynamic(
     return dynamic_id
 
 
-def _insert_parameter(connection: Connection, rows: PublicApiRows) -> object:
+def _insert_parameter(session: Session, rows: PublicApiRows) -> UUID:
     parameter_id = uuid4()
-    insert_row(
-        connection,
-        "parameters",
+    add_row(
+        session,
+        Parameter,
         id=parameter_id,
         name="gov.simulation.labor_supply_responses.elasticities.income",
         tax_benefit_model_version_id=rows.version_id,
@@ -143,13 +168,11 @@ def _insert_parameter(connection: Connection, rows: PublicApiRows) -> object:
     return parameter_id
 
 
-def _insert_policy(
-    connection: Connection, rows: PublicApiRows, *, country_id: str
-) -> object:
+def _insert_policy(session: Session, rows: PublicApiRows, *, country_id: str) -> UUID:
     policy_id = uuid4()
-    insert_row(
-        connection,
-        "policies",
+    add_row(
+        session,
+        Policy,
         id=policy_id,
         country_id=country_id,
         tax_benefit_model_id=rows.model_id,
@@ -160,14 +183,18 @@ def _insert_policy(
     return policy_id
 
 
+def _delete_dynamic(session: Session, dynamic_id: UUID) -> None:
+    session.execute(delete(Dynamic).where(col(Dynamic.id) == dynamic_id))
+
+
 def test_the_revision_changes_only_dynamics_their_values_and_mappings(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     config = alembic_v2_config()
     command.downgrade(config, PREVIOUS_REVISION)
-    before = _schema(engine)
+    before = _schema(sessions)
     command.upgrade(config, DYNAMICS_REVISION)
-    after = _schema(engine)
+    after = _schema(sessions)
 
     assert {name: before[name] for name in before if name not in CHANGED_TABLES} == {
         name: after[name] for name in after if name not in CHANGED_TABLES
@@ -217,54 +244,54 @@ def test_the_revision_changes_only_dynamics_their_values_and_mappings(
     }
 
     command.downgrade(config, PREVIOUS_REVISION)
-    assert _schema(engine) == before
+    assert _schema(sessions) == before
     command.upgrade(config, "head")
     command.check(config)
 
 
 def test_a_dynamic_is_stored_once_and_sets_one_value_per_parameter_and_date(
-    connection: Connection,
+    session: Session,
 ) -> None:
-    rows = insert_public_api_rows(connection)
-    parameter_id = _insert_parameter(connection, rows)
-    dynamic_id = _insert_dynamic(connection, rows)
+    rows = insert_public_api_rows(session)
+    parameter_id = _insert_parameter(session, rows)
+    dynamic_id = _insert_dynamic(session, rows)
 
-    with refused(connection, match="uq_dynamics_canonicalization_content_hash"):
-        _insert_dynamic(connection, rows)
-    with refused(connection, match="ck_dynamics_content_hash_length"):
-        _insert_dynamic(connection, rows, content_hash="short")
+    with refused(session, match="uq_dynamics_canonicalization_content_hash"):
+        _insert_dynamic(session, rows)
+    with refused(session, match="ck_dynamics_content_hash_length"):
+        _insert_dynamic(session, rows, content_hash="short")
 
     value = {
         "parameter_id": parameter_id,
         "dynamic_id": dynamic_id,
-        "value_json": "0.1",
-        "start_date": "2026-01-01T00:00:00Z",
+        "value_json": 0.1,
+        "start_date": datetime(2026, 1, 1, tzinfo=UTC),
     }
-    insert_row(connection, "parameter_values", id=uuid4(), **value)
-    with refused(connection, match="uq_parameter_values_dynamic_parameter_start_date"):
-        insert_row(connection, "parameter_values", id=uuid4(), **value)
+    add_row(session, ParameterValue, id=uuid4(), **value)
+    with refused(session, match="uq_parameter_values_dynamic_parameter_start_date"):
+        add_row(session, ParameterValue, id=uuid4(), **value)
     # Another dynamic may set the same parameter from the same date.
-    other_dynamic_id = _insert_dynamic(connection, rows, content_hash="e" * 64)
-    insert_row(
-        connection,
-        "parameter_values",
+    other_dynamic_id = _insert_dynamic(session, rows, content_hash="e" * 64)
+    add_row(
+        session,
+        ParameterValue,
         id=uuid4(),
         **{**value, "dynamic_id": other_dynamic_id},
     )
 
 
 def test_a_mapping_names_a_dynamic_of_its_country_which_stays_while_named(
-    connection: Connection,
+    session: Session,
 ) -> None:
-    rows = insert_public_api_rows(connection)
-    us_dynamic_id = _insert_dynamic(connection, rows)
-    us_policy_id = _insert_policy(connection, rows, country_id="us")
-    uk_policy_id = _insert_policy(connection, rows, country_id="uk")
+    rows = insert_public_api_rows(session)
+    us_dynamic_id = _insert_dynamic(session, rows)
+    us_policy_id = _insert_policy(session, rows, country_id="us")
+    uk_policy_id = _insert_policy(session, rows, country_id="uk")
 
-    with refused(connection, match="fk_legacy_policy_mappings_dynamic_country"):
-        insert_row(
-            connection,
-            "legacy_policy_mappings",
+    with refused(session, match="fk_legacy_policy_mappings_dynamic_country"):
+        add_row(
+            session,
+            LegacyPolicyMapping,
             id=uuid4(),
             country_id="uk",
             legacy_policy_id=1,
@@ -272,9 +299,9 @@ def test_a_mapping_names_a_dynamic_of_its_country_which_stays_while_named(
             dynamic_id=us_dynamic_id,
             source_policy_hash="v1-hash",
         )
-    insert_row(
-        connection,
-        "legacy_policy_mappings",
+    add_row(
+        session,
+        LegacyPolicyMapping,
         id=uuid4(),
         country_id="us",
         legacy_policy_id=1,
@@ -283,58 +310,58 @@ def test_a_mapping_names_a_dynamic_of_its_country_which_stays_while_named(
         source_policy_hash="v1-hash",
     )
     # A mapping without a dynamic is unaffected.
-    insert_row(
-        connection,
-        "legacy_policy_mappings",
+    add_row(
+        session,
+        LegacyPolicyMapping,
         id=uuid4(),
         country_id="us",
         legacy_policy_id=2,
         policy_id=us_policy_id,
         source_policy_hash="v1-hash-2",
     )
-    with refused(connection, match="fk_legacy_policy_mappings_dynamic_country"):
-        connection.execute(
-            text("DELETE FROM dynamics WHERE id = :id"), {"id": us_dynamic_id}
-        )
+    with refused(session, match="fk_legacy_policy_mappings_dynamic_country"):
+        _delete_dynamic(session, us_dynamic_id)
 
 
 def test_the_upgrade_fails_changing_nothing_while_a_dynamic_is_stored(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     config = alembic_v2_config()
     command.downgrade(config, PREVIOUS_REVISION)
     dynamic_id = uuid4()
-    with engine.begin() as connection:
-        insert_row(connection, "dynamics", id=dynamic_id, name="stored before")
+    with sessions.begin() as session:
+        add_row(session, DynamicAtF519a77ba122, id=dynamic_id, name="stored before")
     try:
         with pytest.raises(IntegrityError, match="country_id"):
             command.upgrade(config, DYNAMICS_REVISION)
-        assert _current_revision(engine) == PREVIOUS_REVISION
-        dynamics_columns = inspect(engine).get_columns("dynamics")
-        assert "name" in {column["name"] for column in dynamics_columns}
+        assert current_revision(sessions) == PREVIOUS_REVISION
+        assert "name" in table_columns(sessions, "dynamics")
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text("DELETE FROM dynamics WHERE id = :id"), {"id": dynamic_id}
+        with sessions.begin() as session:
+            session.execute(
+                delete(DynamicAtF519a77ba122).where(
+                    DynamicAtF519a77ba122.id == dynamic_id
+                )
             )
 
 
 def test_the_downgrade_fails_changing_nothing_while_a_dynamic_is_stored(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     config = alembic_v2_config()
-    # Step down from head, so the downgrade below runs this revision's step alone.
+    # The fixture upgrades to the head before the test, and the head can be
+    # later than the dynamics revision, so a downgrade reaches it; an upgrade
+    # to an older revision does nothing.
     command.downgrade(config, DYNAMICS_REVISION)
-    with engine.begin() as connection:
-        rows = insert_public_api_rows(connection)
-        dynamic_id = _insert_dynamic(connection, rows)
+    with sessions.begin() as session:
+        rows = insert_public_api_rows(session)
+        dynamic_id = _insert_dynamic(session, rows)
     try:
         with pytest.raises(IntegrityError, match="name"):
             command.downgrade(config, PREVIOUS_REVISION)
-        assert _current_revision(engine) == DYNAMICS_REVISION
+        assert current_revision(sessions) == DYNAMICS_REVISION
+        assert "dynamic_id" in table_columns(sessions, "legacy_policy_mappings")
     finally:
-        with engine.begin() as connection:
-            connection.execute(
-                text("DELETE FROM dynamics WHERE id = :id"), {"id": dynamic_id}
-            )
-            delete_public_api_rows(connection, rows)
+        with sessions.begin() as session:
+            _delete_dynamic(session, dynamic_id)
+            delete_public_api_rows(session, rows)

@@ -14,18 +14,13 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Household,
     Policy,
     Report,
     ReportRun,
     ReportRunStatus,
-    ReportRunTrigger,
     Simulation,
     SimulationRun,
     SimulationStatus,
@@ -60,11 +55,13 @@ from policyengine_api.services.v2.stored_reports.validators import (
     CreatedReportUnreadableError,
     StoredReportNotFoundError,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 STORED_AT = datetime(2026, 11, 13, 9, tzinfo=UTC)
 CURRENT_VERSIONS = PackageVersions(
@@ -119,20 +116,9 @@ def current_versions(country_id: str) -> PackageVersions:
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    database_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
-
-
-@pytest.fixture
-def sessions(engine: Engine) -> sessionmaker[Session]:
-    return sessionmaker(engine, class_=Session, expire_on_commit=False)
+def sessions() -> Iterator[sessionmaker[Session]]:
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 @pytest.fixture
@@ -225,8 +211,6 @@ def store_household_report(
     session.add_all([side for side in (baseline, reform) if side is not None])
     session.flush()
     report = Report(
-        label="My household under the reform",
-        description="Doubles the credit",
         country=country,
         tax_benefit_model_id=model.id,
         baseline_simulation_id=baseline.id,
@@ -275,7 +259,6 @@ def store_household_report(
             baseline_simulation_run_id=baseline_run.id,
             reform_simulation_run_id=None if reform_run is None else reform_run.id,
             status=run.status,
-            trigger=ReportRunTrigger.INITIAL,
             created_at=STORED_AT,
             started_at=STORED_AT,
             completed_at=completed_at,
@@ -535,7 +518,6 @@ def store_economy_report(session: Session) -> UUID:
     session.add(model)
     session.flush()
     report = Report(
-        label="Economy",
         country="us",
         tax_benefit_model_id=model.id,
         year=2026,

@@ -11,12 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
-
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Report,
     Simulation,
     SimulationType,
@@ -26,9 +21,13 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 STORED_AT = datetime(2026, 11, 14, 9, tzinfo=UTC)
 CURRENT_VERSIONS = PackageVersions(
@@ -38,16 +37,8 @@ CURRENT_VERSIONS = PackageVersions(
 
 def sqlite_sessions() -> Iterator[sessionmaker[Session]]:
     """Yield sessions of a new in-memory v2 schema, and dispose of it after."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(engine)
-    try:
-        yield sessionmaker(engine, class_=Session, expire_on_commit=False)
-    finally:
-        engine.dispose()
+    with sqlite_v2_sessions() as sessions:
+        yield sessions
 
 
 def report_service(sessions: sessionmaker[Session]) -> V2StoredReportService:
@@ -111,7 +102,6 @@ def store_economy_report(
     )
     stored = Report(
         id=uuid4() if report.report_id is None else report.report_id,
-        label="A stored report",
         country=place.country,
         tax_benefit_model_id=place.model_id,
         baseline_simulation_id=simulations[0].id,

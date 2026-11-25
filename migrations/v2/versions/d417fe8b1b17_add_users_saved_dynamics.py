@@ -1,9 +1,13 @@
 """add users' saved dynamics
 
 Revision ID: d417fe8b1b17
-Revises: 9d1d12a7ac58
+Revises: 4e30076d4b9f
 Create Date: 2026-11-19 21:00:24.397454
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
+
+Generated on 9d1d12a7ac58; its down_revision moved to 4e30076d4b9f when the
+cliff impacts and report column drops revisions reached master first.
+Generating it again from 4e30076d4b9f gives the same operations.
 
 Adds user_dynamics, users' named saved dynamics, built like user_policies
 without its v1 reference: the owner (a key to users, CASCADE), the country (a
@@ -23,7 +27,7 @@ import sqlmodel
 
 
 revision: str = "d417fe8b1b17"
-down_revision: Union[str, None] = "9d1d12a7ac58"
+down_revision: Union[str, None] = "4e30076d4b9f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

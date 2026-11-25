@@ -327,6 +327,39 @@ class TestEveryLayerIsChecked(unittest.TestCase):
             },
         )
 
+    def test_api_v1s_command_session_factories_are_database_code(self) -> None:
+        """``v1_sessions`` is a database package, as ``orm`` is."""
+        route_source = """
+            from policyengine_api.data.v1_sessions import unpooled_v1_sessions
+
+
+            def route(url):
+                with unpooled_v1_sessions(url) as sessions:
+                    return sessions
+        """
+        connector_source = """
+            from policyengine_api.data import v1_sessions
+
+
+            def read(url):
+                return v1_sessions.unpooled_v1_sessions(url)
+        """
+
+        self.assertEqual(
+            _findings({ROUTE: route_source}, ROUTES_RULE),
+            {
+                f"{ROUTE} calls unpooled_v1_sessions",
+                f"{ROUTE} imports policyengine_api.data.v1_sessions",
+            },
+        )
+        self.assertEqual(
+            _findings({CONNECTOR: connector_source}, CONNECTORS_RULE),
+            {
+                f"{CONNECTOR} calls unpooled_v1_sessions",
+                f"{CONNECTOR} imports policyengine_api.data.v1_sessions",
+            },
+        )
+
     def test_services_import_only_the_session_type_and_errors_from_sql_packages(
         self,
     ) -> None:

@@ -33,36 +33,42 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import col
 
 from policyengine_api.data.v2.catalog.publication_inserts import (
     INSERT_PARAMETER_VALUES,
-)
-from policyengine_api.data.v2.catalog.publication_tables import (
-    MODEL_VERSIONS,
-    MODELS,
-    PARAMETER_VALUES,
-    PARAMETERS,
+    RAW_DML_STRATEGY,
 )
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPruningFailure,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import (
+    Parameter,
+    ParameterSearchFile,
+    ParameterTreeChild,
+    ParameterValue,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
     from datetime import datetime
     from uuid import UUID
 
-    from sqlalchemy import Connection
+    from sqlalchemy import Delete, Update
+    from sqlalchemy.engine import CursorResult
+    from sqlmodel import Session
 
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
-PARAMETER_TREE_CHILDREN = V2_METADATA.tables["parameter_tree_children"]
-PARAMETER_SEARCH_FILES = V2_METADATA.tables["parameter_search_files"]
+# Set-based UPDATEs and DELETEs run as written: no row they change is loaded
+# in the Session, so the ORM need not find and refresh any.
+SET_BASED = {"synchronize_session": False}
 
 KEPT_OTHER_CATALOG_VERSIONS = 2
 """How many most recently published versions, besides the installed one, are kept.
@@ -182,22 +188,26 @@ def catalog_versions_to_prune_now(
 
 
 def read_stored_catalog_versions(
-    connection: Connection, model_names: Iterable[str]
+    session: Session, model_names: Iterable[str]
 ) -> tuple[StoredCatalogVersion, ...]:
     """Return every stored version of the named models."""
-    rows = connection.execute(
+    rows = session.execute(
         sa.select(
-            MODEL_VERSIONS.c.id,
-            MODELS.c.name,
-            MODEL_VERSIONS.c.version,
-            MODEL_VERSIONS.c.created_at,
-            MODEL_VERSIONS.c.catalog_values_pruned_at,
-            MODEL_VERSIONS.c.catalog_last_published_at,
+            col(TaxBenefitModelVersion.id),
+            col(TaxBenefitModel.name),
+            col(TaxBenefitModelVersion.version),
+            col(TaxBenefitModelVersion.created_at),
+            col(TaxBenefitModelVersion.catalog_values_pruned_at),
+            col(TaxBenefitModelVersion.catalog_last_published_at),
         )
         .select_from(
-            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
         )
-        .where(MODELS.c.name.in_(list(model_names)))
+        .where(col(TaxBenefitModel.name).in_(list(model_names)))
     )
     return tuple(
         StoredCatalogVersion(
@@ -213,7 +223,7 @@ def read_stored_catalog_versions(
 
 
 def record_catalog_publication(
-    connection: Connection, countries: Sequence[CountryCatalog]
+    session: Session, countries: Sequence[CountryCatalog]
 ) -> None:
     """Record that this publication published each catalog country's version.
 
@@ -223,21 +233,22 @@ def record_catalog_publication(
     transaction, after the versions are stored.
     """
     for country in countries:
-        connection.execute(
-            sa.update(MODEL_VERSIONS)
+        _changed_rows(
+            session,
+            sa.update(TaxBenefitModelVersion)
             .where(
-                MODEL_VERSIONS.c.version == country.model_version.version,
-                MODEL_VERSIONS.c.model_id.in_(
-                    sa.select(MODELS.c.id).where(MODELS.c.name == country.model.name)
+                col(TaxBenefitModelVersion.version) == country.model_version.version,
+                col(TaxBenefitModelVersion.model_id).in_(
+                    sa.select(col(TaxBenefitModel.id)).where(
+                        col(TaxBenefitModel.name) == country.model.name
+                    )
                 ),
             )
-            .values(catalog_last_published_at=sa.func.current_timestamp())
+            .values(catalog_last_published_at=sa.func.current_timestamp()),
         )
 
 
-def prune_catalog_version(
-    connection: Connection, version_id: UUID
-) -> PrunedRows | None:
+def prune_catalog_version(session: Session, version_id: UUID) -> PrunedRows | None:
     """Delete one version's current-law values, tree rows and search files.
 
     Sets the version's ``catalog_values_pruned_at`` first, only if it is
@@ -245,46 +256,56 @@ def prune_catalog_version(
     Runs in the caller's transaction, which holds the publication lock, so the
     deletes and the marker commit or roll back together.
     """
-    marked = connection.execute(
-        sa.update(MODEL_VERSIONS)
+    marked = _changed_rows(
+        session,
+        sa.update(TaxBenefitModelVersion)
         .where(
-            MODEL_VERSIONS.c.id == version_id,
-            MODEL_VERSIONS.c.catalog_values_pruned_at.is_(None),
+            col(TaxBenefitModelVersion.id) == version_id,
+            col(TaxBenefitModelVersion.catalog_values_pruned_at).is_(None),
         )
-        .values(catalog_values_pruned_at=sa.func.current_timestamp())
+        .values(catalog_values_pruned_at=sa.func.current_timestamp()),
     )
     # A guard publication can't reach: every writer of the column (pruning
     # and restoration) holds the publication lock, and the caller checks under
     # it that the version is unpruned. It costs nothing in the UPDATE, and
     # keeps a writer that doesn't take the lock, such as an operator's SQL,
     # from having a version's time replaced or its rows deleted twice.
-    if marked.rowcount == 0:
+    if marked == 0:
         return None
-    version_parameter_ids = sa.select(PARAMETERS.c.id).where(
-        PARAMETERS.c.tax_benefit_model_version_id == version_id
+    version_parameter_ids = sa.select(col(Parameter.id)).where(
+        col(Parameter.tax_benefit_model_version_id) == version_id
     )
-    parameter_values = connection.execute(
-        sa.delete(PARAMETER_VALUES).where(
-            PARAMETER_VALUES.c.parameter_id.in_(version_parameter_ids),
-            PARAMETER_VALUES.c.policy_id.is_(None),
-            PARAMETER_VALUES.c.dynamic_id.is_(None),
-        )
-    ).rowcount
-    tree_rows = connection.execute(
-        sa.delete(PARAMETER_TREE_CHILDREN).where(
-            PARAMETER_TREE_CHILDREN.c.tax_benefit_model_version_id == version_id
-        )
-    ).rowcount
-    search_files = connection.execute(
-        sa.delete(PARAMETER_SEARCH_FILES).where(
-            PARAMETER_SEARCH_FILES.c.tax_benefit_model_version_id == version_id
-        )
-    ).rowcount
+    parameter_values = _changed_rows(
+        session,
+        sa.delete(ParameterValue).where(
+            col(ParameterValue.parameter_id).in_(version_parameter_ids),
+            col(ParameterValue.policy_id).is_(None),
+            col(ParameterValue.dynamic_id).is_(None),
+        ),
+    )
+    tree_rows = _changed_rows(
+        session,
+        sa.delete(ParameterTreeChild).where(
+            col(ParameterTreeChild.tax_benefit_model_version_id) == version_id
+        ),
+    )
+    search_files = _changed_rows(
+        session,
+        sa.delete(ParameterSearchFile).where(
+            col(ParameterSearchFile.tax_benefit_model_version_id) == version_id
+        ),
+    )
     return PrunedRows(
         parameter_values=parameter_values,
         parameter_tree_children=tree_rows,
         parameter_search_files=search_files,
     )
+
+
+def _changed_rows(session: Session, statement: Update | Delete) -> int:
+    """Run a set-based UPDATE or DELETE and return how many rows it changed."""
+    result = session.execute(statement, execution_options=SET_BASED)
+    return cast("CursorResult[Any]", result).rowcount
 
 
 def pruning_failure(
@@ -325,23 +346,27 @@ def pruning_failure(
     )
 
 
-def _pruned_version_id(connection: Connection, country: CountryCatalog) -> UUID | None:
-    pruned_id: UUID | None = connection.execute(
-        sa.select(MODEL_VERSIONS.c.id)
+def _pruned_version_id(session: Session, country: CountryCatalog) -> UUID | None:
+    pruned_id: UUID | None = session.execute(
+        sa.select(col(TaxBenefitModelVersion.id))
         .select_from(
-            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
         )
         .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
-            MODEL_VERSIONS.c.catalog_values_pruned_at.is_not(None),
+            col(TaxBenefitModel.name) == country.model.name,
+            col(TaxBenefitModelVersion.version) == country.model_version.version,
+            col(TaxBenefitModelVersion.catalog_values_pruned_at).is_not(None),
         )
     ).scalar_one_or_none()
     return pruned_id
 
 
 def restore_pruned_catalog_versions(
-    connection: Connection, countries: Sequence[CountryCatalog]
+    session: Session, countries: Sequence[CountryCatalog]
 ) -> tuple[tuple[str, str, int], ...]:
     """Write back the current-law values of each staged version that was pruned.
 
@@ -354,18 +379,21 @@ def restore_pruned_catalog_versions(
     """
     restored = []
     for country in countries:
-        version_id = _pruned_version_id(connection, country)
+        version_id = _pruned_version_id(session, country)
         if version_id is None:
             continue
         # SQLAlchemy keeps an INSERT's row count only when asked to.
-        parameter_values = connection.execute(
+        inserted = session.execute(
             INSERT_PARAMETER_VALUES.execution_options(preserve_rowcount=True),
             {"country_id": country.country_id},
-        ).rowcount
-        connection.execute(
-            sa.update(MODEL_VERSIONS)
-            .where(MODEL_VERSIONS.c.id == version_id)
-            .values(catalog_values_pruned_at=None)
+            execution_options=RAW_DML_STRATEGY,
+        )
+        parameter_values = cast("CursorResult[Any]", inserted).rowcount
+        _changed_rows(
+            session,
+            sa.update(TaxBenefitModelVersion)
+            .where(col(TaxBenefitModelVersion.id) == version_id)
+            .values(catalog_values_pruned_at=None),
         )
         restored.append(
             (country.country_id, country.model_version.version, parameter_values)

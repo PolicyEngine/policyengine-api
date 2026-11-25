@@ -1,6 +1,6 @@
 """Save budget-window reports in migrated PostgreSQL.
 
-The saved-report service runs as the Public API's runtime role. A saved
+The saved-report service runs as API v1's runtime role. A saved
 report naming a detailed-save report gives that report's budget window as
 ``budget_window_years``, read from ``reports.budget_window_size`` in the
 write's transaction, or none for a report without a window of two or more
@@ -15,10 +15,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, delete
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
+from sqlalchemy import delete
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.models import User
@@ -47,50 +44,55 @@ from tests.integration.stored_report_rows import (
 from tests.unit.v2.user_service_support import default_legacy_references
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from uuid import UUID
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(v2_owner_sessions: sessionmaker[Session]) -> sessionmaker[Session]:
+    """Return the database owner's Session factories, its schema migrated to head."""
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def browsers(owner_engine: Engine) -> Iterator[list[UUID]]:
+def browsers(owner_sessions: sessionmaker[Session]) -> Iterator[list[UUID]]:
     """Signed-out browsers' user IDs; their users and saved records go afterwards."""
     user_ids: list[UUID] = []
     yield user_ids
-    with owner_engine.begin() as connection:
-        connection.execute(delete(User).where(User.id.in_(user_ids)))
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(User.id.in_(user_ids)))
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine, browsers: list[UUID]) -> Iterator[CatalogRows]:
+def catalog(
+    owner_sessions: sessionmaker[Session], browsers: list[UUID]
+) -> Iterator[CatalogRows]:
     """Store a US catalog; delete it after the saved records that name its reports."""
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        connection.execute(delete(User).where(User.id.in_(browsers)))
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(User.id.in_(browsers)))
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def service(managed_v2_roles, v2_engine_as_role) -> Iterator[V2UserReportService]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
-    yield V2UserReportService(
-        UserReportDatabaseSession(sessions), default_legacy_references()
+def service(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> V2UserReportService:
+    """Return the saved-report service, its Sessions acting as API v1's runtime role."""
+    return V2UserReportService(
+        UserReportDatabaseSession(v2_sessions_as_role(managed_v2_roles.runtime)),
+        default_legacy_references(),
     )
-    engine.dispose()
 
 
 def browser(browsers: list[UUID]) -> UnauthenticatedPrincipal:
@@ -111,15 +113,15 @@ def save(
 
 
 def test_a_saved_budget_window_gives_the_reports_window(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
     browsers: list[UUID],
     service: V2UserReportService,
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=10)
-        one_year = store_report(connection, catalog, budget_window_size=1)
-        economy = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=10)
+        one_year = store_report(session, catalog, budget_window_size=1)
+        economy = store_report(session, catalog)
     principal = browser(browsers)
 
     saved = [
@@ -143,17 +145,15 @@ DISAGREEING_WINDOWS = {
     "window", list(DISAGREEING_WINDOWS.values()), ids=list(DISAGREEING_WINDOWS)
 )
 def test_a_saved_report_disagreeing_with_the_reports_window_is_refused(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
     browsers: list[UUID],
     service: V2UserReportService,
     window: tuple[int | None, int | None],
 ) -> None:
     budget_window_size, budget_window_years = window
-    with owner_engine.begin() as connection:
-        report = store_report(
-            connection, catalog, budget_window_size=budget_window_size
-        )
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog, budget_window_size=budget_window_size)
 
     with pytest.raises(
         AssociationBudgetWindowConflictError, match=str(report.report_id)
@@ -167,15 +167,15 @@ def test_a_saved_report_disagreeing_with_the_reports_window_is_refused(
 
 
 def test_an_update_keeps_the_saved_window_agreeing_with_its_report(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
     browsers: list[UUID],
     service: V2UserReportService,
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=10)
-        other_window = store_report(connection, catalog, budget_window_size=5)
-        economy = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=10)
+        other_window = store_report(session, catalog, budget_window_size=5)
+        economy = store_report(session, catalog)
     principal = browser(browsers)
     saved = save(service, principal, report_id=economy.report_id)
 
@@ -214,7 +214,7 @@ def test_a_v1_saved_report_keeps_its_own_window(
 
 
 def test_a_succeeded_window_whose_result_cannot_be_read_can_still_be_saved(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
     browsers: list[UUID],
     service: V2UserReportService,
@@ -222,16 +222,16 @@ def test_a_succeeded_window_whose_result_cannot_be_read_can_still_be_saved(
     # Saving reads only the report's window size, never its figures, so a
     # window whose years stored no result rows is saved like any other.
     versions = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
         window_run_id = store_budget_window_run(
-            connection, catalog, window, RunSettings(versions=versions)
+            session, catalog, window, RunSettings(versions=versions)
         )
         for year in (2026, 2027):
             store_report_run(
-                connection,
+                session,
                 catalog,
-                store_year_simulations(connection, catalog, window, year),
+                store_year_simulations(session, catalog, window, year),
                 RunSettings(
                     versions=versions,
                     budget_window_year=BudgetWindowYear(

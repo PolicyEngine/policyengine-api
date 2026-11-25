@@ -56,15 +56,11 @@ class ReportRunItem(StrictReportAPIModel):
     """One calculation of a report, on one country package and .py version.
 
     ``status`` is ``pending``, ``running``, ``succeeded`` or ``failed``, and
-    ``error_message`` says why a failed run failed. ``trigger`` is
-    ``initial`` for the run the report's creation started, and null for a run
-    the simulation service shares between requests, which records no one
-    request's trigger.
+    ``error_message`` says why a failed run failed.
     """
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: Literal["initial", "manual", "system"] | None
     country_package_version: str
     policyengine_version: str
     baseline_simulation_run_id: UUID
@@ -140,14 +136,62 @@ class ReportSummaryItem(ReportDefinitionItem):
         return cls.model_validate(read)
 
 
+# How far a side's cliff calculation has got.
+CliffCalculationStatus = Literal[
+    "not_calculated", "pending", "running", "succeeded", "failed"
+]
+
+
+class CliffCalculationItem(StrictReportAPIModel):
+    """How far one side's cliff calculation of its simulation run has got.
+
+    ``status`` is ``not_calculated`` while the simulation run has no cliff
+    calculation, ``pending`` or ``running`` while one is under way,
+    ``succeeded`` once it has its result, and ``failed`` once its newest
+    calculation failed and none is under way; ``error_message`` then says
+    why, and is null otherwise.
+    """
+
+    status: CliffCalculationStatus
+    error_message: str | None
+
+
+class ReportCliffsItem(StrictReportAPIModel):
+    """How far the cliff calculations of the run read's two simulation runs have got.
+
+    A simulation run's cliffs are calculated apart from it, once, when a
+    create or re-run asks with ``include_cliffs``, and every report naming
+    the run shares them. ``status`` is ``succeeded`` once both sides are;
+    otherwise ``failed`` when either side is, else ``not_calculated`` when
+    either side is, else ``running`` when either side is, else ``pending``.
+    Running the report again with ``include_cliffs`` on the current versions
+    starts a new calculation for each side that is ``not_calculated`` or
+    ``failed``, and joins one under way; a run on older versions is not run
+    again, so its re-run answers another run, with that run's ``cliffs``. A
+    report naming one simulation run on both sides gives its calculation for
+    each. A simulation service that doesn't calculate cliffs per simulation
+    run starts none, so a side with no calculation stays ``not_calculated``,
+    and it refuses ``include_cliffs: true`` with 422.
+    """
+
+    status: CliffCalculationStatus
+    baseline: CliffCalculationItem
+    reform: CliffCalculationItem
+
+
 class ReportItem(ReportSummaryItem):
     """An economy report with its run's result.
 
     ``result`` is the single-year economy result, in the format the app reads
-    today, once the run read has succeeded, and null otherwise.
+    today, once the run read has succeeded, and null otherwise. Its
+    ``cliff_impact`` is the two simulation runs' cliff results once ``cliffs``
+    is ``succeeded``, and null otherwise. ``cliffs`` says how far their cliff
+    calculations have got, whatever the run's status, and is null for a
+    report with no run.
     """
 
     result: EconomyResult | None
+    cliffs: ReportCliffsItem | None
 
     @classmethod
     def from_read(cls, read: ReportRead) -> ReportItem:
@@ -251,9 +295,7 @@ class BudgetWindowRunItem(StrictReportAPIModel):
 
     ``status`` is ``pending`` until a year starts running, ``running`` while
     its years run, ``failed`` once a year has failed, with ``error_message``
-    saying which, and ``succeeded`` once every year has. ``trigger`` is
-    ``initial`` for the run the report's creation started (null for a shared
-    run, which records no one request's trigger), and ``recalculate`` says
+    saying which, and ``succeeded`` once every year has. ``recalculate`` says
     whether its years calculate their simulations again rather than reusing
     successful runs.
     ``country_package_version`` and ``policyengine_version`` are the versions
@@ -262,7 +304,6 @@ class BudgetWindowRunItem(StrictReportAPIModel):
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: Literal["initial", "manual", "system"] | None
     recalculate: bool
     country_package_version: str | None
     policyengine_version: str | None
@@ -505,7 +546,8 @@ CREATE_RESPONSES: dict[int | str, dict[str, Any]] = {
             "422, or its 400 for a region or dataset it does not have. The "
             "message says which; for the simulation service's refusal, it gives "
             "the service's code, when it gave one, and its reason, but not its "
-            "status."
+            "status. A simulation service that doesn't calculate cliffs per "
+            "simulation run answers that 422 for include_cliffs: true."
         ),
     },
     502: {

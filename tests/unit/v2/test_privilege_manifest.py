@@ -14,7 +14,7 @@ from policyengine_api.data.v2 import models
 from policyengine_api.data.v2.catalog.publication_statistics import (
     CATALOG_STATISTICS_TABLES,
 )
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import V2_REGISTRY, V2_TABLE_NAMES
 from policyengine_api.data.v2.privilege_requirements import (
     required_privileges,
     undeclared_requirements,
@@ -39,13 +39,15 @@ from policyengine_api.data.v2.privileges import (
     stage12_role,
     update_columns,
 )
+from tests.unit.v2.v2_schema_reading import stored_v2_schema
 
 PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declared"
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
 TEST_ENVIRONMENT = "staging"
-# The rows the simulation service creates, and the run tables among them.
+# The rows the simulation service creates, and the run tables among them. A
+# simulation run's cliff calculation is started and finished like a run.
 SIMULATION_SERVICE_CREATES = frozenset(
     {
         "simulations",
@@ -54,9 +56,12 @@ SIMULATION_SERVICE_CREATES = frozenset(
         "report_runs",
         "budget_window_runs",
         "household_jobs",
+        "cliff_impacts",
     }
 )
-RUN_STATUS_TABLES = frozenset({"simulation_runs", "report_runs", "household_jobs"})
+RUN_STATUS_TABLES = frozenset(
+    {"simulation_runs", "report_runs", "household_jobs", "cliff_impacts"}
+)
 # The run columns the Modal workers update: a run's state and its results.
 WORKER_RUN_STATE_COLUMNS = frozenset(
     {
@@ -72,15 +77,12 @@ WORKER_RESULT_COLUMNS = {
     "simulation_runs": frozenset({"output_uri", "output_sha256", "household_result"}),
     "report_runs": frozenset(
         {
-            "baseline_cliff_gap",
-            "baseline_cliff_share",
-            "reform_cliff_gap",
-            "reform_cliff_share",
             "spm_provenance",
             "data_version",
         }
     ),
     "household_jobs": frozenset({"result"}),
+    "cliff_impacts": frozenset({"cliff_gap", "cliff_share"}),
 }
 # The run columns the simulation service updates: it records a Modal call's ID
 # when Modal accepts the call, and fails the run when Modal refuses it.
@@ -123,7 +125,6 @@ RUN_DEFINITION_COLUMNS = {
             "year",
             "country_package_version",
             "policyengine_version",
-            "trigger",
             "idempotency_key",
             "forced",
         }
@@ -146,10 +147,11 @@ RUN_DEFINITION_COLUMNS = {
             "report_id",
             "tax_benefit_model_version_id",
             "policyengine_version",
-            "trigger",
             "recalculate",
         }
     ),
+    # A cliff calculation always calculates the run it was inserted for.
+    "cliff_impacts": frozenset({"simulation_run_id"}),
 }
 # The policy, dynamic, household and catalog rows a run needs.
 RUN_INPUT_TABLES = frozenset(
@@ -212,30 +214,36 @@ def _missing(relative_path: str, role: str) -> list[str]:
     )
     declared = declared_privileges(TEST_ENVIRONMENT)[role]
     return [
-        f"{missing.connector}: {missing.privilege} on {missing.table} "
+        f"{missing.connector}: {missing.privilege} on {missing.table_name} "
         f"({missing.reason})"
         for missing in undeclared_requirements(requirements, declared)
     ]
 
 
-def test_every_v2_table_has_an_entry_for_every_managed_role() -> None:
-    metadata_tables = {table.name for table in V2_METADATA.tables.values()}
+def _column_keys_by_table() -> dict[str, set[str]]:
+    """Return the names of each v2 table's columns, as SQLite's copy stores them.
 
-    assert set(TABLE_ACCESS) == metadata_tables | {"alembic_version"}
+    A grant is on the table's columns, which include any a mapper leaves out.
+    """
+    return {name: set(table.columns) for name, table in stored_v2_schema().items()}
+
+
+def test_every_v2_table_has_an_entry_for_every_managed_role() -> None:
+    assert set(TABLE_ACCESS) == V2_TABLE_NAMES | {"alembic_version"}
     for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
         assert set(privileges_by_table) == set(TABLE_ACCESS), role
 
 
 def test_v2_schema_has_no_sequences_the_manifest_would_need_to_cover() -> None:
     sequence_columns = [
-        f"{table.name}.{column.name}"
-        for table in V2_METADATA.tables.values()
-        for column in table.columns
+        f"{mapper.class_.__tablename__}.{column.name}"
+        for mapper in V2_REGISTRY.mappers
+        for column in mapper.columns
         if isinstance(column.default, sa.Sequence)
         or column.identity is not None
         or (
             column.primary_key
-            and len(table.primary_key.columns) == 1
+            and len(mapper.primary_key) == 1
             and isinstance(column.type, sa.Integer)
             and column.autoincrement is not False
         )
@@ -323,6 +331,7 @@ def test_modal_workers_write_only_run_status_and_results() -> None:
 
 def test_column_privileges_name_their_tables_columns_alone() -> None:
     """A whole-table privilege would override the same privilege's column list."""
+    column_keys_by_table = _column_keys_by_table()
     for role, privileges_by_table in declared_privileges(TEST_ENVIRONMENT).items():
         for table, privileges in privileges_by_table.items():
             column_privileges = [
@@ -334,7 +343,7 @@ def test_column_privileges_name_their_tables_columns_alone() -> None:
             assert len(kinds) == len(set(kinds)), (role, table)
             for privilege in column_privileges:
                 assert privilege.columns, (role, table)
-                assert privilege.columns <= set(V2_METADATA.tables[table].c.keys()), (
+                assert privilege.columns <= column_keys_by_table[table], (
                     role,
                     table,
                 )
@@ -390,7 +399,7 @@ def test_rule_proof_runtime_privileges_declared() -> None:
     good = required_privileges(PROOF_FIXTURES / "reads_good.py", table_by_model)
 
     assert [
-        (missing.table, missing.privilege)
+        (missing.table_name, missing.privilege)
         for missing in undeclared_requirements(bad, runtime_before_3977)
     ] == [("legacy_policy_mappings", TablePrivilege.SELECT)]
     assert undeclared_requirements(good, runtime_before_3977) == []
@@ -467,7 +476,7 @@ def test_the_public_api_revokes_and_accepts_invitations_but_never_deletes_them()
 
 
 def test_the_public_api_records_each_users_report_run_requests() -> None:
-    """The Public API writes a user's record of each report run they asked for.
+    """API v1 writes a user's record of each report run they asked for.
 
     It reads, adds and deletes them, but never changes one: a later request
     for the same run is the same record. No other role reads them.
@@ -480,6 +489,28 @@ def test_the_public_api_records_each_users_report_run_requests() -> None:
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_report_run_associations"] == NO_ACCESS, role
+
+
+def test_cliff_calculations_are_started_by_the_service_and_finished_by_workers() -> (
+    None
+):
+    """The simulation service inserts a run's cliff calculation and records its call.
+
+    The Modal worker claims it, writes the cliff gap and share or the failure,
+    and never inserts one; API v1 reads the results. The catalog
+    writer and the Stage 12 role can do neither.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[SIMULATION_SERVICE_ROLE]["cliff_impacts"] == READ_INSERT | {
+        update_columns(*SERVICE_RUN_STATE_COLUMNS)
+    }
+    assert declared[MODAL_WORKER_ROLE]["cliff_impacts"] == READ | {
+        update_columns(*WORKER_RUN_STATE_COLUMNS, "cliff_gap", "cliff_share")
+    }
+    assert declared[RUNTIME_ROLE]["cliff_impacts"] == READ
+    for role in (CATALOG_WRITER_ROLE, stage12_role(TEST_ENVIRONMENT)):
+        assert declared[role]["cliff_impacts"] == NO_ACCESS, role
 
 
 def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:

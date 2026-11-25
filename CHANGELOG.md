@@ -1,3 +1,29 @@
+## [5.55.0] - 2026-11-25
+
+### Removed
+
+- The v2 database no longer stores a label, description or user on reports, a trigger on report runs or budget-window runs, or cliff results on report runs. A report's name and description are on each user's saved report, each user's trigger is on their record of the run, and cliffs are each simulation run's cliff results.
+- `/v2/reports` run items and budget-window run items no longer have a `trigger` field: a run is shared between requests, and each user's trigger is on their record of it. API v1 no longer selects or writes the per-user columns of reports, report runs and budget-window runs, which a later database revision drops.
+
+
+## [5.54.1] - 2026-11-25
+
+### Changed
+
+- `/v2/reports` reads a report run's cliff impact from its two simulation runs' cliff results, never from the report run's own cliff columns, and each economy report read gives `cliffs`: how far each side's cliff calculation has got. `POST /v2/reports/{report_id}/runs` takes `include_cliffs`, which a household report or budget window refuses with 422. A simulation service that doesn't calculate cliffs per simulation run refuses `include_cliffs: true` with 422, on creates and re-runs alike.
+
+
+## [5.54.0] - 2026-11-24
+
+### Added
+
+- The v2 database can store one cliff result per simulation run, its cliff gap and cliff share, with the state of its calculation. The simulation service may start each calculation, its Modal workers may write the result, and API v1 may read it.
+
+### Changed
+
+- API v1 runs every database statement through SQLAlchemy's ORM, in its production code, scripts and tests, and rule api.data.orm-only enforces it; the few statements SQLAlchemy can't express, such as GRANT and COPY, are named exceptions. Commands, their arguments and their environment variables are unchanged.
+
+
 ## [5.53.0] - 2026-11-19
 
 ### Added

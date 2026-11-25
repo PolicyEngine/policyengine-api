@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
-from sqlalchemy import event
 from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
@@ -22,12 +21,19 @@ from policyengine_api.services.v2.metadata.database_session import (
     MetadataDatabaseSession,
 )
 from policyengine_api.services.v2.metadata.services import V2MetadataService
+from tests.fixtures import database_sessions
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from policyengine_api.services.v2.metadata.process_state import (
         SelectedCatalogStore,
     )
+
+
+# What a recorded read returns.
+ReadResult = TypeVar("ReadResult")
 
 
 def insert_country(
@@ -213,16 +219,10 @@ def catalog_service(
     )
 
 
-def recorded_statements(session: Session, read):
-    statements: list[str] = []
-
-    def record_statement(_connection, _cursor, statement, *_args) -> None:
-        statements.append(statement.lower())
-
-    bind = session.get_bind()
-    event.listen(bind, "before_cursor_execute", record_statement)
-    try:
+def recorded_statements(
+    session: Session, read: Callable[[], ReadResult]
+) -> tuple[ReadResult, list[str]]:
+    """Return what ``read()`` returns and the SQL it sent, in lowercase."""
+    with database_sessions.recorded_statements(session) as statements:
         result = read()
-    finally:
-        event.remove(bind, "before_cursor_execute", record_statement)
-    return result, statements
+    return result, [statement.lower() for statement in statements]

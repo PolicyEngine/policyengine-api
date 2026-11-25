@@ -2,31 +2,37 @@
 
 from __future__ import annotations
 
-import pytest
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
+from typing import TYPE_CHECKING
 
-from policyengine_api.data.v2.models import V2_METADATA
+import pytest
+
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_catalog import normalized_catalog
 from tests.fixtures.v2_metadata_service_helpers import insert_country
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
 
 @pytest.fixture
-def catalog_session() -> Session:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    V2_METADATA.create_all(engine)
-    with Session(engine) as session:
-        for country in normalized_catalog().countries:
-            insert_country(session, country, include_model=True)
-        session.commit()
+def catalog_sessions() -> Iterator[sessionmaker[Session]]:
+    """Return Session factories of a database holding the US and UK catalogs."""
+    with sqlite_v2_sessions() as sessions:
+        with sessions.begin() as session:
+            for country in normalized_catalog().countries:
+                insert_country(session, country, include_model=True)
+        yield sessions
 
-    session = Session(engine)
-    try:
+
+@pytest.fixture
+def catalog_session(catalog_sessions: sessionmaker[Session]) -> Iterator[Session]:
+    """Return a Session of the catalog database, closed after the test.
+
+    A commit expires its rows, as a plain SQLModel ``Session`` does, so a read
+    after a commit sees the stored values, not the ones the Session held.
+    """
+    with catalog_sessions(expire_on_commit=True) as session:
         yield session
-    finally:
-        session.close()
-        engine.dispose()

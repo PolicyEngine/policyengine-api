@@ -34,8 +34,8 @@ def _spm_override_response(payload: dict) -> Response | None:
 def _serialize_v1_simulation(simulation: Simulation) -> dict:
     """Project canonical ORM JSON objects onto the legacy v1 response shape."""
     response = {
-        column.name: getattr(simulation, column.name)
-        for column in Simulation.__table__.columns
+        attribute.key: getattr(simulation, attribute.key)
+        for attribute in Simulation.__mapper__.column_attrs
     }
     for field in ("output", "simulation_spec_json"):
         value = response.get(field)
