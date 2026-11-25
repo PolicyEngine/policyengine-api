@@ -248,6 +248,21 @@ def test_runtime_rejects_transaction_pooling_without_session_timeouts() -> None:
         )
 
 
+def test_the_policy_copy_split_url_refuses_transaction_pooling() -> None:
+    """Transaction pooling drops the command's lock and statement timeouts."""
+    with pytest.raises(V2ConfigurationError, match="session mode on port 5432"):
+        load_v2_policy_copy_split_database_settings(
+            {
+                **TARGET_ENVIRONMENT,
+                V2_POLICY_COPY_SPLIT_DATABASE_URL: (
+                    f"postgresql+psycopg://policy-copy-split.{PROJECT_REF}:password@"
+                    "aws-0-us-east-2.pooler.supabase.com:6543/"
+                    "postgres?sslmode=require"
+                ),
+            }
+        )
+
+
 def test_supabase_database_name_must_be_postgres() -> None:
     with pytest.raises(V2ConfigurationError, match="configured Supabase database"):
         load_v2_runtime_database_settings(

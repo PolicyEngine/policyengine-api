@@ -67,9 +67,26 @@ def test_the_runbook_creates_a_login_role_with_no_other_powers() -> None:
     assert creation.lstrip().startswith("DO $$")
 
 
-def test_the_runbook_drops_the_role_and_its_grants() -> None:
+def test_the_runbook_revokes_every_grant_then_drops_the_role() -> None:
+    """A login that isn't a superuser can run it.
+
+    ``DROP OWNED BY`` needs the target role's own privileges, which the
+    CREATEROLE login that created the role lacks on PostgreSQL 16 and later,
+    so the role's grants are revoked one by one before ``DROP ROLE``.
+    """
     removal = _block_containing(f"DROP ROLE {POLICY_COPY_SPLIT_ROLE}")
 
-    assert f"DROP OWNED BY {POLICY_COPY_SPLIT_ROLE};" in removal
-    assert removal.index("DROP OWNED BY") < removal.index("DROP ROLE")
+    table_revoke = re.compile(
+        rf"^\s*REVOKE ALL ON TABLE public\.(\w+) FROM {POLICY_COPY_SPLIT_ROLE};$"
+    )
+    revoked_tables = sorted(
+        match.group(1)
+        for statement in removal.splitlines()
+        if (match := table_revoke.match(statement))
+    )
+
+    assert revoked_tables == sorted(POLICY_COPY_SPLIT_PRIVILEGES)
+    assert f"REVOKE USAGE ON SCHEMA public FROM {POLICY_COPY_SPLIT_ROLE};" in removal
+    assert "DROP OWNED BY" not in removal
+    assert removal.rindex("REVOKE") < removal.index("DROP ROLE")
     assert removal.lstrip().startswith("DO $$")

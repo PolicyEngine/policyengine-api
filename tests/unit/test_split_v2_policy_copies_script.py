@@ -321,7 +321,9 @@ def test_the_command_lists_read_only_and_bounds_its_waits(
     [(opener, url)] = opened
     assert opener == expected_opener
     assert url.query["connect_timeout"] == "10"
-    assert url.query["options"] == "-c lock_timeout=10000 -c statement_timeout=60000"
+    # Shorter than PostgreSQL's default one-second deadlock_timeout, so in a
+    # lock cycle with a live write the split's wait ends first.
+    assert url.query["options"] == "-c lock_timeout=500 -c statement_timeout=60000"
     assert url.query["sslmode"] == "require"
 
 

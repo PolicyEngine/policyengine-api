@@ -18,15 +18,20 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, func, or_
+from sqlalchemy import delete, func, or_, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.database import unpooled_v2_read_only_sessions
+from policyengine_api.data.v2.database import (
+    unpooled_v2_read_only_sessions,
+    unpooled_v2_sessions,
+)
 from policyengine_api.data.v2.models import (
     Dataset,
     Dynamic,
+    Household,
+    HouseholdJob,
     LegacyPolicyMapping,
     Parameter,
     ParameterValue,
@@ -119,13 +124,34 @@ def listing_sessions(
         yield sessions
 
 
-class ListingAsTheSplitRole(PolicyCopySplitDatabaseSession):
-    """Act as the temporary role in each of the listing's READ ONLY sessions."""
+@pytest.fixture(scope="module")
+def time_limited_sessions(
+    disposable_v2_database_url: str, split_role_sessions: sessionmaker[Session]
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the owner's Session factories with the command's time limits.
+
+    Their URL is the command's (``with_time_limits``), so a lock wait ends as
+    the command's does. ``split_role_sessions`` creates the temporary role.
+    """
+    url = with_time_limits(make_url(disposable_v2_database_url))
+    with unpooled_v2_sessions(url) as sessions:
+        yield sessions
+
+
+class ActingAsTheSplitRole(PolicyCopySplitDatabaseSession):
+    """Act as the temporary role in each of the owner's sessions (SET LOCAL ROLE)."""
 
     @contextmanager
     def read(self) -> Iterator[Session]:
-        """Yield a READ ONLY session acting as the temporary role."""
+        """Yield a session acting as the temporary role."""
         with super().read() as session:
+            act_as(session, POLICY_COPY_SPLIT_ROLE)
+            yield session
+
+    @contextmanager
+    def transaction(self) -> Iterator[Session]:
+        """Yield a transaction acting as the temporary role."""
+        with super().transaction() as session:
             act_as(session, POLICY_COPY_SPLIT_ROLE)
             yield session
 
@@ -135,7 +161,7 @@ def _service(sessions: sessionmaker[Session]) -> V2PolicyCopySplitService:
 
 
 def _listing_service(sessions: sessionmaker[Session]) -> V2PolicyCopySplitService:
-    return V2PolicyCopySplitService(ListingAsTheSplitRole(sessions))
+    return V2PolicyCopySplitService(ActingAsTheSplitRole(sessions))
 
 
 @dataclass
@@ -146,8 +172,10 @@ class Scenario:
     model_id: UUID
     version_id: UUID
     parameter_ids: dict[str, UUID]
+    policyengine_version: str = CATALOG_VERSION
     user_ids: list[UUID] = field(default_factory=list)
     legacy_policy_ids: list[int] = field(default_factory=list)
+    household_ids: list[UUID] = field(default_factory=list)
 
     def parameter_value(
         self, name: str, *, value: object, end_date: datetime | None = END_2026
@@ -164,7 +192,7 @@ class Scenario:
             "country_id": self.country_id,
             "tax_benefit_model_id": self.model_id,
             "tax_benefit_model_version_id": self.version_id,
-            "policyengine_version": CATALOG_VERSION,
+            "policyengine_version": self.policyengine_version,
             "parameter_values": list(values),
         }
 
@@ -235,19 +263,33 @@ def _remove(owner_sessions: sessionmaker[Session], scenario: Scenario) -> None:
         session.execute(
             delete(Dynamic).where(Dynamic.tax_benefit_model_id == scenario.model_id)
         )
+        version_ids = select(TaxBenefitModelVersion.id).where(
+            TaxBenefitModelVersion.model_id == scenario.model_id
+        )
+        session.execute(
+            delete(HouseholdJob).where(
+                col(HouseholdJob.tax_benefit_model_version_id).in_(version_ids)
+            )
+        )
+        session.execute(
+            delete(Household).where(col(Household.id).in_(scenario.household_ids))
+        )
+        parameter_ids = select(Parameter.id).where(
+            col(Parameter.tax_benefit_model_version_id).in_(version_ids)
+        )
         session.execute(
             delete(ParameterValue).where(
-                col(ParameterValue.parameter_id).in_(scenario.parameter_ids.values())
+                col(ParameterValue.parameter_id).in_(parameter_ids)
             )
         )
         session.execute(
             delete(Parameter).where(
-                Parameter.tax_benefit_model_version_id == scenario.version_id
+                col(Parameter.tax_benefit_model_version_id).in_(version_ids)
             )
         )
         session.execute(
             delete(TaxBenefitModelVersion).where(
-                TaxBenefitModelVersion.id == scenario.version_id
+                TaxBenefitModelVersion.model_id == scenario.model_id
             )
         )
         session.execute(
@@ -276,6 +318,31 @@ def uk_scenario(owner_sessions: sessionmaker[Session]) -> Iterator[Scenario]:
         yield scenario
     finally:
         _remove(owner_sessions, scenario)
+
+
+def _store_other_version(
+    owner_sessions: sessionmaker[Session], scenario: Scenario, names: list[str]
+) -> Scenario:
+    """Store another catalog version of the scenario's model, with these parameters."""
+    with owner_sessions() as session:
+        version = TaxBenefitModelVersion(
+            model_id=scenario.model_id,
+            version="6.20.0",
+            current_law_id=1,
+            metadata_time_periods=[2026],
+        )
+        parameters = [
+            Parameter(name=name, tax_benefit_model_version=version) for name in names
+        ]
+        session.add_all(parameters)
+        session.commit()
+        return Scenario(
+            country_id=scenario.country_id,
+            model_id=scenario.model_id,
+            version_id=version.id,
+            parameter_ids={parameter.name: parameter.id for parameter in parameters},
+            policyengine_version="6.20.0",
+        )
 
 
 def _store_policy(
@@ -1019,8 +1086,203 @@ def test_the_command_s_time_limits_reach_its_sessions(
 
     with unpooled_v2_read_only_sessions(url) as sessions, sessions() as session:
         lock_timeout = session.exec(select(func.current_setting("lock_timeout")))
-        assert lock_timeout.one() == "10s"
+        assert lock_timeout.one() == "500ms"
         statement_timeout = session.exec(
             select(func.current_setting("statement_timeout"))
         )
         assert statement_timeout.one() == "1min"
+
+
+def test_the_split_gives_way_to_a_live_sign_in_merge(
+    owner_sessions: sessionmaker[Session],
+    time_limited_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
+) -> None:
+    """API v1's sign-in merge locks the browser's user, then moves its saved policies.
+
+    The split holds a saved policy's lock while saving its owner's dynamic,
+    whose foreign-key check waits for the user's lock: a lock cycle. The
+    split's wait ends first (its lock timeout is shorter than PostgreSQL's
+    deadlock_timeout), so it rolls back, the merge commits, and the split
+    tries the copy again, for the account the saved policy now belongs to.
+    """
+    scenario = us_scenario
+    old_copy_id = _store_policy(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(US_TAX_RATE, value=0.3),
+        scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
+    )
+    browser_user_id = _store_user(owner_sessions, scenario)
+    account_user_id = _store_user(owner_sessions, scenario)
+    saved_policy_id = _store_saved_policy(
+        owner_sessions,
+        scenario,
+        user_id=browser_user_id,
+        policy_id=old_copy_id,
+        name="Saved before signing in",
+    )
+    service = V2PolicyCopySplitService(
+        ActingAsTheSplitRole(time_limited_sessions),
+        attempts=10,
+        retry_delay_seconds=0.2,
+    )
+    split_results: list[PolicyCopySplit] = []
+    split_errors: list[Exception] = []
+
+    def run_split() -> None:
+        try:
+            split_results.extend(service.split_policy_copies())
+        except DBAPIError as error:
+            split_errors.append(error)
+
+    split_thread = threading.Thread(target=run_split)
+    with owner_sessions() as sign_in:
+        sign_in.exec(
+            select(User).where(User.id == browser_user_id).with_for_update()
+        ).one()
+        split_thread.start()
+        # Give the split time to wait for the browser user's lock.
+        time.sleep(0.3)
+        sign_in.execute(
+            update(UserPolicy)
+            .where(col(UserPolicy.user_id) == browser_user_id)
+            .values(user_id=account_user_id)
+        )
+        sign_in.commit()
+    split_thread.join(timeout=60)
+
+    assert not split_thread.is_alive()
+    assert split_errors == []
+    split = _result_for(split_results, old_copy_id)
+    assert split.outcome is PolicyCopyOutcome.DELETED
+    with owner_sessions() as session:
+        saved_policy = session.get(UserPolicy, saved_policy_id)
+        assert (saved_policy.user_id, saved_policy.policy_id) == (
+            account_user_id,
+            split.policy.id,
+        )
+    [saved_dynamic] = _saved_dynamics(owner_sessions, account_user_id)
+    assert saved_dynamic.dynamic_id == split.dynamic.id
+    assert _saved_dynamics(owner_sessions, browser_user_id) == []
+
+
+def test_a_mapping_s_dynamic_on_another_catalog_version_refuses_the_copy(
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
+) -> None:
+    scenario = uk_scenario
+    old_copy_id = _store_policy(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(UK_TAX_RATE, value=0.21),
+        scenario.parameter_value(UK_OBR_SWITCH, value=False),
+    )
+    other_version = _store_other_version(
+        owner_sessions, scenario, [UK_INCOME_ELASTICITY]
+    )
+    earlier_dynamic_id = _store_dynamic(
+        owner_sessions,
+        other_version,
+        other_version.parameter_value(UK_INCOME_ELASTICITY, value=0.1),
+    )
+    legacy_policy_id = _store_mapping(
+        owner_sessions, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
+    )
+
+    split = _result_for(
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
+    )
+
+    assert split.outcome is PolicyCopyOutcome.REFUSED
+    assert split.refusal_reason is PolicyCopyRefusalReason.DYNAMIC_ON_ANOTHER_CATALOG
+    assert _policy_exists(owner_sessions, old_copy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
+    assert (mapping.policy_id, mapping.dynamic_id) == (old_copy_id, earlier_dynamic_id)
+
+
+def test_the_listing_reports_a_mapping_s_merged_dynamic_as_applying_does(
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    listing_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
+) -> None:
+    scenario = uk_scenario
+    old_copy_id = _store_policy(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(UK_TAX_RATE, value=0.21),
+        scenario.parameter_value(UK_OBR_SWITCH, value=False),
+    )
+    earlier_dynamic_id = _store_dynamic(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(UK_INCOME_ELASTICITY, value=0.1),
+    )
+    _store_mapping(
+        owner_sessions, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
+    )
+
+    listed = _result_for(
+        _listing_service(listing_sessions).list_policy_copy_splits(), old_copy_id
+    )
+    applied = _result_for(
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
+    )
+
+    [listed_mapping] = listed.mappings
+    [applied_mapping] = applied.mappings
+    assert listed_mapping.previous_dynamic_id == earlier_dynamic_id
+    assert (listed_mapping.dynamic.id, listed_mapping.dynamic.created) == (None, True)
+    assert listed_mapping.dynamic.content_hash == applied_mapping.dynamic.content_hash
+    assert listed_mapping.dynamic.content_hash != listed.dynamic.content_hash
+    assert applied_mapping.dynamic.created
+
+
+def test_a_copy_a_household_calculation_names_is_kept(
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
+) -> None:
+    scenario = us_scenario
+    old_copy_id = _store_policy(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(US_TAX_RATE, value=0.3),
+        scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
+    )
+    with owner_sessions() as session:
+        household = Household(
+            household_data={"people": {"you": {}}},
+            country_id="us",
+            canonicalization_version=1,
+            content_hash=uuid4().hex * 2,
+        )
+        session.add(household)
+        session.flush()
+        household_job = HouseholdJob(
+            country="us",
+            household_id=household.id,
+            year=2026,
+            request_data={},
+            policy_id=old_copy_id,
+            tax_benefit_model_version_id=scenario.version_id,
+            country_package_version="1.0.0",
+            policyengine_version=CATALOG_VERSION,
+        )
+        session.add(household_job)
+        session.commit()
+        scenario.household_ids.append(household.id)
+
+    split = _result_for(
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
+    )
+
+    assert split.outcome is PolicyCopyOutcome.KEPT
+    assert (
+        split.references.simulations,
+        split.references.reports,
+        split.references.household_jobs,
+    ) == (0, 0, 1)
+    assert _policy_exists(owner_sessions, old_copy_id)
