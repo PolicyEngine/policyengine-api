@@ -20,8 +20,10 @@ It exits with 0 when, afterwards, no stored policy sets a model assumption
 (for the listing: when every copy would be deleted), and with 1 otherwise,
 such as when a copy is kept because a simulation, report or household
 calculation names it, or refused. Any other failure, such as missing
-settings or an unreachable database, raises, so Python prints its traceback
-and also exits with 1.
+settings, an unreachable database (after 10 seconds) or a lock wait of more
+than 10 seconds, raises, so Python prints its traceback and also exits with
+1; the copies already reported have committed, and running it again
+carries on.
 
 It connects as the temporary role ``policyengine_v2_policy_copy_split``,
 which the operator creates with the grants in
@@ -47,12 +49,19 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
     from contextlib import AbstractContextManager
 
+    from sqlalchemy.engine import URL
+
     from policyengine_api.services.v2.policy_copy_split.types import (
         CopyReferences,
         PolicyCopySplit,
         RepointedSavedPolicy,
         SplitContent,
     )
+
+
+CONNECT_TIMEOUT_SECONDS = 10
+LOCK_TIMEOUT_MILLISECONDS = 10_000
+STATEMENT_TIMEOUT_MILLISECONDS = 60_000
 
 
 class PolicyCopySplitter(Protocol):
@@ -80,6 +89,7 @@ def splitter_on_temporary_role(*, writable: bool) -> Iterator[PolicyCopySplitter
     settings.
     """
     settings = load_v2_policy_copy_split_database_settings()
+    url = with_time_limits(settings.connection.url)
     # These modules are imported only when the command runs, as they need the
     # connection.
     from policyengine_api.data.v2.database import (
@@ -94,8 +104,33 @@ def splitter_on_temporary_role(*, writable: bool) -> Iterator[PolicyCopySplitter
     )
 
     open_sessions = unpooled_v2_sessions if writable else unpooled_v2_read_only_sessions
-    with open_sessions(settings.connection.url) as session_factory:
+    with open_sessions(url) as session_factory:
         yield V2PolicyCopySplitService(PolicyCopySplitDatabaseSession(session_factory))
+
+
+def with_time_limits(url: URL) -> URL:
+    """Return the URL with a connection timeout, and lock and statement timeouts.
+
+    A lock wait then fails after a while instead of lasting indefinitely
+    while the split holds a copy's row lock, which blocks a live write that
+    names the copy. Earlier copies' transactions have committed by then, and
+    running the command again carries on.
+    """
+    time_limits = (
+        f"-c lock_timeout={LOCK_TIMEOUT_MILLISECONDS} "
+        f"-c statement_timeout={STATEMENT_TIMEOUT_MILLISECONDS}"
+    )
+    existing_options = url.query.get("options")
+    return url.update_query_dict(
+        {
+            "connect_timeout": str(CONNECT_TIMEOUT_SECONDS),
+            "options": (
+                time_limits
+                if existing_options is None
+                else f"{existing_options} {time_limits}"
+            ),
+        }
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -119,8 +154,13 @@ def _plural(count: int, singular: str, plural: str | None = None) -> str:
 
 def _content(kind: str, content: SplitContent) -> str:
     """Name a policy or dynamic: its ID, or its content hash if it is still to come."""
-    if content.id is None:
+    if content.id is None and content.created:
         return f"{kind}: would be created (content hash {content.content_hash[:12]})"
+    if content.id is None:
+        return (
+            f"{kind}: the one listed above would be reused "
+            f"(content hash {content.content_hash[:12]})"
+        )
     return f"{kind} {content.id} ({'created' if content.created else 'already stored'})"
 
 

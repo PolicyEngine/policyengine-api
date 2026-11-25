@@ -8,7 +8,7 @@ policies before it split model assumptions off (C1 · 36), and for UK
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -181,3 +181,27 @@ class PolicyCopySplit:
     saved_policies: tuple[RepointedSavedPolicy, ...]
     references: CopyReferences
     refusal_reason: PolicyCopyRefusalReason | None
+
+
+@dataclass(frozen=True)
+class SavedDynamicIdentity:
+    """What makes two saved dynamics identical: owner, country, dynamic and name."""
+
+    user_id: UUID
+    country_id: str
+    dynamic_content_hash: str
+    name: str | None
+
+
+@dataclass
+class ListedRows:
+    """What a listing has reported so far, across copies, by content hash.
+
+    Applying commits each copy before the next, so a later copy finds the
+    policies, dynamics and saved dynamics an earlier copy created; the
+    listing reports those as found, as applying will.
+    """
+
+    policies: dict[str, SplitContent] = field(default_factory=dict)
+    dynamics: dict[str, SplitContent] = field(default_factory=dict)
+    saved_dynamics: set[SavedDynamicIdentity] = field(default_factory=set)

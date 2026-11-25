@@ -239,7 +239,6 @@ def _run_table(
     )
 
 
-# The Modal workers write results, keyed by run, once each.
 # The policy copy split's temporary role (see the module docstring). It locks
 # and deletes the old copies (their values go with them by the foreign key's
 # cascade), re-points legacy mappings and saved policies, inserts policies,
@@ -261,6 +260,7 @@ POLICY_COPY_SPLIT_PRIVILEGES: Final[dict[str, frozenset[DeclaredPrivilege]]] = {
     "user_policies": _READ_UPDATE,
 }
 
+# The Modal workers write results, keyed by run, once each.
 _RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
 # What a run needs from the Public API's policies, dynamics, households and
 # catalog.

@@ -303,9 +303,12 @@ revision, which moves dynamic parameters into their own tables, refuses to
 run while any policy value names one, because the foreign key's cascade would
 otherwise change those policies silently.
 
-For each such policy, in one transaction that first locks it (`SELECT … FOR
-UPDATE`, so nothing can start naming it meanwhile), the command
-(`policyengine_api/services/v2/policy_copy_split/services.py`):
+For each such policy, in one transaction, the command
+(`policyengine_api/services/v2/policy_copy_split/services.py`) locks the
+legacy mappings and saved policies that name it, then the policy itself
+(`SELECT … FOR UPDATE`, so nothing can start naming it meanwhile), in the
+order API v1's copy of a v1 saved policy takes the same locks, so the two
+wait for each other instead of deadlocking. It then:
 
 - finds or creates a policy holding the values that aren't model assumptions,
   empty when there are none, and a dynamic holding the model assumptions,
@@ -318,7 +321,7 @@ UPDATE`, so nothing can start naming it meanwhile), the command
   dynamic's values and the copy's model assumptions together; the earlier
   dynamic is kept;
 - points each `user_policies` row that names the copy at that policy, keeping
-  its name, description and label, and gives its owner a `user_dynamics` row
+  its name, description, `baseline` and `provenance`, and gives its owner a `user_dynamics` row
   with the saved policy's name and no description, naming the dynamic the
   saved policy's own v1 policy's mapping now names, or else the copy's
   dynamic. When the owner already has a saved dynamic in that country naming
@@ -337,7 +340,8 @@ The user decided these cases on 2026-11-25.
 
 Running the command again changes nothing: a re-pointed mapping or saved
 policy no longer names the copy, and the policy and dynamic are found by
-their content hashes. A kept copy is listed as kept again.
+their content hashes. A kept copy is listed as kept again, and a refused
+copy as refused.
 
 ### Deploy order
 
@@ -345,8 +349,13 @@ their content hashes. A kept copy is listed as kept again.
    in the environment, so the v1-to-v2 copy there splits UK `gov.dynamic.`
    values too and no new policy holding model assumptions is stored.
 2. C1 · 49 runs the command there: the read-only listing, then `--apply`,
-   then the listing again, which must list nothing.
-3. Only then does C1 · 50's revision run in that environment.
+   then the listing again. That listing lists nothing and exits with 0, or
+   lists only kept and refused copies and exits with 1. Each of those still
+   holds model assumptions as policy values, so the operator settles it by
+   hand first (for example by deleting the test simulations, reports or
+   household calculations that name it), with the user's approval.
+3. Only then, once a listing lists nothing, does C1 · 50's revision run in
+   that environment.
 
 ### The temporary role
 
@@ -419,6 +428,14 @@ or refused (with the reason). With `--apply` it reports the same with the IDs
 of the rows it points at or creates, as each copy's transaction commits. It
 prints no URL, saved-policy name or user ID.
 
+The listing reports a row that an earlier copy in the same run would create
+as reused, since `--apply` commits each copy before the next.
+
 It exits with 0 when no stored policy sets a model assumption afterwards (for
 the listing: when every listed copy would be deleted), and with 1 otherwise.
-Missing settings or a failed connection raise, and also exit with 1.
+Missing settings or a failed connection raise, and also exit with 1. The
+command adds a 10-second connection timeout, a 10-second lock timeout and a
+60-second statement timeout to the URL, so a wait for a lock that a live
+write holds ends with an error rather than holding the copy's lock
+indefinitely; the copies already reported have committed, and running the
+command again carries on.

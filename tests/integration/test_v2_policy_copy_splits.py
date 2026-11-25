@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, or_
+from sqlalchemy import create_engine, delete, func, or_
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -64,6 +65,7 @@ from policyengine_api.services.v2.policy_copy_split.types import (
     PolicyCopyRefusalReason,
     PolicyCopySplit,
 )
+from scripts.split_v2_policy_copies import with_time_limits
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -943,3 +945,17 @@ def test_the_listing_s_sessions_refuse_writes(disposable_v2_database_url: str) -
         session.add(User(user_type="unauthenticated"))
         with pytest.raises(DBAPIError, match="read-only transaction"):
             session.flush()
+
+
+def test_the_command_s_time_limits_reach_its_sessions(
+    disposable_v2_database_url: str,
+) -> None:
+    url = with_time_limits(make_url(disposable_v2_database_url))
+
+    with unpooled_v2_read_only_sessions(url) as sessions, sessions() as session:
+        lock_timeout = session.exec(select(func.current_setting("lock_timeout")))
+        assert lock_timeout.one() == "10s"
+        statement_timeout = session.exec(
+            select(func.current_setting("statement_timeout"))
+        )
+        assert statement_timeout.one() == "1min"
