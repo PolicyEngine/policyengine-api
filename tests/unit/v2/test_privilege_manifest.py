@@ -527,3 +527,23 @@ def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
     assert declared[SIMULATION_SERVICE_ROLE]["dynamics"] == READ
     assert declared[MODAL_WORKER_ROLE]["dynamics"] == READ
     assert declared[CATALOG_WRITER_ROLE]["dynamics"] == NO_ACCESS
+
+
+def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:
+    """Users' saved dynamics are written as saved policies are, by API v1 alone.
+
+    API v1 creates, renames, repoints and deletes a user's saved dynamics, and
+    moves a browser's saved dynamics to the account it signs in to, so it holds
+    every privilege it holds on ``user_policies``. The simulation service, its
+    Modal workers and the catalog writer never read them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["user_dynamics"] == READ_WRITE
+    assert (
+        declared[RUNTIME_ROLE]["user_dynamics"]
+        == declared[RUNTIME_ROLE]["user_policies"]
+    )
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["user_dynamics"] == NO_ACCESS, role

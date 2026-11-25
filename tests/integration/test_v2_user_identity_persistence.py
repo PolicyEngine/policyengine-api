@@ -24,9 +24,11 @@ from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.data.v2.models import (
+    Dynamic,
     LegacyUserMapping,
     Report,
     User,
+    UserDynamic,
     UserHouseholdAssociation,
     UserIdentity,
     UserPolicy,
@@ -56,6 +58,14 @@ from policyengine_api.services.v2.user_accounts.database_session import (
 )
 from policyengine_api.services.v2.user_accounts.services import V2AccountService
 from policyengine_api.services.v2.user_accounts.types import AccountUpdateInput
+from policyengine_api.services.v2.user_dynamics.database_session import (
+    UserDynamicDatabaseSession,
+)
+from policyengine_api.services.v2.user_dynamics.services import V2UserDynamicService
+from policyengine_api.services.v2.user_dynamics.types import (
+    UserDynamicCreateFields,
+    UserDynamicUpdateInput,
+)
 from policyengine_api.services.v2.user_households.database_session import (
     UserHouseholdDatabaseSession,
 )
@@ -852,3 +862,95 @@ def test_qualification_reads_counts_in_a_read_only_transaction(
         "user_simulation_associations",
         "user_report_associations",
     }
+
+
+@pytest.fixture
+def stored_dynamic_id(v2_owner_sessions: sessionmaker[Session]) -> Iterator[UUID]:
+    """Store a US dynamic as the owner; delete it and its saves afterwards."""
+    dynamic_id = uuid4()
+    with v2_owner_sessions.begin() as session:
+        rows = insert_public_api_rows(session)
+        add_row(
+            session,
+            Dynamic,
+            id=dynamic_id,
+            country_id="us",
+            tax_benefit_model_id=rows.model_id,
+            tax_benefit_model_version_id=rows.version_id,
+            canonicalization_version=1,
+            content_hash=uuid4().hex * 2,
+        )
+    try:
+        yield dynamic_id
+    finally:
+        with v2_owner_sessions.begin() as session:
+            session.execute(
+                delete(UserDynamic).where(UserDynamic.dynamic_id == dynamic_id)
+            )
+            session.execute(delete(Dynamic).where(Dynamic.id == dynamic_id))
+            delete_public_api_rows(session, rows)
+
+
+def test_saved_dynamics_move_at_sign_in_and_are_deleted_with_the_account(
+    sessions, stored_dynamic_id: UUID
+) -> None:
+    """The runtime role saves, renames, merges and deletes users' saved dynamics."""
+    browser = _browser(sessions)
+    alice = _principal(sessions, "google-oauth2|saved-dynamics")
+    deleted_subjects: list[str] = []
+
+    class RecordingDeleter:
+        def prepare_deletion(self) -> None:
+            return None
+
+        def delete_user(self, subject: str) -> None:
+            deleted_subjects.append(subject)
+
+    accounts = V2AccountService(
+        AccountDatabaseSession(sessions),
+        auth0_user_deleter_factory=RecordingDeleter,
+    )
+    saved_dynamics = V2UserDynamicService(UserDynamicDatabaseSession(sessions))
+    alice_id = accounts.get_account(principal=alice, country_id="us").id
+    fields = UserDynamicCreateFields(
+        country_id="us", dynamic_id=stored_dynamic_id, name="CBO responses"
+    )
+    alices = saved_dynamics.create_user_dynamic(
+        principal=alice, association_input=fields
+    )
+    browsers = saved_dynamics.create_user_dynamic(
+        principal=browser, association_input=fields
+    )
+    saved_dynamics.patch_user_dynamic(
+        principal=browser,
+        country_id="us",
+        association_id=browsers.id,
+        association_input=UserDynamicUpdateInput(name="Browser's responses"),
+    )
+
+    upgrade = accounts.upgrade_account(
+        principal=alice, unauthenticated_user_id=browser.user_id, country_id="us"
+    )
+
+    assert upgrade.outcome is AccountConversionOutcome.MERGED
+    exported = accounts.export_account(principal=alice, country_id="us")
+    assert [(item.id, item.user_id, item.name) for item in exported.dynamics] == [
+        (alices.id, alice_id, "CBO responses"),
+        (browsers.id, alice_id, "Browser's responses"),
+    ]
+    saved_dynamics.delete_user_dynamic(
+        principal=alice, country_id="us", association_id=alices.id
+    )
+
+    accounts.delete_account(principal=alice)
+
+    assert deleted_subjects == [alice.subject]
+    assert (
+        _count(
+            sessions,
+            select(func.count())
+            .select_from(UserDynamic)
+            .where(UserDynamic.dynamic_id == stored_dynamic_id),
+        )
+        == 0
+    )

@@ -835,7 +835,8 @@ pruning").
 
 A schema downgrade past revision `334859ef4fec` drops
 `catalog_last_published_at` and `catalog_values_pruned_at`. From the head,
-it first runs the later revisions' downgrades: `4e30076d4b9f`'s adds the
+it first runs the later revisions' downgrades: `d417fe8b1b17`'s drops
+`user_dynamics` with every saved dynamic, `4e30076d4b9f`'s adds the
 dropped report columns back empty, `bc334f9877b7`'s drops
 `cliff_impacts` with every simulation run's cliff results, `9d1d12a7ac58`'s
 needs `dynamics` empty, `f519a77ba122`'s

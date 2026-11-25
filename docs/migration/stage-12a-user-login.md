@@ -120,7 +120,7 @@ type first, and each operation checks it again in its own transaction.
 | `GET /v2/admin/users/{user_id}` | One signed-in user. |
 | `PATCH /v2/admin/users/{user_id}` `{"user_type": …, "expected_user_type": …}`, each `standard`, `author` or `admin` | Changes the type and records the change. The type the user already has changes and records nothing, whatever `expected_user_type` is. Otherwise `expected_user_type`, the type the admin last read, must still be the stored type: when it differs, the change is refused with 409 and nothing is written. Only the type is compared, so a type changed and changed back since the read is not detected. |
 | `GET /v2/admin/users/{user_id}/user-type-changes` | The user's recorded changes, newest first. |
-| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
+| `GET /v2/admin/users/{user_id}/saved-items` | Read-only: what the user's own `GET /v2/me/export` returns, the user and every policy, dynamic, household, simulation and report it saved, in every country. The user's `email` is the one its admin user item shows; its names are the stored ones, as the user's own export has them. |
 | `DELETE /v2/admin/users/{user_id}` | Deletes the user's account and saved records, and the Auth0 users of its sign-in identities, as `DELETE /v2/me` deletes the caller's own (see [Admins' account deletions](#admins-account-deletions)). 204. |
 
 An admin user item is `{id, user_type, email, first_name, last_name,
@@ -461,7 +461,7 @@ unauthenticated: a signed-in user's row is never locked.
 | State | Outcome | What happens |
 | --- | --- | --- |
 | The identity has no user yet; the browser's unauthenticated user exists | `converted` | The `user_identities` row (issuer, subject, verified email) is inserted pointing at the browser's `users.id`; the user becomes `standard` with `primary_country = country_id`. The ID is unchanged, so every association stays owned. |
-| The identity already belongs to signed-in user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. S keeps its stored type. |
+| The identity already belongs to signed-in user S; the unauthenticated user exists | `merged` | Every row of `user_policies`, `user_dynamics`, `user_household_associations`, `user_simulation_associations`, and `user_report_associations` owned by the unauthenticated user moves to S with its ID, contents, and timestamps unchanged; then the unauthenticated user is deleted. S keeps its stored type. |
 | No unauthenticated user with that ID | `none` | The identity's user is resolved, or provisioned, as on any request. |
 | The ID names a signed-in user (already converted, or anyone else's) | `none` | That user is never touched; the identity's user is resolved as on any request. |
 
@@ -587,7 +587,7 @@ contract shared with `policyengine-app-v2`. The generated route inventory is in
 | `GET /v2/me/export` | The user and every association, all countries | The same; `user: null` and empty lists before the first saved record |
 | `POST /v2/me/upgrade?country_id=` | Requires the header too (422 without it); `{"item": MeItem, "outcome": ...}` | 401 (a bearer token is required) |
 | `DELETE /v2/me` | 204; deletes data, then the Auth0 user when configured; 409 for the last admin, deleting nothing | 204; deletes data, never calls Auth0 |
-| `/v2/user-policies`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
+| `/v2/user-policies`, `/v2/user-dynamics`, `/v2/user-households`, `/v2/user-simulations`, `/v2/user-reports` | POST (201), list, GET, PATCH, DELETE (204), owner-scoped | The same; reads never provision |
 | `GET /v2/shared-reports/{id}?country_id=` | No credential: any user's saved report in that country, without its owner (404 when none) | The same |
 
 ### Shared reports
@@ -770,7 +770,8 @@ admin; `scripts/set_v2_user_type.py` makes another admin afterwards.
   `users.primary_country`, so it fails while legacy-only rows, any simulation
   or report associations, or any unauthenticated user exist. Removing them
   first deletes users' saved work. From the head, the later revisions'
-  downgrades run first: the report column drops revision (`4e30076d4b9f`) adds
+  downgrades run first: the users' saved dynamics revision (`d417fe8b1b17`)
+  drops every saved dynamic, the report column drops revision (`4e30076d4b9f`) adds
   the dropped report columns back empty, the cliff impacts revision (`bc334f9877b7`) drops
   every simulation run's cliff results, the dynamics revision
   (`9d1d12a7ac58`) needs `dynamics` empty, the user invitations revision
@@ -1106,8 +1107,8 @@ The disposable-Postgres suite proves the following:
 - concurrent upgrades of one browser convert exactly once;
 - two browsers upgrading into a new account at once share it: one converts,
   the other merges;
-- a merge moves all four association kinds with their IDs, keeps report links
-  valid, and deletes the unauthenticated user;
+- a merge moves every association kind, saved dynamics included, with their
+  IDs, keeps report links valid, and deletes the unauthenticated user;
 - a signed-out write waits for a conversion and then gets 401, or, after a
   merge, starts a new unauthenticated user;
 - a signed-out account deletion racing a conversion never deletes the

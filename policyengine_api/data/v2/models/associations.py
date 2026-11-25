@@ -2,8 +2,9 @@
 
 Every saved-item association names its target through a nullable v2
 reference, a nullable country-scoped v1 (legacy) reference, or both; a
-database check requires at least one. A user's record of a report run they
-asked for names the v2 run alone.
+database check requires at least one. A saved dynamic names its v2 dynamic
+alone, since v1 has no dynamics, and so does a user's record of a report run
+they asked for.
 
 The simulation and report associations still carry the pre-Stage 12A
 ``country`` and ``label`` columns. Nothing reads or writes them; they stay
@@ -25,7 +26,7 @@ from policyengine_api.data.v2.models.base import (
     enum_type,
 )
 from policyengine_api.data.v2.models.households import Household
-from policyengine_api.data.v2.models.policies import Policy
+from policyengine_api.data.v2.models.policies import Dynamic, Policy
 from policyengine_api.data.v2.models.reports import ReportRunTrigger
 from policyengine_api.data.v2.models.users import User
 from policyengine_api.utils.budget_window import BUDGET_WINDOW_MAX_YEARS
@@ -175,6 +176,61 @@ class UserPolicy(TimestampedModel, table=True):
         back_populates="association",
         cascade_delete=True,
     )
+
+
+class UserDynamic(TimestampedModel, table=True):
+    """A user's saved, named link to a dynamic in the same country.
+
+    Built like ``user_policies`` without its v1 reference: a dynamic holds a
+    report's model assumptions with no name, and a user's saved dynamic names
+    it. Deleted with the user; a dynamic that users have saved cannot be
+    deleted.
+    """
+
+    __tablename__ = "user_dynamics"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "id",
+            "country_id",
+            name="uq_user_dynamics_id_country",
+        ),
+        sa.ForeignKeyConstraint(
+            ["dynamic_id", "country_id"],
+            ["dynamics.id", "dynamics.country_id"],
+            name="fk_user_dynamics_dynamic_country",
+            ondelete="RESTRICT",
+        ),
+        sa.Index(
+            "ix_user_dynamics_country_user_created_id",
+            "country_id",
+            "user_id",
+            "created_at",
+            "id",
+        ),
+        # Also serves the key's check when a dynamic is deleted.
+        sa.Index(
+            "ix_user_dynamics_country_dynamic",
+            "country_id",
+            "dynamic_id",
+        ),
+    )
+
+    user_id: UUID = Field(
+        foreign_key="users.id",
+        ondelete="CASCADE",
+        index=True,
+    )
+    dynamic_id: UUID
+    country_id: str = Field(
+        max_length=2,
+        foreign_key="countries.id",
+        ondelete="RESTRICT",
+    )
+    name: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, sa_type=sa.Text)
+
+    user: User = Relationship(back_populates="dynamic_associations")
+    dynamic: Dynamic = Relationship(back_populates="user_associations")
 
 
 class UserSimulationAssociation(TimestampedModel, table=True):

@@ -31,6 +31,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "simulation_runs",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
+        "user_dynamics",
         "user_identities",
         "user_invitations",
         "user_report_run_associations",
@@ -73,16 +74,20 @@ DYNAMICS_REVISION = "9d1d12a7ac58"
 # The cliff impacts revision, on the dynamics revision, and parent of the
 # report column drops revision.
 CLIFF_IMPACTS_REVISION = "bc334f9877b7"
-# The report column drops revision, on the cliff impacts revision.
+# The report column drops revision, on the cliff impacts revision, and
+# parent of the user dynamics revision.
 REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
+# The user dynamics revision, on the report column drops revision.
+USER_DYNAMICS_REVISION = "d417fe8b1b17"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
-    assert V2_ALEMBIC_HEAD_REVISION == REPORT_COLUMN_DROPS_REVISION
+    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
     assert [revision.revision for revision in script.walk_revisions()] == [
+        USER_DYNAMICS_REVISION,
         REPORT_COLUMN_DROPS_REVISION,
         CLIFF_IMPACTS_REVISION,
         DYNAMICS_REVISION,
@@ -1325,3 +1330,51 @@ def test_report_column_drops_revision_drops_only_the_named_columns() -> None:
         assert "op.execute(" not in body
         assert "op.bulk_insert(" not in body
         assert "op.drop_table(" not in body
+
+
+def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
+    """The revision after report column drops creates ``user_dynamics`` alone.
+
+    It is generated with no corrections, with its ID chosen through
+    ``--rev-id``: one table, whose keys name its user (``CASCADE``), its
+    country and a dynamic of that country (both ``RESTRICT``), with its
+    three indexes. The downgrade drops them, and neither writes data.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{USER_DYNAMICS_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert (
+        f'down_revision: Union[str, None] = "{REPORT_COLUMN_DROPS_REVISION}"'
+        in revision
+    )
+    assert "correction" not in revision.lower()
+    operations = [name for name in re.findall(r"op\.\w+", upgrade) if name != "op.f"]
+    assert sorted(operations) == ["op.create_index"] * 3 + ["op.create_table"]
+    reversals = [name for name in re.findall(r"op\.\w+", downgrade) if name != "op.f"]
+    assert sorted(reversals) == ["op.drop_index"] * 3 + ["op.drop_table"]
+    assert re.search(r'op\.create_table\(\s*"user_dynamics"', upgrade)
+    assert 'op.drop_table("user_dynamics")' in downgrade
+    for constraint_name in (
+        "fk_user_dynamics_dynamic_country",
+        "uq_user_dynamics_id_country",
+        "ix_user_dynamics_country_user_created_id",
+        "ix_user_dynamics_country_dynamic",
+    ):
+        assert constraint_name in upgrade
+    assert re.search(
+        r'\["dynamic_id", "country_id"\],\s*\["dynamics\.id", "dynamics\.country_id"\]',
+        upgrade,
+    )
+    assert upgrade.count('ondelete="RESTRICT"') == 2
+    assert upgrade.count('ondelete="CASCADE"') == 1
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision

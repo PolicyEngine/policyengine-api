@@ -12,6 +12,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "policy_resources_v2",
         "dynamic_resources_v2",
         "user_policy_associations_v2",
+        "user_dynamic_associations_v2",
         "household_save_read",
         "household_resources_v2",
         "household_calculations_v2",
@@ -40,6 +41,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
                 "policy_resources_v2",
                 "dynamic_resources_v2",
                 "user_policy_associations_v2",
+                "user_dynamic_associations_v2",
                 "household_resources_v2",
                 "household_calculations_v2",
                 "user_household_associations_v2",
@@ -95,7 +97,7 @@ def test_user_routes_record_signed_in_and_signed_out_contracts() -> None:
         if headers == ("PolicyEngine-Unauthenticated-User",)
     }
 
-    for resource in ("policies", "households", "simulations", "reports"):
+    for resource in ("policies", "dynamics", "households", "simulations", "reports"):
         collection = f"/v2/user-{resource}"
         detail = f"{collection}/{{association_id}}"
         assert {

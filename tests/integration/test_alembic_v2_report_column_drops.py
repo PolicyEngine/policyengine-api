@@ -417,7 +417,9 @@ def test_the_deploys_privilege_steps_pass_after_the_upgrade(
             to=managed_v2_roles.modal_worker,
         )
 
-    command.upgrade(config, REPORT_COLUMN_DROPS_REVISION)
+    # The deploy upgrades to the head, which can be later than this revision,
+    # before it applies the declared privileges, which name the head's tables.
+    command.upgrade(config, "head")
     environ = _privilege_environment(disposable_v2_database_url, managed_v2_roles)
 
     assert run("apply", environ=environ) == 0

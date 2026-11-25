@@ -39,6 +39,9 @@ from policyengine_api.services.v2.user_accounts.validators import (
     AccountNotFoundError,
     TypeChangeNotFoundError,
 )
+from policyengine_api.services.v2.user_dynamics.validators import (
+    AssociationDynamicNotFoundError,
+)
 from policyengine_api.services.v2.user_households.validators import (
     AssociationHouseholdNotFoundError,
 )
@@ -238,6 +241,7 @@ USER_RESOURCE_FAILURES: tuple[UserResourceFailure, ...] = (
         (
             AssociationNotFoundError,
             AssociationPolicyNotFoundError,
+            AssociationDynamicNotFoundError,
             AssociationHouseholdNotFoundError,
             AssociationReportNotFoundError,
             AssociationSimulationNotFoundError,

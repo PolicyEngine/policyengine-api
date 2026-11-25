@@ -24,6 +24,7 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2PolicyResourceService,
     V2StoredReportResourceService,
     V2StoredSimulationResourceService,
+    V2UserDynamicResourceService,
     V2UserHouseholdResourceService,
     V2UserInvitationResourceService,
     V2UserPolicyResourceService,
@@ -79,6 +80,7 @@ __all__ = [
     "V2PolicyResourceService",
     "V2StoredReportResourceService",
     "V2StoredSimulationResourceService",
+    "V2UserDynamicResourceService",
     "V2UserHouseholdResourceService",
     "V2UserInvitationResourceService",
     "V2UserPolicyResourceService",
@@ -417,6 +419,20 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     )
 
 
+def _default_v2_user_dynamic_service_factory() -> V2UserDynamicResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_dynamics.database_session import (
+        UserDynamicDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_dynamics.services import (
+        V2UserDynamicService,
+    )
+
+    return V2UserDynamicService(UserDynamicDatabaseSession(get_v2_session_factory()))
+
+
 def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -577,6 +593,9 @@ class NativeRouteDependencies:
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
         None
     )
+    v2_user_dynamic_service_factory: (
+        Callable[[], V2UserDynamicResourceService] | None
+    ) = None
     v2_user_household_service_factory: (
         Callable[[], V2UserHouseholdResourceService] | None
     ) = None
@@ -622,6 +641,7 @@ class NativeRouteDependencies:
                 _default_v2_stored_simulation_service_factory
             ),
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
+            v2_user_dynamic_service_factory=_default_v2_user_dynamic_service_factory,
             v2_user_household_service_factory=(
                 _default_v2_user_household_service_factory
             ),

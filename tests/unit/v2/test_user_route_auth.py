@@ -71,11 +71,19 @@ def configured_auth(monkeypatch: pytest.MonkeyPatch):
 def _services() -> tuple[dict[str, RecordingService], dict[str, Any]]:
     services = {
         name: RecordingService()
-        for name in ("account", "policy", "household", "simulation", "report")
+        for name in (
+            "account",
+            "policy",
+            "dynamic",
+            "household",
+            "simulation",
+            "report",
+        )
     }
     factories = {
         "v2_account_service_factory": lambda: services["account"],
         "v2_user_policy_service_factory": lambda: services["policy"],
+        "v2_user_dynamic_service_factory": lambda: services["dynamic"],
         "v2_user_household_service_factory": lambda: services["household"],
         "v2_user_simulation_service_factory": lambda: services["simulation"],
         "v2_user_report_service_factory": lambda: services["report"],
@@ -95,8 +103,8 @@ def _user_operations() -> list[tuple[str, str]]:
         for method in methods
         if method in {"get", "post", "patch", "delete"}
     )
-    # 5 account operations plus 5 for each of the 4 association resources.
-    assert len(operations) >= 25
+    # 5 account operations plus 5 for each of the 5 association resources.
+    assert len(operations) >= 30
     return operations
 
 
@@ -420,7 +428,12 @@ def test_a_bearer_token_takes_precedence_over_the_unauthenticated_header(
     configured_auth({"iss": ISSUER, "sub": "google-oauth2|42"})
     services, factories = _services()
     services["account"].next_result = AccountExport(
-        user=None, policies=(), households=(), simulations=(), reports=()
+        user=None,
+        policies=(),
+        dynamics=(),
+        households=(),
+        simulations=(),
+        reports=(),
     )
     client, _flask_calls = user_route_client(require_user=None, **factories)
 

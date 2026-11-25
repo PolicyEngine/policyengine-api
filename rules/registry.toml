@@ -1677,6 +1677,7 @@ paths = [
   "policyengine_api/fastapi_routes/dependencies.py",
   "policyengine_api/fastapi_routes/metadata_protocols.py",
   "policyengine_api/fastapi_routes/resource_service_protocols.py",
+  "policyengine_api/fastapi_routes/saved_item_service_protocols.py",
   "policyengine_api/fastapi_routes/v2",
   "policyengine_api/services/v2",
   "policyengine_api/content_encoding.py",
