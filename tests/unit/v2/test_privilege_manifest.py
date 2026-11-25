@@ -23,6 +23,8 @@ from policyengine_api.data.v2.privileges import (
     CATALOG_WRITER_ROLE,
     MODAL_WORKER_ROLE,
     NO_ACCESS,
+    POLICY_COPY_SPLIT_PRIVILEGES,
+    POLICY_COPY_SPLIT_ROLE,
     READ,
     READ_INSERT,
     READ_INSERT_DELETE,
@@ -44,6 +46,9 @@ PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declared"
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
+# Run once, by hand, as a temporary role the operator creates with
+# POLICY_COPY_SPLIT_PRIVILEGES (C1 · 48 and C1 · 49), never as a managed role.
+POLICY_COPY_SPLIT_PACKAGES = frozenset({"policy_copy_splits"})
 TEST_ENVIRONMENT = "staging"
 # The rows the simulation service creates, and the run tables among them.
 SIMULATION_SERVICE_CREATES = frozenset(
@@ -200,9 +205,21 @@ def _connector_modules(*, stage12: bool) -> list[str]:
         path.relative_to(SERVICES_ROOT).as_posix()
         for path in SERVICES_ROOT.glob("*/database_connectors/*.py")
         if path.name != "__init__.py"
+        and path.parts[-3] not in POLICY_COPY_SPLIT_PACKAGES
         and (path.parts[-3] in STAGE12_PACKAGES) is stage12
     )
     assert paths, "no connector modules found"
+    return paths
+
+
+def _policy_copy_split_connector_modules() -> list[str]:
+    paths = sorted(
+        path.relative_to(SERVICES_ROOT).as_posix()
+        for package in POLICY_COPY_SPLIT_PACKAGES
+        for path in (SERVICES_ROOT / package / "database_connectors").glob("*.py")
+        if path.name != "__init__.py"
+    )
+    assert paths, "no policy copy split connector modules found"
     return paths
 
 
@@ -259,6 +276,72 @@ def test_stage12_connectors_need_only_declared_stage12_privileges(
     relative_path: str,
 ) -> None:
     assert _missing(relative_path, stage12_role(TEST_ENVIRONMENT)) == []
+
+
+@pytest.mark.parametrize("relative_path", _policy_copy_split_connector_modules())
+def test_policy_copy_split_connectors_need_only_the_temporary_role_s_privileges(
+    relative_path: str,
+) -> None:
+    requirements = required_privileges(
+        SERVICES_ROOT / relative_path, _table_by_model(), connector=relative_path
+    )
+
+    assert requirements, "the analysis found no table this connector uses"
+    assert [
+        f"{missing.connector}: {missing.privilege} on {missing.table} "
+        f"({missing.reason})"
+        for missing in undeclared_requirements(
+            requirements, POLICY_COPY_SPLIT_PRIVILEGES
+        )
+    ] == []
+
+
+def test_the_policy_copy_split_role_deletes_only_policies_and_is_not_managed() -> None:
+    """The split command's temporary role changes only what the split must change.
+
+    It deletes old policy copies (their values go with them by the foreign
+    key's cascade), locks them, re-points legacy mappings and saved policies,
+    and inserts policies, dynamics, their values and saved dynamics. It reads
+    the catalog and the simulations, reports and household calculations that
+    may name a copy. No deploy grants it anything: the operator creates it for
+    C1 · 49 and drops it afterwards.
+    """
+    write_privileges = {
+        table: privileges & WRITE_PRIVILEGES
+        for table, privileges in POLICY_COPY_SPLIT_PRIVILEGES.items()
+        if privileges & WRITE_PRIVILEGES
+    }
+
+    assert write_privileges == {
+        "dynamics": {TablePrivilege.INSERT},
+        "legacy_policy_mappings": {TablePrivilege.UPDATE},
+        "parameter_values": {TablePrivilege.INSERT},
+        "policies": {
+            TablePrivilege.INSERT,
+            TablePrivilege.UPDATE,
+            TablePrivilege.DELETE,
+        },
+        "user_dynamics": {TablePrivilege.INSERT},
+        "user_policies": {TablePrivilege.UPDATE},
+    }
+    assert {
+        table
+        for table, privileges in POLICY_COPY_SPLIT_PRIVILEGES.items()
+        if privileges == READ
+    } == {
+        "household_jobs",
+        "parameters",
+        "reports",
+        "simulations",
+        "tax_benefit_model_versions",
+    }
+    assert set(POLICY_COPY_SPLIT_PRIVILEGES) <= set(TABLE_ACCESS)
+    assert all(
+        TablePrivilege.SELECT in privileges
+        for privileges in POLICY_COPY_SPLIT_PRIVILEGES.values()
+    )
+    assert POLICY_COPY_SPLIT_ROLE == "policyengine_v2_policy_copy_split"
+    assert POLICY_COPY_SPLIT_ROLE not in declared_privileges(TEST_ENVIRONMENT)
 
 
 def test_stage12_role_name_follows_the_deployment_environment() -> None:

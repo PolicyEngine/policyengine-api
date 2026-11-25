@@ -445,6 +445,45 @@ def test_a_uk_policy_with_only_old_spelling_assumptions_maps_to_an_empty_policy(
     ]
 
 
+def test_a_uk_policy_s_gov_dynamic_values_are_copied_into_its_dynamic(
+    catalog_session: Session, recorded_writes: RecordedCopyWrites
+) -> None:
+    uk_tax_rate = "gov.hmrc.income_tax.rates.uk[0].rate"
+    uk_obr_switch = "gov.dynamic.obr_labour_supply_assumptions"
+    _version, parameters = _add_running_catalog(
+        catalog_session,
+        country_id="uk",
+        parameter_names=[uk_tax_rate, uk_obr_switch, UK_INCOME_ELASTICITY],
+    )
+
+    result = _copy(
+        catalog_session,
+        _snapshot(
+            country_id="uk",
+            legacy_policy_id=503,
+            api_version="2.174.1",
+            policy_json={
+                uk_tax_rate: {"2026": 0.21},
+                uk_obr_switch: {"2026": False},
+                UK_INCOME_ELASTICITY: {"2026": 0.1},
+            },
+        ),
+    )
+
+    assert result.dynamic_id == COPIED_DYNAMIC_ID
+    [copied_policy] = recorded_writes.created_policies
+    assert [value.parameter_id for value in copied_policy.parameter_values] == [
+        parameters[uk_tax_rate].id
+    ]
+    [copied_dynamic] = recorded_writes.created_dynamics
+    assert {
+        (value.parameter_id, value.value) for value in copied_dynamic.parameter_values
+    } == {
+        (parameters[uk_obr_switch].id, False),
+        (parameters[UK_INCOME_ELASTICITY].id, 0.1),
+    }
+
+
 @pytest.mark.parametrize(
     ("policy_json", "reason"),
     [

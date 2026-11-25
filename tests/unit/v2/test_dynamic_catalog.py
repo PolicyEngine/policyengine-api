@@ -1,8 +1,8 @@
 """Binding dynamics and policies to a catalog, and keeping their parameters apart.
 
 A dynamic holds only parameters under ``gov.simulation.`` (plus the US's
-``simulation.``), and a policy holds none of them; each is refused with the
-parameter names it may not set.
+``simulation.`` and the UK's ``gov.dynamic.``), and a policy holds none of
+them; each is refused with the parameter names it may not set.
 """
 
 from __future__ import annotations
@@ -280,3 +280,105 @@ def test_a_dynamic_that_cannot_be_written_is_a_storage_error(
         )
 
     assert isinstance(failure.value.__cause__, SQLAlchemyError)
+
+
+UK_OBR_LABOUR_SUPPLY_SWITCH = "gov.dynamic.obr_labour_supply_assumptions"
+UK_INCOME_ELASTICITY = "gov.simulation.labour_supply_responses.income_elasticity"
+UK_TAX_RATE = "gov.hmrc.income_tax.rates.uk[0].rate"
+
+
+class UkCatalog:
+    """A UK catalog version with two model assumptions and one policy parameter."""
+
+    def __init__(self, session: Session) -> None:
+        self.model = TaxBenefitModel(name="policyengine-uk")
+        self.version = TaxBenefitModelVersion(
+            model=self.model,
+            version=RUNNING_VERSION,
+            current_law_id=1,
+            metadata_time_periods=[2026],
+        )
+        self.parameter_ids = {}
+        for name in (UK_OBR_LABOUR_SUPPLY_SWITCH, UK_INCOME_ELASTICITY, UK_TAX_RATE):
+            parameter = Parameter(name=name, tax_benefit_model_version=self.version)
+            session.add(parameter)
+            self.parameter_ids[name] = parameter.id
+        session.commit()
+
+
+@pytest.fixture
+def uk_catalog(session: Session) -> UkCatalog:
+    return UkCatalog(session)
+
+
+def _uk_values(catalog: UkCatalog, *names: str) -> list[dict[str, object]]:
+    return [
+        {
+            "parameter_id": catalog.parameter_ids[name],
+            "value": False if name == UK_OBR_LABOUR_SUPPLY_SWITCH else 0.25,
+            "start_date": "2026-01-01T00:00:00Z",
+        }
+        for name in names
+    ]
+
+
+def test_a_uk_policy_setting_gov_dynamic_is_refused_naming_it(
+    session: Session, uk_catalog: UkCatalog
+) -> None:
+    policy_input = PolicyCreationInput(
+        country_id="uk",
+        tax_benefit_model_id=uk_catalog.model.id,
+        parameter_values=_uk_values(
+            uk_catalog, UK_TAX_RATE, UK_OBR_LABOUR_SUPPLY_SWITCH
+        ),
+    )
+
+    with pytest.raises(PolicySetsDynamicParametersError) as refusal:
+        resolve_policy_creation_input(
+            session, policy_input, running_policyengine_version=RUNNING_VERSION
+        )
+
+    assert refusal.value.parameter_names == (UK_OBR_LABOUR_SUPPLY_SWITCH,)
+    assert "gov.dynamic" in str(refusal.value)
+    assert "/v2/dynamics" in str(refusal.value)
+
+
+def test_a_uk_dynamic_may_set_gov_dynamic(
+    session: Session, uk_catalog: UkCatalog
+) -> None:
+    resolved = resolve_dynamic_creation_input(
+        session,
+        DynamicCreationInput(
+            country_id="uk",
+            tax_benefit_model_id=uk_catalog.model.id,
+            parameter_values=_uk_values(
+                uk_catalog, UK_OBR_LABOUR_SUPPLY_SWITCH, UK_INCOME_ELASTICITY
+            ),
+        ),
+        running_policyengine_version=RUNNING_VERSION,
+    )
+
+    assert {value.parameter_id for value in resolved.parameter_values} == {
+        uk_catalog.parameter_ids[UK_OBR_LABOUR_SUPPLY_SWITCH],
+        uk_catalog.parameter_ids[UK_INCOME_ELASTICITY],
+    }
+
+
+def test_a_uk_dynamic_setting_a_policy_parameter_names_gov_dynamic_as_allowed(
+    session: Session, uk_catalog: UkCatalog
+) -> None:
+    with pytest.raises(DynamicSetsPolicyParametersError) as refusal:
+        resolve_dynamic_creation_input(
+            session,
+            DynamicCreationInput(
+                country_id="uk",
+                tax_benefit_model_id=uk_catalog.model.id,
+                parameter_values=_uk_values(
+                    uk_catalog, UK_OBR_LABOUR_SUPPLY_SWITCH, UK_TAX_RATE
+                ),
+            ),
+            running_policyengine_version=RUNNING_VERSION,
+        )
+
+    assert refusal.value.parameter_names == (UK_TAX_RATE,)
+    assert "gov.dynamic" in str(refusal.value)

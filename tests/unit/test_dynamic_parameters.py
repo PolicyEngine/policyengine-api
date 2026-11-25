@@ -16,12 +16,13 @@ from policyengine_api.supported_countries import SupportedCountryId
 UK_OLD_INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.income_elasticity"
 UK_INCOME_ELASTICITY = "gov.simulation.labour_supply_responses.income_elasticity"
 US_INCOME_ELASTICITY = "gov.simulation.labor_supply_responses.elasticities.income"
+UK_OBR_LABOUR_SUPPLY_SWITCH = "gov.dynamic.obr_labour_supply_assumptions"
 
 
 def test_every_supported_country_lists_its_prefixes() -> None:
     assert set(DYNAMIC_PARAMETER_PREFIXES) == set(get_args(SupportedCountryId))
     assert DYNAMIC_PARAMETER_PREFIXES["us"] == ("gov.simulation.", "simulation.")
-    assert DYNAMIC_PARAMETER_PREFIXES["uk"] == ("gov.simulation.",)
+    assert DYNAMIC_PARAMETER_PREFIXES["uk"] == ("gov.simulation.", "gov.dynamic.")
 
 
 @pytest.mark.parametrize(
@@ -32,6 +33,7 @@ def test_every_supported_country_lists_its_prefixes() -> None:
         ("us", "simulation.marginal_tax_rate_delta"),
         ("uk", UK_INCOME_ELASTICITY),
         ("uk", "gov.simulation.marginal_tax_rate_delta"),
+        ("uk", UK_OBR_LABOUR_SUPPLY_SWITCH),
     ],
 )
 def test_parameters_under_the_country_s_prefixes_are_dynamic(
@@ -50,6 +52,9 @@ def test_parameters_under_the_country_s_prefixes_are_dynamic(
         # The UK has no top-level simulation tree.
         ("uk", "simulation.marginal_tax_rate_delta"),
         ("uk", "gov.hmrc.income_tax.allowances.personal_allowance.amount"),
+        ("uk", "gov.dynamics_count"),
+        # Only the UK keeps model assumptions under gov.dynamic.
+        ("us", "gov.dynamic.obr_labour_supply_assumptions"),
     ],
 )
 def test_other_parameters_are_not_dynamic(
@@ -145,3 +150,28 @@ def test_a_policy_with_no_dynamic_values_is_left_whole() -> None:
     assert split.policy_values == policy_json
     assert split.dynamic_values == {}
     assert split_legacy_policy_json("us", {}) == split_legacy_policy_json("uk", {})
+
+
+def test_a_uk_policy_s_gov_dynamic_values_go_into_its_dynamic() -> None:
+    split = split_legacy_policy_json(
+        "uk",
+        {
+            "gov.hmrc.income_tax.rates.uk[0].rate": {"2026": 0.21},
+            UK_OBR_LABOUR_SUPPLY_SWITCH: {"2026": False},
+            UK_INCOME_ELASTICITY: {"2026": 0.1},
+        },
+    )
+
+    assert split.policy_values == {
+        "gov.hmrc.income_tax.rates.uk[0].rate": {"2026": 0.21}
+    }
+    assert split.dynamic_values == {
+        UK_OBR_LABOUR_SUPPLY_SWITCH: {"2026": False},
+        UK_INCOME_ELASTICITY: {"2026": 0.1},
+    }
+
+
+def test_gov_dynamic_has_one_spelling_and_is_never_rewritten() -> None:
+    assert canonical_parameter_name("uk", UK_OBR_LABOUR_SUPPLY_SWITCH) == (
+        UK_OBR_LABOUR_SUPPLY_SWITCH
+    )
