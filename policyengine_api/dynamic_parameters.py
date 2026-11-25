@@ -16,10 +16,7 @@ The rule is used in three places:
 - The copy of each v1 policy into v2 splits the v1 policy's values with
   ``split_legacy_policy_json``: these values become a dynamic and the rest
   the policy.
-- The one-time migration splits v1 policies with the same functions, and
-  the policy copy split command
-  (``policyengine_api.services.v2.policy_copy_split``) splits the v2 copies
-  stored before a prefix applied to them.
+- The one-time migration splits v1 policies with the same functions.
 
 The UK renamed ``gov.simulation.labor_supply_responses`` to
 ``gov.simulation.labour_supply_responses`` on 2026-05-01. Its catalog has

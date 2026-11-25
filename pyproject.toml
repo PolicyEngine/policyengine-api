@@ -415,8 +415,6 @@ banned-module-level-imports = [
     "policyengine_api.services.v2.metadata.services",
     "policyengine_api.services.v2.policies.database_session",
     "policyengine_api.services.v2.policies.services",
-    "policyengine_api.services.v2.policy_copy_split.database_session",
-    "policyengine_api.services.v2.policy_copy_split.services",
     "policyengine_api.services.v2.report_run_records.database_session",
     "policyengine_api.services.v2.report_run_records.services",
     "policyengine_api.services.v2.simulation_service.services",

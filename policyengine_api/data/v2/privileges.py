@@ -60,13 +60,6 @@ The Public API reads the simulation tables it serves, and writes none of them.
 The migration role (``policyengine_v2_migrator``) owns every table, and
 Supabase's ``postgres`` role administers the project; neither is managed here.
 
-``POLICY_COPY_SPLIT_PRIVILEGES`` declares what the policy copy split command
-(``scripts/split_v2_policy_copies.py``) needs, for the temporary role
-``policyengine_v2_policy_copy_split`` that an operator creates for one run
-(C1 · 49) and drops afterwards. No deploy grants, checks or reports it: it is
-not one of the managed roles, and ``docs/migration/stage-10-v2-policies.md``
-gives the statements that create and drop it.
-
 Extra privileges a database holds beyond this manifest are reported, not
 revoked, with one exception: a privilege a role holds on a whole table that
 this manifest declares for named columns only is revoked, with the role's
@@ -240,27 +233,6 @@ def _run_table(
         modal_worker=READ | {update_columns(*_RUN_STATE_COLUMNS, *result_columns)},
     )
 
-
-# The policy copy split's temporary role (see the module docstring). It locks
-# and deletes the old copies (their values go with them by the foreign key's
-# cascade), re-points legacy mappings and saved policies, inserts policies,
-# dynamics, their values and saved dynamics, and reads the catalog and the
-# rows that may name a copy.
-POLICY_COPY_SPLIT_ROLE: Final = "policyengine_v2_policy_copy_split"
-_READ_UPDATE: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.UPDATE})
-POLICY_COPY_SPLIT_PRIVILEGES: Final[dict[str, frozenset[DeclaredPrivilege]]] = {
-    "dynamics": READ_INSERT,
-    "household_jobs": READ,
-    "legacy_policy_mappings": _READ_UPDATE,
-    "parameter_values": READ_INSERT,
-    "parameters": READ,
-    "policies": READ_WRITE,
-    "reports": READ,
-    "simulations": READ,
-    "tax_benefit_model_versions": READ,
-    "user_dynamics": READ_INSERT,
-    "user_policies": _READ_UPDATE,
-}
 
 # The Modal workers write results, keyed by run, once each.
 _RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
