@@ -2,7 +2,7 @@
 
 A stand-in for the simulation service's client stores the rows the
 simulation service would create and answers with their IDs; the routes run
-as the Public API's runtime role, checking the country and policies and
+as API v1's runtime role, checking the country and policies and
 reading the created records back.
 """
 
@@ -17,10 +17,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
@@ -67,6 +63,7 @@ from tests.integration.stored_report_rows import (
     RunSettings,
     delete_catalog,
     store_catalog,
+    store_cliff_calculation,
     store_report,
     store_report_run,
     store_simulation,
@@ -74,14 +71,16 @@ from tests.integration.stored_report_rows import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
     from policyengine_api.services.v2.simulation_service.types import (
         EconomyReportCreationInput,
         EconomySimulationCreationInput,
     )
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -97,9 +96,11 @@ class StoringSimulationService:
 
     With ``answer_unstored``, it answers with IDs it stored nothing for, and
     keeps them in ``unstored_ids`` (a report's run in ``unstored_run_ids``).
+    A report with ``include_cliffs`` also gets a pending cliff calculation for
+    each side's simulation run, as a service calculating them per run starts them.
     """
 
-    engine: Engine
+    owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     answer_unstored: bool = False
     reports: list[EconomyReportCreationInput] = field(default_factory=list)
@@ -116,14 +117,20 @@ class StoringSimulationService:
                 report_id=self.unstored_ids[-1],
                 report_run_id=self.unstored_run_ids[-1],
             )
-        with self.engine.begin() as connection:
-            stored = store_report(connection, self.catalog)
+        with self.owner_sessions.begin() as session:
+            stored = store_report(session, self.catalog)
             run_ids = store_report_run(
-                connection,
+                session,
                 self.catalog,
                 stored,
                 RunSettings(versions=CURRENT_VERSIONS, status="pending"),
             )
+            if report.include_cliffs:
+                for simulation_run_id in (
+                    run_ids.baseline_simulation_run_id,
+                    run_ids.reform_simulation_run_id,
+                ):
+                    store_cliff_calculation(session, simulation_run_id, "pending")
         return SubmittedReport(
             report_id=stored.report_id, report_run_id=run_ids.report_run_id
         )
@@ -137,12 +144,12 @@ class StoringSimulationService:
             return SubmittedSimulation(
                 simulation_id=self.unstored_ids[-1], simulation_run_id=uuid4()
             )
-        with self.engine.begin() as connection:
+        with self.owner_sessions.begin() as session:
             simulation_id = store_simulation(
-                connection, self.catalog, policy_id=simulation.policy_id
+                session, self.catalog, policy_id=simulation.policy_id
             )
             run_id = store_simulation_run(
-                connection,
+                session,
                 self.catalog,
                 simulation_id,
                 RunSettings(versions=CURRENT_VERSIONS, status="pending"),
@@ -153,27 +160,28 @@ class StoringSimulationService:
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 def client_for(
@@ -232,9 +240,11 @@ def report_body(policy_id: UUID) -> dict[str, Any]:
 
 
 def test_a_created_report_is_answered_as_the_tables_hold_it(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringSimulationService(owner_engine, catalog)
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
@@ -244,7 +254,7 @@ def test_a_created_report_is_answered_as_the_tables_hold_it(
     item = response.json()["result"]["item"]
     assert item["id"] == str(catalog.report_ids[0])
     assert item["status"] == "pending"
-    assert item["run"]["trigger"] == "initial"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None
     assert item["current_versions"] == CURRENT_VERSIONS
@@ -253,10 +263,32 @@ def test_a_created_report_is_answered_as_the_tables_hold_it(
     assert sent.include_cliffs is True
 
 
-def test_a_report_naming_a_policy_the_country_does_not_store_is_not_sent(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+def test_a_report_created_with_cliffs_answers_their_pending_calculations(
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringSimulationService(owner_engine, catalog)
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        "/v2/reports?country_id=us", json=report_body(catalog.policy_id)
+    )
+
+    assert response.status_code == 201, response.text
+    item = response.json()["result"]["item"]
+    assert item["cliffs"] == {
+        "status": "pending",
+        "baseline": {"status": "pending", "error_message": None},
+        "reform": {"status": "pending", "error_message": None},
+    }
+
+
+def test_a_report_naming_a_policy_the_country_does_not_store_is_not_sent(
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/reports?country_id=us", json=report_body(uuid4())
@@ -267,12 +299,14 @@ def test_a_report_naming_a_policy_the_country_does_not_store_is_not_sent(
 
 
 def test_a_created_report_that_cannot_be_read_back_answers_its_id(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     # The simulation service answered that it created the report, so the
     # record exists: the caller gets its ID and is not invited to submit again.
     simulation_service = StoringSimulationService(
-        owner_engine, catalog, answer_unstored=True
+        owner_sessions, catalog, answer_unstored=True
     )
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -295,10 +329,12 @@ def test_a_created_report_that_cannot_be_read_back_answers_its_id(
 
 
 def test_a_created_simulation_that_cannot_be_read_back_answers_its_id(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     simulation_service = StoringSimulationService(
-        owner_engine, catalog, answer_unstored=True
+        owner_sessions, catalog, answer_unstored=True
     )
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -325,9 +361,11 @@ def test_a_created_simulation_that_cannot_be_read_back_answers_its_id(
 
 
 def test_a_created_simulation_is_answered_as_the_tables_hold_it(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    simulation_service = StoringSimulationService(owner_engine, catalog)
+    simulation_service = StoringSimulationService(owner_sessions, catalog)
 
     response = client_for(runtime_sessions, simulation_service).post(
         "/v2/simulations?country_id=us",

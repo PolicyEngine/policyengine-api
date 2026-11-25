@@ -17,7 +17,8 @@ result.
 
 The result is rebuilt from the run's result rows once it has succeeded; a
 local-area report's (a UK-wide or nation report on the dataset its catalog
-version gives local areas) also lists its withheld area codes. A
+version gives local areas) also lists its withheld area codes. An economy
+report's read also gives its run's cliffs (``ReportCliffsRead``). A
 budget-window report's run is a budget-window run, read with its years;
 once that run has succeeded, its result is the budget-window format,
 rebuilt from each year's budget rows. Reading a
@@ -67,9 +68,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from policyengine_api.data.v2.models import ReportRunStatus, ReportRunTrigger
 from policyengine_api.data.v2.models.base import utc_now
 from policyengine_api.query_parameters import MAXIMUM_LISTED_REPORTS
-from policyengine_api.services.v2.identity.services import (
-    find_principal_user_in_session,
-)
 from policyengine_api.services.v2.report_run_records.types import ReportRunRequest
 from policyengine_api.services.v2.simulation_service.types import (
     ReportRerunInput,
@@ -83,9 +81,6 @@ from policyengine_api.services.v2.stored_reports.database_connectors import (
 )
 from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_household_results as household_result_reads,
-)
-from policyengine_api.services.v2.stored_reports.database_connectors import (
-    reads_requests as request_reads,
 )
 from policyengine_api.services.v2.stored_reports.database_connectors import (
     reads_results as result_reads,
@@ -110,6 +105,9 @@ from policyengine_api.services.v2.stored_reports.household_results import (
 from policyengine_api.services.v2.stored_reports.household_results.validators import (
     require_household_report_result,
 )
+from policyengine_api.services.v2.stored_reports.requester_views.services import (
+    requesters_view,
+)
 from policyengine_api.services.v2.stored_reports.transformations import (
     budget_window_read,
     budget_window_runs_read,
@@ -117,6 +115,7 @@ from policyengine_api.services.v2.stored_reports.transformations import (
     household_report_read,
     household_report_summary_read,
     listed_reports,
+    report_cliffs,
     report_kind,
     report_policy_ids,
     report_read,
@@ -130,6 +129,7 @@ from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
     RerunReportUnreadableError,
     require_admin_to_force,
+    require_cliffs_available,
     require_reform_run,
     require_report,
     require_report_run,
@@ -157,6 +157,7 @@ if TYPE_CHECKING:
     from policyengine_api.services.v2.stored_reports.types import (
         BudgetWindowReportRead,
         HouseholdReportRead,
+        ReportRead,
         StoredReportRead,
         StoredReportRows,
         StoredReportRunsRead,
@@ -245,90 +246,6 @@ def _record_request(recording: _RunRecording, request: ReportRunRequest) -> UUID
         ) from error
 
 
-def _viewer_user_id(
-    session: Session,
-    *,
-    requester: AccountPrincipal | None,
-    recorded_user_id: UUID | None,
-) -> UUID | None:
-    """Return the ID of the user a read is for.
-
-    That is ``recorded_user_id`` when a request was just recorded for it, or
-    else the requester's stored user's, or None.
-    """
-    if recorded_user_id is not None:
-        return recorded_user_id
-    if requester is None:
-        return None
-    user = find_principal_user_in_session(session, requester)
-    return None if user is None else user.user_id
-
-
-def _requesters_view(
-    session: Session,
-    rows: Sequence[StoredReportRows],
-    *,
-    requester: AccountPrincipal | None,
-    recorded_user_id: UUID | None = None,
-    with_requested_runs: bool,
-) -> list[StoredReportRows]:
-    """Return the reports as the requester sees them.
-
-    The requester's stored user is looked up, unless ``recorded_user_id``
-    names the user a request was just recorded for. Each report takes its
-    label and description from that user's saved report of it. With
-    ``with_requested_runs``, a report the user asked to run
-    is read with the run of their newest request in place of its default (a
-    budget window's with that year's budget-window run and its years). A
-    request naming no user, or a user not stored yet, sees each report's
-    default run and no label. Raise StandardUserRequiresSignInError for an
-    unauthenticated credential that names a signed-in user.
-    """
-    user_id = _viewer_user_id(
-        session, requester=requester, recorded_user_id=recorded_user_id
-    )
-    if user_id is None or not rows:
-        return list(rows)
-    report_ids = [stored.report.id for stored in rows]
-    labels = request_reads.read_saved_report_labels(
-        session, user_id=user_id, report_ids=report_ids
-    )
-    requested_runs = (
-        request_reads.read_requested_report_runs(
-            session, user_id=user_id, report_ids=report_ids
-        )
-        if with_requested_runs
-        else {}
-    )
-    window_run_ids = [
-        run.budget_window_run_id
-        for run in requested_runs.values()
-        if run.budget_window_run_id is not None
-    ]
-    window_runs = request_reads.read_budget_window_runs_by_id(
-        session, budget_window_run_ids=window_run_ids
-    )
-    window_years = read_budget_window_years(session, window_run_ids)
-    viewed = []
-    for stored in rows:
-        name, description = labels.get(stored.report.id, (None, None))
-        seen = replace(
-            stored, saved_report_name=name, saved_report_description=description
-        )
-        requested = requested_runs.get(stored.report.id)
-        if requested is not None and requested.budget_window_run_id is None:
-            seen = replace(seen, run=requested)
-        elif requested is not None and requested.budget_window_run_id in window_runs:
-            window_run_id = requested.budget_window_run_id
-            seen = replace(
-                seen,
-                budget_window_run=window_runs[window_run_id],
-                budget_window_years=window_years.get(window_run_id, ()),
-            )
-        viewed.append(seen)
-    return viewed
-
-
 def _summary_read(
     stored: StoredReportRows, *, current_versions: PackageVersions
 ) -> StoredReportSummaryRead:
@@ -413,8 +330,9 @@ class V2StoredReportService:
         ``run_id`` (a budget window's runs are its budget-window runs; any
         other report's, its own report runs),
         StandardUserRequiresSignInError for an unauthenticated credential
-        that names a signed-in user, EconomyResultUnreadableError when a
-        succeeded run's rows lack a part every result has,
+        that names a signed-in user, EconomyResultUnreadableError when an
+        economy run names no reform simulation run or a succeeded one's rows
+        lack a part every result has,
         HouseholdResultUnreadableError when a
         succeeded household report run's calculated households cannot be
         read, BudgetWindowResultUnreadableError when a succeeded window run's
@@ -445,7 +363,7 @@ class V2StoredReportService:
         """
         with _storage_failures(), self._database_session.read() as session:
             stored = _stored_report(session, country_id=country_id, report_id=report_id)
-            (stored,) = _requesters_view(
+            (stored,) = requesters_view(
                 session,
                 [stored],
                 requester=requester,
@@ -459,23 +377,42 @@ class V2StoredReportService:
                 return self._budget_window(session, stored)
             if kind == "household":
                 return self._household_report(session, stored)
-            run = stored.run
-            result = None
-            if run is not None and run.status is ReportRunStatus.SUCCEEDED:
+            return self._economy_report(session, stored)
+
+    def _economy_report(self, session: Session, stored: StoredReportRows) -> ReportRead:
+        """Return an economy report with its run's cliffs, and its result if succeeded.
+
+        The cliffs of its two simulation runs are read whatever the run's
+        status, since they are calculated apart from it; the result's cliff
+        impact is theirs once both have succeeded.
+        """
+        run = stored.run
+        result = cliffs = None
+        if run is not None:
+            reform_simulation_run_id = require_reform_run(run)
+            cliff_calculations = result_reads.read_cliff_calculations(
+                session,
+                baseline_simulation_run_id=run.baseline_simulation_run_id,
+                reform_simulation_run_id=reform_simulation_run_id,
+            )
+            cliffs = report_cliffs(cliff_calculations)
+            if run.status is ReportRunStatus.SUCCEEDED:
                 result = result_transformations.economy_result(
                     result_reads.read_economy_result_rows(
                         session,
-                        country_id=country_id,
+                        country_id=stored.report.country,
                         report_run=run,
-                        reform_simulation_run_id=require_reform_run(run),
+                        reform_simulation_run_id=reform_simulation_run_id,
                         on_local_area_dataset=stored.on_local_area_dataset,
+                        cliff_calculations=cliff_calculations,
                     )
                 )
-            return report_read(
-                stored,
-                current_versions=self._current_versions(country_id),
-                result=result,
-            )
+        return report_read(
+            stored,
+            current_versions=self._current_versions(stored.report.country),
+            result=result,
+            cliffs=cliffs,
+        )
 
     def _budget_window(
         self, session: Session, stored: StoredReportRows
@@ -545,7 +482,7 @@ class V2StoredReportService:
         cannot be read.
         """
         with _storage_failures(), self._database_session.read() as session:
-            rows = _requesters_view(
+            rows = requesters_view(
                 session,
                 read_report_rows(session, country_id=country_id, report_ids=report_ids),
                 requester=requester,
@@ -580,7 +517,7 @@ class V2StoredReportService:
                 dataset_independent_key=dataset_independent_key,
                 limit=MAXIMUM_LISTED_REPORTS,
             )
-            rows = _requesters_view(
+            rows = requesters_view(
                 session,
                 read_report_rows(session, country_id=country_id, report_ids=report_ids),
                 requester=requester,
@@ -665,6 +602,7 @@ class V2StoredReportService:
         country_id: str,
         report_id: UUID,
         force: bool,
+        include_cliffs: bool = False,
         requester: AccountPrincipal | None = None,
     ) -> StoredReportRead:
         """Run the country's report again; return it with the run the request ended on.
@@ -676,14 +614,16 @@ class V2StoredReportService:
         on the current versions; with it, both are calculated again (a budget
         window's new run then recalculates each year). A household report's
         sides are always calculated again. Only an admin user may force a
-        re-run. With a ``requester``, it is
+        re-run; ``include_cliffs`` asks for an economy report run's cliffs
+        too. With a ``requester``, it is
         checked before the simulation service is asked, and the request is
         recorded for its user (trigger ``manual``, forced or not) once the
         service has answered: that run, or each year's report run of a budget
         window's. Raise StoredReportNotFoundError when the country has no such
         report, ForcedRerunRequiresSignInError for a forced re-run naming no
-        user and ForcedRerunRequiresAdminError for one by a user below admin,
-        both before the simulation service is asked, ReportStorageError when
+        user, ForcedRerunRequiresAdminError for one by a user below admin and
+        CliffsNotAvailableError for a household report's or window's cliffs,
+        each before the simulation service is asked, ReportStorageError when
         it cannot be read, the recorder's check's
         errors, the submission's checks' and the simulation service's errors
         (see ``SimulationSubmissionService.rerun_report``),
@@ -700,6 +640,7 @@ class V2StoredReportService:
         recording = self._run_recording(requester)
         if force:
             require_admin_to_force(None if recording is None else recording.requester)
+        require_cliffs_available(kind, include_cliffs=include_cliffs)
         started = submissions.rerun_report(
             ReportRerunInput(
                 country_id=country_id,
@@ -707,6 +648,7 @@ class V2StoredReportService:
                 kind=kind,
                 force=force,
                 policy_ids=report_policy_ids(stored),
+                include_cliffs=include_cliffs,
             )
         )
         if kind != "budget_window":

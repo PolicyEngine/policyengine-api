@@ -5,9 +5,13 @@ and joins an existing run on the current versions instead of creating one.
 The database enforces both: one row per key, and at most one unfailed,
 unforced run per definition and version set. Each user's request is recorded
 in ``user_report_run_associations``.
+
+Columns are read from the models' mappers, constraints from SQLite's copy of
+the schema, and partial indexes from the models' declarations
+(tests/unit/v2/v2_schema_reading.py).
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -17,7 +21,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     BudgetWindowRun,
     ReportRun,
     ReportRunStatus,
@@ -28,32 +31,27 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.stored_reports import (
     transformations as stored_report_transformations,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+from tests.unit.v2.v2_schema_reading import (
+    declared_index,
+    model_columns,
+    stored_v2_table,
+    v2_model,
+)
 
 UNFAILED_UNFORCED = "status <> 'failed' AND NOT forced"
 
 
-def _checks(table_name: str) -> dict[str, str]:
-    return {
-        constraint.name: str(constraint.sqltext)
-        for constraint in V2_METADATA.tables[table_name].constraints
-        if isinstance(constraint, sa.CheckConstraint)
-    }
+def _checks(table_name: str) -> Mapping[str | None, str]:
+    return stored_v2_table(table_name).checks
 
 
-def _unique_constraints(table_name: str) -> dict[str, tuple[str, ...]]:
-    return {
-        str(constraint.name): tuple(column.name for column in constraint.columns)
-        for constraint in V2_METADATA.tables[table_name].constraints
-        if isinstance(constraint, sa.UniqueConstraint)
-    }
+def _unique_constraints(table_name: str) -> Mapping[str | None, tuple[str, ...]]:
+    return stored_v2_table(table_name).unique_constraints
 
 
 def _index(table_name: str, index_name: str) -> sa.Index:
-    return next(
-        index
-        for index in V2_METADATA.tables[table_name].indexes
-        if index.name == index_name
-    )
+    return declared_index(v2_model(table_name), index_name)
 
 
 @pytest.mark.parametrize("table_name", ["simulations", "reports"])
@@ -61,12 +59,12 @@ def test_simulations_and_reports_are_found_by_an_optional_unique_key(
     table_name: str,
 ) -> None:
     """Existing rows stay unkeyed; a keyed row is unique on its key and version."""
-    table = V2_METADATA.tables[table_name]
+    columns = model_columns(table_name)
 
-    assert table.c.key_version.nullable
-    assert isinstance(table.c.key_version.type, sa.Integer)
-    assert table.c.definition_key.nullable
-    assert table.c.definition_key.type.length == 64
+    assert columns.key_version.nullable
+    assert isinstance(columns.key_version.type, sa.Integer)
+    assert columns.definition_key.nullable
+    assert columns.definition_key.type.length == 64
     assert _unique_constraints(table_name)[
         f"uq_{table_name}_key_version_definition_key"
     ] == ("key_version", "definition_key")
@@ -85,11 +83,11 @@ def test_a_keyed_simulation_names_its_key_version() -> None:
 
 def test_a_keyed_report_also_has_the_key_shared_across_datasets() -> None:
     """A national report and its local-area report share dataset_independent_key."""
-    reports = V2_METADATA.tables["reports"]
+    reports = model_columns("reports")
     checks = _checks("reports")
 
-    assert reports.c.dataset_independent_key.nullable
-    assert reports.c.dataset_independent_key.type.length == 64
+    assert reports.dataset_independent_key.nullable
+    assert reports.dataset_independent_key.type.length == 64
     assert checks["ck_reports_dataset_independent_key"] == (
         "length(dataset_independent_key) = 64 "
         "AND ltrim(dataset_independent_key, '0123456789abcdef') = ''"
@@ -110,7 +108,7 @@ def test_a_keyed_report_also_has_the_key_shared_across_datasets() -> None:
 @pytest.mark.parametrize("table_name", ["simulation_runs", "report_runs"])
 def test_runs_record_whether_a_re_run_forced_them(table_name: str) -> None:
     """Every existing run, and every run the service writes without it, is unforced."""
-    forced = V2_METADATA.tables[table_name].c.forced
+    forced = model_columns(table_name).forced
 
     assert isinstance(forced.type, sa.Boolean)
     assert not forced.nullable
@@ -158,13 +156,13 @@ def test_a_report_has_one_unfailed_unrecalculated_window_run_per_version_set() -
     The version stays optional, since window runs written before it have
     none, and an unversioned run is never joined.
     """
-    windows = V2_METADATA.tables["budget_window_runs"]
+    windows = model_columns("budget_window_runs")
     index = _index(
         "budget_window_runs", "uq_budget_window_runs_unfailed_unforced_versions"
     )
 
-    assert windows.c.policyengine_version.nullable
-    assert windows.c.policyengine_version.type.length == 128
+    assert windows.policyengine_version.nullable
+    assert windows.policyengine_version.type.length == 128
     assert index.unique
     assert tuple(column.name for column in index.columns) == (
         "report_id",
@@ -221,28 +219,28 @@ def test_sqlite_refuses_a_second_unfailed_unrecalculated_window_run(
     ("table_name", "column_name"),
     [
         ("reports", "label"),
+        ("reports", "description"),
+        ("reports", "user_id"),
         ("report_runs", "trigger"),
         ("budget_window_runs", "trigger"),
     ],
 )
-def test_per_user_columns_of_shared_rows_need_no_value(
+def test_shared_rows_hold_no_per_user_columns(
     table_name: str, column_name: str
 ) -> None:
-    """A shared row describes no one caller, so the simulation service may omit them.
+    """A shared row describes no one caller.
 
-    They go in a later revision; until then they are nullable, with no default,
-    so a row written without one holds none.
+    A report's name is on each user's saved report, and a run's trigger on
+    each user's record of the run.
     """
-    column = V2_METADATA.tables[table_name].c[column_name]
-
-    assert column.nullable
-    assert column.server_default is None
+    assert column_name not in stored_v2_table(table_name).columns
 
 
 def test_user_report_run_associations_record_each_users_request_for_a_run() -> None:
-    records = V2_METADATA.tables["user_report_run_associations"]
+    records = model_columns("user_report_run_associations")
+    stored_records = stored_v2_table("user_report_run_associations")
 
-    assert {column.name for column in records.columns} == {
+    assert set(records.keys()) == {
         "id",
         "created_at",
         "user_id",
@@ -251,16 +249,12 @@ def test_user_report_run_associations_record_each_users_request_for_a_run() -> N
         "trigger",
     }
     for column_name in ("user_id", "report_run_id", "requested_at", "trigger"):
-        assert not records.c[column_name].nullable, column_name
-    assert records.c.requested_at.type.timezone
-    assert records.c.requested_at.server_default is None
-    assert records.c.trigger.type.name == "v2_report_run_trigger"
-    foreign_keys = {
-        key.parent.name: (key.column.table.name, key.ondelete)
-        for key in records.foreign_keys
-    }
+        assert not records[column_name].nullable, column_name
+    assert records.requested_at.type.timezone
+    assert records.requested_at.server_default is None
+    assert records.trigger.type.name == "v2_report_run_trigger"
     # A user's records go with the user; a run a user asked for stays.
-    assert foreign_keys == {
+    assert stored_records.references_by_column == {
         "user_id": ("users", "CASCADE"),
         "report_run_id": ("report_runs", "RESTRICT"),
     }
@@ -270,9 +264,7 @@ def test_user_report_run_associations_record_each_users_request_for_a_run() -> N
             "report_run_id",
         )
     }
-    assert {
-        tuple(column.name for column in index.columns) for index in records.indexes
-    } == {("report_run_id",)}
+    assert set(stored_records.index_columns.values()) == {("report_run_id",)}
     # A user creates a report or runs it again; a system re-run asks for no user.
     assert _checks("user_report_run_associations") == {
         "ck_user_report_run_associations_trigger": "trigger IN ('initial', 'manual')"
@@ -281,11 +273,8 @@ def test_user_report_run_associations_record_each_users_request_for_a_run() -> N
 
 @pytest.fixture
 def sqlite_session() -> Iterator[Session]:
-    engine = sa.create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    with Session(engine) as session:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         yield session
-    engine.dispose()
 
 
 VALID_KEY = "4bb1299756cb0a89" * 4
@@ -413,8 +402,8 @@ def test_sqlite_lets_a_budget_window_name_one_report_run_per_year(
         sqlite_session.commit()
 
 
-def test_stored_runs_without_a_trigger_read_as_null() -> None:
-    """The run lists pass on a missing trigger as null (the route tests a label)."""
+def test_stored_runs_are_read_without_a_trigger() -> None:
+    """A shared run has no one trigger: each user's is on their record of it."""
     window_run_id = uuid4()
     run = ReportRun(
         report_id=uuid4(),
@@ -422,7 +411,6 @@ def test_stored_runs_without_a_trigger_read_as_null() -> None:
         country_package_version="1.5.0",
         policyengine_version="4.2.0",
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
     year_run = ReportRun(
         report_id=run.report_id,
@@ -432,19 +420,17 @@ def test_stored_runs_without_a_trigger_read_as_null() -> None:
         country_package_version="1.5.0",
         policyengine_version="4.2.0",
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
     window_run = BudgetWindowRun(
         id=window_run_id,
         report_id=run.report_id,
         tax_benefit_model_version_id=uuid4(),
         status=ReportRunStatus.PENDING,
-        trigger=None,
     )
 
-    assert stored_report_transformations.report_run_read(run).trigger is None
+    assert not hasattr(stored_report_transformations.report_run_read(run), "trigger")
     window_read = stored_report_transformations.budget_window_run_read(
         window_run, [year_run]
     )
-    assert window_read.trigger is None
-    assert [year.trigger for year in window_read.years] == [None]
+    assert not hasattr(window_read, "trigger")
+    assert not any(hasattr(year, "trigger") for year in window_read.years)

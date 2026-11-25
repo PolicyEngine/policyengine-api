@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
 
 import pytest
 from alembic.config import Config
@@ -18,10 +16,14 @@ from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
+    load_v2_migration_database_settings,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
+from tests.unit.v2.qualification_sessions import (
+    CountingSession,
+    QualificationSessions,
+    serve_public_tables,
+    serve_read_only_sessions,
+)
 
 ENVIRONMENT = {
     V2_MIGRATION_DATABASE_URL: (
@@ -33,59 +35,28 @@ ENVIRONMENT = {
 }
 
 
-class FakeTransaction:
-    def __init__(self) -> None:
-        self.rolled_back = False
-
-    def rollback(self) -> None:
-        self.rolled_back = True
+@pytest.fixture(autouse=True)
+def _every_association_table_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_public_tables(monkeypatch)
 
 
-class FakeConnection:
-    def __init__(self, counts: tuple[int, int, int, int]) -> None:
-        self._counts = iter(counts)
-        self.transaction = FakeTransaction()
-        self.options: list[dict[str, object]] = []
-        self.statements: list[str] = []
-
-    def execution_options(self, **options: object) -> FakeConnection:
-        self.options.append(options)
-        return self
-
-    def begin(self) -> FakeTransaction:
-        return self.transaction
-
-    def scalar(self, statement: object) -> int:
-        self.statements.append(str(statement))
-        return next(self._counts)
-
-
-class FakeEngine:
-    def __init__(self, connection: FakeConnection) -> None:
-        self.connection = connection
-        self.disposed = False
-
-    @contextmanager
-    def connect(self) -> Iterator[FakeConnection]:
-        yield self.connection
-
-    def dispose(self) -> None:
-        self.disposed = True
-
-
-def _qualify(counts, *, pending: bool):
-    connection = FakeConnection(counts)
-    engine = FakeEngine(connection)
+def _qualify(counts, *, pending: bool, monkeypatch: pytest.MonkeyPatch):
+    session = CountingSession(counts)
+    sessions = QualificationSessions(session)
+    read_only_urls = serve_read_only_sessions(monkeypatch, sessions)
     evidence = qualification.qualify_user_association_migration(
         ENVIRONMENT,
-        engine_builder=lambda _settings: engine,
-        pending_checker=lambda _connection: pending,
+        pending_checker=lambda _session: pending,
     )
-    return evidence, connection, engine
+    return evidence, session, sessions, read_only_urls
 
 
-def test_counts_are_reported_from_a_read_only_rolled_back_transaction() -> None:
-    evidence, connection, engine = _qualify((3, 2, 0, 0), pending=True)
+def test_counts_are_reported_from_a_read_only_rolled_back_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence, session, sessions, read_only_urls = _qualify(
+        (3, 2, 0, 0), pending=True, monkeypatch=monkeypatch
+    )
 
     assert evidence.as_dict() == {
         "outcome": "ok",
@@ -101,26 +72,33 @@ def test_counts_are_reported_from_a_read_only_rolled_back_transaction() -> None:
             "user_report_associations": 0,
         },
     }
-    assert connection.options == [{"postgresql_readonly": True}]
-    assert connection.transaction.rolled_back
-    assert engine.disposed
-    assert len(connection.statements) == 4
-    assert all("count(*)" in statement for statement in connection.statements)
+    configured = load_v2_migration_database_settings(ENVIRONMENT)
+    assert read_only_urls == [configured.connection.url]
+    assert session.rolled_back
+    assert sessions.closed
+    assert len(session.statements) == 4
+    assert all("count(*)" in statement for statement in session.statements)
 
 
-def test_retained_dormant_rows_stop_a_pending_reshape() -> None:
+def test_retained_dormant_rows_stop_a_pending_reshape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     with pytest.raises(qualification.RetainedDormantAssociationError) as error:
-        _qualify((0, 0, 1, 2), pending=True)
+        _qualify((0, 0, 1, 2), pending=True, monkeypatch=monkeypatch)
 
     assert error.value.counts.dormant_total == 3
 
 
-def test_applied_reshape_reports_rows_without_failing() -> None:
-    evidence, connection, _engine = _qualify((0, 0, 5, 7), pending=False)
+def test_applied_reshape_reports_rows_without_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence, session, _sessions, _read_only_urls = _qualify(
+        (0, 0, 5, 7), pending=False, monkeypatch=monkeypatch
+    )
 
     assert evidence.as_dict()["dormant_tables_empty"] is False
     assert evidence.as_dict()["migration_pending"] is False
-    assert connection.transaction.rolled_back
+    assert session.rolled_back
 
 
 def test_revision_constant_names_a_revision_in_the_v2_chain() -> None:

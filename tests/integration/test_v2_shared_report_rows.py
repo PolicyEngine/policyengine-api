@@ -3,153 +3,292 @@
 The simulation service finds each simulation and report by its key, and joins
 a run on the same versions that hasn't failed, with ``INSERT ... ON CONFLICT
 DO NOTHING`` against the indexes the shared-report revision adds; a forced
-re-run is an extra run that nothing joins. The Public API records each user's
+re-run is an extra run that nothing joins. API v1 records each user's
 request for a report run. Each statement runs as the role that runs it in
 staging and production, holding only its declared privileges
 (``policyengine_api/data/v2/privileges.py``).
+
+Every statement runs through one Session of the database's owner, which
+``act_as`` switches to a role for the rest of its transaction and
+``act_as_owner`` returns to the owner. The partial indexes' conditions are
+sent as literals, as the indexes hold them, so PostgreSQL matches the index
+however often a statement runs.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import (
+    and_,
+    delete,
+    func,
+    insert,
+    not_,
+    select,
+    true,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.pool import NullPool
+from sqlmodel import col
 
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import (
+    BudgetWindowRun,
+    Report,
+    ReportRun,
+    ReportRunStatus,
+    Simulation,
+    SimulationRun,
+    SimulationStatus,
+    User,
+    UserReportRunAssociation,
+)
+from tests.fixtures.database_sessions import act_as, act_as_owner, query_plan
+from tests.integration.privilege_statements import (
+    ReportColumns,
+    SimulationColumns,
+    unfailed,
+    update_row,
+)
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
+    add_row,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection
+    from sqlalchemy import Executable
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 # SHA-256 digests, as the simulation service computes keys.
 NATIONAL_KEY = "4bb1299756cb0a89" * 4
 LOCAL_AREA_KEY = "907455a2702b0559" * 4
 DATASET_INDEPENDENT_KEY = "bcabc98b4e0d3eff" * 4
 NEWER_VERSIONS = {"country_package_version": "1.1.0", "policyengine_version": "4.1.0"}
+# The keyed tables' mapped classes, by the table names the key tests use.
+KEYED_MODELS: dict[str, type[Any]] = {
+    "simulations": Simulation,
+    "reports": Report,
+}
+
 
 # What the simulation service will send: a new row, or nothing when one with
 # the same key, or an unfailed unforced run on the same versions, exists.
-FIND_OR_CREATE_SIMULATION = (
-    "INSERT INTO simulations (id, simulation_type, dataset_id, "
-    "tax_benefit_model_version_id, year, key_version, definition_key) "
-    "VALUES (:id, 'economy', :dataset_id, :version_id, 2026, 1, :key) "
-    "ON CONFLICT (key_version, definition_key) DO NOTHING RETURNING id"
-)
-FIND_OR_CREATE_REPORT = (
-    "INSERT INTO reports (id, label, country, tax_benefit_model_id, year, inputs, "
-    "key_version, definition_key, dataset_independent_key) "
-    "VALUES (:id, 'Report', 'us', :model_id, 2026, '{}', 1, :key, "
-    ":dataset_independent_key) "
-    "ON CONFLICT (key_version, definition_key) DO NOTHING RETURNING id"
-)
-FIND_OR_CREATE_SIMULATION_RUN = (
-    "INSERT INTO simulation_runs (id, simulation_id, year, "
-    "tax_benefit_model_version_id, country_package_version, "
-    "policyengine_version, status, forced) "
-    "VALUES (:id, :simulation_id, :year, :version_id, :country_package_version, "
-    ":policyengine_version, 'pending', :forced) "
-    "ON CONFLICT (simulation_id, year, tax_benefit_model_version_id, "
-    "country_package_version, policyengine_version) "
-    "WHERE status <> 'failed' AND NOT forced DO NOTHING RETURNING id"
-)
-FIND_OR_CREATE_REPORT_RUN = (
-    "INSERT INTO report_runs (id, report_id, baseline_simulation_run_id, "
-    "country_package_version, policyengine_version, status, trigger, forced) "
-    "VALUES (:id, :report_id, :baseline_run_id, :country_package_version, "
-    ":policyengine_version, 'pending', 'initial', :forced) "
-    "ON CONFLICT (report_id, country_package_version, policyengine_version) "
-    "WHERE budget_window_run_id IS NULL AND status <> 'failed' AND NOT forced "
-    "DO NOTHING RETURNING id"
-)
-FIND_OR_CREATE_WINDOW_RUN = (
-    "INSERT INTO budget_window_runs (id, report_id, tax_benefit_model_version_id, "
-    "policyengine_version, trigger, recalculate, status) "
-    "VALUES (:id, :report_id, :version_id, :policyengine_version, 'initial', "
-    ":recalculate, 'pending') "
-    "ON CONFLICT (report_id, tax_benefit_model_version_id, policyengine_version) "
-    "WHERE status <> 'failed' AND NOT recalculate DO NOTHING RETURNING id"
-)
-RECORD_REQUEST = (
-    "INSERT INTO user_report_run_associations (id, user_id, report_run_id, "
-    "requested_at, trigger) VALUES (:id, :user_id, :report_run_id, now(), :trigger)"
-)
+def _find_or_create_simulation(public_api_rows: PublicApiRows, key: str) -> Executable:
+    return (
+        postgresql.insert(Simulation)
+        .values(
+            id=uuid4(),
+            simulation_type="economy",
+            dataset_id=public_api_rows.dataset_id,
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            year=2026,
+            key_version=1,
+            definition_key=key,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[col(Simulation.key_version), col(Simulation.definition_key)]
+        )
+        .returning(col(Simulation.id))
+    )
+
+
+def _find_or_create_report(public_api_rows: PublicApiRows, key: str) -> Executable:
+    return (
+        postgresql.insert(Report)
+        .values(
+            id=uuid4(),
+            country="us",
+            tax_benefit_model_id=public_api_rows.model_id,
+            year=2026,
+            inputs={},
+            key_version=1,
+            definition_key=key,
+            dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[col(Report.key_version), col(Report.definition_key)]
+        )
+        .returning(col(Report.id))
+    )
+
+
+def _find_or_create_simulation_run(
+    public_api_rows: PublicApiRows,
+    simulation_id: UUID,
+    *,
+    year: int,
+    versions: dict[str, str],
+    forced: bool,
+) -> Executable:
+    return (
+        postgresql.insert(SimulationRun)
+        .values(
+            id=uuid4(),
+            simulation_id=simulation_id,
+            year=year,
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            status="pending",
+            forced=forced,
+            **versions,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                col(SimulationRun.simulation_id),
+                col(SimulationRun.year),
+                col(SimulationRun.tax_benefit_model_version_id),
+                col(SimulationRun.country_package_version),
+                col(SimulationRun.policyengine_version),
+            ],
+            index_where=and_(
+                unfailed(col(SimulationRun.status), SimulationStatus.FAILED),
+                not_(col(SimulationRun.forced)),
+            ),
+        )
+        .returning(col(SimulationRun.id))
+    )
+
+
+def _find_or_create_report_run(
+    report_id: UUID,
+    baseline_run_id: UUID | None,
+    *,
+    versions: dict[str, str],
+    forced: bool,
+) -> Executable:
+    return (
+        postgresql.insert(ReportRun)
+        .values(
+            id=uuid4(),
+            report_id=report_id,
+            baseline_simulation_run_id=baseline_run_id,
+            status="pending",
+            forced=forced,
+            **versions,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                col(ReportRun.report_id),
+                col(ReportRun.country_package_version),
+                col(ReportRun.policyengine_version),
+            ],
+            index_where=and_(
+                col(ReportRun.budget_window_run_id).is_(None),
+                unfailed(col(ReportRun.status), ReportRunStatus.FAILED),
+                not_(col(ReportRun.forced)),
+            ),
+        )
+        .returning(col(ReportRun.id))
+    )
+
+
+def _find_or_create_window_run(
+    public_api_rows: PublicApiRows,
+    report_id: UUID,
+    *,
+    policyengine_version: str,
+    recalculate: bool,
+) -> Executable:
+    return (
+        postgresql.insert(BudgetWindowRun)
+        .values(
+            id=uuid4(),
+            report_id=report_id,
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            policyengine_version=policyengine_version,
+            recalculate=recalculate,
+            status="pending",
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                col(BudgetWindowRun.report_id),
+                col(BudgetWindowRun.tax_benefit_model_version_id),
+                col(BudgetWindowRun.policyengine_version),
+            ],
+            index_where=and_(
+                unfailed(col(BudgetWindowRun.status), ReportRunStatus.FAILED),
+                not_(col(BudgetWindowRun.recalculate)),
+            ),
+        )
+        .returning(col(BudgetWindowRun.id))
+    )
+
+
+def _record_request(
+    user_id: UUID,
+    report_run_id: UUID | None,
+    trigger: str,
+    record_id: UUID | None = None,
+) -> Executable:
+    """Build API v1's record of the user's request for the report run."""
+    return insert(UserReportRunAssociation).values(
+        id=uuid4() if record_id is None else record_id,
+        user_id=user_id,
+        report_run_id=report_run_id,
+        requested_at=func.now(),
+        trigger=trigger,
+    )
 
 
 @pytest.fixture
-def connection(disposable_v2_database_url, managed_v2_roles) -> Iterator[Connection]:
-    """Yield a connection at head whose writes are rolled back after the test.
+def session(
+    v2_owner_sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
+) -> Iterator[Session]:
+    """Yield a Session at head whose writes are rolled back after the test.
 
-    It connects as the disposable database's superuser, which owns every
-    table; ``_act_as`` switches it to one managed role and ``_act_as_owner``
+    It acts as the disposable database's owner (superuser), which owns every
+    table; ``act_as`` switches it to one managed role and ``act_as_owner``
     back.
     """
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        with engine.connect() as database_connection:
-            transaction = database_connection.begin()
-            try:
-                yield database_connection
-            finally:
-                transaction.rollback()
-    finally:
-        engine.dispose()
+    with v2_owner_sessions() as owner_session:
+        try:
+            yield owner_session
+        finally:
+            owner_session.rollback()
 
 
 @pytest.fixture
-def public_api_rows(connection: Connection) -> PublicApiRows:
-    return insert_public_api_rows(connection)
+def public_api_rows(session: Session) -> PublicApiRows:
+    return insert_public_api_rows(session)
 
 
-def _act_as(connection: Connection, role: str) -> None:
-    quoted_role = connection.dialect.identifier_preparer.quote(role)
-    connection.execute(text(f"SET LOCAL ROLE {quoted_role}"))
-
-
-def _act_as_owner(connection: Connection) -> None:
-    connection.execute(text("RESET ROLE"))
-
-
-def _inserted_id(
-    connection: Connection, statement: str, **values: object
-) -> UUID | None:
+def _inserted_id(session: Session, statement: Executable) -> UUID | None:
     """Run an ``INSERT ... RETURNING id``; return the new row's ID, or None."""
-    return connection.execute(text(statement), values).scalar_one_or_none()
+    inserted: UUID | None = session.execute(statement).scalar_one_or_none()
+    return inserted
 
 
 def _refused(
-    connection: Connection,
-    statement: str,
+    session: Session,
+    statement: Executable,
     error: type[Exception] = IntegrityError,
     match: str | None = None,
-    **values: object,
 ) -> None:
-    with refused(connection, error, match=match):
-        connection.execute(text(statement), values)
+    with refused(session, error, match=match):
+        session.execute(statement)
 
 
 def _simulation(
-    connection: Connection, public_api_rows: PublicApiRows, key: str | None = None
+    session: Session, public_api_rows: PublicApiRows, key: str | None = None
 ) -> UUID:
     """Create an economy simulation of 2026, keyed when ``key`` is given."""
     simulation_id = uuid4()
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=simulation_id,
         simulation_type="economy",
         dataset_id=public_api_rows.dataset_id,
@@ -162,7 +301,7 @@ def _simulation(
 
 
 def _simulation_run(  # noqa: PLR0913  # the simulation, then each part of its run
-    connection: Connection,
+    session: Session,
     public_api_rows: PublicApiRows,
     simulation_id: UUID,
     *,
@@ -172,115 +311,83 @@ def _simulation_run(  # noqa: PLR0913  # the simulation, then each part of its r
 ) -> UUID | None:
     """Find or create the simulation's run; return its ID if this call created it."""
     return _inserted_id(
-        connection,
-        FIND_OR_CREATE_SIMULATION_RUN,
-        id=uuid4(),
-        simulation_id=simulation_id,
-        year=year,
-        version_id=public_api_rows.version_id,
-        forced=forced,
-        **versions,
+        session,
+        _find_or_create_simulation_run(
+            public_api_rows, simulation_id, year=year, versions=versions, forced=forced
+        ),
     )
 
 
-def _report(connection: Connection, public_api_rows: PublicApiRows) -> UUID:
+def _report(session: Session, public_api_rows: PublicApiRows) -> UUID:
     report_id = uuid4()
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
-        inputs="{}",
+        inputs={},
     )
     return report_id
 
 
 def _report_run(
-    connection: Connection,
+    session: Session,
     report_id: UUID,
-    baseline_run_id: UUID,
+    baseline_run_id: UUID | None,
     *,
     versions: dict[str, str] = RUN_VERSIONS,
     forced: bool = False,
 ) -> UUID | None:
     """Find or create the report's run; return its ID if this call created it."""
     return _inserted_id(
-        connection,
-        FIND_OR_CREATE_REPORT_RUN,
-        id=uuid4(),
-        report_id=report_id,
-        baseline_run_id=baseline_run_id,
-        forced=forced,
-        **versions,
-    )
-
-
-def _fail(connection: Connection, table: str, run_id: UUID) -> None:
-    connection.execute(
-        text(
-            f"UPDATE {table} SET status = 'failed', error_message = 'failed', "
-            "completed_at = now(), updated_at = now() WHERE id = :id"
+        session,
+        _find_or_create_report_run(
+            report_id, baseline_run_id, versions=versions, forced=forced
         ),
-        {"id": run_id},
     )
 
 
-def _user(connection: Connection) -> UUID:
+def _fail(session: Session, model: type[Any], run_id: UUID | None) -> None:
+    session.execute(
+        update_row(
+            model,
+            run_id,
+            status="failed",
+            error_message="failed",
+            completed_at=func.now(),
+            updated_at=func.now(),
+        )
+    )
+
+
+def _user(session: Session) -> UUID:
     user_id = uuid4()
-    insert_row(
-        connection, "users", id=user_id, user_type="standard", primary_country="us"
-    )
+    add_row(session, User, id=user_id, user_type="standard", primary_country="us")
     return user_id
 
 
 def test_identical_keys_name_one_simulation_and_one_report(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    _act_as(connection, managed_v2_roles.simulation_service)
+    act_as(session, managed_v2_roles.simulation_service)
 
     simulation_id = _inserted_id(
-        connection,
-        FIND_OR_CREATE_SIMULATION,
-        id=uuid4(),
-        dataset_id=public_api_rows.dataset_id,
-        version_id=public_api_rows.version_id,
-        key=NATIONAL_KEY,
+        session, _find_or_create_simulation(public_api_rows, NATIONAL_KEY)
     )
     joined_simulation = _inserted_id(
-        connection,
-        FIND_OR_CREATE_SIMULATION,
-        id=uuid4(),
-        dataset_id=public_api_rows.dataset_id,
-        version_id=public_api_rows.version_id,
-        key=NATIONAL_KEY,
+        session, _find_or_create_simulation(public_api_rows, NATIONAL_KEY)
     )
     national_report = _inserted_id(
-        connection,
-        FIND_OR_CREATE_REPORT,
-        id=uuid4(),
-        model_id=public_api_rows.model_id,
-        key=NATIONAL_KEY,
-        dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        session, _find_or_create_report(public_api_rows, NATIONAL_KEY)
     )
     joined_report = _inserted_id(
-        connection,
-        FIND_OR_CREATE_REPORT,
-        id=uuid4(),
-        model_id=public_api_rows.model_id,
-        key=NATIONAL_KEY,
-        dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        session, _find_or_create_report(public_api_rows, NATIONAL_KEY)
     )
     # The local-area report is its own report, linked by the shared key.
     local_area_report = _inserted_id(
-        connection,
-        FIND_OR_CREATE_REPORT,
-        id=uuid4(),
-        model_id=public_api_rows.model_id,
-        key=LOCAL_AREA_KEY,
-        dataset_independent_key=DATASET_INDEPENDENT_KEY,
+        session, _find_or_create_report(public_api_rows, LOCAL_AREA_KEY)
     )
 
     assert simulation_id is not None
@@ -288,25 +395,26 @@ def test_identical_keys_name_one_simulation_and_one_report(
     assert national_report is not None
     assert joined_report is None
     assert local_area_report not in {None, national_report}
-    found = connection.execute(
-        text(
-            "SELECT id FROM simulations WHERE key_version = 1 AND definition_key = :key"
-        ),
-        {"key": NATIONAL_KEY},
+    found = session.execute(
+        select(col(Simulation.id)).where(
+            col(Simulation.key_version) == 1,
+            col(Simulation.definition_key) == NATIONAL_KEY,
+        )
     ).scalar_one()
     assert found == simulation_id
-    linked = connection.execute(
-        text("SELECT count(*) FROM reports WHERE dataset_independent_key = :key"),
-        {"key": DATASET_INDEPENDENT_KEY},
+    linked = session.execute(
+        select(func.count())
+        .select_from(Report)
+        .where(col(Report.dataset_independent_key) == DATASET_INDEPENDENT_KEY)
     ).scalar_one()
     assert linked == 2
     # Rows from before the keys, and a later key format, stay apart.
-    assert _simulation(connection, public_api_rows) != _simulation(
-        connection, public_api_rows
+    assert _simulation(session, public_api_rows) != _simulation(
+        session, public_api_rows
     )
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=uuid4(),
         simulation_type="economy",
         dataset_id=public_api_rows.dataset_id,
@@ -318,37 +426,28 @@ def test_identical_keys_name_one_simulation_and_one_report(
 
 
 def test_the_public_api_finds_reports_by_the_shared_key_alone(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
     """The app looks a local-area report up by the national report's key.
 
     The key holds its own key version, so the lookup names the key alone, and
     the index on that column alone serves it.
     """
-    _act_as(connection, managed_v2_roles.simulation_service)
+    act_as(session, managed_v2_roles.simulation_service)
     stored_report_ids = {
-        _inserted_id(
-            connection,
-            FIND_OR_CREATE_REPORT,
-            id=uuid4(),
-            model_id=public_api_rows.model_id,
-            key=key,
-            dataset_independent_key=DATASET_INDEPENDENT_KEY,
-        )
+        _inserted_id(session, _find_or_create_report(public_api_rows, key))
         for key in (NATIONAL_KEY, LOCAL_AREA_KEY)
     }
-    _act_as(connection, managed_v2_roles.runtime)
-    lookup = "SELECT id FROM reports WHERE dataset_independent_key = :key"
+    act_as(session, managed_v2_roles.runtime)
+    lookup = select(col(Report.id)).where(
+        col(Report.dataset_independent_key) == DATASET_INDEPENDENT_KEY
+    )
 
-    found_report_ids = set(
-        connection.execute(text(lookup), {"key": DATASET_INDEPENDENT_KEY}).scalars()
-    )
-    connection.execute(text("SET LOCAL enable_seqscan = off"))
-    plan = "\n".join(
-        connection.execute(
-            text(f"EXPLAIN {lookup}"), {"key": DATASET_INDEPENDENT_KEY}
-        ).scalars()
-    )
+    found_report_ids = set(session.execute(lookup).scalars())
+    # SET LOCAL enable_seqscan = off: set_config's true keeps it to the
+    # transaction.
+    session.execute(select(func.set_config("enable_seqscan", "off", true())))
+    plan = query_plan(session, lookup)
 
     assert found_report_ids == stored_report_ids
     assert None not in stored_report_ids
@@ -356,15 +455,39 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
 
 
 @pytest.mark.parametrize(
-    ("table", "key_columns"),
+    ("table", "key_columns", "constraint"),
     [
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY.upper()}),
-        ("simulations", {"key_version": 1, "definition_key": NATIONAL_KEY[:63]}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY.upper()},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": NATIONAL_KEY[:63]},
+            "ck_simulations_definition_key",
+        ),
         # Lowercase, 64 characters, but not hexadecimal.
-        ("simulations", {"key_version": 1, "definition_key": "g" * 64}),
-        ("simulations", {"key_version": 0, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": None, "definition_key": NATIONAL_KEY}),
-        ("simulations", {"key_version": 1, "definition_key": None}),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": "g" * 64},
+            "ck_simulations_definition_key",
+        ),
+        (
+            "simulations",
+            {"key_version": 0, "definition_key": NATIONAL_KEY},
+            "ck_simulations_key_version",
+        ),
+        (
+            "simulations",
+            {"key_version": None, "definition_key": NATIONAL_KEY},
+            "ck_simulations_keys_complete",
+        ),
+        (
+            "simulations",
+            {"key_version": 1, "definition_key": None},
+            "ck_simulations_keys_complete",
+        ),
         (
             "reports",
             {
@@ -372,6 +495,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": None,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -380,6 +504,7 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": None,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY,
             },
+            "ck_reports_keys_complete",
         ),
         (
             "reports",
@@ -388,14 +513,16 @@ def test_the_public_api_finds_reports_by_the_shared_key_alone(
                 "definition_key": NATIONAL_KEY,
                 "dataset_independent_key": DATASET_INDEPENDENT_KEY.upper(),
             },
+            "ck_reports_dataset_independent_key",
         ),
     ],
 )
 def test_a_malformed_or_incomplete_key_is_refused(
-    connection: Connection,
+    session: Session,
     public_api_rows: PublicApiRows,
     table: str,
     key_columns: dict[str, object],
+    constraint: str,
 ) -> None:
     columns: dict[str, object] = (
         {
@@ -405,38 +532,35 @@ def test_a_malformed_or_incomplete_key_is_refused(
         }
         if table == "simulations"
         else {
-            "label": "Report",
             "country": "us",
             "tax_benefit_model_id": public_api_rows.model_id,
-            "inputs": "{}",
+            "inputs": {},
         }
     )
     columns |= {"id": uuid4(), "year": 2026, **key_columns}
 
-    with refused(connection, IntegrityError, match="violates check constraint"):
-        insert_row(connection, table, **columns)
+    with refused(
+        session, IntegrityError, match=f'violates check constraint "{constraint}"'
+    ):
+        add_row(session, KEYED_MODELS[table], **columns)
 
 
 def test_a_simulation_has_one_unfailed_unforced_run_per_version_set(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
-    _act_as(connection, managed_v2_roles.simulation_service)
+    simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
+    act_as(session, managed_v2_roles.simulation_service)
 
-    first_run = _simulation_run(connection, public_api_rows, simulation_id)
-    joined = _simulation_run(connection, public_api_rows, simulation_id)
-    forced_run = _simulation_run(
-        connection, public_api_rows, simulation_id, forced=True
-    )
+    first_run = _simulation_run(session, public_api_rows, simulation_id)
+    joined = _simulation_run(session, public_api_rows, simulation_id)
+    forced_run = _simulation_run(session, public_api_rows, simulation_id, forced=True)
     second_forced_run = _simulation_run(
-        connection, public_api_rows, simulation_id, forced=True
+        session, public_api_rows, simulation_id, forced=True
     )
     newer_versions_run = _simulation_run(
-        connection, public_api_rows, simulation_id, versions=NEWER_VERSIONS
+        session, public_api_rows, simulation_id, versions=NEWER_VERSIONS
     )
-    other_year_run = _simulation_run(
-        connection, public_api_rows, simulation_id, year=2027
-    )
+    other_year_run = _simulation_run(session, public_api_rows, simulation_id, year=2027)
 
     assert first_run is not None
     assert joined is None
@@ -444,104 +568,101 @@ def test_a_simulation_has_one_unfailed_unforced_run_per_version_set(
     assert other_year_run is not None
     # Today's plain INSERT of a second run on the same versions is refused.
     _refused(
-        connection,
-        "INSERT INTO simulation_runs (id, simulation_id, year, "
-        "tax_benefit_model_version_id, country_package_version, "
-        "policyengine_version, status) VALUES (:id, :simulation_id, 2026, "
-        ":version_id, :country_package_version, :policyengine_version, 'pending')",
+        session,
+        insert(SimulationRun).values(
+            id=uuid4(),
+            simulation_id=simulation_id,
+            year=2026,
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            status="pending",
+            **RUN_VERSIONS,
+        ),
         match="uq_simulation_runs_unfailed_unforced_versions",
-        id=uuid4(),
-        simulation_id=simulation_id,
-        version_id=public_api_rows.version_id,
-        **RUN_VERSIONS,
     )
 
     # A failed run never counts: the next request creates a new run.
-    _act_as(connection, managed_v2_roles.modal_worker)
-    _fail(connection, "simulation_runs", first_run)
-    _act_as(connection, managed_v2_roles.simulation_service)
-    after_failure = _simulation_run(connection, public_api_rows, simulation_id)
+    act_as(session, managed_v2_roles.modal_worker)
+    _fail(session, SimulationRun, first_run)
+    act_as(session, managed_v2_roles.simulation_service)
+    after_failure = _simulation_run(session, public_api_rows, simulation_id)
     assert after_failure not in {None, first_run}
     # The failed run can't count again while the new one hasn't failed.
-    _act_as(connection, managed_v2_roles.modal_worker)
+    act_as(session, managed_v2_roles.modal_worker)
     _refused(
-        connection,
-        "UPDATE simulation_runs SET status = 'running' WHERE id = :id",
+        session,
+        update_row(SimulationRun, first_run, status="running"),
         match="uq_simulation_runs_unfailed_unforced_versions",
-        id=first_run,
     )
 
 
 def test_a_report_has_one_unfailed_unforced_run_per_version_set_outside_windows(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
-    report_id = _report(connection, public_api_rows)
-    _act_as(connection, managed_v2_roles.simulation_service)
-    baseline_run_id = _simulation_run(connection, public_api_rows, simulation_id)
+    simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
+    report_id = _report(session, public_api_rows)
+    act_as(session, managed_v2_roles.simulation_service)
+    baseline_run_id = _simulation_run(session, public_api_rows, simulation_id)
     assert baseline_run_id is not None
 
-    first_run = _report_run(connection, report_id, baseline_run_id)
-    joined = _report_run(connection, report_id, baseline_run_id)
-    forced_run = _report_run(connection, report_id, baseline_run_id, forced=True)
+    first_run = _report_run(session, report_id, baseline_run_id)
+    joined = _report_run(session, report_id, baseline_run_id)
+    forced_run = _report_run(session, report_id, baseline_run_id, forced=True)
     newer_versions_run = _report_run(
-        connection, report_id, baseline_run_id, versions=NEWER_VERSIONS
+        session, report_id, baseline_run_id, versions=NEWER_VERSIONS
     )
     # Each window run names a report run per year on the same versions.
     for window_run_id in (uuid4(), uuid4()):
-        insert_row(
-            connection,
-            "budget_window_runs",
+        add_row(
+            session,
+            BudgetWindowRun,
             id=window_run_id,
             report_id=report_id,
             tax_benefit_model_version_id=public_api_rows.version_id,
-            trigger="initial",
             recalculate=False,
             status="pending",
         )
-        insert_row(
-            connection,
-            "report_runs",
+        add_row(
+            session,
+            ReportRun,
             id=uuid4(),
             report_id=report_id,
             budget_window_run_id=window_run_id,
             year=2026,
             baseline_simulation_run_id=baseline_run_id,
             status="pending",
-            trigger="initial",
             **RUN_VERSIONS,
         )
 
     assert first_run is not None
     assert joined is None
     assert None not in {forced_run, newer_versions_run}
-    _act_as(connection, managed_v2_roles.modal_worker)
-    _fail(connection, "report_runs", first_run)
-    _act_as(connection, managed_v2_roles.simulation_service)
-    assert _report_run(connection, report_id, baseline_run_id) not in {
+    act_as(session, managed_v2_roles.modal_worker)
+    _fail(session, ReportRun, first_run)
+    act_as(session, managed_v2_roles.simulation_service)
+    assert _report_run(session, report_id, baseline_run_id) not in {
         None,
         first_run,
     }
 
 
 def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
     """``recalculate`` is a window run's forced marker."""
-    report_id = _report(connection, public_api_rows)
-    _act_as(connection, managed_v2_roles.simulation_service)
+    report_id = _report(session, public_api_rows)
+    act_as(session, managed_v2_roles.simulation_service)
 
     def window_run(
         *, policyengine_version: str = "4.0.0", recalculate: bool = False
     ) -> UUID | None:
         return _inserted_id(
-            connection,
-            FIND_OR_CREATE_WINDOW_RUN,
-            id=uuid4(),
-            report_id=report_id,
-            version_id=public_api_rows.version_id,
-            policyengine_version=policyengine_version,
-            recalculate=recalculate,
+            session,
+            _find_or_create_window_run(
+                public_api_rows,
+                report_id,
+                policyengine_version=policyengine_version,
+                recalculate=recalculate,
+            ),
         )
 
     first_run = window_run()
@@ -552,49 +673,48 @@ def test_a_budget_window_has_one_unfailed_unrecalculated_run_per_version_set(
     assert first_run is not None
     assert joined is None
     assert None not in {recalculated, newer_versions_run}
-    _act_as(connection, managed_v2_roles.modal_worker)
-    _fail(connection, "budget_window_runs", first_run)
-    _act_as(connection, managed_v2_roles.simulation_service)
+    act_as(session, managed_v2_roles.modal_worker)
+    _fail(session, BudgetWindowRun, first_run)
+    act_as(session, managed_v2_roles.simulation_service)
     assert window_run() not in {None, first_run}
     _refused(
-        connection,
-        "UPDATE budget_window_runs SET policyengine_version = '4.9.9' WHERE id = :id",
+        session,
+        update_row(BudgetWindowRun, first_run, policyengine_version="4.9.9"),
         ProgrammingError,
         match="permission denied",
-        id=first_run,
     )
 
 
 def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    """A report without a label, and runs without a trigger, are stored as such."""
-    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
-    _act_as(connection, managed_v2_roles.simulation_service)
-    baseline_run_id = _simulation_run(connection, public_api_rows, simulation_id)
+    """The service stores reports and runs with no label, user or trigger."""
+    simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
+    act_as(session, managed_v2_roles.simulation_service)
+    baseline_run_id = _simulation_run(session, public_api_rows, simulation_id)
     report_id, report_run_id, window_run_id = uuid4(), uuid4(), uuid4()
 
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=report_id,
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
-        inputs="{}",
+        inputs={},
     )
-    insert_row(
-        connection,
-        "report_runs",
+    add_row(
+        session,
+        ReportRun,
         id=report_run_id,
         report_id=report_id,
         baseline_simulation_run_id=baseline_run_id,
         status="pending",
         **RUN_VERSIONS,
     )
-    insert_row(
-        connection,
-        "budget_window_runs",
+    add_row(
+        session,
+        BudgetWindowRun,
         id=window_run_id,
         report_id=report_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
@@ -602,142 +722,111 @@ def test_the_simulation_service_writes_shared_rows_without_per_user_columns(
         status="pending",
     )
 
-    _act_as(connection, managed_v2_roles.runtime)
-    stored = connection.execute(
-        text(
-            "SELECT reports.label, report_runs.trigger, budget_window_runs.trigger "
-            "FROM reports JOIN report_runs ON report_runs.report_id = reports.id "
-            "JOIN budget_window_runs ON budget_window_runs.report_id = reports.id "
-            "WHERE reports.id = :report_id"
-        ),
-        {"report_id": report_id},
+    act_as(session, managed_v2_roles.runtime)
+    stored = session.execute(
+        select(col(Report.id), col(ReportRun.id), col(BudgetWindowRun.id))
+        .select_from(Report)
+        .join(ReportRun, col(ReportRun.report_id) == col(Report.id))
+        .join(BudgetWindowRun, col(BudgetWindowRun.report_id) == col(Report.id))
+        .where(col(Report.id) == report_id)
     ).one()
-    assert tuple(stored) == (None, None, None)
+    assert tuple(stored) == (report_id, report_run_id, window_run_id)
 
 
 def test_no_simulation_role_changes_a_rows_key_or_a_runs_forced_marker(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
-    report_id = _report(connection, public_api_rows)
-    _act_as(connection, managed_v2_roles.simulation_service)
-    run_id = _simulation_run(connection, public_api_rows, simulation_id)
+    simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
+    report_id = _report(session, public_api_rows)
+    act_as(session, managed_v2_roles.simulation_service)
+    run_id = _simulation_run(session, public_api_rows, simulation_id)
     assert run_id is not None
-    report_run_id = _report_run(connection, report_id, run_id)
+    report_run_id = _report_run(session, report_id, run_id)
 
     for role in (
         managed_v2_roles.simulation_service,
         managed_v2_roles.modal_worker,
     ):
-        _act_as(connection, role)
-        for statement, row_id in (
-            (
-                "UPDATE simulations SET definition_key = NULL WHERE id = :id",
-                simulation_id,
-            ),
-            ("UPDATE reports SET key_version = 1 WHERE id = :id", report_id),
-            ("UPDATE simulation_runs SET forced = true WHERE id = :id", run_id),
-            ("UPDATE report_runs SET forced = true WHERE id = :id", report_run_id),
+        act_as(session, role)
+        # The keys' UPDATEs set only the key column: neither role may update
+        # ``updated_at`` on simulations or reports, which the models' UPDATE
+        # also sets. Both roles may update it on the run tables.
+        for statement in (
+            update_row(SimulationColumns, simulation_id, definition_key=None),
+            update_row(ReportColumns, report_id, key_version=1),
+            update_row(SimulationRun, run_id, forced=True),
+            update_row(ReportRun, report_run_id, forced=True),
         ):
-            _refused(
-                connection,
-                statement,
-                ProgrammingError,
-                match="permission denied",
-                id=row_id,
-            )
+            _refused(session, statement, ProgrammingError, match="permission denied")
 
 
 def test_the_public_api_records_each_users_request_for_a_report_run(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    simulation_id = _simulation(connection, public_api_rows, NATIONAL_KEY)
-    report_id = _report(connection, public_api_rows)
-    first_user, second_user, third_user = (_user(connection) for _ in range(3))
-    _act_as(connection, managed_v2_roles.simulation_service)
-    baseline_run_id = _simulation_run(connection, public_api_rows, simulation_id)
-    report_run_id = _report_run(connection, report_id, baseline_run_id)
-    _act_as(connection, managed_v2_roles.runtime)
+    simulation_id = _simulation(session, public_api_rows, NATIONAL_KEY)
+    report_id = _report(session, public_api_rows)
+    first_user, second_user, third_user = (_user(session) for _ in range(3))
+    act_as(session, managed_v2_roles.simulation_service)
+    baseline_run_id = _simulation_run(session, public_api_rows, simulation_id)
+    report_run_id = _report_run(session, report_id, baseline_run_id)
+    act_as(session, managed_v2_roles.runtime)
 
     first_record, second_record = uuid4(), uuid4()
-    connection.execute(
-        text(RECORD_REQUEST),
-        {
-            "id": first_record,
-            "user_id": first_user,
-            "report_run_id": report_run_id,
-            "trigger": "initial",
-        },
+    session.execute(
+        _record_request(first_user, report_run_id, "initial", record_id=first_record)
     )
     # A second user who joins the same run gets a record of their own.
-    connection.execute(
-        text(RECORD_REQUEST),
-        {
-            "id": second_record,
-            "user_id": second_user,
-            "report_run_id": report_run_id,
-            "trigger": "manual",
-        },
+    session.execute(
+        _record_request(second_user, report_run_id, "manual", record_id=second_record)
     )
-    requesters = connection.execute(
-        text(
-            "SELECT user_id FROM user_report_run_associations "
-            "WHERE report_run_id = :report_run_id ORDER BY trigger"
-        ),
-        {"report_run_id": report_run_id},
+    requesters = session.execute(
+        select(col(UserReportRunAssociation.user_id))
+        .where(col(UserReportRunAssociation.report_run_id) == report_run_id)
+        .order_by(col(UserReportRunAssociation.trigger))
     ).scalars()
     assert list(requesters) == [first_user, second_user]
     _refused(
-        connection,
-        RECORD_REQUEST,
+        session,
+        _record_request(first_user, report_run_id, "manual"),
         match="uq_user_report_run_associations_user_id_report_run_id",
-        id=uuid4(),
-        user_id=first_user,
-        report_run_id=report_run_id,
-        trigger="manual",
     )
     # A system re-run is nobody's request.
     _refused(
-        connection,
-        RECORD_REQUEST,
+        session,
+        _record_request(third_user, report_run_id, "system"),
         match="ck_user_report_run_associations_trigger",
-        id=uuid4(),
-        user_id=third_user,
-        report_run_id=report_run_id,
-        trigger="system",
     )
     _refused(
-        connection,
-        "UPDATE user_report_run_associations SET requested_at = now() WHERE id = :id",
+        session,
+        update_row(UserReportRunAssociation, first_record, requested_at=func.now()),
         ProgrammingError,
         match="permission denied",
-        id=first_record,
     )
-    deleted = connection.execute(
-        text("DELETE FROM user_report_run_associations WHERE id = :id RETURNING id"),
-        {"id": second_record},
+    deleted = session.execute(
+        delete(UserReportRunAssociation)
+        .where(col(UserReportRunAssociation.id) == second_record)
+        .returning(col(UserReportRunAssociation.id))
     ).scalar_one()
     assert deleted == second_record
 
     for role in (managed_v2_roles.simulation_service, managed_v2_roles.modal_worker):
-        _act_as(connection, role)
+        act_as(session, role)
         _refused(
-            connection,
-            "SELECT count(*) FROM user_report_run_associations",
+            session,
+            select(func.count()).select_from(UserReportRunAssociation),
             ProgrammingError,
             match="permission denied",
         )
 
     # A run a user asked for stays; the user's records go with the user.
-    _act_as_owner(connection)
+    act_as_owner(session)
     _refused(
-        connection,
-        "DELETE FROM report_runs WHERE id = :id",
+        session,
+        delete(ReportRun).where(col(ReportRun.id) == report_run_id),
         match="fk_user_report_run_associations_report_run_id_report_runs",
-        id=report_run_id,
     )
-    connection.execute(text("DELETE FROM users WHERE id = :id"), {"id": first_user})
-    remaining = connection.execute(
-        text("SELECT count(*) FROM user_report_run_associations")
+    session.execute(delete(User).where(col(User.id) == first_user))
+    remaining = session.execute(
+        select(func.count()).select_from(UserReportRunAssociation)
     ).scalar_one()
     assert remaining == 0

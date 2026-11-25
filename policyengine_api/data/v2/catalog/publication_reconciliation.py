@@ -3,67 +3,80 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
-from sqlalchemy import Connection, Select
+from sqlalchemy import Select
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped
+from sqlmodel import col
 
-from policyengine_api.data.v2.catalog.publication_staging import (
-    STAGE_CATALOG_DATASETS,
-    STAGE_CATALOG_MODELS,
-    STAGE_CATALOG_PARAMETER_NODES,
-    STAGE_CATALOG_PARAMETER_VALUES,
-    STAGE_CATALOG_PARAMETERS,
-    STAGE_CATALOG_REGIONS,
-    STAGE_CATALOG_VARIABLES,
-)
-from policyengine_api.data.v2.catalog.publication_tables import (
-    DATASETS,
-    MODEL_VERSIONS,
-    MODELS,
-    PARAMETER_NODES,
-    PARAMETER_VALUES,
-    PARAMETERS,
-    REGIONS,
-    VARIABLES,
+from policyengine_api.data.v2.catalog.publication_inserts import column_type
+from policyengine_api.data.v2.catalog.publication_staging_base import (
+    StagedDataset,
+    StagedModel,
+    StagedParameter,
+    StagedParameterNode,
+    StagedParameterValue,
+    StagedRegion,
+    StagedVariable,
 )
 from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
+)
+from policyengine_api.data.v2.models import (
+    Dataset,
+    Parameter,
+    ParameterNode,
+    ParameterValue,
+    Region,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
 )
 
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from sqlmodel import Session
+
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
+# The catalog tables whose rows belong to one model version.
+VersionedCatalogRow = Variable | ParameterNode | Parameter | Dataset | Region
+# A selected column: a mapped attribute, or an expression such as a cast.
+ColumnExpression = sa.ColumnElement[Any] | Mapped[Any]
 
-def version_exists(connection: Connection, country: CountryCatalog) -> bool:
+
+def version_exists(session: Session, country: CountryCatalog) -> bool:
     """Return whether the model name and version of this country are already stored."""
     statement = (
-        sa.select(MODEL_VERSIONS.c.id)
+        sa.select(col(TaxBenefitModelVersion.id))
         .select_from(
-            MODEL_VERSIONS.join(
-                MODELS,
-                MODELS.c.id == MODEL_VERSIONS.c.model_id,
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
             )
         )
         .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
+            col(TaxBenefitModel.name) == country.model.name,
+            col(TaxBenefitModelVersion.version) == country.model_version.version,
         )
         .limit(1)
     )
-    return connection.execute(statement).first() is not None
+    return session.execute(statement).first() is not None
 
 
-def _versioned_table_from(table: sa.Table) -> sa.Join:
-    return table.join(
-        MODEL_VERSIONS,
-        MODEL_VERSIONS.c.id == table.c.tax_benefit_model_version_id,
+def _versioned_from(model: type[VersionedCatalogRow]) -> sa.Join:
+    """Join a catalog table to its rows' model version and model."""
+    return sa.join(
+        model,
+        TaxBenefitModelVersion,
+        col(TaxBenefitModelVersion.id) == col(model.tax_benefit_model_version_id),
     ).join(
-        MODELS,
-        MODELS.c.id == MODEL_VERSIONS.c.model_id,
+        TaxBenefitModel,
+        col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
     )
 
 
@@ -79,24 +92,25 @@ class StoredVersion:
     catalog_format: int | None
 
 
-def stored_version(
-    connection: Connection, country: CountryCatalog
-) -> StoredVersion | None:
+def stored_version(session: Session, country: CountryCatalog) -> StoredVersion | None:
     """Return this country's stored catalog version, or None if it is not stored."""
     statement = (
-        sa.select(MODEL_VERSIONS.c.id, MODEL_VERSIONS.c.catalog_format)
+        sa.select(
+            col(TaxBenefitModelVersion.id), col(TaxBenefitModelVersion.catalog_format)
+        )
         .select_from(
-            MODEL_VERSIONS.join(
-                MODELS,
-                MODELS.c.id == MODEL_VERSIONS.c.model_id,
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
             )
         )
         .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
+            col(TaxBenefitModel.name) == country.model.name,
+            col(TaxBenefitModelVersion.version) == country.model_version.version,
         )
     )
-    row = connection.execute(statement).one_or_none()
+    row = session.execute(statement).one_or_none()
     if row is None:
         return None
     return StoredVersion(id=row.id, catalog_format=row.catalog_format)
@@ -116,180 +130,186 @@ def _comparison_pairs(
     version the staged ones (``update_stored_time_periods``).
     """
 
-    def format_2(*columns: sa.ColumnElement) -> tuple[sa.ColumnElement, ...]:
+    def format_2(*columns: ColumnExpression) -> tuple[ColumnExpression, ...]:
         return columns if with_format_2 else ()
 
-    staged_country = STAGE_CATALOG_MODELS.c.country_id == country.country_id
+    staged_country = col(StagedModel.country_id) == country.country_id
     selected_version = sa.and_(
-        MODELS.c.name == country.model.name,
-        MODEL_VERSIONS.c.version == country.model_version.version,
+        col(TaxBenefitModel.name) == country.model.name,
+        col(TaxBenefitModelVersion.version) == country.model_version.version,
     )
 
     staged_model_version = sa.select(
-        STAGE_CATALOG_MODELS.c.version_description,
-        STAGE_CATALOG_MODELS.c.current_law_id,
+        col(StagedModel.version_description),
+        col(StagedModel.current_law_id),
         *format_2(
-            STAGE_CATALOG_MODELS.c.catalog_format,
-            STAGE_CATALOG_MODELS.c.entities,
-            STAGE_CATALOG_MODELS.c.basic_inputs,
+            col(StagedModel.catalog_format),
+            col(StagedModel.entities),
+            col(StagedModel.basic_inputs),
         ),
     ).where(staged_country)
     actual_model_version = (
         sa.select(
-            MODEL_VERSIONS.c.description,
-            MODEL_VERSIONS.c.current_law_id,
+            col(TaxBenefitModelVersion.description),
+            col(TaxBenefitModelVersion.current_law_id),
             *format_2(
-                MODEL_VERSIONS.c.catalog_format,
-                sa.cast(MODEL_VERSIONS.c.entities, JSONB),
-                sa.cast(MODEL_VERSIONS.c.basic_inputs, JSONB),
+                col(TaxBenefitModelVersion.catalog_format),
+                sa.cast(col(TaxBenefitModelVersion.entities), JSONB),
+                sa.cast(col(TaxBenefitModelVersion.basic_inputs), JSONB),
             ),
         )
         .select_from(
-            MODEL_VERSIONS.join(
-                MODELS,
-                MODELS.c.id == MODEL_VERSIONS.c.model_id,
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
             )
         )
         .where(selected_version)
     )
 
     staged_variables = sa.select(
-        STAGE_CATALOG_VARIABLES.c.name,
-        STAGE_CATALOG_VARIABLES.c.label,
-        STAGE_CATALOG_VARIABLES.c.entity,
-        STAGE_CATALOG_VARIABLES.c.description,
-        STAGE_CATALOG_VARIABLES.c.data_type,
-        STAGE_CATALOG_VARIABLES.c.possible_values,
-        STAGE_CATALOG_VARIABLES.c.default_value,
-        STAGE_CATALOG_VARIABLES.c.adds,
-        STAGE_CATALOG_VARIABLES.c.subtracts,
+        col(StagedVariable.name),
+        col(StagedVariable.label),
+        col(StagedVariable.entity),
+        col(StagedVariable.description),
+        col(StagedVariable.data_type),
+        col(StagedVariable.possible_values),
+        col(StagedVariable.default_value),
+        col(StagedVariable.adds),
+        col(StagedVariable.subtracts),
         *format_2(
-            STAGE_CATALOG_VARIABLES.c.is_input_variable,
-            STAGE_CATALOG_VARIABLES.c.hidden_input,
-            STAGE_CATALOG_VARIABLES.c.module_name,
-            STAGE_CATALOG_VARIABLES.c.adds_parameter_path,
-            STAGE_CATALOG_VARIABLES.c.subtracts_parameter_path,
-            STAGE_CATALOG_VARIABLES.c.enum_values,
-            STAGE_CATALOG_VARIABLES.c.unit,
-            STAGE_CATALOG_VARIABLES.c.definition_period,
+            col(StagedVariable.is_input_variable),
+            col(StagedVariable.hidden_input),
+            col(StagedVariable.module_name),
+            col(StagedVariable.adds_parameter_path),
+            col(StagedVariable.subtracts_parameter_path),
+            col(StagedVariable.enum_values),
+            col(StagedVariable.unit),
+            col(StagedVariable.definition_period),
         ),
-    ).where(STAGE_CATALOG_VARIABLES.c.country_id == country.country_id)
+    ).where(col(StagedVariable.country_id) == country.country_id)
     actual_variables = (
         sa.select(
-            VARIABLES.c.name,
-            VARIABLES.c.label,
-            VARIABLES.c.entity,
-            VARIABLES.c.description,
-            VARIABLES.c.data_type,
-            sa.cast(VARIABLES.c.possible_values, JSONB),
-            sa.cast(VARIABLES.c.default_value, JSONB),
-            sa.cast(VARIABLES.c.adds, JSONB),
-            sa.cast(VARIABLES.c.subtracts, JSONB),
+            col(Variable.name),
+            col(Variable.label),
+            col(Variable.entity),
+            col(Variable.description),
+            col(Variable.data_type),
+            sa.cast(col(Variable.possible_values), JSONB),
+            sa.cast(col(Variable.default_value), JSONB),
+            sa.cast(col(Variable.adds), JSONB),
+            sa.cast(col(Variable.subtracts), JSONB),
             *format_2(
-                VARIABLES.c.is_input_variable,
-                VARIABLES.c.hidden_input,
-                VARIABLES.c.module_name,
-                VARIABLES.c.adds_parameter_path,
-                VARIABLES.c.subtracts_parameter_path,
-                sa.cast(VARIABLES.c.enum_values, JSONB),
-                VARIABLES.c.unit,
-                VARIABLES.c.definition_period,
+                col(Variable.is_input_variable),
+                col(Variable.hidden_input),
+                col(Variable.module_name),
+                col(Variable.adds_parameter_path),
+                col(Variable.subtracts_parameter_path),
+                sa.cast(col(Variable.enum_values), JSONB),
+                col(Variable.unit),
+                col(Variable.definition_period),
             ),
         )
-        .select_from(_versioned_table_from(VARIABLES))
+        .select_from(_versioned_from(Variable))
         .where(selected_version)
     )
 
     staged_parameter_nodes = sa.select(
-        STAGE_CATALOG_PARAMETER_NODES.c.name,
-        STAGE_CATALOG_PARAMETER_NODES.c.label,
-        STAGE_CATALOG_PARAMETER_NODES.c.description,
-    ).where(STAGE_CATALOG_PARAMETER_NODES.c.country_id == country.country_id)
+        col(StagedParameterNode.name),
+        col(StagedParameterNode.label),
+        col(StagedParameterNode.description),
+    ).where(col(StagedParameterNode.country_id) == country.country_id)
     actual_parameter_nodes = (
         sa.select(
-            PARAMETER_NODES.c.name,
-            PARAMETER_NODES.c.label,
-            PARAMETER_NODES.c.description,
+            col(ParameterNode.name),
+            col(ParameterNode.label),
+            col(ParameterNode.description),
         )
-        .select_from(_versioned_table_from(PARAMETER_NODES))
+        .select_from(_versioned_from(ParameterNode))
         .where(selected_version)
     )
 
     staged_parameters = sa.select(
-        STAGE_CATALOG_PARAMETERS.c.name,
-        STAGE_CATALOG_PARAMETERS.c.label,
-        STAGE_CATALOG_PARAMETERS.c.description,
-        STAGE_CATALOG_PARAMETERS.c.data_type,
-        STAGE_CATALOG_PARAMETERS.c.unit,
+        col(StagedParameter.name),
+        col(StagedParameter.label),
+        col(StagedParameter.description),
+        col(StagedParameter.data_type),
+        col(StagedParameter.unit),
         *format_2(
-            STAGE_CATALOG_PARAMETERS.c.economy,
-            STAGE_CATALOG_PARAMETERS.c.household,
+            col(StagedParameter.economy),
+            col(StagedParameter.household),
         ),
-    ).where(STAGE_CATALOG_PARAMETERS.c.country_id == country.country_id)
+    ).where(col(StagedParameter.country_id) == country.country_id)
     actual_parameters = (
         sa.select(
-            PARAMETERS.c.name,
-            PARAMETERS.c.label,
-            PARAMETERS.c.description,
-            PARAMETERS.c.data_type,
-            PARAMETERS.c.unit,
-            *format_2(PARAMETERS.c.economy, PARAMETERS.c.household),
+            col(Parameter.name),
+            col(Parameter.label),
+            col(Parameter.description),
+            col(Parameter.data_type),
+            col(Parameter.unit),
+            *format_2(col(Parameter.economy), col(Parameter.household)),
         )
-        .select_from(_versioned_table_from(PARAMETERS))
+        .select_from(_versioned_from(Parameter))
         .where(selected_version)
     )
 
     staged_parameter_values = sa.select(
-        STAGE_CATALOG_PARAMETER_VALUES.c.parameter_name,
-        STAGE_CATALOG_PARAMETER_VALUES.c.value_json,
-        STAGE_CATALOG_PARAMETER_VALUES.c.start_date,
-        STAGE_CATALOG_PARAMETER_VALUES.c.end_date,
-    ).where(STAGE_CATALOG_PARAMETER_VALUES.c.country_id == country.country_id)
+        col(StagedParameterValue.parameter_name),
+        col(StagedParameterValue.value_json),
+        col(StagedParameterValue.start_date),
+        col(StagedParameterValue.end_date),
+    ).where(col(StagedParameterValue.country_id) == country.country_id)
     actual_parameter_values = (
         sa.select(
-            PARAMETERS.c.name,
-            sa.cast(PARAMETER_VALUES.c.value_json, JSONB),
-            PARAMETER_VALUES.c.start_date,
-            PARAMETER_VALUES.c.end_date,
+            col(Parameter.name),
+            sa.cast(col(ParameterValue.value_json), JSONB),
+            col(ParameterValue.start_date),
+            col(ParameterValue.end_date),
         )
         .select_from(
-            PARAMETER_VALUES.join(
-                PARAMETERS,
-                PARAMETERS.c.id == PARAMETER_VALUES.c.parameter_id,
+            sa.join(
+                ParameterValue,
+                Parameter,
+                col(Parameter.id) == col(ParameterValue.parameter_id),
             )
             .join(
-                MODEL_VERSIONS,
-                MODEL_VERSIONS.c.id == PARAMETERS.c.tax_benefit_model_version_id,
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id)
+                == col(Parameter.tax_benefit_model_version_id),
             )
-            .join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
         )
         .where(
             selected_version,
-            PARAMETER_VALUES.c.policy_id.is_(None),
-            PARAMETER_VALUES.c.dynamic_id.is_(None),
+            col(ParameterValue.policy_id).is_(None),
+            col(ParameterValue.dynamic_id).is_(None),
         )
     )
 
     staged_datasets = sa.select(
-        STAGE_CATALOG_DATASETS.c.name,
-        STAGE_CATALOG_DATASETS.c.description,
-        STAGE_CATALOG_DATASETS.c.year,
+        col(StagedDataset.name),
+        col(StagedDataset.description),
+        col(StagedDataset.year),
         sa.literal(value=False),
-        sa.cast(sa.null(), DATASETS.c.storage_path.type),
-    ).where(STAGE_CATALOG_DATASETS.c.country_id == country.country_id)
+        sa.cast(sa.null(), column_type(Dataset, "storage_path")),
+    ).where(col(StagedDataset.country_id) == country.country_id)
     actual_datasets = (
         sa.select(
-            DATASETS.c.name,
-            DATASETS.c.description,
-            DATASETS.c.year,
-            DATASETS.c.is_output_dataset,
-            DATASETS.c.storage_path,
+            col(Dataset.name),
+            col(Dataset.description),
+            col(Dataset.year),
+            col(Dataset.is_output_dataset),
+            col(Dataset.storage_path),
         )
-        .select_from(_versioned_table_from(DATASETS))
+        .select_from(_versioned_from(Dataset))
         .where(
             selected_version,
-            DATASETS.c.is_output_dataset.is_(False),
-            DATASETS.c.storage_path.is_(None),
+            col(Dataset.is_output_dataset).is_(False),
+            col(Dataset.storage_path).is_(None),
         )
     )
 
@@ -306,40 +326,40 @@ def _comparison_pairs(
 def _region_comparison_pair(country: CountryCatalog) -> tuple[Select, Select]:
     """Return the staged and stored region rows of one country's catalog version."""
     selected_version = sa.and_(
-        MODELS.c.name == country.model.name,
-        MODEL_VERSIONS.c.version == country.model_version.version,
+        col(TaxBenefitModel.name) == country.model.name,
+        col(TaxBenefitModelVersion.version) == country.model_version.version,
     )
     staged_regions = sa.select(
-        STAGE_CATALOG_REGIONS.c.code,
-        STAGE_CATALOG_REGIONS.c.label,
-        STAGE_CATALOG_REGIONS.c.region_type,
-        STAGE_CATALOG_REGIONS.c.requires_filter,
-        STAGE_CATALOG_REGIONS.c.filter_field,
-        STAGE_CATALOG_REGIONS.c.filter_value,
-        STAGE_CATALOG_REGIONS.c.filter_strategy,
-        STAGE_CATALOG_REGIONS.c.parent_code,
-        STAGE_CATALOG_REGIONS.c.state_code,
-        STAGE_CATALOG_REGIONS.c.state_name,
-        STAGE_CATALOG_REGIONS.c.default_dataset_name,
-    ).where(STAGE_CATALOG_REGIONS.c.country_id == country.country_id)
+        col(StagedRegion.code),
+        col(StagedRegion.label),
+        col(StagedRegion.region_type),
+        col(StagedRegion.requires_filter),
+        col(StagedRegion.filter_field),
+        col(StagedRegion.filter_value),
+        col(StagedRegion.filter_strategy),
+        col(StagedRegion.parent_code),
+        col(StagedRegion.state_code),
+        col(StagedRegion.state_name),
+        col(StagedRegion.default_dataset_name),
+    ).where(col(StagedRegion.country_id) == country.country_id)
     actual_regions = (
         sa.select(
-            REGIONS.c.code,
-            REGIONS.c.label,
-            sa.cast(REGIONS.c.region_type, sa.Text),
-            REGIONS.c.requires_filter,
-            REGIONS.c.filter_field,
-            REGIONS.c.filter_value,
-            REGIONS.c.filter_strategy,
-            REGIONS.c.parent_code,
-            REGIONS.c.state_code,
-            REGIONS.c.state_name,
-            DATASETS.c.name,
+            col(Region.code),
+            col(Region.label),
+            sa.cast(col(Region.region_type), sa.Text),
+            col(Region.requires_filter),
+            col(Region.filter_field),
+            col(Region.filter_value),
+            col(Region.filter_strategy),
+            col(Region.parent_code),
+            col(Region.state_code),
+            col(Region.state_name),
+            col(Dataset.name),
         )
         .select_from(
-            _versioned_table_from(REGIONS).join(
-                DATASETS,
-                DATASETS.c.id == REGIONS.c.default_dataset_id,
+            _versioned_from(Region).join(
+                Dataset,
+                col(Dataset.id) == col(Region.default_dataset_id),
             )
         )
         .where(selected_version)
@@ -349,7 +369,7 @@ def _region_comparison_pair(country: CountryCatalog) -> tuple[Select, Select]:
 
 
 def _sets_differ(
-    connection: Connection,
+    session: Session,
     staged: Select,
     actual: Select,
 ) -> bool:
@@ -359,11 +379,11 @@ def _sets_differ(
         sa.select(sa.literal(1)).select_from(missing),
         sa.select(sa.literal(1)).select_from(extra),
     ).limit(1)
-    return connection.execute(differences).first() is not None
+    return session.execute(differences).first() is not None
 
 
 def assert_country_matches(
-    connection: Connection,
+    session: Session,
     country: CountryCatalog,
     *,
     include_regions: bool = True,
@@ -373,13 +393,13 @@ def assert_country_matches(
     Rows are compared as sets in both directions, so a missing row and an extra
     row both fail; the error names the first table that differs, never its
     rows. Without ``include_regions``, region rows are not compared: they come
-    from the Public API's reference files, which may change while the
+    from API v1's reference files, which may change while the
     PolicyEngine.py version stays the same. The model version's
     ``metadata_time_periods`` are never compared, for the same reason: they
     come from ``policyengine_api.economy_years``. A version published before
     catalog format 2 is compared without format 2's fields.
     """
-    stored = stored_version(connection, country)
+    stored = stored_version(session, country)
     pairs = _comparison_pairs(
         country,
         with_format_2=stored is not None and stored.catalog_format is not None,
@@ -387,7 +407,7 @@ def assert_country_matches(
     if include_regions:
         pairs = (*pairs, ("regions", *_region_comparison_pair(country)))
     for table_name, staged, actual in pairs:
-        if _sets_differ(connection, staged, actual):
+        if _sets_differ(session, staged, actual):
             msg = (
                 f"the stored {country.country_id} catalog version "
                 f"{country.model_version.version} differs from the staged catalog "
@@ -397,11 +417,11 @@ def assert_country_matches(
 
 
 def update_stored_time_periods(
-    connection: Connection, country: CountryCatalog
+    session: Session, country: CountryCatalog
 ) -> tuple[list[int], list[int]] | None:
     """Give this country's stored version the staged ``metadata_time_periods``.
 
-    They are the years the Public API offers for the version, which come from
+    They are the years API v1 offers for the version, which come from
     ``policyengine_api.economy_years`` and so may change while the
     PolicyEngine.py version stays the same. When the two lists differ, a
     change of order included, replace the stored list in the publication's
@@ -410,22 +430,28 @@ def update_stored_time_periods(
     the country was not staged.
     """
     staged_time_periods = (
-        sa.select(STAGE_CATALOG_MODELS.c.metadata_time_periods)
-        .where(STAGE_CATALOG_MODELS.c.country_id == country.country_id)
+        sa.select(col(StagedModel.metadata_time_periods))
+        .where(col(StagedModel.country_id) == country.country_id)
         .scalar_subquery()
     )
-    row = connection.execute(
+    row = session.execute(
         sa.select(
-            MODEL_VERSIONS.c.id,
-            sa.cast(MODEL_VERSIONS.c.metadata_time_periods, JSONB).label("stored"),
+            col(TaxBenefitModelVersion.id),
+            sa.cast(col(TaxBenefitModelVersion.metadata_time_periods), JSONB).label(
+                "stored"
+            ),
             staged_time_periods.label("staged"),
         )
         .select_from(
-            MODEL_VERSIONS.join(MODELS, MODELS.c.id == MODEL_VERSIONS.c.model_id)
+            sa.join(
+                TaxBenefitModelVersion,
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
         )
         .where(
-            MODELS.c.name == country.model.name,
-            MODEL_VERSIONS.c.version == country.model_version.version,
+            col(TaxBenefitModel.name) == country.model.name,
+            col(TaxBenefitModelVersion.version) == country.model_version.version,
         )
     ).one_or_none()
     if row is None or row.staged is None:
@@ -437,24 +463,26 @@ def update_stored_time_periods(
         raise CatalogPublicationError(msg)
     if row.stored == row.staged:
         return None
-    connection.execute(
-        sa.update(MODEL_VERSIONS)
-        .where(MODEL_VERSIONS.c.id == row.id)
+    session.execute(
+        sa.update(TaxBenefitModelVersion)
+        .where(col(TaxBenefitModelVersion.id) == row.id)
         .values(metadata_time_periods=row.staged)
+        .execution_options(synchronize_session=False)
     )
     return list(row.stored), list(row.staged)
 
 
-def count_stored_regions(connection: Connection, country: CountryCatalog) -> int:
+def count_stored_regions(session: Session, country: CountryCatalog) -> int:
     """Count the region rows stored for one country's catalog version."""
     _staged, actual = _region_comparison_pair(country)
-    return connection.execute(
+    count: int = session.execute(
         sa.select(sa.func.count()).select_from(actual.subquery())
     ).scalar_one()
+    return count
 
 
 def count_region_differences(
-    connection: Connection,
+    session: Session,
     country: CountryCatalog,
 ) -> tuple[int, int]:
     """Count staged region rows the stored version lacks, and stored rows not staged."""
@@ -462,34 +490,34 @@ def count_region_differences(
     staged_not_stored = sa.except_(staged, actual).subquery()
     stored_not_staged = sa.except_(actual, staged).subquery()
     return (
-        connection.execute(
+        session.execute(
             sa.select(sa.func.count()).select_from(staged_not_stored)
         ).scalar_one(),
-        connection.execute(
+        session.execute(
             sa.select(sa.func.count()).select_from(stored_not_staged)
         ).scalar_one(),
     )
 
 
-def assert_canonical_value_uniqueness(connection: Connection) -> None:
+def assert_canonical_value_uniqueness(session: Session) -> None:
     """Raise CatalogPublicationError if a parameter has duplicate current-law values.
 
     Current-law values are those with neither a policy nor a dynamic; each
     parameter may have only one per start date.
     """
     duplicates = (
-        sa.select(PARAMETER_VALUES.c.parameter_id)
+        sa.select(col(ParameterValue.parameter_id))
         .where(
-            PARAMETER_VALUES.c.policy_id.is_(None),
-            PARAMETER_VALUES.c.dynamic_id.is_(None),
+            col(ParameterValue.policy_id).is_(None),
+            col(ParameterValue.dynamic_id).is_(None),
         )
         .group_by(
-            PARAMETER_VALUES.c.parameter_id,
-            PARAMETER_VALUES.c.start_date,
+            col(ParameterValue.parameter_id),
+            col(ParameterValue.start_date),
         )
         .having(sa.func.count() > 1)
         .limit(1)
     )
-    if connection.execute(duplicates).first() is not None:
+    if session.execute(duplicates).first() is not None:
         msg = "canonical parameter-value uniqueness validation failed"
         raise CatalogPublicationError(msg)

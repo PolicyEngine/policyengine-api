@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, or_
+from sqlalchemy import delete, func, or_
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.database import unpooled_v2_read_only_sessions
@@ -66,11 +65,12 @@ from policyengine_api.services.v2.policy_copy_split.types import (
     PolicyCopySplit,
 )
 from scripts.split_v2_policy_copies import with_time_limits
+from tests.fixtures.database_sessions import act_as
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.orm import sessionmaker
 
 CATALOG_VERSION = "6.17.1"
 US_TAX_RATE = "gov.irs.income.rate"
@@ -84,37 +84,58 @@ END_2026 = datetime(2026, 12, 31, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module")
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
+    """Session factories of the disposable database's owner, its superuser."""
+    return v2_owner_sessions
 
 
 @pytest.fixture(scope="module")
-def split_role_engine(owner_engine: Engine, v2_engine_as_role) -> Iterator[Engine]:
-    """Yield an engine acting as the temporary role, with only its declared grants."""
-    with owner_engine.begin() as connection:
-        create_missing_roles(connection, [POLICY_COPY_SPLIT_ROLE])
+def split_role_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    """Session factories acting as the temporary role, with only its declared grants."""
+    with v2_owner_sessions.begin() as session:
+        create_missing_roles(session, [POLICY_COPY_SPLIT_ROLE])
         plan, _default_privileges = apply_declared_privileges(
-            connection, {POLICY_COPY_SPLIT_ROLE: POLICY_COPY_SPLIT_PRIVILEGES}
+            session, {POLICY_COPY_SPLIT_ROLE: POLICY_COPY_SPLIT_PRIVILEGES}
         )
     assert plan.can_apply
-    engine = v2_engine_as_role(POLICY_COPY_SPLIT_ROLE, poolclass=NullPool)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
+    return v2_sessions_as_role(POLICY_COPY_SPLIT_ROLE)
 
 
-def _service(engine: Engine, *, read_only: bool = False) -> V2PolicyCopySplitService:
-    bind = engine.execution_options(postgresql_readonly=True) if read_only else engine
-    return V2PolicyCopySplitService(
-        PolicyCopySplitDatabaseSession(
-            sessionmaker(bind=bind, class_=Session, expire_on_commit=False)
-        )
-    )
+@pytest.fixture(scope="module")
+def listing_sessions(
+    disposable_v2_database_url: str, split_role_sessions: sessionmaker[Session]
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the owner's READ ONLY Session factories, as the command's listing has.
+
+    ``split_role_sessions`` creates the temporary role, which the listing's
+    service acts as in each session.
+    """
+    with unpooled_v2_read_only_sessions(disposable_v2_database_url) as sessions:
+        yield sessions
+
+
+class ListingAsTheSplitRole(PolicyCopySplitDatabaseSession):
+    """Act as the temporary role in each of the listing's READ ONLY sessions."""
+
+    @contextmanager
+    def read(self) -> Iterator[Session]:
+        """Yield a READ ONLY session acting as the temporary role."""
+        with super().read() as session:
+            act_as(session, POLICY_COPY_SPLIT_ROLE)
+            yield session
+
+
+def _service(sessions: sessionmaker[Session]) -> V2PolicyCopySplitService:
+    return V2PolicyCopySplitService(PolicyCopySplitDatabaseSession(sessions))
+
+
+def _listing_service(sessions: sessionmaker[Session]) -> V2PolicyCopySplitService:
+    return V2PolicyCopySplitService(ListingAsTheSplitRole(sessions))
 
 
 @dataclass
@@ -148,8 +169,10 @@ class Scenario:
         }
 
 
-def _store_catalog(owner_engine: Engine, country_id: str, names: list[str]) -> Scenario:
-    with Session(owner_engine) as session:
+def _store_catalog(
+    owner_sessions: sessionmaker[Session], country_id: str, names: list[str]
+) -> Scenario:
+    with owner_sessions() as session:
         model = TaxBenefitModel(name=f"split-{country_id}-{uuid4().hex[:16]}")
         version = TaxBenefitModelVersion(
             model=model,
@@ -170,14 +193,14 @@ def _store_catalog(owner_engine: Engine, country_id: str, names: list[str]) -> S
         )
 
 
-def _remove(owner_engine: Engine, scenario: Scenario) -> None:
+def _remove(owner_sessions: sessionmaker[Session], scenario: Scenario) -> None:
     policy_ids = select(Policy.id).where(
         Policy.tax_benefit_model_id == scenario.model_id
     )
     dynamic_ids = select(Dynamic.id).where(
         Dynamic.tax_benefit_model_id == scenario.model_id
     )
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         session.execute(
             delete(UserDynamic).where(col(UserDynamic.dynamic_id).in_(dynamic_ids))
         )
@@ -234,32 +257,34 @@ def _remove(owner_engine: Engine, scenario: Scenario) -> None:
 
 
 @pytest.fixture
-def us_scenario(owner_engine: Engine) -> Iterator[Scenario]:
+def us_scenario(owner_sessions: sessionmaker[Session]) -> Iterator[Scenario]:
     scenario = _store_catalog(
-        owner_engine, "us", [US_TAX_RATE, US_INCOME_ELASTICITY, US_MTR_DELTA]
+        owner_sessions, "us", [US_TAX_RATE, US_INCOME_ELASTICITY, US_MTR_DELTA]
     )
     try:
         yield scenario
     finally:
-        _remove(owner_engine, scenario)
+        _remove(owner_sessions, scenario)
 
 
 @pytest.fixture
-def uk_scenario(owner_engine: Engine) -> Iterator[Scenario]:
+def uk_scenario(owner_sessions: sessionmaker[Session]) -> Iterator[Scenario]:
     scenario = _store_catalog(
-        owner_engine, "uk", [UK_TAX_RATE, UK_INCOME_ELASTICITY, UK_OBR_SWITCH]
+        owner_sessions, "uk", [UK_TAX_RATE, UK_INCOME_ELASTICITY, UK_OBR_SWITCH]
     )
     try:
         yield scenario
     finally:
-        _remove(owner_engine, scenario)
+        _remove(owner_sessions, scenario)
 
 
 def _store_policy(
-    owner_engine: Engine, scenario: Scenario, *values: dict[str, object]
+    owner_sessions: sessionmaker[Session],
+    scenario: Scenario,
+    *values: dict[str, object],
 ) -> UUID:
     """Store a policy as the v1-to-v2 copy did before C1 · 36: no split."""
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         result = create_resolved_policy(
             session,
             ResolvedPolicyCreationInput.model_validate(scenario.content(*values)),
@@ -269,9 +294,11 @@ def _store_policy(
 
 
 def _store_dynamic(
-    owner_engine: Engine, scenario: Scenario, *values: dict[str, object]
+    owner_sessions: sessionmaker[Session],
+    scenario: Scenario,
+    *values: dict[str, object],
 ) -> UUID:
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         result = create_resolved_dynamic(
             session,
             ResolvedDynamicCreationInput.model_validate(scenario.content(*values)),
@@ -281,14 +308,14 @@ def _store_dynamic(
 
 
 def _store_mapping(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     scenario: Scenario,
     *,
     policy_id: UUID,
     dynamic_id: UUID | None = None,
 ) -> int:
     legacy_policy_id = 900_000_000 + uuid4().int % 100_000_000
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         session.add(
             LegacyPolicyMapping(
                 country_id=scenario.country_id,
@@ -303,8 +330,8 @@ def _store_mapping(
     return legacy_policy_id
 
 
-def _store_user(owner_engine: Engine, scenario: Scenario) -> UUID:
-    with Session(owner_engine) as session:
+def _store_user(owner_sessions: sessionmaker[Session], scenario: Scenario) -> UUID:
+    with owner_sessions() as session:
         user = User(user_type="unauthenticated")
         session.add(user)
         session.commit()
@@ -313,19 +340,23 @@ def _store_user(owner_engine: Engine, scenario: Scenario) -> UUID:
 
 
 def _store_saved_policy(
-    owner_engine: Engine, scenario: Scenario, **saved_policy_fields: object
+    owner_sessions: sessionmaker[Session],
+    scenario: Scenario,
+    **saved_policy_fields: object,
 ) -> UUID:
     """Store a saved policy with the given user, policy, name and other fields."""
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         saved_policy = UserPolicy(country_id=scenario.country_id, **saved_policy_fields)
         session.add(saved_policy)
         session.commit()
         return saved_policy.id
 
 
-def _values(owner_engine: Engine, *, policy_id=None, dynamic_id=None) -> set:
+def _values(
+    owner_sessions: sessionmaker[Session], *, policy_id=None, dynamic_id=None
+) -> set:
     """Each value a policy or dynamic sets: its parameter, value and end date."""
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         owner_column = (
             ParameterValue.policy_id
             if dynamic_id is None
@@ -337,8 +368,10 @@ def _values(owner_engine: Engine, *, policy_id=None, dynamic_id=None) -> set:
         return {(row.parameter_id, row.value_json, row.end_date) for row in rows}
 
 
-def _mapping(owner_engine: Engine, scenario: Scenario, legacy_policy_id: int):
-    with Session(owner_engine) as session:
+def _mapping(
+    owner_sessions: sessionmaker[Session], scenario: Scenario, legacy_policy_id: int
+):
+    with owner_sessions() as session:
         return session.exec(
             select(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.country_id == scenario.country_id,
@@ -347,13 +380,17 @@ def _mapping(owner_engine: Engine, scenario: Scenario, legacy_policy_id: int):
         ).one()
 
 
-def _saved_policy_target(owner_engine: Engine, saved_policy_id: UUID) -> UUID:
-    with Session(owner_engine) as session:
+def _saved_policy_target(
+    owner_sessions: sessionmaker[Session], saved_policy_id: UUID
+) -> UUID:
+    with owner_sessions() as session:
         return session.get(UserPolicy, saved_policy_id).policy_id
 
 
-def _saved_dynamics(owner_engine: Engine, user_id: UUID) -> list[UserDynamic]:
-    with Session(owner_engine) as session:
+def _saved_dynamics(
+    owner_sessions: sessionmaker[Session], user_id: UUID
+) -> list[UserDynamic]:
+    with owner_sessions() as session:
         return list(
             session.exec(
                 select(UserDynamic)
@@ -363,8 +400,8 @@ def _saved_dynamics(owner_engine: Engine, user_id: UUID) -> list[UserDynamic]:
         )
 
 
-def _policy_exists(owner_engine: Engine, policy_id: UUID) -> bool:
-    with Session(owner_engine) as session:
+def _policy_exists(owner_sessions: sessionmaker[Session], policy_id: UUID) -> bool:
+    with owner_sessions() as session:
         return session.get(Policy, policy_id) is not None
 
 
@@ -374,20 +411,22 @@ def _result_for(splits, policy_id: UUID) -> PolicyCopySplit:
 
 
 def test_a_us_copy_is_split_re_pointed_given_a_saved_dynamic_and_deleted(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     scenario = us_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
         scenario.parameter_value(US_MTR_DELTA, value=0.01, end_date=None),
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
-    user_id = _store_user(owner_engine, scenario)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
+    user_id = _store_user(owner_sessions, scenario)
     saved_policy_id = _store_saved_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         user_id=user_id,
         policy_id=old_copy_id,
@@ -397,7 +436,7 @@ def test_a_us_copy_is_split_re_pointed_given_a_saved_dynamic_and_deleted(
     )
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.applied
@@ -409,23 +448,23 @@ def test_a_us_copy_is_split_re_pointed_given_a_saved_dynamic_and_deleted(
     assert split.dynamic is not None
     assert split.dynamic.created
     new_policy_id, new_dynamic_id = split.policy.id, split.dynamic.id
-    assert not _policy_exists(owner_engine, old_copy_id)
-    assert _values(owner_engine, policy_id=old_copy_id) == set()
-    assert _values(owner_engine, policy_id=new_policy_id) == {
+    assert not _policy_exists(owner_sessions, old_copy_id)
+    assert _values(owner_sessions, policy_id=old_copy_id) == set()
+    assert _values(owner_sessions, policy_id=new_policy_id) == {
         (scenario.parameter_ids[US_TAX_RATE], 0.3, END_2026)
     }
-    assert _values(owner_engine, dynamic_id=new_dynamic_id) == {
+    assert _values(owner_sessions, dynamic_id=new_dynamic_id) == {
         (scenario.parameter_ids[US_INCOME_ELASTICITY], 0.25, END_2026),
         (scenario.parameter_ids[US_MTR_DELTA], 0.01, None),
     }
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert (mapping.policy_id, mapping.dynamic_id) == (new_policy_id, new_dynamic_id)
     [repointed_mapping] = split.mappings
     assert repointed_mapping.legacy_policy_id == legacy_policy_id
     assert repointed_mapping.previous_dynamic_id is None
     assert repointed_mapping.dynamic.id == new_dynamic_id
-    assert _saved_policy_target(owner_engine, saved_policy_id) == new_policy_id
-    [saved_dynamic] = _saved_dynamics(owner_engine, user_id)
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == new_policy_id
+    [saved_dynamic] = _saved_dynamics(owner_sessions, user_id)
     assert (saved_dynamic.dynamic_id, saved_dynamic.country_id) == (
         new_dynamic_id,
         "us",
@@ -435,70 +474,74 @@ def test_a_us_copy_is_split_re_pointed_given_a_saved_dynamic_and_deleted(
     assert repointed_saved_policy.user_policy_id == saved_policy_id
     assert repointed_saved_policy.saved_dynamic_id == saved_dynamic.id
     assert repointed_saved_policy.saved_dynamic_created
-    with Session(split_role_engine) as session:
+    with split_role_sessions() as session:
         assert old_copy_id not in read_policy_copy_ids(session)
 
-    second_run = list(_service(split_role_engine).split_policy_copies())
+    second_run = list(_service(split_role_sessions).split_policy_copies())
 
     assert old_copy_id not in {split.old_policy_id for split in second_run}
-    mapping_after = _mapping(owner_engine, scenario, legacy_policy_id)
+    mapping_after = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert (mapping_after.policy_id, mapping_after.dynamic_id) == (
         new_policy_id,
         new_dynamic_id,
     )
-    assert _saved_policy_target(owner_engine, saved_policy_id) == new_policy_id
-    assert [row.id for row in _saved_dynamics(owner_engine, user_id)] == [
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == new_policy_id
+    assert [row.id for row in _saved_dynamics(owner_sessions, user_id)] == [
         saved_dynamic.id
     ]
 
 
 def test_a_uk_copy_of_only_model_assumptions_points_at_an_empty_policy(
-    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
 ) -> None:
     scenario = uk_scenario
     old_copy_id = _store_policy(
-        owner_engine, scenario, scenario.parameter_value(UK_OBR_SWITCH, value=False)
+        owner_sessions, scenario, scenario.parameter_value(UK_OBR_SWITCH, value=False)
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.outcome is PolicyCopyOutcome.DELETED
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert mapping.policy_id == split.policy.id
-    assert _values(owner_engine, policy_id=mapping.policy_id) == set()
-    with Session(owner_engine) as session:
+    assert _values(owner_sessions, policy_id=mapping.policy_id) == set()
+    with owner_sessions() as session:
         empty_policy = session.get(Policy, mapping.policy_id)
         assert empty_policy.tax_benefit_model_version_id == scenario.version_id
-    assert _values(owner_engine, dynamic_id=mapping.dynamic_id) == {
+    assert _values(owner_sessions, dynamic_id=mapping.dynamic_id) == {
         (scenario.parameter_ids[UK_OBR_SWITCH], False, END_2026)
     }
-    assert not _policy_exists(owner_engine, old_copy_id)
+    assert not _policy_exists(owner_sessions, old_copy_id)
 
 
 def test_a_mapping_that_already_names_a_dynamic_gets_one_merged_dynamic(
-    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
 ) -> None:
     scenario = uk_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(UK_TAX_RATE, value=0.21),
         scenario.parameter_value(UK_OBR_SWITCH, value=False),
     )
     earlier_dynamic_id = _store_dynamic(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(UK_INCOME_ELASTICITY, value=0.1),
     )
     legacy_policy_id = _store_mapping(
-        owner_engine, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
+        owner_sessions, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
     )
-    user_id = _store_user(owner_engine, scenario)
+    user_id = _store_user(owner_sessions, scenario)
     mapped_saved_policy_id = _store_saved_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         user_id=user_id,
         policy_id=old_copy_id,
@@ -506,60 +549,64 @@ def test_a_mapping_that_already_names_a_dynamic_gets_one_merged_dynamic(
         legacy_policy_id=legacy_policy_id,
     )
     native_saved_policy_id = _store_saved_policy(
-        owner_engine, scenario, user_id=user_id, policy_id=old_copy_id, name="Native"
+        owner_sessions, scenario, user_id=user_id, policy_id=old_copy_id, name="Native"
     )
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.outcome is PolicyCopyOutcome.DELETED
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert mapping.policy_id == split.policy.id
-    assert _values(owner_engine, policy_id=mapping.policy_id) == {
+    assert _values(owner_sessions, policy_id=mapping.policy_id) == {
         (scenario.parameter_ids[UK_TAX_RATE], 0.21, END_2026)
     }
     merged_dynamic_id = mapping.dynamic_id
     assert merged_dynamic_id not in {earlier_dynamic_id, split.dynamic.id}
-    assert _values(owner_engine, dynamic_id=merged_dynamic_id) == {
+    assert _values(owner_sessions, dynamic_id=merged_dynamic_id) == {
         (scenario.parameter_ids[UK_INCOME_ELASTICITY], 0.1, END_2026),
         (scenario.parameter_ids[UK_OBR_SWITCH], False, END_2026),
     }
-    assert _values(owner_engine, dynamic_id=split.dynamic.id) == {
+    assert _values(owner_sessions, dynamic_id=split.dynamic.id) == {
         (scenario.parameter_ids[UK_OBR_SWITCH], False, END_2026)
     }
     [repointed_mapping] = split.mappings
     assert repointed_mapping.previous_dynamic_id == earlier_dynamic_id
     assert repointed_mapping.dynamic.id == merged_dynamic_id
     saved_dynamics = {
-        row.name: row.dynamic_id for row in _saved_dynamics(owner_engine, user_id)
+        row.name: row.dynamic_id for row in _saved_dynamics(owner_sessions, user_id)
     }
     assert saved_dynamics == {
         "Copied from v1": merged_dynamic_id,
         "Native": split.dynamic.id,
     }
     for saved_policy_id in (mapped_saved_policy_id, native_saved_policy_id):
-        assert _saved_policy_target(owner_engine, saved_policy_id) == mapping.policy_id
-    with Session(owner_engine) as session:
+        assert (
+            _saved_policy_target(owner_sessions, saved_policy_id) == mapping.policy_id
+        )
+    with owner_sessions() as session:
         assert session.get(Dynamic, earlier_dynamic_id) is not None
 
 
 def test_a_copy_a_report_names_is_split_and_re_pointed_but_kept(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     scenario = us_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
-    user_id = _store_user(owner_engine, scenario)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
+    user_id = _store_user(owner_sessions, scenario)
     saved_policy_id = _store_saved_policy(
-        owner_engine, scenario, user_id=user_id, policy_id=old_copy_id, name="Kept"
+        owner_sessions, scenario, user_id=user_id, policy_id=old_copy_id, name="Kept"
     )
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         report = Report(
             country="us",
             tax_benefit_model_id=scenario.model_id,
@@ -570,7 +617,7 @@ def test_a_copy_a_report_names_is_split_and_re_pointed_but_kept(
         report_id = report.id
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.outcome is PolicyCopyOutcome.KEPT
@@ -579,56 +626,58 @@ def test_a_copy_a_report_names_is_split_and_re_pointed_but_kept(
         split.references.reports,
         split.references.household_jobs,
     ) == (0, 1, 0)
-    assert _policy_exists(owner_engine, old_copy_id)
-    assert len(_values(owner_engine, policy_id=old_copy_id)) == 2
-    with Session(owner_engine) as session:
+    assert _policy_exists(owner_sessions, old_copy_id)
+    assert len(_values(owner_sessions, policy_id=old_copy_id)) == 2
+    with owner_sessions() as session:
         assert session.get(Report, report_id).policy_id == old_copy_id
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert (mapping.policy_id, mapping.dynamic_id) == (
         split.policy.id,
         split.dynamic.id,
     )
-    assert _saved_policy_target(owner_engine, saved_policy_id) == split.policy.id
-    [saved_dynamic] = _saved_dynamics(owner_engine, user_id)
-    with Session(split_role_engine) as session:
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == split.policy.id
+    [saved_dynamic] = _saved_dynamics(owner_sessions, user_id)
+    with split_role_sessions() as session:
         assert old_copy_id in read_policy_copy_ids(session)
 
     second_split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert second_split.outcome is PolicyCopyOutcome.KEPT
     assert second_split.mappings == ()
     assert second_split.saved_policies == ()
-    assert [row.id for row in _saved_dynamics(owner_engine, user_id)] == [
+    assert [row.id for row in _saved_dynamics(owner_sessions, user_id)] == [
         saved_dynamic.id
     ]
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         session.execute(delete(Report).where(Report.id == report_id))
         session.commit()
 
 
 def test_a_conflicting_merge_refuses_the_copy_and_changes_nothing(
-    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
 ) -> None:
     scenario = uk_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(UK_TAX_RATE, value=0.21),
         scenario.parameter_value(UK_INCOME_ELASTICITY, value=0.2),
     )
     earlier_dynamic_id = _store_dynamic(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(UK_INCOME_ELASTICITY, value=0.1),
     )
     legacy_policy_id = _store_mapping(
-        owner_engine, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
+        owner_sessions, scenario, policy_id=old_copy_id, dynamic_id=earlier_dynamic_id
     )
-    user_id = _store_user(owner_engine, scenario)
+    user_id = _store_user(owner_sessions, scenario)
     saved_policy_id = _store_saved_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         user_id=user_id,
         policy_id=old_copy_id,
@@ -637,17 +686,17 @@ def test_a_conflicting_merge_refuses_the_copy_and_changes_nothing(
     )
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.outcome is PolicyCopyOutcome.REFUSED
     assert split.refusal_reason is PolicyCopyRefusalReason.CONFLICTING_DYNAMIC_VALUES
-    assert _policy_exists(owner_engine, old_copy_id)
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    assert _policy_exists(owner_sessions, old_copy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert (mapping.policy_id, mapping.dynamic_id) == (old_copy_id, earlier_dynamic_id)
-    assert _saved_policy_target(owner_engine, saved_policy_id) == old_copy_id
-    assert _saved_dynamics(owner_engine, user_id) == []
-    with Session(owner_engine) as session:
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == old_copy_id
+    assert _saved_dynamics(owner_sessions, user_id) == []
+    with owner_sessions() as session:
         stored = session.exec(
             select(Policy.id).where(Policy.tax_benefit_model_id == scenario.model_id)
         ).all()
@@ -659,26 +708,29 @@ def test_a_conflicting_merge_refuses_the_copy_and_changes_nothing(
 
 
 def test_the_listing_reads_only_and_reports_what_would_change(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
+    listing_sessions: sessionmaker[Session],
 ) -> None:
     scenario = us_scenario
     stored_policy_part_id = _store_policy(
-        owner_engine, scenario, scenario.parameter_value(US_TAX_RATE, value=0.3)
+        owner_sessions, scenario, scenario.parameter_value(US_TAX_RATE, value=0.3)
     )
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
-    user_id = _store_user(owner_engine, scenario)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
+    user_id = _store_user(owner_sessions, scenario)
     saved_policy_id = _store_saved_policy(
-        owner_engine, scenario, user_id=user_id, policy_id=old_copy_id, name="Listed"
+        owner_sessions, scenario, user_id=user_id, policy_id=old_copy_id, name="Listed"
     )
 
     split = _result_for(
-        _service(split_role_engine, read_only=True).list_policy_copy_splits(),
+        _listing_service(listing_sessions).list_policy_copy_splits(),
         old_copy_id,
     )
 
@@ -693,12 +745,12 @@ def test_the_listing_reads_only_and_reports_what_would_change(
     assert listed_saved_policy.user_policy_id == saved_policy_id
     assert listed_saved_policy.saved_dynamic_id is None
     assert listed_saved_policy.saved_dynamic_created
-    assert _policy_exists(owner_engine, old_copy_id)
-    mapping = _mapping(owner_engine, scenario, legacy_policy_id)
+    assert _policy_exists(owner_sessions, old_copy_id)
+    mapping = _mapping(owner_sessions, scenario, legacy_policy_id)
     assert (mapping.policy_id, mapping.dynamic_id) == (old_copy_id, None)
-    assert _saved_policy_target(owner_engine, saved_policy_id) == old_copy_id
-    assert _saved_dynamics(owner_engine, user_id) == []
-    with Session(owner_engine) as session:
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == old_copy_id
+    assert _saved_dynamics(owner_sessions, user_id) == []
+    with owner_sessions() as session:
         dynamics = session.exec(
             select(Dynamic.id).where(Dynamic.tax_benefit_model_id == scenario.model_id)
         ).all()
@@ -706,25 +758,27 @@ def test_the_listing_reads_only_and_reports_what_would_change(
 
 
 def test_an_identical_saved_dynamic_is_reused_and_another_name_gets_its_own(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     scenario = us_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
     )
-    user_id = _store_user(owner_engine, scenario)
+    user_id = _store_user(owner_sessions, scenario)
     first_id, second_id, other_id, unnamed_id, also_unnamed_id = (
         _store_saved_policy(
-            owner_engine, scenario, user_id=user_id, policy_id=old_copy_id, name=name
+            owner_sessions, scenario, user_id=user_id, policy_id=old_copy_id, name=name
         )
         for name in ("Reform A", "Reform A", "Reform B", None, None)
     )
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     by_saved_policy = {
@@ -740,63 +794,69 @@ def test_an_identical_saved_dynamic_is_reused_and_another_name_gets_its_own(
     assert by_saved_policy[unnamed_id].saved_dynamic_created
     assert not by_saved_policy[also_unnamed_id].saved_dynamic_created
     assert sorted(
-        (row.name or "") for row in _saved_dynamics(owner_engine, user_id)
+        (row.name or "") for row in _saved_dynamics(owner_sessions, user_id)
     ) == ["", "Reform A", "Reform B"]
 
 
 def test_policies_setting_no_model_assumption_are_left_alone(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     scenario = us_scenario
     policy_id = _store_policy(
-        owner_engine, scenario, scenario.parameter_value(US_TAX_RATE, value=0.3)
+        owner_sessions, scenario, scenario.parameter_value(US_TAX_RATE, value=0.3)
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=policy_id)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=policy_id)
 
-    splits = list(_service(split_role_engine).split_policy_copies())
+    splits = list(_service(split_role_sessions).split_policy_copies())
 
     assert policy_id not in {split.old_policy_id for split in splits}
-    assert _policy_exists(owner_engine, policy_id)
-    assert _mapping(owner_engine, scenario, legacy_policy_id).dynamic_id is None
+    assert _policy_exists(owner_sessions, policy_id)
+    assert _mapping(owner_sessions, scenario, legacy_policy_id).dynamic_id is None
 
 
 def test_one_copy_splits_in_a_caller_owned_transaction(
-    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
 ) -> None:
     """D4 · 1's migration reuses the split in a transaction of its own."""
     scenario = uk_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(UK_TAX_RATE, value=0.21),
         scenario.parameter_value(UK_OBR_SWITCH, value=False),
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
 
-    with Session(split_role_engine) as session:
+    with split_role_sessions() as session:
         split = split_policy_copy_in_session(session, old_copy_id)
         session.rollback()
 
     assert split is not None
     assert split.outcome is PolicyCopyOutcome.DELETED
-    assert _policy_exists(owner_engine, old_copy_id)
-    assert _mapping(owner_engine, scenario, legacy_policy_id).policy_id == old_copy_id
+    assert _policy_exists(owner_sessions, old_copy_id)
+    assert _mapping(owner_sessions, scenario, legacy_policy_id).policy_id == old_copy_id
 
-    with Session(split_role_engine) as session:
+    with split_role_sessions() as session:
         assert split_policy_copy_in_session(session, uuid4()) is None
 
 
 def test_a_copy_a_simulation_names_is_kept(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     scenario = us_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
     )
-    with Session(owner_engine) as session:
+    with owner_sessions() as session:
         dataset = Dataset(
             name="split-test-dataset",
             year=2026,
@@ -815,7 +875,7 @@ def test_a_copy_a_simulation_names_is_kept(
         simulation_id = simulation.id
 
     split = _result_for(
-        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+        list(_service(split_role_sessions).split_policy_copies()), old_copy_id
     )
 
     assert split.outcome is PolicyCopyOutcome.KEPT
@@ -824,13 +884,15 @@ def test_a_copy_a_simulation_names_is_kept(
         split.references.reports,
         split.references.household_jobs,
     ) == (1, 0, 0)
-    assert _policy_exists(owner_engine, old_copy_id)
-    with Session(owner_engine) as session:
+    assert _policy_exists(owner_sessions, old_copy_id)
+    with owner_sessions() as session:
         assert session.get(Simulation, simulation_id).policy_id == old_copy_id
 
 
 def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
-    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
 ) -> None:
     """API v1's copy of a v1 saved policy locks the mapping, then names the copy.
 
@@ -841,24 +903,24 @@ def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
     """
     scenario = us_scenario
     old_copy_id = _store_policy(
-        owner_engine,
+        owner_sessions,
         scenario,
         scenario.parameter_value(US_TAX_RATE, value=0.3),
         scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
     )
-    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
-    user_id = _store_user(owner_engine, scenario)
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
+    user_id = _store_user(owner_sessions, scenario)
     split_results: list[PolicyCopySplit] = []
     split_errors: list[Exception] = []
 
     def run_split() -> None:
         try:
-            split_results.extend(_service(split_role_engine).split_policy_copies())
+            split_results.extend(_service(split_role_sessions).split_policy_copies())
         except DBAPIError as error:
             split_errors.append(error)
 
     split_thread = threading.Thread(target=run_split)
-    with Session(owner_engine) as live_copy:
+    with owner_sessions() as live_copy:
         live_copy.exec(
             select(LegacyPolicyMapping)
             .where(
@@ -889,12 +951,15 @@ def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
     assert [repointed.user_policy_id for repointed in split.saved_policies] == [
         saved_policy_id
     ]
-    assert _saved_policy_target(owner_engine, saved_policy_id) == split.policy.id
-    assert not _policy_exists(owner_engine, old_copy_id)
+    assert _saved_policy_target(owner_sessions, saved_policy_id) == split.policy.id
+    assert not _policy_exists(owner_sessions, old_copy_id)
 
 
 def test_the_listing_reports_rows_an_earlier_copy_creates_as_reused(
-    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+    owner_sessions: sessionmaker[Session],
+    split_role_sessions: sessionmaker[Session],
+    uk_scenario: Scenario,
+    listing_sessions: sessionmaker[Session],
 ) -> None:
     """Applying commits each copy before the next, so later copies reuse its rows.
 
@@ -904,21 +969,21 @@ def test_the_listing_reports_rows_an_earlier_copy_creates_as_reused(
     scenario = uk_scenario
     copy_ids = [
         _store_policy(
-            owner_engine,
+            owner_sessions,
             scenario,
             scenario.parameter_value(UK_TAX_RATE, value=tax_rate),
             scenario.parameter_value(UK_OBR_SWITCH, value=False),
         )
         for tax_rate in (0.21, 0.22)
     ]
-    user_id = _store_user(owner_engine, scenario)
+    user_id = _store_user(owner_sessions, scenario)
     for copy_id in copy_ids:
         _store_saved_policy(
-            owner_engine, scenario, user_id=user_id, policy_id=copy_id, name=None
+            owner_sessions, scenario, user_id=user_id, policy_id=copy_id, name=None
         )
 
-    listed = _service(split_role_engine, read_only=True).list_policy_copy_splits()
-    applied = list(_service(split_role_engine).split_policy_copies())
+    listed = _listing_service(listing_sessions).list_policy_copy_splits()
+    applied = list(_service(split_role_sessions).split_policy_copies())
 
     def created_rows(split: PolicyCopySplit) -> tuple[bool, bool, list[bool]]:
         return (
@@ -934,7 +999,7 @@ def test_the_listing_reports_rows_an_earlier_copy_creates_as_reused(
     assert [created_rows(_result_for(applied, copy_id)) for copy_id in copy_ids] == [
         created_rows(_result_for(listed, copy_id)) for copy_id in copy_ids
     ]
-    assert len(_saved_dynamics(owner_engine, user_id)) == 1
+    assert len(_saved_dynamics(owner_sessions, user_id)) == 1
 
 
 def test_the_listing_s_sessions_refuse_writes(disposable_v2_database_url: str) -> None:

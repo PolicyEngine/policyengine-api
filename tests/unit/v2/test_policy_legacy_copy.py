@@ -8,13 +8,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     LegacyPolicyMapping,
     Parameter,
     TaxBenefitModel,
@@ -37,6 +36,10 @@ from policyengine_api.services.v2.policies.validators import (
     LegacyPolicyMappingIntegrityError,
     LegacyPolicyTranslationError,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
 RUNNING_POLICYENGINE_VERSION = "6.7.5"
 COPIED_POLICY_ID = UUID("00000000-0000-0000-0000-000000000042")
@@ -81,14 +84,8 @@ def recorded_writes(monkeypatch) -> RecordedCopyWrites:
 
 @pytest.fixture
 def catalog_session():
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
-    session = Session(engine)
-    try:
+    with sqlite_v2_sessions() as sessions, sessions(expire_on_commit=True) as session:
         yield session
-    finally:
-        session.close()
-        engine.dispose()
 
 
 def _add_running_catalog(
@@ -149,7 +146,7 @@ class ReusedProductionPolicy:
 
 # The two production copies that failed after dual-write was turned on: each
 # POST matched an existing v1 row saved under a country package release many
-# versions older than the one the Public API ran (us 2.2.1, uk 2.130.1).
+# versions older than the one API v1 ran (us 2.2.1, uk 2.130.1).
 PRODUCTION_REUSED_POLICIES = [
     pytest.param(
         ReusedProductionPolicy("us", 96567, "1.633.2", "gov.dol.minimum_wage", 9),
@@ -211,7 +208,7 @@ def test_policy_with_a_country_package_the_api_does_not_run_is_copied(
     catalog_session: Session,
     recorded_writes: RecordedCopyWrites,
 ) -> None:
-    # The copy binds content to the running catalog, as the Public API binds an
+    # The copy binds content to the running catalog, as API v1 binds an
     # old policy to the running country package when it simulates one.
     _add_running_catalog(
         catalog_session, country_id="us", parameter_names=["gov.example.rate"]

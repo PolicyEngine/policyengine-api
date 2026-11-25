@@ -2,7 +2,7 @@
 
 A stand-in for the simulation service's client stores the new run the
 simulation service would create and records what it was asked; the routes
-run as the Public API's runtime role, reading the report, checking its
+run as API v1's runtime role, reading the report, checking its
 country and policies, and reading the report and its runs back.
 """
 
@@ -19,13 +19,18 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from flask import Flask
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
-from sqlmodel import Session
+from sqlalchemy import delete, select, update
+from sqlmodel import Session, col
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.constants import REPO
+from policyengine_api.data.v2.models import (
+    BudgetWindowRun,
+    Household,
+    Report,
+    ReportRun,
+    User,
+)
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -67,7 +72,7 @@ from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
 )
 from policyengine_api.services.v2.stored_reports.services import V2StoredReportService
-from tests.integration.simulation_rows import insert_row
+from tests.integration.simulation_rows import add_row
 from tests.integration.stored_report_rows import (
     STARTED_AT,
     BudgetWindowYear,
@@ -77,6 +82,7 @@ from tests.integration.stored_report_rows import (
     household_only_catalog,
     store_budget_window_run,
     store_catalog,
+    store_cliff_calculation,
     store_report,
     store_report_run,
     store_year_simulations,
@@ -84,14 +90,15 @@ from tests.integration.stored_report_rows import (
 from tests.integration.user_report_run_support import store_signed_in_user
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
-    from sqlalchemy import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
 
     from policyengine_api.services.v2.identity.types import (
         AccountPrincipal,
         UserPrincipal,
     )
+    from tests.integration.conftest import ManagedV2Roles
     from tests.integration.stored_report_rows import CatalogRows
 
 CURRENT_VERSIONS = {"country_package_version": "1.5.0", "policyengine_version": "4.2.0"}
@@ -102,41 +109,31 @@ def current_versions(country_id: str) -> PackageVersions:
     return PackageVersions(**CURRENT_VERSIONS)
 
 
-def mark_manual(connection: Connection, run_id: UUID) -> None:
-    """Record the report run as a re-run, as the simulation service creates one."""
-    connection.execute(
-        text("UPDATE report_runs SET trigger = 'manual' WHERE id = :id"),
-        {"id": run_id},
-    )
-
-
-def mark_window_manual(
-    connection: Connection, window_run_id: UUID, *, recalculate: bool
+def set_window_recalculate(
+    session: Session, window_run_id: UUID, *, recalculate: bool
 ) -> None:
-    """Record the window run as a re-run, as the simulation service creates one."""
-    connection.execute(
-        text(
-            "UPDATE budget_window_runs SET trigger = 'manual', recalculate = "
-            ":recalculate WHERE id = :id"
-        ),
-        {"id": window_run_id, "recalculate": recalculate},
+    """Record whether the window run is forced, as the simulation service does."""
+    session.execute(
+        update(BudgetWindowRun)
+        .where(col(BudgetWindowRun.id) == window_run_id)
+        .values(recalculate=recalculate)
     )
 
 
 def store_window_run(
-    connection: Connection,
+    session: Session,
     catalog: CatalogRows,
     report: StoredReport,
     settings: RunSettings,
     years: tuple[int, ...],
 ) -> UUID:
     """Store a budget-window run and a report run of each year, with ``settings``."""
-    window_run_id = store_budget_window_run(connection, catalog, report, settings)
+    window_run_id = store_budget_window_run(session, catalog, report, settings)
     for year in years:
         store_report_run(
-            connection,
+            session,
             catalog,
-            store_year_simulations(connection, catalog, report, year),
+            store_year_simulations(session, catalog, report, year),
             replace(
                 settings,
                 budget_window_year=BudgetWindowYear(
@@ -157,9 +154,12 @@ class RerunningSimulationService:
     it records how many of the report service's sessions are open when asked.
     With ``window_years``, the report is a budget window, and the new run is
     a budget-window run with a pending report run for each of those years.
+    A report run again with ``include_cliffs`` also gets a pending cliff
+    calculation for each side's new simulation run, as a service calculating
+    them per run starts them.
     """
 
-    engine: Engine
+    owner_sessions: sessionmaker[Session]
     catalog: CatalogRows
     delete_report: bool = False
     refusal: Exception | None = None
@@ -175,13 +175,12 @@ class RerunningSimulationService:
             self.open_sessions_when_asked.append(self.database_session.open_sessions)
         if self.refusal is not None:
             raise self.refusal
-        with self.engine.begin() as connection:
-            simulations = connection.execute(
-                text(
-                    "SELECT baseline_simulation_id, reform_simulation_id FROM "
-                    "reports WHERE id = :id"
-                ),
-                {"id": rerun.report_id},
+        with self.owner_sessions.begin() as session:
+            simulations = session.execute(
+                select(
+                    col(Report.baseline_simulation_id),
+                    col(Report.reform_simulation_id),
+                ).where(col(Report.id) == rerun.report_id)
             ).one()
             report = StoredReport(
                 report_id=rerun.report_id,
@@ -195,66 +194,70 @@ class RerunningSimulationService:
             )
             if self.window_years:
                 window_run_id = store_window_run(
-                    connection, self.catalog, report, settings, self.window_years
+                    session, self.catalog, report, settings, self.window_years
                 )
-                mark_window_manual(connection, window_run_id, recalculate=rerun.force)
+                set_window_recalculate(session, window_run_id, recalculate=rerun.force)
                 self.new_run_ids.append(window_run_id)
                 started = StartedReportRun(
-                    report_run_id=connection.execute(
-                        text(
-                            "SELECT id FROM report_runs WHERE budget_window_run_id "
-                            "= :id ORDER BY year LIMIT 1"
-                        ),
-                        {"id": window_run_id},
+                    report_run_id=session.execute(
+                        select(col(ReportRun.id))
+                        .where(col(ReportRun.budget_window_run_id) == window_run_id)
+                        .order_by(col(ReportRun.year))
+                        .limit(1)
                     ).scalar_one(),
                     budget_window_run_id=window_run_id,
                 )
             else:
-                run_ids = store_report_run(connection, self.catalog, report, settings)
-                mark_manual(connection, run_ids.report_run_id)
+                run_ids = store_report_run(session, self.catalog, report, settings)
+                if rerun.include_cliffs:
+                    for simulation_run_id in (
+                        run_ids.baseline_simulation_run_id,
+                        run_ids.reform_simulation_run_id,
+                    ):
+                        store_cliff_calculation(session, simulation_run_id, "pending")
                 self.new_run_ids.append(run_ids.report_run_id)
                 started = StartedReportRun(report_run_id=run_ids.report_run_id)
             if self.delete_report:
-                connection.execute(
-                    text("DELETE FROM reports WHERE id = :id"),
-                    {"id": rerun.report_id},
-                )
+                session.execute(delete(Report).where(col(Report.id) == rerun.report_id))
         return started
 
 
 @pytest.fixture
-def owner_engine(disposable_v2_database_url: str) -> Iterator[Engine]:
+def owner_sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> sessionmaker[Session]:
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    yield engine
-    engine.dispose()
+    return v2_owner_sessions
 
 
 @pytest.fixture
-def catalog(owner_engine: Engine) -> Iterator[CatalogRows]:
-    with owner_engine.begin() as connection:
-        stored = store_catalog(connection, "us")
+def catalog(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
+    with owner_sessions.begin() as session:
+        stored = store_catalog(session, "us")
     yield stored
-    with owner_engine.begin() as connection:
-        delete_catalog(connection, stored)
+    with owner_sessions.begin() as session:
+        delete_catalog(session, stored)
 
 
 @pytest.fixture
-def runtime_sessions(managed_v2_roles, v2_engine_as_role) -> Iterator[Any]:
-    engine = v2_engine_as_role(managed_v2_roles.runtime, poolclass=NullPool)
-    yield sessionmaker(engine, class_=Session)
-    engine.dispose()
+def runtime_sessions(
+    managed_v2_roles: ManagedV2Roles,
+    v2_sessions_as_role: Callable[[str], sessionmaker[Session]],
+) -> sessionmaker[Session]:
+    return v2_sessions_as_role(managed_v2_roles.runtime)
 
 
 @pytest.fixture
-def admin(owner_engine: Engine, runtime_sessions: Any) -> Iterator[UserPrincipal]:
+def admin(
+    owner_sessions: sessionmaker[Session], runtime_sessions: sessionmaker[Session]
+) -> Iterator[UserPrincipal]:
     """Provision an admin user, who may force a re-run; delete it after."""
     principal, user_id = store_signed_in_user(
-        runtime_sessions, owner_engine, user_type="admin"
+        runtime_sessions, owner_sessions, user_type="admin"
     )
     yield principal
-    with owner_engine.begin() as connection:
-        connection.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+    with owner_sessions.begin() as session:
+        session.execute(delete(User).where(col(User.id) == user_id))
 
 
 class CountingDatabaseSession(StoredReportDatabaseSession):
@@ -324,18 +327,20 @@ def client_for(
 
 
 def test_a_reports_runs_are_listed_newest_first_with_their_versions(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         first = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
         )
         failed = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -345,9 +350,8 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
                 error_message="The reform simulation failed",
             ),
         )
-        mark_manual(connection, failed.report_run_id)
         newest = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -356,16 +360,15 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
                 created_at=STARTED_AT + timedelta(days=2),
             ),
         )
-        mark_manual(connection, newest.report_run_id)
-        other_report = store_report(connection, catalog)
+        other_report = store_report(session, catalog)
         store_report_run(
-            connection,
+            session,
             catalog,
             other_report,
             RunSettings(versions=CURRENT_VERSIONS),
         )
     client = client_for(
-        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+        runtime_sessions, RerunningSimulationService(owner_sessions, catalog)
     )
 
     response = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
@@ -381,11 +384,8 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
         str(failed.report_run_id),
         str(first.report_run_id),
     ]
-    assert [(item["status"], item["trigger"]) for item in items] == [
-        ("running", "manual"),
-        ("failed", "manual"),
-        ("succeeded", "initial"),
-    ]
+    assert [item["status"] for item in items] == ["running", "failed", "succeeded"]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == [
         "4.2.0",
         "4.2.0",
@@ -399,12 +399,14 @@ def test_a_reports_runs_are_listed_newest_first_with_their_versions(
 
 
 def test_a_report_with_no_run_lists_none(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     client = client_for(
-        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+        runtime_sessions, RerunningSimulationService(owner_sessions, catalog)
     )
 
     response = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
@@ -415,11 +417,14 @@ def test_a_report_with_no_run_lists_none(
 
 @pytest.mark.parametrize("method", ["get", "post"])
 def test_another_countrys_report_or_an_unknown_one_is_not_found(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any, method: str
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
+    method: str,
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-    simulation_service = RerunningSimulationService(owner_engine, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+    simulation_service = RerunningSimulationService(owner_sessions, catalog)
     client = client_for(runtime_sessions, simulation_service)
 
     other_country = client.request(
@@ -434,44 +439,44 @@ def test_another_countrys_report_or_an_unknown_one_is_not_found(
     assert simulation_service.reruns == []
 
 
-def store_household_report(
-    connection: Connection, catalog: CatalogRows
-) -> StoredReport:
+def store_household_report(session: Session, catalog: CatalogRows) -> StoredReport:
     """Store a household and a report over it, without a run."""
     household_id = uuid4()
-    insert_row(
-        connection,
-        "households",
+    add_row(
+        session,
+        Household,
         id=household_id,
         country_id=catalog.country,
-        household_data="{}",
+        household_data={},
         canonicalization_version=1,
         content_hash=uuid4().hex * 2,
     )
     catalog.household_ids.append(household_id)
-    return store_report(connection, catalog, household_id=household_id)
+    return store_report(session, catalog, household_id=household_id)
 
 
 @pytest.fixture
-def household_only_uk(owner_engine: Engine) -> Iterator[CatalogRows]:
+def household_only_uk(owner_sessions: sessionmaker[Session]) -> Iterator[CatalogRows]:
     """Make the UK household-only, store a UK catalog, and restore both after."""
-    with household_only_catalog(owner_engine, "uk") as uk_catalog:
+    with household_only_catalog(owner_sessions, "uk") as uk_catalog:
         yield uk_catalog
 
 
 def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_household_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_household_report(session, catalog)
         first = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
         )
         newest = store_report_run(
-            connection,
+            session,
             catalog,
             report,
             RunSettings(
@@ -480,9 +485,8 @@ def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
                 created_at=STARTED_AT + timedelta(days=1),
             ),
         )
-        mark_manual(connection, newest.report_run_id)
     client = client_for(
-        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+        runtime_sessions, RerunningSimulationService(owner_sessions, catalog)
     )
 
     response = client.get(f"/v2/reports/{report.report_id}/runs?country_id=us")
@@ -497,27 +501,27 @@ def test_a_household_reports_runs_are_listed_newest_first_with_their_versions(
         str(newest.report_run_id),
         str(first.report_run_id),
     ]
-    assert [(item["status"], item["trigger"]) for item in items] == [
-        ("pending", "manual"),
-        ("succeeded", "initial"),
-    ]
+    assert [item["status"] for item in items] == ["pending", "succeeded"]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
 
 
 def test_a_household_report_runs_again_where_households_are_calculated(
-    owner_engine: Engine, household_only_uk: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     # The UK here has household calculations but no economy reports, so a
     # household report's re-run passes only the household check.
-    with owner_engine.begin() as connection:
-        report = store_household_report(connection, household_only_uk)
+    with owner_sessions.begin() as session:
+        report = store_household_report(session, household_only_uk)
         first = store_report_run(
-            connection,
+            session,
             household_only_uk,
             report,
             RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
         )
-    simulation_service = RerunningSimulationService(owner_engine, household_only_uk)
+    simulation_service = RerunningSimulationService(owner_sessions, household_only_uk)
     client = client_for(runtime_sessions, simulation_service)
 
     response = client.post(
@@ -539,7 +543,7 @@ def test_a_household_report_runs_again_where_households_are_calculated(
     assert item["kind"] == "household"
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None
     runs = client.get(f"/v2/reports/{report.report_id}/runs?country_id=uk").json()
@@ -551,18 +555,18 @@ def test_a_household_report_runs_again_where_households_are_calculated(
 
 @pytest.mark.parametrize("force", [False, True])
 def test_running_a_report_again_answers_it_with_its_new_run(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     admin: UserPrincipal,
     force: bool,  # noqa: FBT001  # pytest passes parameters positionally
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
         first = store_report_run(
-            connection, catalog, report, RunSettings(versions=OLDER_VERSIONS)
+            session, catalog, report, RunSettings(versions=OLDER_VERSIONS)
         )
-    simulation_service = RerunningSimulationService(owner_engine, catalog)
+    simulation_service = RerunningSimulationService(owner_sessions, catalog)
     # Only an admin user may force a re-run.
     client = client_for(
         runtime_sessions, simulation_service, requester=admin if force else None
@@ -587,7 +591,7 @@ def test_running_a_report_again_answers_it_with_its_new_run(
     assert item["id"] == str(report.report_id)
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["current_versions"] == CURRENT_VERSIONS
     assert item["result"] is None
@@ -598,23 +602,101 @@ def test_running_a_report_again_answers_it_with_its_new_run(
     ]
 
 
-def test_a_report_whose_reform_simulation_is_gone_is_left_to_the_service_to_refuse(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+def test_running_a_report_again_with_cliffs_asks_for_them_and_answers_their_progress(
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    # The Public API checks the policies that remain and asks the simulation
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+    simulation_service = RerunningSimulationService(owner_sessions, catalog)
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{report.report_id}/runs?country_id=us",
+        json={"include_cliffs": True},
+    )
+
+    assert response.status_code == 201, response.text
+    assert simulation_service.reruns == [
+        ReportRerunInput(
+            country_id="us",
+            report_id=report.report_id,
+            kind="economy",
+            force=False,
+            policy_ids=(None, catalog.policy_id),
+            include_cliffs=True,
+        )
+    ]
+    item = response.json()["result"]["item"]
+    assert item["cliffs"] == {
+        "status": "pending",
+        "baseline": {"status": "pending", "error_message": None},
+        "reform": {"status": "pending", "error_message": None},
+    }
+
+
+def test_a_budget_window_run_again_with_cliffs_is_refused_before_asking(
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
+    simulation_service = RerunningSimulationService(
+        owner_sessions, catalog, window_years=(2026, 2027)
+    )
+
+    response = client_for(runtime_sessions, simulation_service).post(
+        f"/v2/reports/{window.report_id}/runs?country_id=us",
+        json={"include_cliffs": True},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "include_cliffs" in response.json()["message"]
+    assert simulation_service.reruns == []
+
+
+def test_a_household_report_run_again_asks_for_no_cliffs(
+    owner_sessions: sessionmaker[Session],
+    household_only_uk: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    with owner_sessions.begin() as session:
+        report = store_household_report(session, household_only_uk)
+    simulation_service = RerunningSimulationService(owner_sessions, household_only_uk)
+    client = client_for(runtime_sessions, simulation_service)
+    runs_path = f"/v2/reports/{report.report_id}/runs?country_id=uk"
+
+    refused = client.post(runs_path, json={"include_cliffs": True})
+    not_asked = client.post(runs_path, json={"include_cliffs": False})
+
+    assert refused.status_code == 422, refused.text
+    assert "include_cliffs" in refused.json()["message"]
+    assert not_asked.status_code == 201, not_asked.text
+    (rerun,) = simulation_service.reruns
+    assert rerun.include_cliffs is False
+
+
+def test_a_report_whose_reform_simulation_is_gone_is_left_to_the_service_to_refuse(
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
+) -> None:
+    # API v1 checks the policies that remain and asks the simulation
     # service, which refuses a report missing a simulation.
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
-        connection.execute(
-            text("UPDATE reports SET reform_simulation_id = NULL WHERE id = :id"),
-            {"id": report.report_id},
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
+        session.execute(
+            update(Report)
+            .where(col(Report.id) == report.report_id)
+            .values(reform_simulation_id=None)
         )
     message = (
         "The simulation service will not run the report again now "
         "(rerun_not_supported): The report has no reform simulation."
     )
     simulation_service = RerunningSimulationService(
-        owner_engine, catalog, refusal=SimulationServiceConflictError(message)
+        owner_sessions, catalog, refusal=SimulationServiceConflictError(message)
     )
     client = client_for(runtime_sessions, simulation_service)
 
@@ -628,12 +710,14 @@ def test_a_report_whose_reform_simulation_is_gone_is_left_to_the_service_to_refu
 
 
 def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     simulation_service = RerunningSimulationService(
-        owner_engine, catalog, delete_report=True
+        owner_sessions, catalog, delete_report=True
     )
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -656,13 +740,15 @@ def test_a_new_run_whose_report_cannot_be_read_back_answers_the_reports_id(
 
 
 def test_no_report_session_is_open_while_the_simulation_service_is_asked(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     database_session = CountingDatabaseSession(runtime_sessions)
     simulation_service = RerunningSimulationService(
-        owner_engine, catalog, database_session=database_session
+        owner_sessions, catalog, database_session=database_session
     )
     client = client_for(runtime_sessions, simulation_service, database_session)
 
@@ -676,15 +762,17 @@ def test_no_report_session_is_open_while_the_simulation_service_is_asked(
 
 
 def test_the_simulation_services_refusal_is_answered_as_its_own(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
     # The report exists, so the service's refusal is not mistaken for a
     # report that cannot be read back.
-    with owner_engine.begin() as connection:
-        report = store_report(connection, catalog)
+    with owner_sessions.begin() as session:
+        report = store_report(session, catalog)
     message = "The simulation service is unavailable (503 manifest_unavailable)."
     simulation_service = RerunningSimulationService(
-        owner_engine, catalog, refusal=SimulationServiceUnavailableError(message)
+        owner_sessions, catalog, refusal=SimulationServiceUnavailableError(message)
     )
 
     response = client_for(runtime_sessions, simulation_service).post(
@@ -696,19 +784,21 @@ def test_the_simulation_services_refusal_is_answered_as_its_own(
 
 
 def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
-    owner_engine: Engine, catalog: CatalogRows, runtime_sessions: Any
+    owner_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    runtime_sessions: sessionmaker[Session],
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
         first_run_id = store_window_run(
-            connection,
+            session,
             catalog,
             window,
             RunSettings(versions=OLDER_VERSIONS, status="succeeded"),
             (2026, 2027),
         )
         newest_run_id = store_window_run(
-            connection,
+            session,
             catalog,
             window,
             RunSettings(
@@ -718,9 +808,9 @@ def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
             ),
             (2026, 2027),
         )
-        mark_window_manual(connection, newest_run_id, recalculate=True)
+        set_window_recalculate(session, newest_run_id, recalculate=True)
     client = client_for(
-        runtime_sessions, RerunningSimulationService(owner_engine, catalog)
+        runtime_sessions, RerunningSimulationService(owner_sessions, catalog)
     )
 
     response = client.get(f"/v2/reports/{window.report_id}/runs?country_id=us")
@@ -732,9 +822,11 @@ def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
     assert result["current_versions"] == CURRENT_VERSIONS
     items = result["items"]
     assert [item["id"] for item in items] == [str(newest_run_id), str(first_run_id)]
-    assert [
-        (item["status"], item["trigger"], item["recalculate"]) for item in items
-    ] == [("running", "manual", True), ("succeeded", "initial", False)]
+    assert [(item["status"], item["recalculate"]) for item in items] == [
+        ("running", True),
+        ("succeeded", False),
+    ]
+    assert all("trigger" not in item for item in items)
     assert [item["policyengine_version"] for item in items] == ["4.2.0", "4.1.0"]
     assert [[year["year"] for year in item["years"]] for item in items] == [
         [2026, 2027],
@@ -744,23 +836,23 @@ def test_a_budget_windows_runs_are_listed_newest_first_with_their_years(
 
 @pytest.mark.parametrize("force", [False, True])
 def test_running_a_budget_window_again_answers_it_with_its_new_run(
-    owner_engine: Engine,
+    owner_sessions: sessionmaker[Session],
     catalog: CatalogRows,
-    runtime_sessions: Any,
+    runtime_sessions: sessionmaker[Session],
     admin: UserPrincipal,
     force: bool,  # noqa: FBT001  # pytest passes parameters positionally
 ) -> None:
-    with owner_engine.begin() as connection:
-        window = store_report(connection, catalog, budget_window_size=2)
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
         first_run_id = store_window_run(
-            connection,
+            session,
             catalog,
             window,
             RunSettings(versions=OLDER_VERSIONS),
             (2026, 2027),
         )
     simulation_service = RerunningSimulationService(
-        owner_engine, catalog, window_years=(2026, 2027)
+        owner_sessions, catalog, window_years=(2026, 2027)
     )
     # Only an admin user may force a re-run.
     client = client_for(
@@ -786,7 +878,7 @@ def test_running_a_budget_window_again_answers_it_with_its_new_run(
     assert item["kind"] == "budget_window"
     assert item["status"] == "pending"
     assert item["run"]["id"] == str(new_run_id)
-    assert item["run"]["trigger"] == "manual"
+    assert "trigger" not in item["run"]
     assert item["run"]["recalculate"] is force
     assert item["run"]["policyengine_version"] == "4.2.0"
     assert item["result"] is None

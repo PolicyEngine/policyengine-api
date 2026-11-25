@@ -4,17 +4,15 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.data.v2.models import (
-    V2_METADATA,
     Parameter,
     ParameterValue,
     Policy,
@@ -36,7 +34,14 @@ from policyengine_api.services.v2.policies.types import (
     PolicyCreationResult,
     PolicyRead,
 )
+from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.recording_session import RecordingSession
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 RUNNING_VERSION = "5.2.0"
 EARLIER_VERSION = "5.1.0"
@@ -45,21 +50,20 @@ REMOVED_PARAMETER = "gov.example.removed_rate"
 
 
 @pytest.fixture
-def engine():
-    database_engine = create_engine("sqlite://")
-    V2_METADATA.create_all(database_engine)
-    yield database_engine
-    database_engine.dispose()
+def sessions() -> Iterator[sessionmaker[Session]]:
+    with sqlite_v2_sessions() as session_factory:
+        yield session_factory
 
 
 @pytest.fixture
-def session(engine):
-    with Session(engine) as database_session:
+def session(sessions):
+    with sessions(expire_on_commit=True) as database_session:
         yield database_session
 
 
-def _service(engine, running_policyengine_version: str = RUNNING_VERSION):
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def _service(
+    sessions: sessionmaker[Session], running_policyengine_version: str = RUNNING_VERSION
+) -> V2PolicyService:
     return V2PolicyService(
         PolicyDatabaseSession(sessions),
         running_policyengine_version=running_policyengine_version,
@@ -133,9 +137,9 @@ def stored_policies(session: Session) -> dict[str, Policy]:
 
 
 def test_policy_on_an_earlier_catalog_names_the_parameters_the_running_one_lacks(
-    engine, stored_policies: dict[str, Policy]
+    sessions, stored_policies: dict[str, Policy]
 ) -> None:
-    policy = _service(engine).get_policy(
+    policy = _service(sessions).get_policy(
         country_id="us", policy_id=stored_policies["earlier"].id
     )
 
@@ -143,9 +147,9 @@ def test_policy_on_an_earlier_catalog_names_the_parameters_the_running_one_lacks
 
 
 def test_policy_on_the_running_catalog_lacks_nothing(
-    engine, stored_policies: dict[str, Policy]
+    sessions, stored_policies: dict[str, Policy]
 ) -> None:
-    policy = _service(engine).get_policy(
+    policy = _service(sessions).get_policy(
         country_id="us", policy_id=stored_policies["running"].id
     )
 
@@ -153,9 +157,9 @@ def test_policy_on_the_running_catalog_lacks_nothing(
 
 
 def test_page_reports_each_policy_against_the_running_catalog(
-    engine, stored_policies: dict[str, Policy]
+    sessions, stored_policies: dict[str, Policy]
 ) -> None:
-    page = _service(engine).list_policies(country_id="us", offset=0, limit=10)
+    page = _service(sessions).list_policies(country_id="us", offset=0, limit=10)
 
     assert {item.id: item.missing_parameters for item in page.items} == {
         stored_policies["earlier"].id: (REMOVED_PARAMETER,),
@@ -164,10 +168,10 @@ def test_page_reports_each_policy_against_the_running_catalog(
 
 
 def test_without_a_running_catalog_nothing_is_reported(
-    engine, stored_policies: dict[str, Policy]
+    sessions, stored_policies: dict[str, Policy]
 ) -> None:
     # The running PolicyEngine.py release has no published catalog yet.
-    policy = _service(engine, running_policyengine_version="9.9.9").get_policy(
+    policy = _service(sessions, running_policyengine_version="9.9.9").get_policy(
         country_id="us", policy_id=stored_policies["earlier"].id
     )
 
@@ -198,7 +202,7 @@ def test_parameter_names_are_read_in_batches_of_bounded_size() -> None:
 
 
 def test_catalog_that_cannot_be_queried_fails_the_read(
-    engine, stored_policies: dict[str, Policy], monkeypatch
+    sessions, stored_policies: dict[str, Policy], monkeypatch
 ) -> None:
     def unreadable_catalog(*_args, **_kwargs):
         msg = "the v2 metadata catalog cannot be queried"
@@ -207,13 +211,13 @@ def test_catalog_that_cannot_be_queried_fails_the_read(
     monkeypatch.setattr(policy_services, "read_policy_catalog", unreadable_catalog)
 
     with pytest.raises(MetadataCatalogUnavailableError):
-        _service(engine).get_policy(
+        _service(sessions).get_policy(
             country_id="us", policy_id=stored_policies["earlier"].id
         )
 
 
 def test_created_policy_on_an_earlier_catalog_names_what_the_running_one_lacks(
-    engine, stored_policies: dict[str, Policy], monkeypatch
+    sessions, stored_policies: dict[str, Policy], monkeypatch
 ) -> None:
     # Creation is replaced by the stored policy (its inserts need PostgreSQL);
     # the read and check after it are the service's own.
@@ -231,7 +235,7 @@ def test_created_policy_on_an_earlier_catalog_names_what_the_running_one_lacks(
         ),
     )
 
-    creation = _service(engine).create_policy(
+    creation = _service(sessions).create_policy(
         NativePolicyCreationInput(
             country_id="us",
             tax_benefit_model_id=stored.tax_benefit_model_id,
@@ -244,11 +248,11 @@ def test_created_policy_on_an_earlier_catalog_names_what_the_running_one_lacks(
 
 
 def test_only_a_checked_read_carries_missing_parameters(
-    engine, stored_policies: dict[str, Policy]
+    sessions, stored_policies: dict[str, Policy]
 ) -> None:
     # A read that skipped the check cannot be mistaken for "catalog not
     # published": only the checked type has the field.
-    policy = _service(engine).get_policy(
+    policy = _service(sessions).get_policy(
         country_id="us", policy_id=stored_policies["running"].id
     )
 

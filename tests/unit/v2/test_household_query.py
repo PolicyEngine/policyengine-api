@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-from sqlmodel import Session, create_engine
 
-from policyengine_api.data.v2.models import V2_METADATA, Household
+from policyengine_api.data.v2.models import Household
 from policyengine_api.services.v2.households.services import (
     read_complete_household,
     read_household_page,
 )
 from policyengine_api.services.v2.households.validators import HouseholdNotFoundError
+from tests.fixtures.database_sessions import sqlite_v2_sessions
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
-def _stored_households():
-    engine = create_engine("sqlite://")
-    V2_METADATA.create_all(engine)
+@contextmanager
+def _stored_households() -> Iterator[tuple[sessionmaker[Session], UUID, UUID, UUID]]:
+    """Yield Session factories of a database storing three households, and their IDs."""
     created = datetime(2026, 1, 1, tzinfo=UTC)
     first_id = UUID("00000000-0000-0000-0000-000000000010")
     second_id = UUID("00000000-0000-0000-0000-000000000020")
@@ -53,31 +61,28 @@ def _stored_households():
         created_at=created + timedelta(seconds=2),
         updated_at=created + timedelta(seconds=2),
     )
-    with Session(engine) as session:
-        session.add_all([first, second, other])
-        session.commit()
-    return engine, first_id, second_id, other_id
+    with sqlite_v2_sessions() as sessions:
+        with sessions(expire_on_commit=True) as session:
+            session.add_all([first, second, other])
+            session.commit()
+        yield sessions, first_id, second_id, other_id
 
 
 def test_detail_is_complete_and_uses_country_as_resource_identity() -> None:
-    engine, first_id, _second_id, _other_id = _stored_households()
-    try:
-        with Session(engine) as session:
-            item = read_complete_household(
-                session, country_id="us", household_id=first_id
-            )
-            assert item.household_data == {"people": [], "household": []}
-            assert item.default_year == 2026
-            with pytest.raises(HouseholdNotFoundError):
-                read_complete_household(session, country_id="uk", household_id=first_id)
-    finally:
-        engine.dispose()
+    with (
+        _stored_households() as (sessions, first_id, _second_id, _other_id),
+        sessions(expire_on_commit=True) as session,
+    ):
+        item = read_complete_household(session, country_id="us", household_id=first_id)
+        assert item.household_data == {"people": [], "household": []}
+        assert item.default_year == 2026
+        with pytest.raises(HouseholdNotFoundError):
+            read_complete_household(session, country_id="uk", household_id=first_id)
 
 
 def test_collection_orders_paginates_and_filters_exact_default_year() -> None:
-    engine, first_id, second_id, _other_id = _stored_households()
-    try:
-        with Session(engine) as session:
+    with _stored_households() as (sessions, first_id, second_id, _other_id):
+        with sessions(expire_on_commit=True) as session:
             first_page = read_household_page(
                 session,
                 country_id="us",
@@ -105,5 +110,3 @@ def test_collection_orders_paginates_and_filters_exact_default_year() -> None:
         assert [item.id for item in second_page.items] == [second_id]
         assert second_page.has_more is False
         assert [item.id for item in filtered.items] == [first_id]
-    finally:
-        engine.dispose()

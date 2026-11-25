@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
 
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     Parameter,
@@ -24,7 +19,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.v2.policies.services import (
     create_resolved_policy,
     mirror_legacy_policy_in_session,
@@ -43,23 +37,9 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyContentHashCollisionError,
 )
 
-
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(
-                V2_ALEMBIC_DISPOSABLE_TEST,
-                "",
-            ),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("policy persistence tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
+if TYPE_CHECKING:
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
 def _catalog(session: Session, *, country_id: str | None = None):
@@ -108,56 +88,53 @@ def _command(
     )
 
 
-def _cleanup(engine, model_id: UUID) -> None:
-    with engine.begin() as connection:
+def _cleanup(v2_owner_sessions: sessionmaker[Session], model_id: UUID) -> None:
+    with v2_owner_sessions.begin() as session:
         policy_ids = select(Policy.id).where(Policy.tax_benefit_model_id == model_id)
-        connection.execute(
+        session.execute(
             delete(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.policy_id.in_(policy_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(ParameterValue).where(ParameterValue.policy_id.in_(policy_ids))
         )
-        connection.execute(
-            delete(Policy).where(Policy.tax_benefit_model_id == model_id)
-        )
+        session.execute(delete(Policy).where(Policy.tax_benefit_model_id == model_id))
         version_ids = select(TaxBenefitModelVersion.id).where(
             TaxBenefitModelVersion.model_id == model_id
         )
-        connection.execute(
+        session.execute(
             delete(Parameter).where(
                 Parameter.tax_benefit_model_version_id.in_(version_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(TaxBenefitModelVersion).where(
                 TaxBenefitModelVersion.model_id == model_id
             )
         )
-        connection.execute(
-            delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id)
-        )
+        session.execute(delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id))
 
 
-def test_equivalent_create_returns_one_policy_and_one_child_set() -> None:
-    engine = create_engine(_disposable_url())
+def test_equivalent_create_returns_one_policy_and_one_child_set(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session)
             model_id = model.id
             command = _command(model.id, version.id, parameter.id)
             first = create_resolved_policy(session, command)
 
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             second = create_resolved_policy(session, command)
 
         assert first.created is True
         assert second.created is False
         assert second.policy_id == first.policy_id
 
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             policy_count = session.scalar(
                 select(func.count())
                 .select_from(Policy)
@@ -171,15 +148,15 @@ def test_equivalent_create_returns_one_policy_and_one_child_set() -> None:
         assert (policy_count, value_count) == (1, 1)
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> None:
-    engine = create_engine(_disposable_url())
+def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session)
             model_id = model.id
             version_id = version.id
@@ -200,8 +177,7 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
             )
 
         with (
-            Session(engine) as session,
-            session.begin(),
+            v2_owner_sessions.begin() as session,
             pytest.raises(PolicyContentHashCollisionError),
         ):
             create_resolved_policy(
@@ -210,7 +186,7 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
                 canonicalizer=simulated_collision,
             )
 
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             values = session.scalars(
                 select(ParameterValue.value_json)
                 .join(
@@ -222,15 +198,15 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
         assert values == [0.2]
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
-    engine = create_engine(_disposable_url())
+def test_legacy_policy_mapping_is_many_to_one_and_retry_safe(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session, country_id="us")
             model_id = model.id
             first = LegacyPolicySnapshot(
@@ -260,7 +236,7 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
                 running_policyengine_version=version.version,
             )
 
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             retry = mirror_legacy_policy_in_session(
                 session,
                 first,
@@ -275,7 +251,7 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
             policy_created=False,
             mapping_created=False,
         )
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             mappings = session.scalars(
                 select(LegacyPolicyMapping).where(
                     LegacyPolicyMapping.policy_id == first_result.policy_id
@@ -284,15 +260,15 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
         assert {mapping.legacy_policy_id for mapping in mappings} == {301, 302}
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> None:
-    engine = create_engine(_disposable_url())
+def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session, country_id="us")
             model_id = model.id
             parameter_name = parameter.name
@@ -317,8 +293,7 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
         )
         with (
             pytest.raises(LegacyPolicyMappingIntegrityError, match="different"),
-            Session(engine) as session,
-            session.begin(),
+            v2_owner_sessions.begin() as session,
         ):
             mirror_legacy_policy_in_session(
                 session,
@@ -326,7 +301,7 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
                 running_policyengine_version="5.2.0",
             )
 
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             mapping = session.scalar(
                 select(LegacyPolicyMapping).where(
                     LegacyPolicyMapping.legacy_policy_id == 401
@@ -343,15 +318,15 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
         assert policy_count == 1
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_concurrent_equivalent_creates_return_one_policy_uuid() -> None:
-    engine = create_engine(_disposable_url())
+def test_concurrent_equivalent_creates_return_one_policy_uuid(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session)
             model_id = model.id
             command = _command(model.id, version.id, parameter.id)
@@ -359,7 +334,7 @@ def test_concurrent_equivalent_creates_return_one_policy_uuid() -> None:
         barrier = Barrier(2, timeout=10)
 
         def create():
-            with Session(engine) as session, session.begin():
+            with v2_owner_sessions.begin() as session:
                 barrier.wait()
                 return create_resolved_policy(session, command)
 
@@ -369,7 +344,7 @@ def test_concurrent_equivalent_creates_return_one_policy_uuid() -> None:
 
         assert {result.policy_id for result in results} == {results[0].policy_id}
         assert sorted(result.created for result in results) == [False, True]
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             policy_count = session.scalar(
                 select(func.count())
                 .select_from(Policy)
@@ -383,15 +358,15 @@ def test_concurrent_equivalent_creates_return_one_policy_uuid() -> None:
         assert (policy_count, value_count) == (1, 1)
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_empty_and_distinct_policy_content_persist_independently() -> None:
-    engine = create_engine(_disposable_url())
+def test_empty_and_distinct_policy_content_persist_independently(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, parameter = _catalog(session)
             model_id = model.id
             empty = ResolvedPolicyCreationInput(
@@ -412,7 +387,7 @@ def test_empty_and_distinct_policy_content_persist_independently() -> None:
             )
 
         assert len({first.policy_id, second.policy_id, third.policy_id}) == 3
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             empty_value_count = session.scalar(
                 select(func.count())
                 .select_from(ParameterValue)
@@ -421,15 +396,15 @@ def test_empty_and_distinct_policy_content_persist_independently() -> None:
         assert empty_value_count == 0
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)
 
 
-def test_child_insert_failure_rolls_back_the_policy_and_all_values() -> None:
-    engine = create_engine(_disposable_url())
+def test_child_insert_failure_rolls_back_the_policy_and_all_values(
+    v2_owner_sessions: sessionmaker[Session],
+) -> None:
     model_id = None
     try:
-        with Session(engine) as session, session.begin():
+        with v2_owner_sessions.begin() as session:
             model, version, _parameter = _catalog(session)
             model_id = model.id
             invalid = _command(model.id, version.id, uuid4())
@@ -437,12 +412,11 @@ def test_child_insert_failure_rolls_back_the_policy_and_all_values() -> None:
 
         with (
             pytest.raises(IntegrityError),
-            Session(engine) as session,
-            session.begin(),
+            v2_owner_sessions.begin() as session,
         ):
             create_resolved_policy(session, invalid)
 
-        with Session(engine) as session:
+        with v2_owner_sessions() as session:
             policy_count = session.scalar(
                 select(func.count())
                 .select_from(Policy)
@@ -457,5 +431,4 @@ def test_child_insert_failure_rolls_back_the_policy_and_all_values() -> None:
         assert owned_value_count == 0
     finally:
         if model_id is not None:
-            _cleanup(engine, model_id)
-        engine.dispose()
+            _cleanup(v2_owner_sessions, model_id)

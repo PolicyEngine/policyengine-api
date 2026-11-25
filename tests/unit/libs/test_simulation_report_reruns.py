@@ -132,6 +132,48 @@ def test_a_rerun_posts_force_to_the_reports_runs_route(
     assert json.loads(request.content) == {"force": force}
 
 
+def test_a_rerun_asking_for_cliffs_sends_include_cliffs() -> None:
+    service = ScriptedService()
+
+    service.rerun(include_cliffs=True)
+
+    (request,) = service.requests
+    assert json.loads(request.content) == {"force": False, "include_cliffs": True}
+
+
+def test_a_rerun_not_asking_for_cliffs_sends_no_include_cliffs() -> None:
+    """A service not calculating cliffs per simulation run takes only ``force``."""
+    service = ScriptedService()
+
+    service.rerun(include_cliffs=False)
+
+    (request,) = service.requests
+    assert json.loads(request.content) == {"force": False}
+
+
+def test_a_rerun_asking_for_cliffs_the_service_does_not_take_is_refused() -> None:
+    """FastAPI's 422 for the field, from a service taking only ``force``."""
+    service = ScriptedService(
+        status_code=422,
+        body={
+            "detail": [
+                {
+                    "type": "extra_forbidden",
+                    "loc": ["body", "include_cliffs"],
+                    "msg": "Extra inputs are not permitted",
+                    "input": True,
+                }
+            ]
+        },
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.rerun(include_cliffs=True)
+
+    assert route_status(refused.value) == 422
+    assert "include_cliffs: Extra inputs are not permitted" in str(refused.value)
+
+
 @pytest.mark.parametrize("status_code", [201, 202])
 def test_a_started_rerun_naming_the_report_is_accepted(status_code: int) -> None:
     service = ScriptedService(

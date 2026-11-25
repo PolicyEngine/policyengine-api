@@ -12,8 +12,8 @@ from policyengine_api.data.v2.catalog.publication_statistics import (
 )
 
 
-class EngineThatCannotConnect:
-    """Stands in for an engine whose connection fails before any statement."""
+class SessionsThatCannotConnect:
+    """Stands in for Session factories whose connection fails before any statement."""
 
     def begin(self) -> None:
         msg = "postgresql://writer:hunter2@db.example.internal refused the connection"
@@ -21,7 +21,7 @@ class EngineThatCannotConnect:
 
 
 def test_a_failure_that_is_not_a_database_error_is_named_by_its_class() -> None:
-    refresh = analyze_catalog_tables(EngineThatCannotConnect())
+    refresh = analyze_catalog_tables(SessionsThatCannotConnect())
 
     assert refresh.analyzed == ()
     assert refresh.failure_type == "builtins.RuntimeError"

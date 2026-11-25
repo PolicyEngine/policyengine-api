@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
-
 import pytest
 
 from policyengine_api.data.v2 import policy_migration_qualification as qualification
@@ -12,10 +9,14 @@ from policyengine_api.data.v2.settings import (
     V2_MIGRATION_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
+    load_v2_migration_database_settings,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
+from tests.unit.v2.qualification_sessions import (
+    CountingSession,
+    QualificationSessions,
+    serve_public_tables,
+    serve_read_only_sessions,
+)
 
 ENVIRONMENT = {
     V2_MIGRATION_DATABASE_URL: (
@@ -27,51 +28,23 @@ ENVIRONMENT = {
 }
 
 
-class FakeTransaction:
-    def __init__(self) -> None:
-        self.rolled_back = False
-
-    def rollback(self) -> None:
-        self.rolled_back = True
+@pytest.fixture(autouse=True)
+def _every_policy_table_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_public_tables(monkeypatch)
 
 
-class FakeConnection:
-    def __init__(self, counts: tuple[int, int, int]) -> None:
-        self._counts = iter(counts)
-        self.transaction = FakeTransaction()
-        self.statements: list[str] = []
-
-    def begin(self) -> FakeTransaction:
-        return self.transaction
-
-    def exec_driver_sql(self, statement: str) -> None:
-        self.statements.append(statement)
-
-    def scalar(self, _statement: object) -> int:
-        return next(self._counts)
+def _configured_url() -> object:
+    return load_v2_migration_database_settings(ENVIRONMENT).connection.url
 
 
-class FakeEngine:
-    def __init__(self, connection: FakeConnection) -> None:
-        self.connection = connection
-        self.disposed = False
+def test_empty_target_is_qualified_in_a_rolled_back_read_only_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = CountingSession((0, 0, 0))
+    sessions = QualificationSessions(session)
+    read_only_urls = serve_read_only_sessions(monkeypatch, sessions)
 
-    @contextmanager
-    def connect(self) -> Iterator[FakeConnection]:
-        yield self.connection
-
-    def dispose(self) -> None:
-        self.disposed = True
-
-
-def test_empty_target_is_qualified_in_a_rolled_back_read_only_transaction() -> None:
-    connection = FakeConnection((0, 0, 0))
-    engine = FakeEngine(connection)
-
-    evidence = qualification.qualify_policy_migration_target(
-        ENVIRONMENT,
-        engine_builder=lambda _settings: engine,
-    )
+    evidence = qualification.qualify_policy_migration_target(ENVIRONMENT)
 
     assert evidence.as_dict() == {
         "outcome": "ok",
@@ -84,19 +57,21 @@ def test_empty_target_is_qualified_in_a_rolled_back_read_only_transaction() -> N
             "user_policies": 0,
         },
     }
-    assert connection.statements == ["SET TRANSACTION READ ONLY"]
-    assert connection.transaction.rolled_back
-    assert engine.disposed
+    assert read_only_urls == [_configured_url()]
+    assert session.rolled_back
+    assert sessions.closed
 
 
-def test_applied_policy_revision_skips_predecessor_row_qualification() -> None:
-    connection = FakeConnection((1, 2, 3))
-    engine = FakeEngine(connection)
+def test_applied_policy_revision_skips_predecessor_row_qualification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = CountingSession((1, 2, 3))
+    sessions = QualificationSessions(session)
+    read_only_urls = serve_read_only_sessions(monkeypatch, sessions)
 
     evidence = qualification.qualify_policy_migration_if_pending(
         ENVIRONMENT,
-        engine_builder=lambda _settings: engine,
-        pending_checker=lambda _connection: False,
+        pending_checker=lambda _session: False,
     )
 
     assert evidence.as_dict() == {
@@ -110,25 +85,29 @@ def test_applied_policy_revision_skips_predecessor_row_qualification() -> None:
             "user_policies": 0,
         },
     }
-    assert connection.statements == ["SET TRANSACTION READ ONLY"]
-    assert connection.transaction.rolled_back
-    assert engine.disposed
+    assert read_only_urls == [_configured_url()]
+    assert session.statements == []
+    assert session.rolled_back
+    assert sessions.closed
 
 
-def test_pending_policy_revision_runs_predecessor_row_qualification() -> None:
-    connection = FakeConnection((0, 0, 0))
-    engine = FakeEngine(connection)
+def test_pending_policy_revision_runs_predecessor_row_qualification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = CountingSession((0, 0, 0))
+    sessions = QualificationSessions(session)
+    read_only_urls = serve_read_only_sessions(monkeypatch, sessions)
 
     evidence = qualification.qualify_policy_migration_if_pending(
         ENVIRONMENT,
-        engine_builder=lambda _settings: engine,
-        pending_checker=lambda _connection: True,
+        pending_checker=lambda _session: True,
     )
 
     assert evidence.required is True
-    assert connection.statements == ["SET TRANSACTION READ ONLY"]
-    assert connection.transaction.rolled_back
-    assert engine.disposed
+    assert read_only_urls == [_configured_url()]
+    assert len(session.statements) == 3
+    assert session.rolled_back
+    assert sessions.closed
 
 
 @pytest.mark.parametrize(
@@ -143,8 +122,8 @@ def test_pending_policy_revision_runs_predecessor_row_qualification() -> None:
 def test_retained_policy_data_stops_without_committing(
     counts: tuple[int, int, int],
 ) -> None:
-    connection = FakeConnection(counts)
-    engine = FakeEngine(connection)
+    session = CountingSession(counts)
+    sessions = QualificationSessions(session)
 
     with pytest.raises(
         qualification.RetainedPolicyDataError,
@@ -152,12 +131,12 @@ def test_retained_policy_data_stops_without_committing(
     ) as raised:
         qualification.qualify_policy_migration_target(
             ENVIRONMENT,
-            engine_builder=lambda _settings: engine,
+            session_factories=sessions,
         )
 
     assert raised.value.counts == qualification.PolicyDataCounts(*counts)
-    assert connection.transaction.rolled_back
-    assert engine.disposed
+    assert session.rolled_back
+    assert sessions.closed
 
 
 def test_main_redacts_unexpected_errors(

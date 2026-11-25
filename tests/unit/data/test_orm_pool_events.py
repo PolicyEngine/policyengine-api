@@ -2,20 +2,29 @@
 
 The engines here are real SQLAlchemy engines with pre-ping, over in-memory
 SQLite connections that, like pymysql's, keep a socket in ``_sock`` and drop
-it (``_sock = None``) when the connection breaks, before the error is raised.
+it (``_sock = None``) when the connection breaks, before the error is raised
+(``fake_driver_connections``). The tests drive the pool directly, invalidating,
+detaching and recycling its connections, which no Session can do, so this is
+one of rule api.data.orm-only's session-factory modules; its statements still
+run through Sessions.
 """
 
 import errno
 import logging
-import socket
-import sqlite3
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, event, exc
+from sqlalchemy import Engine, create_engine, event, exc, literal, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.pool import QueuePool
 
 from policyengine_api.data import orm_pool_events
+from tests.unit.data.fake_driver_connections import (
+    OperationalError,
+    lost_connection_error,
+    open_socket_carrying_connection,
+    pymysql_lost_connection_error,
+)
 
 ENGINE_FIELD = {"database_pool.engine": "v1_cloud_sql"}
 
@@ -37,73 +46,21 @@ class RecordingRuntime:
         return [name for name, _severity, _attributes in self.events]
 
 
-class SocketCarryingConnection(sqlite3.Connection):
-    """A SQLite connection that keeps a socket in ``_sock``, as pymysql's does."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.bind(("127.0.0.1", 0))
-        self.socket_fields = {
-            "database_connection.fd": self._sock.fileno(),
-            "database_connection.local_port": self._sock.getsockname()[1],
-        }
-
-    def break_like_pymysql(self, error=None):
-        """Lose the connection: drop the socket, as pymysql's _force_close does.
-
-        With ``error``, the next ping raises it instead of finding a closed
-        SQLite database.
-        """
-        self._sock.close()
-        self._sock = None
-        self.ping_error = error
-        super().close()
-
-    def cursor(self, *args, **kwargs):
-        if getattr(self, "ping_error", None) is not None:
-            raise self.ping_error
-        return super().cursor(*args, **kwargs)
-
-    def close(self):
-        if self._sock is not None:
-            self._sock.close()
-            self._sock = None
-        super().close()
+class _MissingTableBase(DeclarativeBase):
+    """The declarative base of a table no test database has."""
 
 
-class LostConnectionError(Exception):
-    """A driver error whose first argument is the driver's error code."""
+class MissingRow(_MissingTableBase):
+    """A row of a table that doesn't exist, so selecting it fails."""
+
+    __tablename__ = "a_missing_table"
+    id: Mapped[int] = mapped_column(primary_key=True)
 
 
-class OperationalError(sqlite3.OperationalError):
-    """Shaped like pymysql.err.OperationalError: (code, message) arguments.
-
-    It subclasses SQLite's error so that SQLAlchemy's SQLite dialect treats it
-    as a DBAPI error, as the MySQL dialect treats pymysql's.
-    """
-
-
-def pymysql_lost_connection_error():
-    """Return OperationalError(2013, ...) caused by a ConnectionResetError.
-
-    This is how pymysql raises a lost connection: its socket read fails, and
-    _read_bytes raises OperationalError(CR_SERVER_LOST, ...) from the OSError.
-    """
-    os_error = ConnectionResetError(errno.ECONNRESET, "Connection reset by peer")
-    driver_error = OperationalError(
-        2013, "Lost connection to MySQL server during query"
-    )
-    driver_error.__cause__ = os_error
-    return driver_error
-
-
-def lost_connection_error():
-    """Return a driver error caused by a ConnectionResetError, as pymysql raises it."""
-    os_error = ConnectionResetError(errno.ECONNRESET, "Connection reset by peer")
-    driver_error = LostConnectionError(2013, "Lost connection to MySQL server")
-    driver_error.__cause__ = os_error
-    return driver_error
+def _select_one(engine: Engine) -> int:
+    """Check a connection out of the pool, pinging it, and select 1 in a Session."""
+    with Session(engine) as session:
+        return session.execute(select(literal(1))).scalar_one()
 
 
 @pytest.fixture
@@ -139,11 +96,7 @@ def engine_factory(connector_logger):
 
     def build(**pool_options):
         def open_connection():
-            connection = sqlite3.connect(
-                ":memory:",
-                factory=SocketCarryingConnection,
-                check_same_thread=False,
-            )
+            connection = open_socket_carrying_connection()
             connections.append(connection)
             return connection
 
@@ -165,13 +118,11 @@ def engine_factory(connector_logger):
 
 def test_failed_pre_ping_records_its_cause_and_the_lost_socket(runtime, engine_factory):
     engine, connections = engine_factory(pool_size=1, max_overflow=0)
-    with engine.connect() as connection:
-        connection.exec_driver_sql("select 1")
+    _select_one(engine)
     [first] = connections
     first.break_like_pymysql()
 
-    with engine.connect() as connection:
-        connection.exec_driver_sql("select 1")
+    _select_one(engine)
 
     assert runtime.names() == [
         "database_pool.connect",
@@ -220,13 +171,11 @@ def test_failed_pre_ping_records_the_driver_code_and_errno(
             or sqlite_is_disconnect(error, *arguments)
         ),
     )
-    with engine.connect() as connection:
-        connection.exec_driver_sql("select 1")
+    _select_one(engine)
     [first] = connections
     first.break_like_pymysql(pymysql_lost_connection_error())
 
-    with engine.connect() as connection:
-        connection.exec_driver_sql("select 1")
+    _select_one(engine)
 
     assert runtime.names() == [
         "database_pool.connect",
@@ -338,8 +287,8 @@ def test_closes_are_recorded_with_the_saved_socket(runtime, engine_factory):
 def test_statement_errors_are_recorded_without_their_message(runtime, engine_factory):
     engine, _connections = engine_factory(pool_size=1, max_overflow=0)
 
-    with engine.connect() as connection, pytest.raises(exc.OperationalError):
-        connection.exec_driver_sql("select * from a_missing_table")
+    with Session(engine) as session, pytest.raises(exc.OperationalError):
+        session.execute(select(MissingRow))
 
     [error] = [event for event in runtime.events if event[0] == "database_pool.error"]
     assert error[1:] == (
@@ -446,12 +395,10 @@ def test_failing_runtime_leaves_the_pool_working(monkeypatch, engine_factory):
 
     monkeypatch.setattr(orm_pool_events, "get_runtime", failing_runtime)
     engine, connections = engine_factory(pool_size=1, max_overflow=0)
-    with engine.connect() as connection:
-        connection.exec_driver_sql("select 1")
+    _select_one(engine)
     connections[0].break_like_pymysql()
 
-    with engine.connect() as connection:
-        assert connection.exec_driver_sql("select 1").scalar() == 1
+    assert _select_one(engine) == 1
     logging.getLogger(orm_pool_events.CONNECTOR_REFRESH_LOGGER).debug("refresh")
 
 

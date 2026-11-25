@@ -24,7 +24,11 @@ from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.reports import Report
-    from policyengine_api.data.v2.models.run_results import Inequality, Poverty
+    from policyengine_api.data.v2.models.run_results import (
+        CliffImpact,
+        Inequality,
+        Poverty,
+    )
 
 
 class SimulationStatus(StrEnum):
@@ -168,7 +172,9 @@ class SimulationRun(TimestampedModel, table=True):
     dataset can't be deleted while a run names them, and deleting the region
     clears the reference. A household simulation's run stores its household in
     ``household_result``; an economy run's output file is ``output_uri``, with
-    its SHA-256. Each poverty and inequality result belongs to one run.
+    its SHA-256. Each poverty and inequality result belongs to one run, and so
+    does each calculation of its cliff impact (``CliffImpact``), which a
+    request asking for cliffs starts apart from the run.
 
     A simulation has at most one run that hasn't failed for each year, catalog
     version and pair of package versions, which identical requests join; a
@@ -265,6 +271,10 @@ class SimulationRun(TimestampedModel, table=True):
         cascade_delete=True,
     )
     inequalities: list["Inequality"] = Relationship(
+        back_populates="simulation_run",
+        cascade_delete=True,
+    )
+    cliff_impacts: list["CliffImpact"] = Relationship(
         back_populates="simulation_run",
         cascade_delete=True,
     )

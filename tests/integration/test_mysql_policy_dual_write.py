@@ -10,24 +10,17 @@ Only rows created by these fixtures are removed during cleanup.
 from __future__ import annotations
 
 import json
-import os
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, func, select, text
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy import String, delete, func, literal, select, type_coerce
 from sqlalchemy.exc import DataError
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
 
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import Policy as V1Policy
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     Parameter,
@@ -36,7 +29,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,
     mirror_policy_after_commit,
@@ -50,49 +42,20 @@ from policyengine_api.services.v2.policies.types import (
 )
 from policyengine_api.utils import hash_object
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
 INPUT_VALUE = 0.04 + 3 / 1_000_000
 STORED_VALUE = 0.040003
 PARAMETER_NAME = "gov.phase10.mysql_storage_rate"
 PERIOD = "2026-01-01.2100-12-31"
 
 
-def _mysql_url() -> str:
-    database_url = os.environ.get("ALEMBIC_DATABASE_URL", "")
-    if not database_url:
-        pytest.skip("ALEMBIC_DATABASE_URL is not set")
-    url = make_url(database_url)
-    if (
-        url.drivername != "mysql+pymysql"
-        or url.host not in {"127.0.0.1", "localhost"}
-        or url.database != "policyengine_alembic_test"
-        or not url.username
-        or url.password is None
-    ):
-        pytest.fail(
-            "MySQL mirror tests require explicit test credentials and the local "
-            "mysql+pymysql policyengine_alembic_test schema"
-        )
-    return database_url
-
-
-def _postgres_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    if os.environ.get(V2_ALEMBIC_DISPOSABLE_TEST) != "1":
-        pytest.fail("MySQL mirror tests require v2 disposable-test mode")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: "1",
-        }
-    )
-    return settings.url.render_as_string(hide_password=False)
-
-
 @dataclass
 class MySQLSource:
-    engine: Engine
+    sessions: sessionmaker[OrmSession]
     service: PolicyService
     label_prefix: str
 
@@ -106,30 +69,24 @@ class MySQLSource:
 
 
 @pytest.fixture
-def mysql_source():
-    engine = create_engine(_mysql_url())
+def mysql_source(v1_sessions: sessionmaker[OrmSession]):
     source = MySQLSource(
-        engine,
-        PolicyService(sessionmaker(engine, expire_on_commit=False)),
-        f"mysql-mirror-{uuid4().hex}-",
+        v1_sessions, PolicyService(v1_sessions), f"mysql-mirror-{uuid4().hex}-"
     )
     try:
         yield source
     finally:
-        try:
-            with engine.begin() as connection:
-                connection.execute(
-                    delete(V1Policy).where(
-                        V1Policy.label.startswith(source.label_prefix, autoescape=True)
-                    )
+        with v1_sessions.begin() as session:
+            session.execute(
+                delete(V1Policy).where(
+                    V1Policy.label.startswith(source.label_prefix, autoescape=True)
                 )
-        finally:
-            engine.dispose()
+            )
 
 
 @dataclass
 class PostgreSQLDestination:
-    sessions: sessionmaker
+    sessions: sessionmaker[Session]
     service: V2PolicyService
     model_id: UUID
 
@@ -159,12 +116,10 @@ class PostgreSQLDestination:
 
 
 @pytest.fixture
-def postgres_destination():
-    engine = create_engine(_postgres_url())
-    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+def postgres_destination(v2_owner_sessions: sessionmaker[Session]):
     model_id = None
     try:
-        with sessions.begin() as session:
+        with v2_owner_sessions.begin() as session:
             model = TaxBenefitModel(name="policyengine-us")
             version = TaxBenefitModelVersion(
                 model=model,
@@ -181,38 +136,37 @@ def postgres_destination():
             session.flush()
             model_id = model.id
         yield PostgreSQLDestination(
-            sessions, V2PolicyService(PolicyDatabaseSession(sessions)), model_id
+            v2_owner_sessions,
+            V2PolicyService(PolicyDatabaseSession(v2_owner_sessions)),
+            model_id,
         )
     finally:
-        try:
-            if model_id is not None:
-                with engine.begin() as connection:
-                    policy_ids = select(Policy.id).where(
-                        Policy.tax_benefit_model_id == model_id
-                    )
-                    version_ids = select(TaxBenefitModelVersion.id).where(
-                        TaxBenefitModelVersion.model_id == model_id
-                    )
-                    for table, clause in (
-                        (
-                            LegacyPolicyMapping,
-                            LegacyPolicyMapping.policy_id.in_(policy_ids),
-                        ),
-                        (ParameterValue, ParameterValue.policy_id.in_(policy_ids)),
-                        (Policy, Policy.tax_benefit_model_id == model_id),
-                        (
-                            Parameter,
-                            Parameter.tax_benefit_model_version_id.in_(version_ids),
-                        ),
-                        (
-                            TaxBenefitModelVersion,
-                            TaxBenefitModelVersion.model_id == model_id,
-                        ),
-                        (TaxBenefitModel, TaxBenefitModel.id == model_id),
-                    ):
-                        connection.execute(delete(table).where(clause))
-        finally:
-            engine.dispose()
+        if model_id is not None:
+            with v2_owner_sessions.begin() as session:
+                policy_ids = select(Policy.id).where(
+                    Policy.tax_benefit_model_id == model_id
+                )
+                version_ids = select(TaxBenefitModelVersion.id).where(
+                    TaxBenefitModelVersion.model_id == model_id
+                )
+                for mapped_class, clause in (
+                    (
+                        LegacyPolicyMapping,
+                        LegacyPolicyMapping.policy_id.in_(policy_ids),
+                    ),
+                    (ParameterValue, ParameterValue.policy_id.in_(policy_ids)),
+                    (Policy, Policy.tax_benefit_model_id == model_id),
+                    (
+                        Parameter,
+                        Parameter.tax_benefit_model_version_id.in_(version_ids),
+                    ),
+                    (
+                        TaxBenefitModelVersion,
+                        TaxBenefitModelVersion.model_id == model_id,
+                    ),
+                    (TaxBenefitModel, TaxBenefitModel.id == model_id),
+                ):
+                    session.execute(delete(mapped_class).where(clause))
 
 
 def test_first_snapshot_matches_real_mysql_json_storage(
@@ -220,10 +174,12 @@ def test_first_snapshot_matches_real_mysql_json_storage(
 ) -> None:
     creation = mysql_source.create()
     assert creation.snapshot is not None
-    with mysql_source.engine.connect() as connection:
-        raw_json = connection.execute(
-            text("SELECT policy_json FROM policy WHERE id = :id AND country_id = 'us'"),
-            {"id": creation.policy_id},
+    with mysql_source.sessions() as session:
+        # MySQL's own text of the stored JSON, which the JSON type would parse.
+        raw_json = session.execute(
+            select(type_coerce(V1Policy.policy_json, String)).where(
+                V1Policy.id == creation.policy_id, V1Policy.country_id == "us"
+            )
         ).scalar_one()
     persisted = json.loads(raw_json)
     record_property("input_value", repr(INPUT_VALUE))
@@ -264,7 +220,7 @@ def test_mysql_first_write_retry_and_relabel_keep_one_postgres_uuid(
                     yield session
                     # Fail on the real server after policy/value/mapping inserts
                     # and before COMMIT, exercising PostgreSQL rollback itself.
-                    session.execute(text("SELECT 1 / 0"))
+                    session.execute(select(literal(1) / literal(0)))
 
         failing_service = V2PolicyService(
             FailingTransaction(postgres_destination.sessions)

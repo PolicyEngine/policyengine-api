@@ -13,14 +13,12 @@ from alembic.script import ScriptDirectory
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from policyengine_api.data.v2.models import V2_METADATA
-
-V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
-
+from policyengine_api.data.v2.models import V2_TABLE_NAMES
 
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
         "budget_window_runs",
+        "cliff_impacts",
         "countries",
         "legacy_household_mappings",
         "legacy_policy_mappings",
@@ -71,9 +69,15 @@ SHARED_REPORTS_REVISION = "94dc43079186"
 # of the dynamics revision.
 USER_INVITATIONS_REVISION = "f519a77ba122"
 # The dynamics revision, on the user invitations revision, and parent of the
-# user dynamics revision.
+# cliff impacts revision.
 DYNAMICS_REVISION = "9d1d12a7ac58"
-# The user dynamics revision, on the dynamics revision.
+# The cliff impacts revision, on the dynamics revision, and parent of the
+# report column drops revision.
+CLIFF_IMPACTS_REVISION = "bc334f9877b7"
+# The report column drops revision, on the cliff impacts revision, and
+# parent of the user dynamics revision.
+REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
+# The user dynamics revision, on the report column drops revision.
 USER_DYNAMICS_REVISION = "d417fe8b1b17"
 
 
@@ -81,8 +85,11 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
+    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
     assert [revision.revision for revision in script.walk_revisions()] == [
-        V2_ALEMBIC_HEAD_REVISION,
+        USER_DYNAMICS_REVISION,
+        REPORT_COLUMN_DROPS_REVISION,
+        CLIFF_IMPACTS_REVISION,
         DYNAMICS_REVISION,
         USER_INVITATIONS_REVISION,
         SHARED_REPORTS_REVISION,
@@ -402,7 +409,7 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert "Post-generation" not in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
-    # The previous Public API revision still maps the retired country and label
+    # The previous API v1 revision still maps the retired country and label
     # columns, so the upgrade relaxes them instead of dropping anything.
     upgrade = revision[
         revision.index("def upgrade()") : revision.index("def downgrade()")
@@ -1215,8 +1222,118 @@ def test_dynamics_revision_stores_dynamics_like_policies_and_maps_them() -> None
     assert "op.bulk_insert(" not in revision
 
 
+def test_cliff_impacts_revision_creates_only_its_table_with_one_correction() -> None:
+    """The revision after dynamics adds ``cliff_impacts``.
+
+    It is generated, creates the table with its two indexes and its partial
+    unique index, and writes no data. Its one post-generation correction makes
+    ``status`` reuse the ``v2_simulation_status`` type the baseline created,
+    which the generated ``create_table`` would create again and fail on; so
+    the downgrade, which drops only the table, leaves the type to
+    ``simulation_runs``.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(f"{CLIFF_IMPACTS_REVISION}_*.py")
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{DYNAMICS_REVISION}["']""",
+        revision,
+    )
+    assert revision.count("Dialect correction:") == 1
+    assert re.search(
+        r"""name=["']v2_simulation_status["'],\s*create_type=False""", upgrade
+    )
+    assert re.findall(r"""op\.create_table\(\s*["'](\w+)["']""", upgrade) == [
+        "cliff_impacts"
+    ]
+    assert sorted(
+        re.findall(r"""op\.create_index\(\s*(?:op\.f\()?["'](\w+)["']""", upgrade)
+    ) == [
+        "ix_cliff_impacts_simulation_run_id",
+        "ix_cliff_impacts_status_started_at",
+        "uq_cliff_impacts_unfailed",
+    ]
+    assert re.search(
+        r"""postgresql_where=sa\.text\(["']status <> 'failed'["']\)""", upgrade
+    )
+    assert re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade) == [
+        "cliff_impacts"
+    ]
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert ".drop(op.get_bind())" not in body
+    assert "op.alter_column(" not in upgrade
+    assert "op.add_column(" not in upgrade
+
+
+def test_report_column_drops_revision_drops_only_the_named_columns() -> None:
+    """The revision after cliff impacts drops what shared report rows don't hold.
+
+    It is generated, removes the nine columns with the key, index and check
+    that depend on them, writes no data, and its downgrade adds the columns
+    back, empty.
+    """
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{REPORT_COLUMN_DROPS_REVISION}_*.py"
+    )
+    revision = path.read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    dropped_columns = [
+        ("budget_window_runs", "trigger"),
+        ("report_runs", "baseline_cliff_gap"),
+        ("report_runs", "baseline_cliff_share"),
+        ("report_runs", "reform_cliff_gap"),
+        ("report_runs", "reform_cliff_share"),
+        ("report_runs", "trigger"),
+        ("reports", "description"),
+        ("reports", "label"),
+        ("reports", "user_id"),
+    ]
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{CLIFF_IMPACTS_REVISION}["']""",
+        revision,
+    )
+    drop_column_call = r"""op\.drop_column\(\s*["'](\w+)["'],\s*["'](\w+)["']"""
+    add_column_call = (
+        r"""op\.add_column\(\s*["'](\w+)["'],\s*sa\.Column\(\s*["'](\w+)["']"""
+    )
+    assert sorted(re.findall(drop_column_call, upgrade)) == dropped_columns
+    assert sorted(re.findall(add_column_call, downgrade)) == dropped_columns
+    # The one correction restores the parentheses autogenerate strips.
+    assert revision.count("Post-generation correction:") == 1
+    assert (
+        "'(baseline_cliff_gap IS NULL) = (baseline_cliff_share IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_gap IS NULL) "
+        "AND (baseline_cliff_gap IS NULL) = (reform_cliff_share IS NULL)'"
+    ) in downgrade
+    assert "ix_reports_user_id" in upgrade
+    assert "fk_reports_user_id_users" in upgrade
+    assert "ck_report_runs_cliff_impact_complete" in upgrade
+    for body in (upgrade, downgrade):
+        assert "op.execute(" not in body
+        assert "op.bulk_insert(" not in body
+        assert "op.drop_table(" not in body
+
+
 def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
-    """The revision after dynamics creates ``user_dynamics`` and nothing else.
+    """The revision after report column drops creates ``user_dynamics`` alone.
 
     It is generated with no corrections, with its ID chosen through
     ``--rev-id``: one table, whose keys name its user (``CASCADE``), its
@@ -1235,7 +1352,10 @@ def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
     )
-    assert f'down_revision: Union[str, None] = "{DYNAMICS_REVISION}"' in revision
+    assert (
+        f'down_revision: Union[str, None] = "{REPORT_COLUMN_DROPS_REVISION}"'
+        in revision
+    )
     assert "correction" not in revision.lower()
     operations = [name for name in re.findall(r"op\.\w+", upgrade) if name != "op.f"]
     assert sorted(operations) == ["op.create_index"] * 3 + ["op.create_table"]

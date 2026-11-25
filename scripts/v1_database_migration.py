@@ -1,25 +1,36 @@
-"""Safely inspect and upgrade the API v1 Cloud SQL schema."""
+"""Safely inspect and upgrade the API v1 Cloud SQL schema.
+
+Every mode runs in one ORM Session. Alembic's ``MigrationContext``,
+``compare_metadata`` and ``command.upgrade`` take a Connection, so they get
+the Session's own (rule api.data.orm-only names these exceptions); everything
+else runs through the Session.
+"""
 
 from __future__ import annotations
 
 import argparse
 import os
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Connection, create_engine, inspect, text
+from sqlalchemy import func, select
 from sqlalchemy.engine import URL
-from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v1_sessions import unpooled_v1_sessions, v1_schema_inspector
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 ALEMBIC_CONFIG = REPO / "alembic-v1.ini"
 MIGRATION_LOCK_NAME = "policyengine-api-v1-alembic"
+MIGRATION_LOCK_TIMEOUT_SECONDS = 60
 DATABASE_NAME = "policyengine"
 READONLY_USER = "policyengine_schema_reader"
 MIGRATION_USER = "policyengine_schema_migrator"
@@ -107,9 +118,10 @@ def describe_metadata_difference(difference: object) -> str:
     raise ValueError(msg)
 
 
-def _config(connection: Connection) -> Config:
+def _config(session: Session) -> Config:
+    """Return the v1 Alembic configuration, migrating the Session's connection."""
     config = Config(str(ALEMBIC_CONFIG))
-    config.attributes["connection"] = connection
+    config.attributes["connection"] = session.connection()
     return config
 
 
@@ -117,12 +129,12 @@ def _script_heads(config: Config) -> set[str]:
     return set(ScriptDirectory.from_config(config).get_heads())
 
 
-def database_state(connection: Connection) -> DatabaseState:
+def database_state(session: Session) -> DatabaseState:
     """Return the database's Alembic state against the repository's revision heads."""
-    inspector = inspect(connection)
+    inspector = v1_schema_inspector(session)
     version_table_exists = "alembic_version" in inspector.get_table_names()
-    context = MigrationContext.configure(connection)
-    config = _config(connection)
+    context = MigrationContext.configure(session.connection())
+    config = _config(session)
     return classify_database_state(
         version_table_exists=version_table_exists,
         current_heads=set(context.get_current_heads()),
@@ -130,13 +142,13 @@ def database_state(connection: Connection) -> DatabaseState:
     )
 
 
-def metadata_differences(connection: Connection) -> set[str]:
+def metadata_differences(session: Session) -> set[str]:
     """Describe every difference between the live schema and the v1 models.
 
     Raise ValueError for a kind of difference that has no data-free description.
     """
     context = MigrationContext.configure(
-        connection,
+        session.connection(),
         opts={"compare_type": True, "compare_server_default": True},
     )
     return {
@@ -145,42 +157,41 @@ def metadata_differences(connection: Connection) -> set[str]:
     }
 
 
-def verify_head_schema(connection: Connection) -> None:
+def verify_head_schema(session: Session) -> None:
     """Raise RuntimeError unless the database is at the head with no schema drift."""
-    state = database_state(connection)
+    state = database_state(session)
     if state is not DatabaseState.HEAD:
         msg = f"Database is not at the Alembic head; found {state}"
         raise RuntimeError(msg)
-    differences = metadata_differences(connection)
+    differences = metadata_differences(session)
     if differences:
         msg = f"Database metadata drift remains after migration: {sorted(differences)}"
         raise RuntimeError(msg)
 
 
-def _acquire_lock(connection: Connection) -> None:
-    acquired = connection.scalar(
-        text("SELECT GET_LOCK(:name, 60)"), {"name": MIGRATION_LOCK_NAME}
+def _acquire_lock(session: Session) -> None:
+    """Take MySQL's named migration lock, waiting up to 60 seconds for it."""
+    acquired = session.scalar(
+        select(func.GET_LOCK(MIGRATION_LOCK_NAME, MIGRATION_LOCK_TIMEOUT_SECONDS))
     )
     if acquired != 1:
         msg = "Could not acquire the v1 Alembic migration lock"
         raise RuntimeError(msg)
 
 
-def _release_lock(connection: Connection) -> None:
-    connection.execute(
-        text("SELECT RELEASE_LOCK(:name)"), {"name": MIGRATION_LOCK_NAME}
-    )
+def _release_lock(session: Session) -> None:
+    session.execute(select(func.RELEASE_LOCK(MIGRATION_LOCK_NAME)))
 
 
-def upgrade_database(connection: Connection, *, backup_id: str) -> None:
+def upgrade_database(session: Session, *, backup_id: str) -> None:
     """Upgrade a versioned database to head under a MySQL named lock, then verify it.
 
     A database already at head is only verified, so ``backup_id`` is required
     only when an upgrade will actually run.
     """
-    _acquire_lock(connection)
+    _acquire_lock(session)
     try:
-        state = database_state(connection)
+        state = database_state(session)
         if state in {DatabaseState.UNVERSIONED, DatabaseState.INVALID}:
             msg = (
                 "database has no valid Alembic revision; automatic baseline "
@@ -188,16 +199,16 @@ def upgrade_database(connection: Connection, *, backup_id: str) -> None:
             )
             raise RuntimeError(msg)
         if state is DatabaseState.HEAD:
-            verify_head_schema(connection)
+            verify_head_schema(session)
             return
         if not backup_id.strip():
             msg = "A completed Cloud SQL backup ID is required"
             raise ValueError(msg)
 
-        command.upgrade(_config(connection), "head")
-        verify_head_schema(connection)
+        command.upgrade(_config(session), "head")
+        verify_head_schema(session)
     finally:
-        _release_lock(connection)
+        _release_lock(session)
 
 
 def _database_target(mode: str) -> str | URL:
@@ -246,20 +257,17 @@ def main(argv: list[str] | None = None) -> int:
     as the schema reader and upgrade as the migrator, in one transaction.
     """
     args = _parse_args(argv)
-    engine = create_engine(_database_target(args.mode), poolclass=NullPool)
-    try:
-        connection_context = (
-            engine.begin() if args.mode == "upgrade" else engine.connect()
-        )
-        with connection_context as connection:
+    with unpooled_v1_sessions(_database_target(args.mode)) as sessions:
+        # The upgrade commits its one transaction; the read-only modes' sessions
+        # close without committing.
+        session_context = sessions.begin() if args.mode == "upgrade" else sessions()
+        with session_context as session:
             if args.mode == "state":
-                print(database_state(connection).value)
+                print(database_state(session).value)
             elif args.mode == "verify-head":
-                verify_head_schema(connection)
+                verify_head_schema(session)
             else:
-                upgrade_database(connection, backup_id=args.backup_id)
-    finally:
-        engine.dispose()
+                upgrade_database(session, backup_id=args.backup_id)
     return 0
 
 

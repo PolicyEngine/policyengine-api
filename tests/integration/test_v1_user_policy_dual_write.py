@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
-from sqlalchemy import create_engine, delete, func, select
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Session
+from sqlalchemy import delete, func, select
 
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
@@ -42,26 +42,28 @@ from policyengine_api.services.v2.user_policies.database_session import (
 )
 from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 
-
-def _v1_services(database_url: str):
-    engine = create_engine(database_url)
-    with engine.begin() as connection:
-        connection.execute(delete(UserPolicyMirrorEvent))
-        connection.execute(delete(V1UserPolicy))
-        connection.execute(delete(V1Policy))
-    sessions = sessionmaker(engine, expire_on_commit=False)
-    return engine, PolicyService(sessions), UserPolicyService(sessions), sessions
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session as OrmSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 
-def _cleanup_v1(engine) -> None:
-    with engine.begin() as connection:
-        connection.execute(delete(UserPolicyMirrorEvent))
-        connection.execute(delete(V1UserPolicy))
-        connection.execute(delete(V1Policy))
+def _v1_services(
+    v1_sessions: sessionmaker[OrmSession],
+) -> tuple[PolicyService, UserPolicyService]:
+    _cleanup_v1(v1_sessions)
+    return PolicyService(v1_sessions), UserPolicyService(v1_sessions)
 
 
-def _seed_catalog(sessions):
-    with sessions.begin() as session:
+def _cleanup_v1(v1_sessions: sessionmaker[OrmSession]) -> None:
+    with v1_sessions.begin() as session:
+        session.execute(delete(UserPolicyMirrorEvent))
+        session.execute(delete(V1UserPolicy))
+        session.execute(delete(V1Policy))
+
+
+def _seed_catalog(v2_owner_sessions: sessionmaker[Session]):
+    with v2_owner_sessions.begin() as session:
         model = TaxBenefitModel(name="policyengine-us")
         version = TaxBenefitModelVersion(
             model=model,
@@ -100,20 +102,16 @@ def _saved_values(reform_id: int, **changes):
     return values
 
 
-def _cleanup(engine, model_id) -> None:
+def _cleanup(v2_owner_sessions: sessionmaker[Session], model_id) -> None:
     if model_id is None:
         return
-    with engine.begin() as connection:
-        user_ids = (
-            connection.execute(
-                select(LegacyUserMapping.user_id).where(
-                    LegacyUserMapping.legacy_user_id == "auth0|cross-database"
-                )
+    with v2_owner_sessions.begin() as session:
+        user_ids = session.scalars(
+            select(LegacyUserMapping.user_id).where(
+                LegacyUserMapping.legacy_user_id == "auth0|cross-database"
             )
-            .scalars()
-            .all()
-        )
-        connection.execute(
+        ).all()
+        session.execute(
             delete(LegacyUserMapping).where(
                 LegacyUserMapping.legacy_user_id == "auth0|cross-database"
             )
@@ -122,57 +120,47 @@ def _cleanup(engine, model_id) -> None:
         association_ids = select(UserPolicy.id).where(
             UserPolicy.policy_id.in_(policy_ids)
         )
-        connection.execute(
+        session.execute(
             delete(LegacyUserPolicyMapping).where(
                 LegacyUserPolicyMapping.user_policy_id.in_(association_ids)
             )
         )
-        connection.execute(
-            delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids))
-        )
+        session.execute(delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids)))
         if user_ids:
-            connection.execute(delete(User).where(User.id.in_(user_ids)))
-        connection.execute(
+            session.execute(delete(User).where(User.id.in_(user_ids)))
+        session.execute(
             delete(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.policy_id.in_(policy_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(ParameterValue).where(ParameterValue.policy_id.in_(policy_ids))
         )
-        connection.execute(
-            delete(Policy).where(Policy.tax_benefit_model_id == model_id)
-        )
+        session.execute(delete(Policy).where(Policy.tax_benefit_model_id == model_id))
         version_ids = select(TaxBenefitModelVersion.id).where(
             TaxBenefitModelVersion.model_id == model_id
         )
-        connection.execute(
+        session.execute(
             delete(Parameter).where(
                 Parameter.tax_benefit_model_version_id.in_(version_ids)
             )
         )
-        connection.execute(
+        session.execute(
             delete(TaxBenefitModelVersion).where(
                 TaxBenefitModelVersion.model_id == model_id
             )
         )
-        connection.execute(
-            delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id)
-        )
+        session.execute(delete(TaxBenefitModel).where(TaxBenefitModel.id == model_id))
 
 
 def test_create_update_and_v1_only_change_mirror_one_association(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, policy_service, saved_service, _v1_sessions = _v1_services(
-        disposable_v1_database_url
-    )
+    policy_service, saved_service = _v1_services(v1_sessions)
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(v2_sessions)
+        model_id, parameter_name = _seed_catalog(v2_owner_sessions)
         reform = policy_service.set_policy(
             "us",
             "Legacy reform label",
@@ -183,7 +171,9 @@ def test_create_update_and_v1_only_change_mirror_one_association(
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
+        mirror_service = V2UserPolicyService(
+            UserPolicyDatabaseSession(v2_owner_sessions)
+        )
         first = mirror_pending_user_policy_events_after_commit(
             "us",
             created.user_policy.id,
@@ -232,7 +222,7 @@ def test_create_update_and_v1_only_change_mirror_one_association(
         assert first.association_id == v1_only_result.association_id
         assert rename_result.association_updated is True
         assert v1_only_result.association_updated is False
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             association = session.get(UserPolicy, first.association_id)
             assert association.name == "Renamed"
             assert association.description is None
@@ -248,21 +238,15 @@ def test_create_update_and_v1_only_change_mirror_one_association(
             mapping = session.scalar(select(LegacyUserPolicyMapping))
             assert mapping.last_applied_source_revision == 3
     finally:
-        _cleanup(v2_engine, model_id)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)
+        _cleanup_v1(v1_sessions)
 
 
 def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, policy_service, saved_service, v1_sessions = _v1_services(
-        disposable_v1_database_url
-    )
+    policy_service, saved_service = _v1_services(v1_sessions)
     model_id = None
     parameter_name = "gov.phase10.cross_database_saved_rate"
     try:
@@ -275,7 +259,9 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
+        mirror_service = V2UserPolicyService(
+            UserPolicyDatabaseSession(v2_owner_sessions)
+        )
 
         with pytest.raises(UserPolicyMirrorUnavailableError):
             mirror_pending_user_policy_events_after_commit(
@@ -298,7 +284,7 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
             )
             event = session.scalar(select(UserPolicyMirrorEvent))
             assert event.processed_at is None
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.scalar(select(func.count()).select_from(User)) == 0
             assert (
                 session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 0
@@ -310,7 +296,7 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
                 == 0
             )
 
-        model_id, _parameter_name = _seed_catalog(v2_sessions)
+        model_id, _parameter_name = _seed_catalog(v2_owner_sessions)
         retry = saved_service.create_or_get_user_policy(
             _saved_values(reform.policy_id, number_of_provisions=99),
             record_mirror_event=True,
@@ -333,7 +319,7 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
             events = session.scalars(select(UserPolicyMirrorEvent)).all()
             assert [event.source_revision for event in events] == [1, 2]
             assert all(event.processed_at is not None for event in events)
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             mapping = session.scalar(select(LegacyUserPolicyMapping))
             assert mapping.last_applied_source_revision == 2
             assert session.scalar(select(func.count()).select_from(User)) == 1
@@ -341,24 +327,18 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent(
                 session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 1
             )
     finally:
-        _cleanup(v2_engine, model_id)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)
+        _cleanup_v1(v1_sessions)
 
 
 def test_destination_commit_replays_when_source_processing_marker_is_missing(
-    disposable_v1_database_url: str,
-    disposable_v2_database_url: str,
+    v1_sessions: sessionmaker[OrmSession],
+    v2_owner_sessions: sessionmaker[Session],
 ) -> None:
-    v2_engine = create_engine(disposable_v2_database_url)
-    v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, policy_service, saved_service, v1_sessions = _v1_services(
-        disposable_v1_database_url
-    )
+    policy_service, saved_service = _v1_services(v1_sessions)
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(v2_sessions)
+        model_id, parameter_name = _seed_catalog(v2_owner_sessions)
         reform = policy_service.set_policy(
             "us",
             "Legacy reform label",
@@ -369,7 +349,9 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing(
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
+        mirror_service = V2UserPolicyService(
+            UserPolicyDatabaseSession(v2_owner_sessions)
+        )
 
         committed = mirror_user_policy_after_commit(
             created.snapshot,
@@ -397,7 +379,7 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing(
         with v1_sessions() as session:
             event = session.scalar(select(UserPolicyMirrorEvent))
             assert event.processed_at is not None
-        with v2_sessions() as session:
+        with v2_owner_sessions() as session:
             assert session.scalar(select(func.count()).select_from(UserPolicy)) == 1
             assert session.scalar(select(func.count()).select_from(User)) == 1
             assert (
@@ -406,7 +388,5 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing(
             mapping = session.scalar(select(LegacyUserPolicyMapping))
             assert mapping.last_applied_source_revision == 1
     finally:
-        _cleanup(v2_engine, model_id)
-        _cleanup_v1(v1_engine)
-        v1_engine.dispose()
-        v2_engine.dispose()
+        _cleanup(v2_owner_sessions, model_id)
+        _cleanup_v1(v1_sessions)

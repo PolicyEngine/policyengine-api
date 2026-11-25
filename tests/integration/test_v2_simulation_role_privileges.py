@@ -1,87 +1,152 @@
 """Run the simulation tables' writes as the roles that do them in production.
 
 The simulation service creates simulations, reports, their runs, budget-window
-runs and household jobs; its Modal workers write their runs' status and
-results and their budget-window runs' status; the Public API reads them. Each
-role holds only its declared privileges
-(``policyengine_api/data/v2/privileges.py``), so a statement outside them
-fails here as it would in staging and production.
+runs, household jobs and simulation runs' cliff calculations; its Modal
+workers write their runs' and cliff calculations' status and results and
+their budget-window runs' status; API v1 reads them. Each role holds only its
+declared privileges (``policyengine_api/data/v2/privileges.py``), so a
+statement outside them fails here as it would in staging and production.
+
+Every statement runs through one Session of the database's owner, which
+``act_as`` switches to a role for the rest of its transaction. A refused
+statement sends only the columns it names, so the database refuses it for
+those columns. A model's ORM ``update`` also sets ``updated_at``, and its ORM
+``insert`` also writes Python-side defaults such as ``created_at``, so refused
+inserts, and refused updates of tables where the role may not update
+``updated_at``, go through ``tests.integration.privilege_statements``' classes,
+which map only the columns they name. The other refused updates use the
+models: both simulation roles may update ``updated_at`` on the run, budget-window
+run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
+have no ``updated_at``. A column a model's mapper leaves out
+(``exclude_properties``) would have no statement through the model, so its
+writes and refusals would go through a class that maps it; since revision
+``4e30076d4b9f`` no model leaves a column out.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import delete, false, func, insert, inspect, select, update
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.pool import NullPool
+from sqlmodel import col
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v2.models import V2_METADATA
+from policyengine_api.data.v2.models import (
+    BudgetWindowRun,
+    CliffImpact,
+    HouseholdJob,
+    LaborSupplyDecileResponse,
+    ParameterValue,
+    Policy,
+    Poverty,
+    Report,
+    ReportRun,
+    Simulation,
+    SimulationRun,
+    SimulationStatus,
+    WithheldAreaCode,
+)
 from policyengine_api.data.v2.privileges import (
     CATALOG_WRITER_ROLE,
     ColumnPrivilege,
     TablePrivilege,
     declared_privileges,
 )
+from tests.fixtures.database_sessions import act_as
+from tests.integration.privilege_statements import (
+    BudgetWindowRunColumns,
+    CliffImpactColumns,
+    HouseholdColumns,
+    LaborSupplyDecileResponseColumns,
+    PolicyColumns,
+    PovertyColumns,
+    ReportRunColumns,
+    SimulationColumns,
+    WithheldAreaCodeColumns,
+    unfailed,
+    update_row,
+)
 from tests.integration.simulation_rows import (
     RUN_VERSIONS,
     PublicApiRows,
+    add_row,
     insert_public_api_rows,
-    insert_row,
     refused,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Connection
+    from sqlalchemy import Executable
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
+    from tests.integration.conftest import ManagedV2Roles
 
 
 @pytest.fixture
-def connection(disposable_v2_database_url, managed_v2_roles) -> Iterator[Connection]:
-    """Yield a connection at head whose writes are rolled back after the test.
+def session(
+    v2_owner_sessions: sessionmaker[Session], managed_v2_roles: ManagedV2Roles
+) -> Iterator[Session]:
+    """Yield a Session at head whose writes are rolled back after the test.
 
-    It connects as the disposable database's superuser; ``_act_as`` switches it
-    to one managed role for the rest of the transaction.
+    It acts as the disposable database's owner (superuser); ``act_as``
+    switches it to one managed role for the rest of the transaction.
     """
     command.upgrade(Config(str(REPO / "alembic-v2.ini")), "head")
-    engine = create_engine(disposable_v2_database_url, poolclass=NullPool)
-    try:
-        with engine.connect() as database_connection:
-            transaction = database_connection.begin()
-            try:
-                yield database_connection
-            finally:
-                transaction.rollback()
-    finally:
-        engine.dispose()
+    with v2_owner_sessions() as owner_session:
+        try:
+            yield owner_session
+        finally:
+            owner_session.rollback()
 
 
 @pytest.fixture
-def public_api_rows(connection: Connection) -> PublicApiRows:
-    """Store, as the superuser, the Public API's rows the simulation rows name."""
-    return insert_public_api_rows(connection)
+def public_api_rows(session: Session) -> PublicApiRows:
+    """Store, as the owner, API v1's rows the simulation rows name."""
+    return insert_public_api_rows(session)
 
 
-def _act_as(connection: Connection, role: str) -> None:
-    quoted_role = connection.dialect.identifier_preparer.quote(role)
-    connection.execute(text(f"SET LOCAL ROLE {quoted_role}"))
-
-
-def _refused(connection: Connection, statement: str, **values: object) -> None:
+def _refused(session: Session, statement: Executable) -> None:
     """Expect a permission error from ``statement``."""
-    with refused(connection, ProgrammingError, match="permission denied"):
-        connection.execute(text(statement), values)
+    with refused(session, ProgrammingError, match="permission denied"):
+        session.execute(statement)
+
+
+def _update_from_status(
+    session: Session,
+    model: type[Any],
+    row_id: object,
+    current_status: str,
+    **values: object,
+) -> object:
+    """Update the row while its status is ``current_status``, as the services do.
+
+    Return its ID, from the statement's RETURNING, which expects exactly the
+    one row.
+    """
+    return session.execute(
+        update(model)
+        .where(model.id == row_id, model.status == current_status)
+        .values(**values)
+        .returning(model.id)
+    ).scalar_one()
+
+
+def _row_count(model: type[Any], *conditions: Any) -> Executable:
+    """Build a count of the model's rows that meet ``conditions``."""
+    return select(func.count()).select_from(model).where(*conditions)
 
 
 def _create_simulation_rows(
-    connection: Connection, public_api_rows: PublicApiRows
-) -> dict[str, object]:
+    session: Session, public_api_rows: PublicApiRows
+) -> dict[str, UUID]:
     """Create what the simulation API creates for one economy report run."""
     ids = {
         name: uuid4()
@@ -94,18 +159,18 @@ def _create_simulation_rows(
             "household_job",
         )
     }
-    insert_row(
-        connection,
-        "simulations",
+    add_row(
+        session,
+        Simulation,
         id=ids["simulation"],
         simulation_type="economy",
         dataset_id=public_api_rows.dataset_id,
         tax_benefit_model_version_id=public_api_rows.version_id,
         year=2026,
     )
-    insert_row(
-        connection,
-        "simulation_runs",
+    add_row(
+        session,
+        SimulationRun,
         id=ids["run"],
         simulation_id=ids["simulation"],
         tax_benefit_model_version_id=public_api_rows.version_id,
@@ -113,47 +178,44 @@ def _create_simulation_rows(
         status="pending",
         **RUN_VERSIONS,
     )
-    insert_row(
-        connection,
-        "reports",
+    add_row(
+        session,
+        Report,
         id=ids["report"],
-        label="Report",
         country="us",
         tax_benefit_model_id=public_api_rows.model_id,
         year=2026,
         budget_window_size=1,
-        inputs="{}",
+        inputs={},
     )
-    insert_row(
-        connection,
-        "budget_window_runs",
+    add_row(
+        session,
+        BudgetWindowRun,
         id=ids["budget_window_run"],
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="initial",
         recalculate=False,
         status="pending",
     )
-    insert_row(
-        connection,
-        "report_runs",
+    add_row(
+        session,
+        ReportRun,
         id=ids["report_run"],
         report_id=ids["report"],
         budget_window_run_id=ids["budget_window_run"],
         year=2026,
         baseline_simulation_run_id=ids["run"],
         status="pending",
-        trigger="initial",
         **RUN_VERSIONS,
     )
-    insert_row(
-        connection,
-        "household_jobs",
+    add_row(
+        session,
+        HouseholdJob,
         id=ids["household_job"],
         country="us",
         household_id=public_api_rows.household_id,
         year=2026,
-        request_data="{}",
+        request_data={},
         tax_benefit_model_version_id=public_api_rows.version_id,
         status="pending",
         **RUN_VERSIONS,
@@ -162,183 +224,175 @@ def _create_simulation_rows(
 
 
 def test_the_simulation_service_creates_rows_and_records_only_its_calls(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    _act_as(connection, managed_v2_roles.simulation_service)
+    act_as(session, managed_v2_roles.simulation_service)
 
-    ids = _create_simulation_rows(connection, public_api_rows)
-    run_count = connection.execute(
-        text("SELECT count(*) FROM simulation_runs WHERE id = :id"), {"id": ids["run"]}
+    ids = _create_simulation_rows(session, public_api_rows)
+    run_count = session.execute(
+        _row_count(SimulationRun, col(SimulationRun.id) == ids["run"])
     ).scalar_one()
-    connection.execute(text("SELECT count(*) FROM policies")).scalar_one()
+    session.execute(_row_count(Policy)).scalar_one()
 
     assert run_count == 1
     # The service records a Modal call's ID once Modal accepts the call, and
     # fails the run when Modal refuses it, while the run is still pending.
-    recorded = connection.execute(
-        text(
-            "UPDATE report_runs SET modal_call_id = 'fc-accepted', "
-            "updated_at = now() WHERE id = :id AND status = 'pending' "
-            "AND modal_call_id IS NULL RETURNING id"
-        ),
-        {"id": ids["report_run"]},
+    recorded = session.execute(
+        update(ReportRun)
+        .where(
+            col(ReportRun.id) == ids["report_run"],
+            col(ReportRun.status) == "pending",
+            col(ReportRun.modal_call_id).is_(None),
+        )
+        .values(modal_call_id="fc-accepted", updated_at=func.now())
+        .returning(col(ReportRun.id))
     ).scalar_one()
-    failed = connection.execute(
-        text(
-            "UPDATE household_jobs SET status = 'failed', error_message = 'refused', "
-            "completed_at = now(), updated_at = now() "
-            "WHERE id = :id AND status = 'pending' RETURNING id"
-        ),
-        {"id": ids["household_job"]},
-    ).scalar_one()
+    failed = _update_from_status(
+        session,
+        HouseholdJob,
+        ids["household_job"],
+        "pending",
+        status="failed",
+        error_message="refused",
+        completed_at=func.now(),
+        updated_at=func.now(),
+    )
     assert (recorded, failed) == (ids["report_run"], ids["household_job"])
     for statement in (
-        "UPDATE simulation_runs SET started_at = now() WHERE id = :id",
-        "UPDATE simulation_runs SET output_uri = 'gs://bucket/run' WHERE id = :id",
-        "UPDATE simulation_runs SET year = 2027 WHERE id = :id",
+        update_row(SimulationRun, ids["run"], started_at=func.now()),
+        update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
+        update_row(SimulationRun, ids["run"], year=2027),
+        update_row(ReportRunColumns, ids["report_run"], data_version="1.0.0"),
+        insert(PovertyColumns).values(
+            id=uuid4(),
+            simulation_run_id=ids["run"],
+            poverty_type="spm",
+            entity="person",
+        ),
+        delete(Simulation).where(col(Simulation.id) == ids["simulation"]),
+        insert(LaborSupplyDecileResponseColumns).values(
+            id=uuid4(), report_run_id=ids["report_run"], decile=1
+        ),
+        update(PolicyColumns).values(content_hash=PolicyColumns.content_hash),
     ):
-        _refused(connection, statement, id=ids["run"])
-    _refused(
-        connection,
-        "UPDATE report_runs SET baseline_cliff_gap = 1.0 WHERE id = :id",
-        id=ids["report_run"],
-    )
-    _refused(
-        connection,
-        "INSERT INTO poverty (id, simulation_run_id, poverty_type, entity) "
-        "VALUES (:id, :run_id, 'spm', 'person')",
-        id=uuid4(),
-        run_id=ids["run"],
-    )
-    _refused(connection, "DELETE FROM simulations WHERE id = :id", id=ids["simulation"])
-    _refused(
-        connection,
-        "INSERT INTO labor_supply_decile_responses (id, report_run_id, decile) "
-        "VALUES (:id, :report_run_id, 1)",
-        id=uuid4(),
-        report_run_id=ids["report_run"],
-    )
-    _refused(connection, "UPDATE policies SET content_hash = content_hash")
+        _refused(session, statement)
 
 
 def test_modal_workers_write_their_run_status_and_results_only(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection, public_api_rows)
-    _act_as(connection, managed_v2_roles.modal_worker)
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    act_as(session, managed_v2_roles.modal_worker)
 
-    updated = connection.execute(
-        text(
-            "UPDATE simulation_runs SET status = 'succeeded', completed_at = now() "
-            "WHERE id = :id AND status = 'pending' RETURNING id"
-        ),
-        {"id": ids["run"]},
-    ).scalar_one()
-    insert_row(
-        connection,
-        "poverty",
+    updated = _update_from_status(
+        session,
+        SimulationRun,
+        ids["run"],
+        "pending",
+        status="succeeded",
+        completed_at=func.now(),
+    )
+    add_row(
+        session,
+        Poverty,
         id=uuid4(),
         simulation_run_id=ids["run"],
         poverty_type="spm",
         entity="person",
         rate=0.1,
     )
-    connection.execute(
-        text(
-            "UPDATE report_runs SET status = 'running', started_at = now(), "
-            "modal_call_id = 'fc-coordinator', baseline_cliff_gap = 1.0, "
-            "baseline_cliff_share = 0.1, reform_cliff_gap = 2.0, "
-            "reform_cliff_share = 0.2, data_version = '1.0.0', "
-            "spm_provenance = CAST('{}' AS jsonb), updated_at = now() "
-            "WHERE id = :id"
-        ),
-        {"id": ids["report_run"]},
+    session.execute(
+        update_row(
+            ReportRun,
+            ids["report_run"],
+            status="running",
+            started_at=func.now(),
+            modal_call_id="fc-coordinator",
+            data_version="1.0.0",
+            spm_provenance={},
+            updated_at=func.now(),
+        )
     )
-    insert_row(
-        connection,
-        "labor_supply_decile_responses",
+    add_row(
+        session,
+        LaborSupplyDecileResponse,
         id=uuid4(),
         report_run_id=ids["report_run"],
         decile=1,
         average_income_effect=-1.0,
     )
-    finished_job = connection.execute(
-        text(
-            "UPDATE household_jobs SET status = 'succeeded', result = '{}', "
-            "completed_at = now() WHERE id = :id AND status = 'pending' "
-            "RETURNING id"
-        ),
-        {"id": ids["household_job"]},
-    ).scalar_one()
-    connection.execute(text("SELECT count(*) FROM parameter_values")).scalar_one()
+    finished_job = _update_from_status(
+        session,
+        HouseholdJob,
+        ids["household_job"],
+        "pending",
+        status="succeeded",
+        result={},
+        completed_at=func.now(),
+    )
+    session.execute(_row_count(ParameterValue)).scalar_one()
 
     assert updated == ids["run"]
     assert finished_job == ids["household_job"]
-    _refused(
-        connection,
-        "INSERT INTO simulations (id, simulation_type, dataset_id, "
-        "tax_benefit_model_version_id) "
-        "VALUES (:id, 'economy', :dataset_id, :version_id)",
-        id=uuid4(),
-        dataset_id=uuid4(),
-        version_id=uuid4(),
-    )
-    _refused(
-        connection, "DELETE FROM poverty WHERE simulation_run_id = :id", id=ids["run"]
-    )
-    _refused(
-        connection,
-        "INSERT INTO budget_window_runs (id, report_id, "
-        "tax_benefit_model_version_id, trigger, recalculate, status) "
-        "VALUES (:id, :report_id, :version_id, 'manual', true, 'pending')",
-        id=uuid4(),
-        report_id=ids["report"],
-        version_id=public_api_rows.version_id,
-    )
-    _refused(
-        connection,
-        "UPDATE poverty SET rate = 0 WHERE simulation_run_id = :id",
-        id=ids["run"],
-    )
-    _refused(connection, "UPDATE households SET content_hash = content_hash")
+    for statement in (
+        insert(SimulationColumns).values(
+            id=uuid4(),
+            simulation_type="economy",
+            dataset_id=uuid4(),
+            tax_benefit_model_version_id=uuid4(),
+        ),
+        delete(Poverty).where(col(Poverty.simulation_run_id) == ids["run"]),
+        insert(BudgetWindowRunColumns).values(
+            id=uuid4(),
+            report_id=ids["report"],
+            tax_benefit_model_version_id=public_api_rows.version_id,
+            recalculate=True,
+            status="pending",
+        ),
+        update(Poverty)
+        .where(col(Poverty.simulation_run_id) == ids["run"])
+        .values(rate=0),
+        update(HouseholdColumns).values(content_hash=HouseholdColumns.content_hash),
+    ):
+        _refused(session, statement)
     # What a run is stays as the simulation service wrote it.
-    for statement, run_key in (
-        ("UPDATE simulation_runs SET year = 2027 WHERE id = :id", "run"),
-        (
-            "UPDATE simulation_runs SET simulation_id = simulation_id WHERE id = :id",
-            "run",
+    for statement in (
+        update_row(SimulationRun, ids["run"], year=2027),
+        update_row(
+            SimulationRun, ids["run"], simulation_id=col(SimulationRun.simulation_id)
         ),
-        (
-            "UPDATE report_runs SET baseline_simulation_run_id = "
-            "baseline_simulation_run_id WHERE id = :id",
-            "report_run",
+        update_row(
+            ReportRun,
+            ids["report_run"],
+            baseline_simulation_run_id=col(ReportRun.baseline_simulation_run_id),
         ),
-        ("UPDATE report_runs SET markdown = 'edited' WHERE id = :id", "report_run"),
-        (
-            "UPDATE household_jobs SET household_id = household_id WHERE id = :id",
-            "household_job",
+        update_row(ReportRun, ids["report_run"], markdown="edited"),
+        update_row(
+            HouseholdJob,
+            ids["household_job"],
+            household_id=col(HouseholdJob.household_id),
         ),
     ):
-        _refused(connection, statement, id=ids[run_key])
+        _refused(session, statement)
 
 
 def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
-    """The workers insert and read the rows, the Public API only reads them.
+    """The workers insert and read the rows, API v1 only reads them.
 
     The simulation service, the Stage 12 role and the catalog writer can't read
     them.
     """
-    _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection, public_api_rows)
-    _act_as(connection, managed_v2_roles.modal_worker)
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    act_as(session, managed_v2_roles.modal_worker)
     withheld_code_id = uuid4()
 
-    insert_row(
-        connection,
-        "withheld_area_codes",
+    add_row(
+        session,
+        WithheldAreaCode,
         id=withheld_code_id,
         report_run_id=ids["report_run"],
         baseline_simulation_run_id=ids["run"],
@@ -347,81 +401,86 @@ def test_modal_workers_insert_withheld_area_codes_that_the_public_api_reads(
         code="E14001063",
     )
     assert (
-        connection.execute(
-            text("SELECT count(*) FROM withheld_area_codes WHERE report_run_id = :id"),
-            {"id": ids["report_run"]},
+        session.execute(
+            _row_count(
+                WithheldAreaCode,
+                col(WithheldAreaCode.report_run_id) == ids["report_run"],
+            )
         ).scalar_one()
         == 1
     )
 
     # Once written, a withheld code is never changed or removed by the workers.
+    _refused(session, update_row(WithheldAreaCode, withheld_code_id, code="E14001064"))
     _refused(
-        connection,
-        "UPDATE withheld_area_codes SET code = 'E14001064' WHERE id = :id",
-        id=withheld_code_id,
+        session,
+        delete(WithheldAreaCode).where(col(WithheldAreaCode.id) == withheld_code_id),
     )
-    _refused(
-        connection,
-        "DELETE FROM withheld_area_codes WHERE id = :id",
-        id=withheld_code_id,
-    )
-    _act_as(connection, managed_v2_roles.runtime)
+    act_as(session, managed_v2_roles.runtime)
     assert (
-        connection.execute(
-            text("SELECT code FROM withheld_area_codes WHERE id = :id"),
-            {"id": withheld_code_id},
+        session.execute(
+            select(col(WithheldAreaCode.code)).where(
+                col(WithheldAreaCode.id) == withheld_code_id
+            )
         ).scalar_one()
         == "E14001063"
     )
     _refused(
-        connection,
-        "INSERT INTO withheld_area_codes (id, report_run_id, "
-        "baseline_simulation_run_id, reform_simulation_run_id, area_type, code) "
-        "VALUES (:id, :report_run_id, :run_id, :run_id, 'constituency', 'E14001064')",
-        id=uuid4(),
-        report_run_id=ids["report_run"],
-        run_id=ids["run"],
+        session,
+        insert(WithheldAreaCodeColumns).values(
+            id=uuid4(),
+            report_run_id=ids["report_run"],
+            baseline_simulation_run_id=ids["run"],
+            reform_simulation_run_id=ids["run"],
+            area_type="constituency",
+            code="E14001064",
+        ),
     )
     for role in (
         managed_v2_roles.simulation_service,
         managed_v2_roles.stage12,
         CATALOG_WRITER_ROLE,
     ):
-        _act_as(connection, role)
-        _refused(connection, "SELECT count(*) FROM withheld_area_codes")
+        act_as(session, role)
+        _refused(session, _row_count(WithheldAreaCode))
 
 
 def test_the_simulation_service_fails_a_window_whose_first_calls_modal_refuses(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
     """The service fails a budget-window run when Modal refuses its first years.
 
     It never sets when the window started, which the Modal workers record, and
     never changes what the window is.
     """
-    _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection, public_api_rows)
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    window_id = ids["budget_window_run"]
 
-    failed_window = connection.execute(
-        text(
-            "UPDATE budget_window_runs SET status = 'failed', "
-            "error_message = 'refused', completed_at = now(), updated_at = now() "
-            "WHERE id = :id AND status = 'pending' RETURNING id"
-        ),
-        {"id": ids["budget_window_run"]},
-    ).scalar_one()
+    failed_window = _update_from_status(
+        session,
+        BudgetWindowRun,
+        window_id,
+        "pending",
+        status="failed",
+        error_message="refused",
+        completed_at=func.now(),
+        updated_at=func.now(),
+    )
 
-    assert failed_window == ids["budget_window_run"]
+    assert failed_window == window_id
     for statement in (
-        "UPDATE budget_window_runs SET started_at = now() WHERE id = :id",
-        "UPDATE budget_window_runs SET recalculate = true WHERE id = :id",
-        "UPDATE budget_window_runs SET report_id = report_id WHERE id = :id",
+        update_row(BudgetWindowRun, window_id, started_at=func.now()),
+        update_row(BudgetWindowRun, window_id, recalculate=True),
+        update_row(
+            BudgetWindowRun, window_id, report_id=col(BudgetWindowRun.report_id)
+        ),
     ):
-        _refused(connection, statement, id=ids["budget_window_run"])
+        _refused(session, statement)
 
 
 def test_modal_workers_start_finish_and_fail_budget_windows(
-    connection: Connection, managed_v2_roles, public_api_rows: PublicApiRows
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
 ) -> None:
     """The Modal workers write a budget-window run's status and times.
 
@@ -429,67 +488,72 @@ def test_modal_workers_start_finish_and_fail_budget_windows(
     own year finishes; the last year to finish marks the window succeeded, and
     a failed year fails it.
     """
-    _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection, public_api_rows)
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    window_id = ids["budget_window_run"]
     failing_window_id = uuid4()
-    insert_row(
-        connection,
-        "budget_window_runs",
+    add_row(
+        session,
+        BudgetWindowRun,
         id=failing_window_id,
         report_id=ids["report"],
         tax_benefit_model_version_id=public_api_rows.version_id,
-        trigger="manual",
         recalculate=True,
         status="pending",
     )
-    _act_as(connection, managed_v2_roles.modal_worker)
+    act_as(session, managed_v2_roles.modal_worker)
 
     started_windows = [
-        connection.execute(
-            text(
-                "UPDATE budget_window_runs SET status = 'running', "
-                "started_at = now(), updated_at = now() "
-                "WHERE id = :id AND status = 'pending' RETURNING id"
-            ),
-            {"id": window_id},
-        ).scalar_one()
-        for window_id in (ids["budget_window_run"], failing_window_id)
+        _update_from_status(
+            session,
+            BudgetWindowRun,
+            started_window_id,
+            "pending",
+            status="running",
+            started_at=func.now(),
+            updated_at=func.now(),
+        )
+        for started_window_id in (window_id, failing_window_id)
     ]
-    succeeded_window = connection.execute(
-        text(
-            "UPDATE budget_window_runs SET status = 'succeeded', "
-            "completed_at = now(), updated_at = now() "
-            "WHERE id = :id AND status = 'running' RETURNING id"
-        ),
-        {"id": ids["budget_window_run"]},
-    ).scalar_one()
-    failed_window = connection.execute(
-        text(
-            "UPDATE budget_window_runs SET status = 'failed', "
-            "error_message = 'the 2027 report run failed', completed_at = now(), "
-            "updated_at = now() WHERE id = :id AND status = 'running' RETURNING id"
-        ),
-        {"id": failing_window_id},
-    ).scalar_one()
-
-    assert started_windows == [ids["budget_window_run"], failing_window_id]
-    assert (succeeded_window, failed_window) == (
-        ids["budget_window_run"],
-        failing_window_id,
+    succeeded_window = _update_from_status(
+        session,
+        BudgetWindowRun,
+        window_id,
+        "running",
+        status="succeeded",
+        completed_at=func.now(),
+        updated_at=func.now(),
     )
+    failed_window = _update_from_status(
+        session,
+        BudgetWindowRun,
+        failing_window_id,
+        "running",
+        status="failed",
+        error_message="the 2027 report run failed",
+        completed_at=func.now(),
+        updated_at=func.now(),
+    )
+
+    assert started_windows == [window_id, failing_window_id]
+    assert (succeeded_window, failed_window) == (window_id, failing_window_id)
     for statement in (
-        "UPDATE budget_window_runs SET trigger = 'manual' WHERE id = :id",
-        "UPDATE budget_window_runs SET recalculate = false WHERE id = :id",
-        "UPDATE budget_window_runs SET tax_benefit_model_version_id = "
-        "tax_benefit_model_version_id WHERE id = :id",
+        update_row(BudgetWindowRun, window_id, recalculate=False),
+        update_row(
+            BudgetWindowRun,
+            window_id,
+            tax_benefit_model_version_id=col(
+                BudgetWindowRun.tax_benefit_model_version_id
+            ),
+        ),
     ):
-        _refused(connection, statement, id=ids["budget_window_run"])
+        _refused(session, statement)
 
 
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
 def test_each_simulation_role_locks_a_budget_window_run_row(
-    connection: Connection,
-    managed_v2_roles,
+    session: Session,
+    managed_v2_roles: ManagedV2Roles,
     public_api_rows: PublicApiRows,
     role_kind: str,
 ) -> None:
@@ -500,80 +564,277 @@ def test_each_simulation_role_locks_a_budget_window_run_row(
     ``budget_window_runs`` alone: neither role may update ``reports``, so a lock
     on every joined table is refused.
     """
-    _act_as(connection, managed_v2_roles.simulation_service)
-    ids = _create_simulation_rows(connection, public_api_rows)
-    _act_as(connection, getattr(managed_v2_roles, role_kind))
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    act_as(session, getattr(managed_v2_roles, role_kind))
+    is_the_window = col(BudgetWindowRun.id) == ids["budget_window_run"]
+    report_of_the_window = col(Report.id) == col(BudgetWindowRun.report_id)
 
-    locked_window = connection.execute(
-        text("SELECT id FROM budget_window_runs WHERE id = :id FOR UPDATE"),
-        {"id": ids["budget_window_run"]},
+    locked_window = session.execute(
+        select(col(BudgetWindowRun.id)).where(is_the_window).with_for_update()
     ).scalar_one()
-    locked_over_join = connection.execute(
-        text(
-            "SELECT budget_window_runs.id, reports.budget_window_size "
-            "FROM budget_window_runs JOIN reports "
-            "ON reports.id = budget_window_runs.report_id "
-            "WHERE budget_window_runs.id = :id FOR UPDATE OF budget_window_runs"
-        ),
-        {"id": ids["budget_window_run"]},
+    locked_over_join = session.execute(
+        select(col(BudgetWindowRun.id), col(Report.budget_window_size))
+        .join(Report, report_of_the_window)
+        .where(is_the_window)
+        .with_for_update(of=BudgetWindowRun)
     ).one()
 
     assert locked_window == ids["budget_window_run"]
     assert tuple(locked_over_join) == (ids["budget_window_run"], 1)
     _refused(
-        connection,
-        "SELECT budget_window_runs.id FROM budget_window_runs JOIN reports "
-        "ON reports.id = budget_window_runs.report_id "
-        "WHERE budget_window_runs.id = :id FOR UPDATE",
-        id=ids["budget_window_run"],
+        session,
+        select(col(BudgetWindowRun.id))
+        .join(Report, report_of_the_window)
+        .where(is_the_window)
+        .with_for_update(),
     )
 
 
 def test_the_public_api_reads_runs_and_results_but_writes_neither(
-    connection: Connection, managed_v2_roles
+    session: Session, managed_v2_roles: ManagedV2Roles
 ) -> None:
-    _act_as(connection, managed_v2_roles.runtime)
+    act_as(session, managed_v2_roles.runtime)
 
-    for table in ("simulation_runs", "report_runs", "poverty"):
-        connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+    for model in (SimulationRun, ReportRun, Poverty):
+        session.execute(_row_count(model)).scalar_one()
     _refused(
-        connection,
-        "INSERT INTO report_runs (id, report_id, baseline_simulation_run_id, "
-        "country_package_version, policyengine_version, status, trigger) "
-        "VALUES (:id, :report_id, :run_id, '1.0.0', '4.0.0', 'pending', 'initial')",
-        id=uuid4(),
-        report_id=uuid4(),
-        run_id=uuid4(),
+        session,
+        insert(ReportRunColumns).values(
+            id=uuid4(),
+            report_id=uuid4(),
+            baseline_simulation_run_id=uuid4(),
+            country_package_version="1.0.0",
+            policyengine_version="4.0.0",
+            status="pending",
+        ),
     )
+
+
+# The class that maps the columns each model's mapper leaves out. Since
+# revision 4e30076d4b9f no model leaves a column out.
+UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {}
 
 
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
 def test_each_simulation_role_updates_exactly_its_declared_columns(
-    connection: Connection, managed_v2_roles, role_kind: str
+    session: Session, managed_v2_roles: ManagedV2Roles, role_kind: str
 ) -> None:
-    """Every column of the run tables is updatable exactly when it is declared."""
+    """Every column of the run tables is updatable exactly when it is declared.
+
+    Setting a column of a model other than ``updated_at`` also sets
+    ``updated_at``, which both roles may update on each of these tables. A
+    column the model's mapper leaves out (``exclude_properties``) is set
+    through the class in ``UNMAPPED_COLUMN_CLASSES``, which sets only the
+    column; a model with such a column and no class there fails the test.
+    """
     role = getattr(managed_v2_roles, role_kind)
     declared = declared_privileges(managed_v2_roles.deployment_environment)[role]
-    _act_as(connection, role)
+    act_as(session, role)
 
-    for table in (
-        "simulation_runs",
-        "report_runs",
-        "household_jobs",
-        "budget_window_runs",
+    for model in (
+        SimulationRun,
+        ReportRun,
+        HouseholdJob,
+        BudgetWindowRun,
+        CliffImpact,
     ):
         updatable = {
             column
-            for privilege in declared[table]
+            for privilege in declared[model.__tablename__]
             if isinstance(privilege, ColumnPrivilege)
             and privilege.privilege is TablePrivilege.UPDATE
             for column in privilege.columns
         }
-        for column in V2_METADATA.tables[table].c:
+        columns_to_update: list[tuple[type[Any], str]] = [
+            (model, column_attribute.key)
+            for column_attribute in inspect(model).column_attrs
+        ]
+        unmapped_columns = sorted(inspect(model).exclude_properties or ())
+        if unmapped_columns:
+            columns_class = UNMAPPED_COLUMN_CLASSES[model]
+            columns_to_update.extend(
+                (columns_class, column_name) for column_name in unmapped_columns
+            )
+        for statement_model, column_name in columns_to_update:
+            column = getattr(statement_model, column_name)
             # The privilege is checked when the statement starts, so no row is
             # needed.
-            statement = f"UPDATE {table} SET {column.name} = {column.name} WHERE false"
-            if column.name in updatable:
-                connection.execute(text(statement))
+            statement = update(statement_model).where(false()).values({column: column})
+            if column_name in updatable:
+                session.execute(statement)
             else:
-                _refused(connection, statement)
+                _refused(session, statement)
+
+
+def _start_cliff_calculation(session: Session, run_id: object) -> UUID | None:
+    """Start the run's cliff calculation, unless one that hasn't failed exists.
+
+    This is what the simulation service inserts; return the new calculation's
+    ID, or None. Naming the partial unique index's conflict target needs SELECT
+    as well as INSERT. Its condition is sent as a literal, as in the index, so
+    PostgreSQL can match the index however often the statement runs.
+    """
+    return session.execute(
+        postgresql.insert(CliffImpact)
+        .values(id=uuid4(), simulation_run_id=run_id, status="pending")
+        .on_conflict_do_nothing(
+            index_elements=[col(CliffImpact.simulation_run_id)],
+            index_where=unfailed(col(CliffImpact.status), SimulationStatus.FAILED),
+        )
+        .returning(col(CliffImpact.id))
+    ).scalar_one_or_none()
+
+
+def test_the_simulation_service_starts_cliff_calculations_and_records_calls(
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
+) -> None:
+    """The service inserts a run's calculation once, and records or fails its call.
+
+    It never claims a calculation, writes its numbers, changes the run it
+    calculates or deletes it.
+    """
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+
+    calculation_id = _start_cliff_calculation(session, ids["run"])
+    joined_calculation = _start_cliff_calculation(session, ids["run"])
+    recorded = session.execute(
+        update(CliffImpact)
+        .where(
+            col(CliffImpact.id) == calculation_id,
+            col(CliffImpact.status) == "pending",
+            col(CliffImpact.modal_call_id).is_(None),
+        )
+        .values(modal_call_id="fc-cliffs", updated_at=func.now())
+        .returning(col(CliffImpact.id))
+    ).scalar_one()
+    failed = _update_from_status(
+        session,
+        CliffImpact,
+        calculation_id,
+        "pending",
+        status="failed",
+        error_message="modal_refused: refused",
+        completed_at=func.now(),
+        updated_at=func.now(),
+    )
+
+    assert calculation_id is not None
+    assert joined_calculation is None
+    assert recorded == failed == calculation_id
+    for statement in (
+        update_row(CliffImpact, calculation_id, started_at=func.now()),
+        update_row(CliffImpact, calculation_id, cliff_gap=1.0),
+        update_row(
+            CliffImpact,
+            calculation_id,
+            simulation_run_id=col(CliffImpact.simulation_run_id),
+        ),
+        delete(CliffImpact).where(col(CliffImpact.id) == calculation_id),
+    ):
+        _refused(session, statement)
+
+
+def test_modal_workers_claim_cliff_calculations_and_write_their_results(
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
+) -> None:
+    """A worker claims a pending calculation under its call and finishes it.
+
+    It never inserts a calculation, changes the run it calculates or deletes
+    one.
+    """
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    calculation_id = _start_cliff_calculation(session, ids["run"])
+    act_as(session, managed_v2_roles.modal_worker)
+
+    claimed = _update_from_status(
+        session,
+        CliffImpact,
+        calculation_id,
+        "pending",
+        status="running",
+        started_at=func.now(),
+        modal_call_id="fc-cliffs",
+        updated_at=func.now(),
+    )
+    succeeded = _update_from_status(
+        session,
+        CliffImpact,
+        calculation_id,
+        "running",
+        status="succeeded",
+        cliff_gap=1.5e9,
+        cliff_share=0.04,
+        completed_at=func.now(),
+        updated_at=func.now(),
+    )
+
+    assert claimed == succeeded == calculation_id
+    for statement in (
+        insert(CliffImpactColumns).values(
+            id=uuid4(), simulation_run_id=ids["run"], status="pending"
+        ),
+        update_row(
+            CliffImpact,
+            calculation_id,
+            simulation_run_id=col(CliffImpact.simulation_run_id),
+        ),
+        delete(CliffImpact).where(col(CliffImpact.id) == calculation_id),
+    ):
+        _refused(session, statement)
+
+
+def test_api_v1_reads_cliff_results_and_other_roles_cannot(
+    session: Session, managed_v2_roles: ManagedV2Roles, public_api_rows: PublicApiRows
+) -> None:
+    """API v1 reads a report run's two cliff results and writes none.
+
+    The catalog writer and the Stage 12 role can't read them.
+    """
+    act_as(session, managed_v2_roles.simulation_service)
+    ids = _create_simulation_rows(session, public_api_rows)
+    calculation_id = _start_cliff_calculation(session, ids["run"])
+    act_as(session, managed_v2_roles.modal_worker)
+    session.execute(
+        update_row(
+            CliffImpact,
+            calculation_id,
+            status="succeeded",
+            cliff_gap=1.5e9,
+            cliff_share=0.04,
+            completed_at=func.now(),
+        )
+    )
+    act_as(session, managed_v2_roles.runtime)
+
+    results = session.execute(
+        select(col(CliffImpact.cliff_gap), col(CliffImpact.cliff_share))
+        .select_from(ReportRun)
+        .join(
+            CliffImpact,
+            col(CliffImpact.simulation_run_id).in_(
+                [
+                    col(ReportRun.baseline_simulation_run_id),
+                    col(ReportRun.reform_simulation_run_id),
+                ]
+            ),
+        )
+        .where(
+            col(ReportRun.id) == ids["report_run"],
+            col(CliffImpact.status) == "succeeded",
+        )
+    ).all()
+
+    assert [tuple(result) for result in results] == [(1.5e9, 0.04)]
+    _refused(
+        session,
+        insert(CliffImpactColumns).values(
+            id=uuid4(), simulation_run_id=ids["run"], status="pending"
+        ),
+    )
+    _refused(session, update_row(CliffImpactColumns, calculation_id, cliff_gap=0))
+    for role in (managed_v2_roles.stage12, CATALOG_WRITER_ROLE):
+        act_as(session, role)
+        _refused(session, _row_count(CliffImpact))

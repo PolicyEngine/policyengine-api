@@ -19,15 +19,17 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect
 from sqlalchemy.dialects import postgresql
 
-from tests.fixtures.integration.alembic_v2 import alembic_v2_config, disposable_v2_url
+from tests.fixtures.database_sessions import schema_inspector
+from tests.fixtures.integration.alembic_v2 import alembic_v2_config
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from sqlalchemy import Engine
+    from sqlalchemy.engine import Inspector
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
 
 SHARED_REPORTS_PREVIOUS_REVISION = "1e1e3f079f2c"
 SHARED_REPORTS_REVISION = "94dc43079186"
@@ -49,19 +51,24 @@ UNFAILED_UNFORCED = "((status <> 'failed'::v2_{status_type}) AND (NOT forced))"
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    """Yield an engine on the disposable database, and leave it at head."""
-    database_engine = create_engine(disposable_v2_url())
+def sessions(
+    v2_owner_sessions: sessionmaker[Session],
+) -> Iterator[sessionmaker[Session]]:
+    """Yield the disposable database owner's Session factories; leave it at head."""
     try:
-        yield database_engine
+        yield v2_owner_sessions
     finally:
         command.upgrade(alembic_v2_config(), "head")
-        database_engine.dispose()
 
 
-def _schema_shape(engine: Engine) -> dict[str, dict[str, Any]]:
+def _schema_shape(sessions: sessionmaker[Session]) -> dict[str, dict[str, Any]]:
     """Reflect every table's columns, keys, indexes (with conditions) and checks."""
-    inspector = inspect(engine)
+    with sessions() as session:
+        return _reflected_shape(schema_inspector(session))
+
+
+def _reflected_shape(inspector: Inspector) -> dict[str, dict[str, Any]]:
+    """Describe each public table but Alembic's own, as the Inspector reads it."""
     return {
         table_name: {
             "columns": {
@@ -138,14 +145,14 @@ def _added(
 
 
 def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
-    engine: Engine,
+    sessions: sessionmaker[Session],
 ) -> None:
     config = alembic_v2_config()
     command.upgrade(config, "head")
     command.downgrade(config, SHARED_REPORTS_PREVIOUS_REVISION)
-    parent = _schema_shape(engine)
+    parent = _schema_shape(sessions)
     command.upgrade(config, SHARED_REPORTS_REVISION)
-    revision = _schema_shape(engine)
+    revision = _schema_shape(sessions)
 
     assert set(revision) - set(parent) == {"user_report_run_associations"}
     assert sorted(
@@ -309,4 +316,4 @@ def test_shared_reports_revision_changes_only_its_tables_and_downgrades_exactly(
     assert set(records["checks"]) == {"ck_user_report_run_associations_trigger"}
 
     command.downgrade(config, SHARED_REPORTS_PREVIOUS_REVISION)
-    assert _schema_shape(engine) == full_parent
+    assert _schema_shape(sessions) == full_parent

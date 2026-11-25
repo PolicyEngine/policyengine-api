@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, NoReturn, get_args
 
 import pytest
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session
 
 from policyengine_api.data.v2.models import User, UserType
 from policyengine_api.fastapi_routes.v2.me.response_models import MeItem
@@ -111,11 +110,11 @@ def test_users_store_each_signed_in_type_and_refuse_unknown_types(
     with store.sessions.begin() as session:
         for user_type in SIGNED_IN_TYPES_ABOVE_STANDARD:
             session.add(User(user_type=user_type.value, primary_country="us"))
-    with Session(store.sessions.kw["bind"]) as session:
+    with store.sessions() as session:
         session.add(User(user_type="editor", primary_country="us"))
         with pytest.raises(IntegrityError):
             session.commit()
-    with Session(store.sessions.kw["bind"]) as session:
+    with store.sessions() as session:
         # Every signed-in type still needs a primary country.
         session.add(User(user_type=UserType.AUTHOR.value))
         with pytest.raises(IntegrityError):

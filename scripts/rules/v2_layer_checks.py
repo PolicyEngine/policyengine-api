@@ -36,7 +36,11 @@ PURE_LAYERS = frozenset(
 )
 
 SQL_PACKAGES = ("sqlalchemy", "sqlmodel")
-DATABASE_PACKAGES = ("policyengine_api.data.orm", "policyengine_api.data.v2.database")
+DATABASE_PACKAGES = (
+    "policyengine_api.data.orm",
+    "policyengine_api.data.v1_sessions",
+    "policyengine_api.data.v2.database",
+)
 SESSION_TYPES = ("sqlmodel.Session", "sqlalchemy.orm.Session")
 SQL_EXCEPTIONS = "sqlalchemy.exc"
 # What a service may import from SQLAlchemy or SQLModel: the session type, for

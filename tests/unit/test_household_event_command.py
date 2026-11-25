@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack, contextmanager
 from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Engine
 from sqlalchemy.engine import URL
-from sqlalchemy.pool import NullPool
 
 from policyengine_api.services.v2.households.types import (
     LegacyHouseholdPersistenceResult,
@@ -131,15 +130,16 @@ def test_command_uses_selected_cloud_sql_proxy(monkeypatch, capsys) -> None:
             mapping_created=True,
         )
     )
-    engine = Mock(spec=Engine)
     event_service = Mock()
+    closed: list[str] = []
+
+    def proxy_event_service(_environ, cleanup: ExitStack) -> Mock:
+        cleanup.callback(closed.append, "proxy sessions")
+        return event_service
+
     monkeypatch.setattr(command, "process_household_event_after_commit", process)
     monkeypatch.setattr(command.logger, "log_struct", Mock())
-    monkeypatch.setattr(
-        command,
-        "_proxy_event_service",
-        Mock(return_value=(event_service, engine)),
-    )
+    monkeypatch.setattr(command, "_proxy_event_service", proxy_event_service)
 
     status = command.main(
         [
@@ -160,7 +160,7 @@ def test_command_uses_selected_cloud_sql_proxy(monkeypatch, capsys) -> None:
         event_service=event_service,
         require_pending=True,
     )
-    engine.dispose.assert_called_once_with()
+    assert closed == ["proxy sessions"]
 
 
 def test_command_redacts_processing_failure_and_records_error(
@@ -354,11 +354,14 @@ def test_audit_failure_does_not_change_the_command_result(
 
 @pytest.mark.parametrize("raw_port", ["", "   "])
 def test_proxy_is_not_used_without_a_port(raw_port: str) -> None:
-    assert command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": raw_port}) == (
-        None,
-        None,
-    )
-    assert command._proxy_event_service({}) == (None, None)
+    with ExitStack() as cleanup:
+        assert (
+            command._proxy_event_service(
+                {"POLICYENGINE_DB_PROXY_PORT": raw_port}, cleanup
+            )
+            is None
+        )
+        assert command._proxy_event_service({}, cleanup) is None
 
 
 @pytest.mark.parametrize(
@@ -371,14 +374,18 @@ def test_proxy_is_not_used_without_a_port(raw_port: str) -> None:
     ],
 )
 def test_proxy_port_must_be_a_valid_tcp_port(raw_port: str, message: str) -> None:
-    with pytest.raises(
-        command.HouseholdEventCommandConfigurationError, match=f"^{message}$"
+    with (
+        pytest.raises(
+            command.HouseholdEventCommandConfigurationError, match=f"^{message}$"
+        ),
+        ExitStack() as cleanup,
     ):
         command._proxy_event_service(
             {
                 "POLICYENGINE_DB_PROXY_PORT": raw_port,
                 "POLICYENGINE_DB_PASSWORD": PROXY_PASSWORD,
-            }
+            },
+            cleanup,
         )
 
 
@@ -386,42 +393,51 @@ def test_proxy_port_must_be_a_valid_tcp_port(raw_port: str, message: str) -> Non
 def test_proxy_connects_as_the_migration_user(
     monkeypatch: pytest.MonkeyPatch, raw_port: str, port: int
 ) -> None:
-    engine = Mock(spec=Engine)
-    create_engine = Mock(return_value=engine)
     session_factory = Mock()
-    build_session_factory = Mock(return_value=session_factory)
+    opened_urls: list[URL] = []
+    closed: list[URL] = []
+
+    @contextmanager
+    def unpooled_v1_sessions(url: URL):
+        opened_urls.append(url)
+        yield session_factory
+        closed.append(url)
+
     household_service = Mock()
-    monkeypatch.setattr(command, "create_engine", create_engine)
-    monkeypatch.setattr(command, "build_session_factory", build_session_factory)
+    monkeypatch.setattr(command, "unpooled_v1_sessions", unpooled_v1_sessions)
     monkeypatch.setattr(command, "HouseholdService", household_service)
 
-    service, returned_engine = command._proxy_event_service(
-        {
-            "POLICYENGINE_DB_PROXY_PORT": raw_port,
-            "POLICYENGINE_DB_PASSWORD": PROXY_PASSWORD,
-        }
-    )
+    with ExitStack() as cleanup:
+        service = command._proxy_event_service(
+            {
+                "POLICYENGINE_DB_PROXY_PORT": raw_port,
+                "POLICYENGINE_DB_PASSWORD": PROXY_PASSWORD,
+            },
+            cleanup,
+        )
+        assert closed == []
 
-    assert returned_engine is engine
     assert service is household_service.return_value
     household_service.assert_called_once_with(session_factory)
-    build_session_factory.assert_called_once_with(engine)
-    create_engine.assert_called_once_with(
-        URL.create(
-            "mysql+pymysql",
-            username="policyengine_schema_migrator",
-            password=PROXY_PASSWORD,
-            host="127.0.0.1",
-            port=port,
-            database="policyengine",
-        ),
-        poolclass=NullPool,
+    expected_url = URL.create(
+        "mysql+pymysql",
+        username="policyengine_schema_migrator",
+        password=PROXY_PASSWORD,
+        host="127.0.0.1",
+        port=port,
+        database="policyengine",
     )
+    assert opened_urls == [expected_url]
+    # Closing the command's cleanup closes the factories, disposing of the engine.
+    assert closed == [expected_url]
 
 
 def test_proxy_requires_the_database_password() -> None:
-    with pytest.raises(
-        command.HouseholdEventCommandConfigurationError,
-        match=r"^POLICYENGINE_DB_PASSWORD is required$",
+    with (
+        pytest.raises(
+            command.HouseholdEventCommandConfigurationError,
+            match=r"^POLICYENGINE_DB_PASSWORD is required$",
+        ),
+        ExitStack() as cleanup,
     ):
-        command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": "3307"})
+        command._proxy_event_service({"POLICYENGINE_DB_PROXY_PORT": "3307"}, cleanup)

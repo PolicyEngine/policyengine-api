@@ -7,9 +7,10 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from sqlalchemy import Engine
-    from sqlalchemy.engine import URL
+    from sqlalchemy.engine import URL, Inspector
 
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
@@ -68,7 +69,7 @@ def _url_fingerprint(settings: V2DatabaseSettings) -> tuple[object, ...]:
     )
 
 
-def build_v2_engine(settings: V2DatabaseSettings) -> Engine:
+def _build_v2_engine(settings: V2DatabaseSettings) -> Engine:
     """Construct an unconnected SQLModel engine for an explicit v2 target."""
     return create_engine(
         settings.connection.url,
@@ -98,24 +99,32 @@ def _refuse_flush(*_flush_arguments: object) -> None:
     raise ReadOnlySessionError(msg)
 
 
-def build_v2_read_session_factory(engine: Engine) -> sessionmaker[Session]:
+def build_v2_read_session_factory(
+    session_factory: sessionmaker[Session],
+) -> sessionmaker[Session]:
     """Build a factory of Sessions for v2 metadata reads, run without a transaction.
 
-    The sessions share ``engine``'s pool in autocommit mode, so psycopg sends
-    each statement on its own: no BEGIN before the first read and no ROLLBACK
-    when the session closes. Only the metadata reader uses them: each of its
-    reads is one statement on a published catalog version. After publication
-    the version's row changes only in its time-period options, its
-    ``catalog_last_published_at`` (set by each publication of it), its
-    ``catalog_values_pruned_at`` (set by pruning, cleared by restoration) and
-    its ``spm_availability`` (recorded once after publishing it), and
-    its other rows only when pruning deletes its current-law values, tree rows
-    and search file, which restoration writes back identically. A read that
-    finds none of those rows reads ``catalog_values_pruned_at`` again, so no
-    common snapshot is needed. The sessions refuse to flush added or changed rows;
+    The sessions share the pool of ``session_factory``'s engine in autocommit
+    mode, so psycopg sends each statement on its own: no BEGIN before the first
+    read and no ROLLBACK when the session closes. Only the metadata reader uses
+    them: each of its reads is one statement on a published catalog version.
+    After publication the version's row changes only in its time-period
+    options, its ``catalog_last_published_at`` (set by each publication of it),
+    its ``catalog_values_pruned_at`` (set by pruning, cleared by restoration)
+    and its ``spm_availability`` (recorded once after publishing it), and its
+    other rows only when pruning deletes its current-law values, tree rows and
+    search file, which restoration writes back identically. A read that finds
+    none of those rows reads ``catalog_values_pruned_at`` again, so no common
+    snapshot is needed. The sessions refuse to flush added or changed rows;
     statements passed directly to ``execute`` are not checked, so they must
     stay reads. The pool restores the ordinary mode when a connection returns.
     """
+    engine: Engine = session_factory.kw["bind"]
+    return _read_session_factory(engine)
+
+
+def _read_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Build the read Session factory on ``engine``'s pool, as described above."""
     factory = sessionmaker(
         bind=engine.execution_options(isolation_level="AUTOCOMMIT"),
         class_=Session,
@@ -145,10 +154,10 @@ def _unpooled_sessions(
 def unpooled_v2_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
     """Yield v2 Session factories for one command's work on the database at ``url``.
 
-    For commands that run once, such as the policy copy split
-    (``scripts/split_v2_policy_copies.py --apply``), given
-    ``V2DatabaseSettings.connection.url``. Their engine keeps no connection
-    pool, so no connection outlives its Session, and is disposed of on exit.
+    For commands that run once, such as catalog initialization and privilege
+    reconciliation, given ``V2DatabaseSettings.connection.url`` or
+    ``V2AlembicSettings.url``. Their engine keeps no connection pool, so no
+    connection outlives its Session, and is disposed of on exit.
     """
     with _unpooled_sessions(url, build_v2_session_factory) as sessions:
         yield sessions
@@ -162,13 +171,25 @@ def _build_read_only_session_factory(engine: Engine) -> sessionmaker[Session]:
 def unpooled_v2_read_only_sessions(url: str | URL) -> Iterator[sessionmaker[Session]]:
     """Yield v2 Session factories whose transactions are all READ ONLY.
 
-    For commands that only read, such as the policy copy split's listing:
-    PostgreSQL refuses any write in their transactions (psycopg's read-only
-    mode, set through SQLAlchemy's ``postgresql_readonly`` option). Like
+    For the migration qualification commands, which only read: PostgreSQL
+    refuses any write in their transactions (psycopg's read-only mode, set
+    through SQLAlchemy's ``postgresql_readonly`` option). Like
     ``unpooled_v2_sessions``, the engine keeps no pool.
     """
     with _unpooled_sessions(url, _build_read_only_session_factory) as sessions:
         yield sessions
+
+
+def v2_schema_inspector(source: OrmSession | sessionmaker[Any]) -> Inspector:
+    """Return SQLAlchemy's Inspector of the v2 database a Session or factory uses.
+
+    Any SQLAlchemy ORM Session counts as a Session, SQLModel's included. A
+    Session's Inspector reads the schema inside the Session's transaction, as
+    the migration target checks need.
+    """
+    bind = source.connection() if isinstance(source, OrmSession) else source.kw["bind"]
+    inspector: Inspector = inspect(bind)
+    return inspector
 
 
 def _discard_inherited_state(current_pid: int) -> None:
@@ -182,7 +203,7 @@ def _discard_inherited_state(current_pid: int) -> None:
     _engine_state.read_session_factory = None
 
 
-def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
+def _v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
     """Return the one lazy v2 runtime engine owned by this process."""
     current_pid = os.getpid()
     with _state_lock:
@@ -203,7 +224,7 @@ def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
                 raise V2ConfigurationError(msg)
             return _engine_state.engine
 
-        _engine_state.engine = build_v2_engine(selected_settings)
+        _engine_state.engine = _build_v2_engine(selected_settings)
         _engine_state.engine_pid = current_pid
         _engine_state.engine_url_fingerprint = fingerprint
         return _engine_state.engine
@@ -213,7 +234,7 @@ def get_v2_session_factory(
     settings: V2DatabaseSettings | None = None,
 ) -> sessionmaker[Session]:
     """Return the process-owned SQLModel Session factory without opening a session."""
-    engine = get_v2_engine(settings)
+    engine = _v2_engine(settings)
     with _state_lock:
         if _engine_state.session_factory is None:
             _engine_state.session_factory = build_v2_session_factory(engine)
@@ -227,10 +248,10 @@ def get_v2_read_session_factory(
 
     See ``build_v2_read_session_factory``.
     """
-    engine = get_v2_engine(settings)
+    engine = _v2_engine(settings)
     with _state_lock:
         if _engine_state.read_session_factory is None:
-            _engine_state.read_session_factory = build_v2_read_session_factory(engine)
+            _engine_state.read_session_factory = _read_session_factory(engine)
         return _engine_state.read_session_factory
 
 

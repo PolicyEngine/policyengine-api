@@ -52,22 +52,24 @@ ReportKind = Literal["economy", "household", "budget_window"]
 # The kinds whose runs are their report runs; a budget window's are its
 # budget-window runs.
 ReportRunsKind = Literal["economy", "household"]
-ReportRunTriggerName = Literal["initial", "manual", "system"]
+# How far a side's cliff calculation has got: not_calculated while its
+# simulation run has none, else its calculation's status (failed once its
+# newest calculation failed and none is pending, running or succeeded).
+CliffCalculationStatusName = Literal[
+    "not_calculated", "pending", "running", "succeeded", "failed"
+]
 
 
 @dataclass(frozen=True)
 class ReportRunRead:
     """One calculation of a report, and the package versions it ran on.
 
-    ``trigger`` is ``initial`` for the run the report's creation started, and
-    null for a run the simulation service shares between requests. A user's
-    trigger is on their record of the run. ``error_message`` says why a failed
-    run failed.
+    ``error_message`` says why a failed run failed. A run is shared between
+    requests, so each user's trigger is on their record of the run.
     """
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName | None
     country_package_version: str
     policyengine_version: str
     baseline_simulation_run_id: UUID
@@ -134,10 +136,49 @@ class ReportSummaryRead(ReportDefinitionRead):
 
 
 @dataclass(frozen=True)
+class CliffCalculationRead:
+    """How far one side's cliff calculation of its simulation run has got.
+
+    ``error_message`` says why a ``failed`` side's newest calculation failed,
+    and is None otherwise.
+    """
+
+    status: CliffCalculationStatusName
+    error_message: str | None
+
+
+@dataclass(frozen=True)
+class ReportCliffsRead:
+    """How far the cliff calculations of a report run's two simulation runs have got.
+
+    A simulation run's cliffs are calculated apart from it, once, when a
+    request asks for them; every report naming the run shares them.
+    ``status`` is ``succeeded`` once both sides are; otherwise ``failed``
+    when either side is, else ``not_calculated`` when either side is, else
+    ``running`` when either side is, else ``pending``. A request with
+    ``include_cliffs`` ending on this run (on the current versions) starts a
+    new calculation for each side that is ``not_calculated`` or ``failed``.
+    A report naming one simulation run on both sides reads its calculation
+    for each. A simulation service that doesn't calculate cliffs per
+    simulation run starts none and refuses ``include_cliffs: true``.
+    """
+
+    status: CliffCalculationStatusName
+    baseline: CliffCalculationRead
+    reform: CliffCalculationRead
+
+
+@dataclass(frozen=True)
 class ReportRead(ReportSummaryRead):
-    """A report with its run's result, once that run has succeeded."""
+    """A report with its run's result, once that run has succeeded.
+
+    ``cliffs`` says how far the cliff calculations of the run read have got,
+    whatever its status, and is None for a report with no run. The result's
+    ``cliff_impact`` is set once both of them have succeeded.
+    """
 
     result: EconomyResult | None
+    cliffs: ReportCliffsRead | None
 
 
 @dataclass(frozen=True)
@@ -192,7 +233,6 @@ class BudgetWindowRunRead:
 
     id: UUID
     status: Literal["pending", "running", "succeeded", "failed"]
-    trigger: ReportRunTriggerName | None
     recalculate: bool
     country_package_version: str | None
     policyengine_version: str | None
