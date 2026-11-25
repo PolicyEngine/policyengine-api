@@ -467,9 +467,9 @@ their policy counterparts do:
   nodes, and the `enum_values` of the version's enum variables, then builds
   the rows with `parameter_tree.build_parameter_tree`, so its labels and
   order follow the policy tree's rules (see "Parameter tree"). The enum read
-  is the largest: 290 variables and about 346 KB for the US at
-  policyengine-us 2.2.2, 42 and about 30 KB for the UK. There is no stored
-  tree table and no search file for this category.
+  is the largest: the `enum_values` of 290 variables, about 458 KB of JSON,
+  for the US at policyengine-us 2.2.2, and of 42 variables, about 41 KB, for
+  the UK. There is no stored tree table and no search file for this category.
   - The top level is `gov`, plus `simulation` for the US. The tree holds only
     the nodes above a dynamic parameter, so a stored node with no dynamic
     parameter below it, such as the UK's `gov.simulation.labor_supply_responses`,

@@ -39,6 +39,7 @@ V2_METADATA_RESOURCE_SEGMENTS = frozenset(
         "dynamic-parameter-values",
         "dynamic-parameters",
         "economy-options",
+        "model-catalog",
         "parameter-values",
         "parameters",
         "regions",
