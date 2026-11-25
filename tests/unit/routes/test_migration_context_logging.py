@@ -411,6 +411,40 @@ def test_v2_metadata_resource_logs_its_actual_supabase_read_source(monkeypatch):
     assert migration_context["db_read"] == "supabase"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v2/dynamic-parameters",
+        "/v2/dynamic-parameters/children",
+        "/v2/dynamic-parameter-values",
+        "/v2/dynamic-parameter-values/00000000-0000-0000-0000-000000000001",
+    ],
+)
+def test_v2_dynamic_parameter_reads_log_their_supabase_read_source(
+    monkeypatch, path: str
+):
+    monkeypatch.setenv("DB_READ_METADATA", "invalid-unprefixed-setting")
+    monkeypatch.setenv("DB_WRITE_METADATA", "invalid-unprefixed-setting")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            ServedRequest(
+                request_id="request-123",
+                method="GET",
+                path=path,
+                status_code=200,
+                started_at=None,
+                country_id="us",
+                route_impl=RouteImplementation.FASTAPI_NATIVE,
+            )
+        )
+
+    migration_context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert migration_context["route_group"] == "metadata"
+    assert migration_context["db_write"] is None
+    assert migration_context["db_read"] == "supabase"
+
+
 def test_v2_policy_resources_log_actual_supabase_read_and_write_sources(
     monkeypatch,
 ):

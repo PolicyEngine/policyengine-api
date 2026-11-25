@@ -325,6 +325,7 @@ def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
         if path.startswith(
             (
                 "/v2/datasets",
+                "/v2/dynamic-parameter",
                 "/v2/economy-options",
                 "/v2/model-catalog",
                 "/v2/parameter",
@@ -335,7 +336,7 @@ def test_openapi_declares_caching_headers_and_not_modified_responses() -> None:
         )
     ]
 
-    assert len(metadata_paths) == 22
+    assert len(metadata_paths) == 28
     for path in metadata_paths:
         responses = schema["paths"][path]["get"]["responses"]
         expected_headers = {"ETag", "Cache-Control", "Vary"}

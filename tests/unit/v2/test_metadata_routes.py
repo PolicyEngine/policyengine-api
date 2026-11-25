@@ -308,10 +308,16 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
     metadata_paths = {
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
+        "/v2/dynamic-parameters",
+        "/v2/dynamic-parameters/children",
+        "/v2/dynamic-parameters/{parameter_id}",
+        "/v2/dynamic-parameter-values",
+        "/v2/dynamic-parameter-values/{value_id}",
         "/v2/economy-options",
         "/v2/model-catalog",
         "/v2/model-catalog/variables",
         "/v2/model-catalog/parameters",
+        "/v2/model-catalog/dynamic-parameters",
         "/v2/parameters",
         "/v2/parameters/children",
         "/v2/parameters/search-file",
@@ -764,6 +770,7 @@ def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
         if path.startswith(
             (
                 "/v2/datasets",
+                "/v2/dynamic-parameter",
                 "/v2/economy-options",
                 "/v2/model-catalog",
                 "/v2/parameter",
@@ -774,7 +781,7 @@ def test_every_metadata_route_declares_the_shared_catalog_query() -> None:
         )
     ]
 
-    assert len(metadata_paths) == 22
+    assert len(metadata_paths) == 28
     for path in metadata_paths:
         parameters = {
             parameter["name"]: parameter

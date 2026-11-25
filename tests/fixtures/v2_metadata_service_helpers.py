@@ -6,8 +6,13 @@ from typing import TYPE_CHECKING, TypeVar
 
 from sqlmodel import Session, select
 
+from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+    is_dynamic_record,
+)
 from policyengine_api.data.v2.models import (
     Dataset,
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
     ParameterNode,
     ParameterValue,
@@ -121,6 +126,18 @@ def insert_country(
         )
         for record in country.parameter_nodes
     )
+    # Model assumptions go to their own tables, as catalog publication stores
+    # them (C1 · 50); every other parameter to ``parameters``.
+    policy_parameters = [
+        record
+        for record in country.parameters
+        if not is_dynamic_record(country.country_id, record.name)
+    ]
+    dynamic_parameters = [
+        record
+        for record in country.parameters
+        if is_dynamic_record(country.country_id, record.name)
+    ]
     session.add_all(
         Parameter(
             id=record.id,
@@ -133,7 +150,7 @@ def insert_country(
             economy=record.economy,
             household=record.household,
         )
-        for record in country.parameters
+        for record in policy_parameters
     )
     session.add_all(
         ParameterValue(
@@ -143,7 +160,32 @@ def insert_country(
             start_date=value.start_date,
             end_date=value.end_date,
         )
-        for parameter in country.parameters
+        for parameter in policy_parameters
+        for value in parameter.values
+    )
+    session.add_all(
+        DynamicParameter(
+            id=record.id,
+            tax_benefit_model_version_id=country.model_version.id,
+            name=record.name,
+            label=record.label,
+            description=record.description,
+            data_type=record.data_type,
+            unit=record.unit,
+            economy=record.economy,
+            household=record.household,
+        )
+        for record in dynamic_parameters
+    )
+    session.add_all(
+        DynamicParameterValue(
+            id=value.id,
+            dynamic_parameter_id=value.parameter_id,
+            value_json=value.value_json,
+            start_date=value.start_date,
+            end_date=value.end_date,
+        )
+        for parameter in dynamic_parameters
         for value in parameter.values
     )
     session.add_all(
