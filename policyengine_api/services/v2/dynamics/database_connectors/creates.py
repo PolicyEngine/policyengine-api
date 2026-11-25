@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
 
-from policyengine_api.data.v2.models import Dynamic, ParameterValue
+from policyengine_api.data.v2.models import Dynamic, DynamicParameterValue
 
 if TYPE_CHECKING:
     from policyengine_api.services.v2.dynamics.types import (
@@ -52,13 +52,16 @@ def create_dynamic_parameter_values(
     dynamic_id: UUID,
     dynamic_input: ResolvedDynamicCreationInput,
 ) -> None:
-    """Insert a new dynamic's parameter values and flush them for later reads."""
+    """Insert a new dynamic's parameter values and flush them for later reads.
+
+    Each value's ``parameter_id`` names a dynamic parameter, which
+    ``resolve_dynamic_creation_input`` found in ``dynamic_parameters``.
+    """
     session.add_all(
         [
-            ParameterValue(
-                policy_id=None,
+            DynamicParameterValue(
                 dynamic_id=dynamic_id,
-                parameter_id=value.parameter_id,
+                dynamic_parameter_id=value.parameter_id,
                 value_json=value.value,
                 start_date=value.start_date,
                 end_date=value.end_date,

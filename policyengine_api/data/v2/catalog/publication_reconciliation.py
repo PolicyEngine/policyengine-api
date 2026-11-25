@@ -26,6 +26,8 @@ from policyengine_api.data.v2.catalog.publication_types import (
 )
 from policyengine_api.data.v2.models import (
     Dataset,
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
     ParameterNode,
     ParameterValue,
@@ -43,7 +45,9 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.catalog.records import CountryCatalog
 
 # The catalog tables whose rows belong to one model version.
-VersionedCatalogRow = Variable | ParameterNode | Parameter | Dataset | Region
+VersionedCatalogRow = (
+    Variable | ParameterNode | Parameter | DynamicParameter | Dataset | Region
+)
 # A selected column: a mapped attribute, or an expression such as a cast.
 ColumnExpression = sa.ColumnElement[Any] | Mapped[Any]
 
@@ -230,36 +234,91 @@ def _comparison_pairs(
         .where(selected_version)
     )
 
-    staged_parameters = sa.select(
-        col(StagedParameter.name),
-        col(StagedParameter.label),
-        col(StagedParameter.description),
-        col(StagedParameter.data_type),
-        col(StagedParameter.unit),
-        *format_2(
-            col(StagedParameter.economy),
-            col(StagedParameter.household),
-        ),
-    ).where(col(StagedParameter.country_id) == country.country_id)
-    actual_parameters = (
-        sa.select(
-            col(Parameter.name),
-            col(Parameter.label),
-            col(Parameter.description),
-            col(Parameter.data_type),
-            col(Parameter.unit),
-            *format_2(col(Parameter.economy), col(Parameter.household)),
+    def staged_parameters(*, dynamic: bool) -> Select:
+        return sa.select(
+            col(StagedParameter.name),
+            col(StagedParameter.label),
+            col(StagedParameter.description),
+            col(StagedParameter.data_type),
+            col(StagedParameter.unit),
+            *format_2(
+                col(StagedParameter.economy),
+                col(StagedParameter.household),
+            ),
+        ).where(
+            col(StagedParameter.country_id) == country.country_id,
+            col(StagedParameter.is_dynamic).is_(sa.true() if dynamic else sa.false()),
         )
-        .select_from(_versioned_from(Parameter))
-        .where(selected_version)
-    )
 
-    staged_parameter_values = sa.select(
-        col(StagedParameterValue.parameter_name),
-        col(StagedParameterValue.value_json),
-        col(StagedParameterValue.start_date),
-        col(StagedParameterValue.end_date),
-    ).where(col(StagedParameterValue.country_id) == country.country_id)
+    def actual_parameters(model: type[Parameter | DynamicParameter]) -> Select:
+        return (
+            sa.select(
+                col(model.name),
+                col(model.label),
+                col(model.description),
+                col(model.data_type),
+                col(model.unit),
+                *format_2(col(model.economy), col(model.household)),
+            )
+            .select_from(_versioned_from(model))
+            .where(selected_version)
+        )
+
+    def staged_parameter_values(*, dynamic: bool) -> Select:
+        """Select one kind of parameter's staged values, by its staged row."""
+        return (
+            sa.select(
+                col(StagedParameterValue.parameter_name),
+                col(StagedParameterValue.value_json),
+                col(StagedParameterValue.start_date),
+                col(StagedParameterValue.end_date),
+            )
+            .select_from(
+                sa.join(
+                    StagedParameterValue,
+                    StagedParameter,
+                    sa.and_(
+                        col(StagedParameter.country_id)
+                        == col(StagedParameterValue.country_id),
+                        col(StagedParameter.name)
+                        == col(StagedParameterValue.parameter_name),
+                    ),
+                )
+            )
+            .where(
+                col(StagedParameterValue.country_id) == country.country_id,
+                col(StagedParameter.is_dynamic).is_(
+                    sa.true() if dynamic else sa.false()
+                ),
+            )
+        )
+
+    actual_dynamic_parameter_values = (
+        sa.select(
+            col(DynamicParameter.name),
+            sa.cast(col(DynamicParameterValue.value_json), JSONB),
+            col(DynamicParameterValue.start_date),
+            col(DynamicParameterValue.end_date),
+        )
+        .select_from(
+            sa.join(
+                DynamicParameterValue,
+                DynamicParameter,
+                col(DynamicParameter.id)
+                == col(DynamicParameterValue.dynamic_parameter_id),
+            )
+            .join(
+                TaxBenefitModelVersion,
+                col(TaxBenefitModelVersion.id)
+                == col(DynamicParameter.tax_benefit_model_version_id),
+            )
+            .join(
+                TaxBenefitModel,
+                col(TaxBenefitModel.id) == col(TaxBenefitModelVersion.model_id),
+            )
+        )
+        .where(selected_version, col(DynamicParameterValue.dynamic_id).is_(None))
+    )
     actual_parameter_values = (
         sa.select(
             col(Parameter.name),
@@ -317,8 +376,26 @@ def _comparison_pairs(
         ("model version", staged_model_version, actual_model_version),
         ("variables", staged_variables, actual_variables),
         ("parameter nodes", staged_parameter_nodes, actual_parameter_nodes),
-        ("parameters", staged_parameters, actual_parameters),
-        ("parameter values", staged_parameter_values, actual_parameter_values),
+        (
+            "parameters",
+            staged_parameters(dynamic=False),
+            actual_parameters(Parameter),
+        ),
+        (
+            "dynamic parameters",
+            staged_parameters(dynamic=True),
+            actual_parameters(DynamicParameter),
+        ),
+        (
+            "parameter values",
+            staged_parameter_values(dynamic=False),
+            actual_parameter_values,
+        ),
+        (
+            "dynamic parameter values",
+            staged_parameter_values(dynamic=True),
+            actual_dynamic_parameter_values,
+        ),
         ("datasets", staged_datasets, actual_datasets),
     )
 
@@ -502,8 +579,8 @@ def count_region_differences(
 def assert_canonical_value_uniqueness(session: Session) -> None:
     """Raise CatalogPublicationError if a parameter has duplicate current-law values.
 
-    Current-law values are those with neither a policy nor a dynamic; each
-    parameter may have only one per start date.
+    Current-law values are those with neither a policy nor a dynamic, in
+    either table; each parameter may have only one per start date.
     """
     duplicates = (
         sa.select(col(ParameterValue.parameter_id))
@@ -518,6 +595,19 @@ def assert_canonical_value_uniqueness(session: Session) -> None:
         .having(sa.func.count() > 1)
         .limit(1)
     )
-    if session.execute(duplicates).first() is not None:
+    dynamic_duplicates = (
+        sa.select(col(DynamicParameterValue.dynamic_parameter_id))
+        .where(col(DynamicParameterValue.dynamic_id).is_(None))
+        .group_by(
+            col(DynamicParameterValue.dynamic_parameter_id),
+            col(DynamicParameterValue.start_date),
+        )
+        .having(sa.func.count() > 1)
+        .limit(1)
+    )
+    if (
+        session.execute(duplicates).first() is not None
+        or session.execute(dynamic_duplicates).first() is not None
+    ):
         msg = "canonical parameter-value uniqueness validation failed"
         raise CatalogPublicationError(msg)

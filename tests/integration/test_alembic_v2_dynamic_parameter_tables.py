@@ -24,13 +24,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
+from sqlalchemy import delete, select, update
+from sqlmodel import col
+
 from policyengine_api.data.v2.dynamic_parameter_move_qualification import (
     count_policy_values_naming_dynamic_parameters,
     dynamic_parameter_move_is_pending,
 )
-from sqlalchemy import delete, select, update
-from sqlmodel import col
-
 from policyengine_api.data.v2.models import (
     Dynamic,
     DynamicParameter,
@@ -533,6 +533,19 @@ def _tree_counts(snapshot: CatalogSnapshot, version_id: UUID) -> dict:
     return {row[3]: (row[7], row[9]) for row in snapshot.tree if row[1] == version_id}
 
 
+def _column_shapes(inspector: Any, table: str) -> list[tuple]:
+    """Return a table's columns as comparable tuples: name, type, null, default."""
+    return [
+        (
+            column["name"],
+            str(column["type"]),
+            column["nullable"],
+            column["default"],
+        )
+        for column in inspector.get_columns(table)
+    ]
+
+
 def test_the_revision_adds_only_the_two_tables(
     sessions: sessionmaker[Session],
 ) -> None:
@@ -541,7 +554,7 @@ def test_the_revision_adds_only_the_two_tables(
     with sessions() as session:
         inspector = schema_inspector(session)
         before = {
-            table: (inspector.get_columns(table), inspector.get_indexes(table))
+            table: (_column_shapes(inspector, table), inspector.get_indexes(table))
             for table in inspector.get_table_names()
         }
     command.upgrade(config, DYNAMIC_PARAMETER_TABLES_REVISION)
@@ -550,7 +563,7 @@ def test_the_revision_adds_only_the_two_tables(
         tables = set(inspector.get_table_names())
         assert tables - set(before) == NEW_TABLES
         for table, (columns, indexes) in before.items():
-            assert inspector.get_columns(table) == columns, table
+            assert _column_shapes(inspector, table) == columns, table
             assert inspector.get_indexes(table) == indexes, table
         parameter_columns = {
             column["name"]: (str(column["type"]), column["nullable"])

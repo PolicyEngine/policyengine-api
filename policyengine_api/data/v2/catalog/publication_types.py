@@ -14,13 +14,15 @@ class PrunedCatalogVersion:
     """A stored catalog version that pruning removed current-law data from.
 
     The counts are the rows deleted from each table: the version's current-law
-    parameter values (those no policy or dynamic owns), its parameter tree
-    rows and its parameter search files.
+    parameter values (those no policy owns), its dynamic parameters'
+    current-law values (those no dynamic owns), its parameter tree rows and its
+    parameter search files.
     """
 
     country_id: str
     policyengine_version: str
     parameter_values: int
+    dynamic_parameter_values: int
     parameter_tree_children: int
     parameter_search_files: int
 
@@ -100,10 +102,10 @@ class PublicationEvidence:
     # model, version, and the file's uncompressed and compressed sizes in bytes.
     parameter_search_files_written: tuple[tuple[str, str, int, int], ...] = ()
     # Pruned catalog versions this publication published again, which it
-    # restored: country, version and the current-law values written back. The
-    # same publication writes their trees and search files, which the two
-    # fields above list.
-    restored_catalog_versions: tuple[tuple[str, str, int], ...] = ()
+    # restored: country, version and the current-law values written back, of
+    # policy parameters and of dynamic parameters. The same publication writes
+    # their trees and search files, which the two fields above list.
+    restored_catalog_versions: tuple[tuple[str, str, int, int], ...] = ()
     # Older catalog versions pruned after the publication committed, and those
     # whose pruning failed and was rolled back; the next publication retries.
     pruned_catalog_versions: tuple[PrunedCatalogVersion, ...] = ()
@@ -180,8 +182,9 @@ class PublicationEvidence:
                     "country_id": country_id,
                     "policyengine_version": version,
                     "parameter_values": parameter_values,
+                    "dynamic_parameter_values": dynamic_parameter_values,
                 }
-                for country_id, version, parameter_values in (
+                for country_id, version, parameter_values, dynamic_parameter_values in (
                     self.restored_catalog_versions
                 )
             ],
@@ -191,6 +194,7 @@ class PublicationEvidence:
                     "policyengine_version": pruned.policyengine_version,
                     "deleted_rows": {
                         "parameter_values": pruned.parameter_values,
+                        "dynamic_parameter_values": pruned.dynamic_parameter_values,
                         "parameter_tree_children": pruned.parameter_tree_children,
                         "parameter_search_files": pruned.parameter_search_files,
                     },

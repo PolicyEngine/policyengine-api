@@ -287,7 +287,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # The UK areas disclosure control withheld from a local-area run's results.
     "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
-    # The writer also analyzes seven of them after every publication (_ANALYZE).
+    # The writer also analyzes nine of them after every publication (_ANALYZE).
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
@@ -304,14 +304,28 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "parameter_tree_children": _access(
         runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
     ),
-    # API v1 also inserts a v2 policy's or dynamic's own parameter
-    # values. Catalog pruning deletes an older version's current-law values
-    # (those with no policy or dynamic), never a policy's or a dynamic's.
+    # API v1 also inserts a v2 policy's own parameter values. Catalog pruning
+    # deletes an older version's current-law values (those with no policy or
+    # dynamic), never a policy's. Dynamics' values were moved to
+    # dynamic_parameter_values (C1 · 50).
     "parameter_values": _access(
         runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "parameters": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
+    ),
+    # Model assumptions, apart from the policy parameters since C1 · 50, granted
+    # as those are: publication writes them, and a run reads a dynamic's.
+    "dynamic_parameters": _access(
+        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
+    ),
+    # Their current-law values, which catalog pruning deletes from an older
+    # version, and every dynamic's values, which API v1 inserts with its
+    # dynamic and never changes. Publication never updates a value.
+    "dynamic_parameter_values": _access(
+        runtime=READ_INSERT,
+        catalog_writer=READ_INSERT_DELETE | _ANALYZE,
+        **_RUN_INPUT_READS,
     ),
     "regions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS

@@ -17,12 +17,15 @@ import pytest
 from policyengine_api.data.v2.models import (
     Country,
     Dynamic,
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
     ParameterValue,
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.dynamic_parameters import is_dynamic_parameter
 from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
@@ -108,13 +111,20 @@ def sessions() -> Iterator[sessionmaker[Session]]:
 
 def store_catalog_version(
     session: Session, model: TaxBenefitModel, version: str, names: list[str]
-) -> dict[str, Parameter]:
-    """Store a catalog version of ``model`` with these parameters, keyed by name."""
+) -> dict[str, Any]:
+    """Store a catalog version of ``model`` with these parameters, keyed by name.
+
+    Model assumptions are ``dynamic_parameters`` rows and the others
+    ``parameters`` rows, as catalog publication stores them (C1 · 50).
+    """
     model_version = TaxBenefitModelVersion(
         model=model, version=version, current_law_id=1, metadata_time_periods=[2026]
     )
+    country_id = "uk" if model.name == "policyengine-uk" else "us"
     parameters = {
-        name: Parameter(name=name, tax_benefit_model_version=model_version)
+        name: (
+            DynamicParameter if is_dynamic_parameter(country_id, name) else Parameter
+        )(name=name, tax_benefit_model_version=model_version)
         for name in names
     }
     session.add(model_version)
@@ -183,7 +193,7 @@ def stored_policy_ids(sessions: sessionmaker[Session]) -> dict[str, UUID]:
 def store_dynamic(
     session: Session,
     country_id: str,
-    parameters: dict[str, Parameter],
+    parameters: dict[str, DynamicParameter],
     content_hash_letter: str,
 ) -> Dynamic:
     """Store a dynamic setting each of ``parameters``, of their catalog version."""
@@ -200,8 +210,8 @@ def store_dynamic(
     session.add(dynamic)
     session.flush()
     session.add_all(
-        ParameterValue(
-            parameter_id=parameter.id,
+        DynamicParameterValue(
+            dynamic_parameter_id=parameter.id,
             value_json=0.25,
             start_date=STORED_AT,
             dynamic_id=dynamic.id,

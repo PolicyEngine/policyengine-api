@@ -46,7 +46,7 @@ if TYPE_CHECKING:
         SelectedCatalog,
     )
     from policyengine_api.data.v2.models import (
-        Dynamic,
+        DynamicParameter,
         Parameter,
         ParameterValue,
         Policy,
@@ -147,11 +147,14 @@ def canonicalize_policy(
 
 
 def stored_policy_creation_input(
-    policy: Policy | Dynamic,
+    policy: Policy,
     model_version: TaxBenefitModelVersion,
     values: list[ParameterValue],
 ) -> ResolvedPolicyCreationInput:
-    """Rebuild a stored policy's or dynamic's input to compare its canonical bytes."""
+    """Rebuild a stored policy's input to compare its canonical bytes.
+
+    A dynamic's is ``dynamics.transformations.stored_dynamic_creation_input``.
+    """
     return ResolvedPolicyCreationInput.model_validate(
         {
             "country_id": policy.country_id,
@@ -330,7 +333,7 @@ def _translate_legacy_values(
     values_by_name: Mapping[str, object],
     *,
     selected: SelectedCatalog,
-    parameters: Mapping[str, Parameter],
+    parameters: Mapping[str, Parameter | DynamicParameter],
 ) -> ResolvedPolicyCreationInput:
     """Translate one part of a v1 policy's values into content bound to the catalog.
 
@@ -397,7 +400,7 @@ def translate_legacy_policy(
     snapshot: LegacyPolicySnapshot,
     *,
     selected: SelectedCatalog,
-    parameters: Mapping[str, Parameter],
+    parameters: Mapping[str, Parameter | DynamicParameter],
 ) -> LegacyPolicyTranslation:
     """Translate a v1 policy into a policy and a dynamic bound to the running catalog.
 
@@ -411,9 +414,11 @@ def translate_legacy_policy(
     binds it to the running catalog the same way.
 
     ``parameters`` holds the running catalog's parameters with the split's
-    parameter names, keyed by name. Raise LegacyPolicyTranslationError, with a
-    fixed reason, if the v1 policy sets a parameter the catalog lacks, sets no
-    value for a parameter, or has invalid or conflicting periods or spellings.
+    parameter names, keyed by name: its policy parameters for the policy's
+    values and its dynamic parameters for the model assumptions. Raise
+    LegacyPolicyTranslationError, with a fixed reason, if the v1 policy sets a
+    parameter the catalog lacks, sets no value for a parameter, or has invalid
+    or conflicting periods or spellings.
     """
     split = split_legacy_policy(snapshot)
     if parameters_missing_from_model(

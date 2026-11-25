@@ -13,14 +13,14 @@ release whose promotion failed, or a rollback to an older version, since the
 release workflow seeds before it deploys. Pruning a version deletes exactly:
 
 - its current-law parameter values: those of its parameters with neither a
-  policy nor a dynamic;
+  policy nor a dynamic, and those of its dynamic parameters with no dynamic;
 - its parameter tree rows;
 - its parameter search files;
 
 and sets its ``catalog_values_pruned_at``, all in one transaction. It never
 deletes parameters (their values cascade with them, saved reforms' included),
-the model version row, its parameter nodes, variables, regions or datasets, or
-any value a policy or dynamic owns.
+the model version row, its parameter nodes, variables, regions or datasets, its
+dynamic parameters, or any value a policy or dynamic owns.
 
 These rows are package-derived: publishing a pruned version again, as a
 rollback that installs it does, restores them from the installed packages
@@ -40,6 +40,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import col
 
 from policyengine_api.data.v2.catalog.publication_inserts import (
+    INSERT_DYNAMIC_PARAMETER_VALUES,
     INSERT_PARAMETER_VALUES,
     RAW_DML_STRATEGY,
 )
@@ -47,6 +48,8 @@ from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPruningFailure,
 )
 from policyengine_api.data.v2.models import (
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
     ParameterSearchFile,
     ParameterTreeChild,
@@ -124,6 +127,7 @@ class PrunedRows:
     """The rows pruning deleted from one catalog version, per table."""
 
     parameter_values: int
+    dynamic_parameter_values: int
     parameter_tree_children: int
     parameter_search_files: int
 
@@ -249,7 +253,7 @@ def record_catalog_publication(
 
 
 def prune_catalog_version(session: Session, version_id: UUID) -> PrunedRows | None:
-    """Delete one version's current-law values, tree rows and search files.
+    """Delete one version's current-law values of both tables, tree rows and files.
 
     Sets the version's ``catalog_values_pruned_at`` first, only if it is
     unset, and returns None without deleting anything when it was set already.
@@ -283,6 +287,18 @@ def prune_catalog_version(session: Session, version_id: UUID) -> PrunedRows | No
             col(ParameterValue.dynamic_id).is_(None),
         ),
     )
+    version_dynamic_parameter_ids = sa.select(col(DynamicParameter.id)).where(
+        col(DynamicParameter.tax_benefit_model_version_id) == version_id
+    )
+    dynamic_parameter_values = _changed_rows(
+        session,
+        sa.delete(DynamicParameterValue).where(
+            col(DynamicParameterValue.dynamic_parameter_id).in_(
+                version_dynamic_parameter_ids
+            ),
+            col(DynamicParameterValue.dynamic_id).is_(None),
+        ),
+    )
     tree_rows = _changed_rows(
         session,
         sa.delete(ParameterTreeChild).where(
@@ -297,6 +313,7 @@ def prune_catalog_version(session: Session, version_id: UUID) -> PrunedRows | No
     )
     return PrunedRows(
         parameter_values=parameter_values,
+        dynamic_parameter_values=dynamic_parameter_values,
         parameter_tree_children=tree_rows,
         parameter_search_files=search_files,
     )
@@ -367,28 +384,26 @@ def _pruned_version_id(session: Session, country: CountryCatalog) -> UUID | None
 
 def restore_pruned_catalog_versions(
     session: Session, countries: Sequence[CountryCatalog]
-) -> tuple[tuple[str, str, int], ...]:
+) -> tuple[tuple[str, str, int, int], ...]:
     """Write back the current-law values of each staged version that was pruned.
 
     Inserts the staged catalog's values, with their catalog IDs, for the
-    stored parameters of the same names, as publishing a new version does, and
-    clears the version's marker. Returns the country, version and values
-    written for each, in catalog order. Runs inside publication's transaction,
-    after staging and before the stored versions are compared with the staged
-    catalog, which then checks the restored values like every other table.
+    stored parameters and dynamic parameters of the same names, as publishing
+    a new version does, and clears the version's marker. Returns the country,
+    version and values written to each table for each, in catalog order. Runs
+    inside publication's transaction, after staging and before the stored
+    versions are compared with the staged catalog, which then checks the
+    restored values like every other table.
     """
     restored = []
     for country in countries:
         version_id = _pruned_version_id(session, country)
         if version_id is None:
             continue
-        # SQLAlchemy keeps an INSERT's row count only when asked to.
-        inserted = session.execute(
-            INSERT_PARAMETER_VALUES.execution_options(preserve_rowcount=True),
-            {"country_id": country.country_id},
-            execution_options=RAW_DML_STRATEGY,
+        parameter_values, dynamic_parameter_values = (
+            _inserted_rows(session, statement, country)
+            for statement in (INSERT_PARAMETER_VALUES, INSERT_DYNAMIC_PARAMETER_VALUES)
         )
-        parameter_values = cast("CursorResult[Any]", inserted).rowcount
         _changed_rows(
             session,
             sa.update(TaxBenefitModelVersion)
@@ -396,6 +411,24 @@ def restore_pruned_catalog_versions(
             .values(catalog_values_pruned_at=None),
         )
         restored.append(
-            (country.country_id, country.model_version.version, parameter_values)
+            (
+                country.country_id,
+                country.model_version.version,
+                parameter_values,
+                dynamic_parameter_values,
+            )
         )
     return tuple(restored)
+
+
+def _inserted_rows(
+    session: Session, statement: sa.Insert, country: CountryCatalog
+) -> int:
+    """Run one staged-values INSERT for the country and return its row count."""
+    # SQLAlchemy keeps an INSERT's row count only when asked to.
+    inserted = session.execute(
+        statement.execution_options(preserve_rowcount=True),
+        {"country_id": country.country_id},
+        execution_options=RAW_DML_STRATEGY,
+    )
+    return cast("CursorResult[Any]", inserted).rowcount

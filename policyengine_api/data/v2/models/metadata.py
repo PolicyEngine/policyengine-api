@@ -87,14 +87,16 @@ class TaxBenefitModel(TimestampedModel, table=True):
 class TaxBenefitModelVersion(IdentifiedModel, table=True):
     """One published catalog version of a model, unique per model and version.
 
-    Owns its variables, parameters and parameter nodes, which are deleted with it,
-    and records the country's current-law policy id and the years its metadata
-    covers. ``catalog_last_published_at`` records when catalog publication last
-    published the version, which decides the versions catalog pruning keeps.
+    Owns its variables, parameters, dynamic parameters and parameter nodes,
+    which are deleted with it, and records the country's current-law policy id
+    and the years its metadata covers. ``catalog_last_published_at`` records
+    when catalog publication last published the version, which decides the
+    versions catalog pruning keeps.
     ``catalog_values_pruned_at`` records when catalog publication pruned the
-    version: it deleted the version's current-law parameter values, parameter
-    tree rows and parameter search file, which publishing the version again
-    restores from the installed packages, clearing the marker.
+    version: it deleted the version's current-law values of policy and dynamic
+    parameters, parameter tree rows and parameter search file, which
+    publishing the version again restores from the installed packages,
+    clearing the marker.
     ``spm_availability`` records whether the version offers SPM settings.
     """
 
@@ -144,6 +146,10 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
         cascade_delete=True,
     )
     parameters: list["Parameter"] = Relationship(
+        back_populates="tax_benefit_model_version",
+        cascade_delete=True,
+    )
+    dynamic_parameters: list["DynamicParameter"] = Relationship(
         back_populates="tax_benefit_model_version",
         cascade_delete=True,
     )
@@ -353,7 +359,8 @@ class Variable(IdentifiedModel, table=True):
 class ParameterNode(IdentifiedModel, table=True):
     """A non-leaf node of a version's parameter tree, which groups parameters.
 
-    Unique by name within the version, and has no values of its own.
+    Unique by name within the version, and has no values of its own. Policy
+    parameters and dynamic parameters share the nodes: ``gov`` is above both.
     """
 
     __tablename__ = "parameter_nodes"
@@ -380,9 +387,10 @@ class ParameterNode(IdentifiedModel, table=True):
 
 
 class Parameter(IdentifiedModel, table=True):
-    """A leaf parameter of a model version, unique by name within it.
+    """A leaf policy parameter of a model version, unique by name within it.
 
-    Its values include current law and the values each policy or dynamic sets.
+    Its values are current law and the values each policy sets. The version's
+    model assumptions are ``DynamicParameter`` rows instead.
     """
 
     __tablename__ = "parameters"
@@ -420,9 +428,12 @@ class Parameter(IdentifiedModel, table=True):
 class ParameterValue(IdentifiedModel, table=True):
     """A parameter's value from ``start_date`` until ``end_date``, or indefinitely.
 
-    A value owned by a policy or dynamic is deleted with its owner, and each
-    owner sets at most one per parameter and start date. A value with neither
-    is current law, and a parameter has at most one per start date.
+    A value owned by a policy is deleted with it, and a policy sets at most one
+    per parameter and start date. A value with no policy is current law, and a
+    parameter has at most one per start date. ``dynamic_id`` is no longer
+    written: a dynamic's values are ``DynamicParameterValue`` rows since
+    revision 7f7335f0eb31 moved them, and C1 · 53 drops the column, its check
+    and its index once no simulation service release maps it.
     """
 
     __tablename__ = "parameter_values"
@@ -497,6 +508,113 @@ class ParameterValue(IdentifiedModel, table=True):
 
     parameter: Parameter = Relationship(back_populates="values")
     policy: Optional["Policy"] = Relationship(back_populates="parameter_values")
+
+
+# The value and date column types of ``DynamicParameterValue``, as
+# ``ParameterValue`` declares them. SQLModel's Field annotates sa_type as a type
+# class, but these are instances of one.
+_VALUE_JSON_TYPE: Any = sa.JSON().with_variant(
+    sa.dialects.postgresql.JSONB(), "postgresql"
+)
+_TIMESTAMP_WITH_TIME_ZONE: Any = sa.DateTime(timezone=True)
+
+
+class DynamicParameter(IdentifiedModel, table=True):
+    """A model assumption of a model version, unique by name within it.
+
+    Every parameter a dynamic may set (``policyengine_api.dynamic_parameters``:
+    ``gov.simulation.``, US ``simulation.`` and UK ``gov.dynamic.``), with a
+    policy parameter's columns and catalog ID
+    (``catalog_identifier("parameter", version, name)``). Its values are its
+    current law and the values each dynamic sets.
+    """
+
+    __tablename__ = "dynamic_parameters"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "tax_benefit_model_version_id",
+            "name",
+            name="uq_dynamic_parameters_model_version_name",
+        ),
+    )
+
+    name: str = Field(max_length=512)
+    label: str | None = Field(default=None, max_length=512)
+    description: str | None = None
+    data_type: str | None = Field(default=None, max_length=128)
+    unit: str | None = Field(default=None, max_length=128)
+    # Catalog format 2 fields; null in versions published before it.
+    economy: bool | None = None
+    household: bool | None = None
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
+        ondelete="CASCADE",
+        index=True,
+    )
+
+    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
+        back_populates="dynamic_parameters"
+    )
+    values: list["DynamicParameterValue"] = Relationship(
+        back_populates="dynamic_parameter",
+        cascade_delete=True,
+    )
+
+
+class DynamicParameterValue(IdentifiedModel, table=True):
+    """A dynamic parameter's value from ``start_date`` until ``end_date``, or on.
+
+    A value with a dynamic is one of the values that dynamic sets, deleted with
+    it, and a dynamic sets at most one per parameter and start date. A value
+    without one is current law, and a parameter has at most one per start date.
+    No policy owns one.
+    """
+
+    __tablename__ = "dynamic_parameter_values"
+    __table_args__ = (
+        sa.CheckConstraint(
+            "end_date IS NULL OR end_date >= start_date",
+            name="ck_dynamic_parameter_values_effective_period",
+        ),
+        sa.Index(
+            "uq_dynamic_parameter_values_dynamic_parameter_start_date",
+            "dynamic_id",
+            "dynamic_parameter_id",
+            "start_date",
+            unique=True,
+            postgresql_where=sa.text("dynamic_id IS NOT NULL"),
+            sqlite_where=sa.text("dynamic_id IS NOT NULL"),
+        ),
+        sa.Index(
+            "ix_dynamic_parameter_values_parameter_period",
+            "dynamic_parameter_id",
+            "start_date",
+            "end_date",
+        ),
+        sa.Index(
+            "uq_dynamic_parameter_values_current_law_parameter_start_date",
+            "dynamic_parameter_id",
+            "start_date",
+            unique=True,
+            postgresql_where=sa.text("dynamic_id IS NULL"),
+            sqlite_where=sa.text("dynamic_id IS NULL"),
+        ),
+    )
+
+    dynamic_parameter_id: UUID = Field(
+        foreign_key="dynamic_parameters.id",
+        ondelete="CASCADE",
+    )
+    value_json: Any = Field(sa_type=_VALUE_JSON_TYPE)
+    start_date: datetime = Field(sa_type=_TIMESTAMP_WITH_TIME_ZONE)
+    end_date: datetime | None = Field(default=None, sa_type=_TIMESTAMP_WITH_TIME_ZONE)
+    dynamic_id: UUID | None = Field(
+        default=None,
+        foreign_key="dynamics.id",
+        ondelete="CASCADE",
+    )
+
+    dynamic_parameter: DynamicParameter = Relationship(back_populates="values")
     dynamic: Optional["Dynamic"] = Relationship(back_populates="parameter_values")
 
 

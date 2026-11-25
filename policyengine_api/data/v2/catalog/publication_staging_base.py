@@ -102,7 +102,12 @@ class StagedParameterNode(StagingBase, table=True):
 
 
 class StagedParameter(StagingBase, table=True):
-    """One parameter of a country's catalog."""
+    """One parameter of a country's catalog.
+
+    ``is_dynamic`` marks a model assumption, which publication stores in
+    ``dynamic_parameters`` (``dynamic_parameter_records``); its values follow it
+    by name.
+    """
 
     __tablename__ = "stage_catalog_parameters"
     __table_args__ = TEMPORARY_UNTIL_COMMIT
@@ -116,6 +121,7 @@ class StagedParameter(StagingBase, table=True):
     unit: str | None = Field(default=None, sa_type=sa.Text)
     economy: bool = Field(sa_type=sa.Boolean)
     household: bool = Field(sa_type=sa.Boolean)
+    is_dynamic: bool = Field(sa_type=sa.Boolean)
 
 
 class StagedParameterValue(StagingBase, table=True):

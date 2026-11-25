@@ -6,8 +6,6 @@ import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from policyengine_api.dynamic_parameters import is_dynamic_parameter
-
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable
     from uuid import UUID
@@ -21,7 +19,6 @@ if TYPE_CHECKING:
         PolicyCreationInput,
         ResolvedPolicyCreationInput,
     )
-    from policyengine_api.supported_countries import SupportedCountryId
 
 
 MAXIMUM_POLICY_PARAMETER_VALUES = 1_000
@@ -86,17 +83,15 @@ class PolicySetsDynamicParametersError(ValueError):
         )
 
 
-def refuse_dynamic_parameters(
-    country_id: SupportedCountryId, parameter_names: Iterable[str]
-) -> None:
-    """Raise PolicySetsDynamicParametersError if any parameter belongs in a dynamic."""
-    dynamic_parameter_names = tuple(
-        sorted(
-            {name for name in parameter_names if is_dynamic_parameter(country_id, name)}
-        )
-    )
-    if dynamic_parameter_names:
-        raise PolicySetsDynamicParametersError(dynamic_parameter_names)
+def refuse_dynamic_parameters(dynamic_parameter_names: Iterable[str]) -> None:
+    """Raise PolicySetsDynamicParametersError when the policy sets model assumptions.
+
+    ``dynamic_parameter_names`` names the requested parameters found among the
+    catalog version's dynamic parameters rather than its policy parameters.
+    """
+    names = tuple(sorted(set(dynamic_parameter_names)))
+    if names:
+        raise PolicySetsDynamicParametersError(names)
 
 
 class PolicyParametersMissingError(ValueError):

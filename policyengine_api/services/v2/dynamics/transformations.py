@@ -15,14 +15,18 @@ from policyengine_api.services.v2.dynamics.types import (
     DynamicRead,
     ResolvedDynamicCreationInput,
 )
-from policyengine_api.services.v2.policies.types import PolicyParameterValueRead
+from policyengine_api.services.v2.policies.types import (
+    PolicyParameterValueRead,
+    ResolvedPolicyCreationInput,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from policyengine_api.data.v2.models import Dynamic, ParameterValue
-    from policyengine_api.services.v2.policies.types import (
-        ResolvedPolicyCreationInput,
+    from policyengine_api.data.v2.models import (
+        Dynamic,
+        DynamicParameterValue,
+        TaxBenefitModelVersion,
     )
 
 
@@ -33,9 +37,38 @@ def dynamic_creation_input(
     return ResolvedDynamicCreationInput.model_validate(dict(content))
 
 
+def stored_dynamic_creation_input(
+    dynamic: Dynamic,
+    model_version: TaxBenefitModelVersion,
+    values: list[DynamicParameterValue],
+) -> ResolvedPolicyCreationInput:
+    """Rebuild a stored dynamic's input to compare its canonical bytes.
+
+    A value's ``dynamic_parameter_id`` is the ``parameter_id`` the dynamic was
+    created with: the revision that moved stored dynamics kept their IDs.
+    """
+    return ResolvedPolicyCreationInput.model_validate(
+        {
+            "country_id": dynamic.country_id,
+            "tax_benefit_model_id": dynamic.tax_benefit_model_id,
+            "tax_benefit_model_version_id": dynamic.tax_benefit_model_version_id,
+            "policyengine_version": model_version.version,
+            "parameter_values": [
+                {
+                    "parameter_id": value.dynamic_parameter_id,
+                    "value": value.value_json,
+                    "start_date": value.start_date,
+                    "end_date": value.end_date,
+                }
+                for value in values
+            ],
+        }
+    )
+
+
 def dynamic_parameter_values_by_dynamic(
     dynamic_ids: list[UUID],
-    rows: list[tuple[ParameterValue, str]],
+    rows: list[tuple[DynamicParameterValue, str]],
 ) -> dict[UUID, tuple[PolicyParameterValueRead, ...]]:
     """Group named value rows by dynamic id; every requested dynamic gets an entry."""
     grouped: dict[UUID, list[PolicyParameterValueRead]] = {
@@ -47,7 +80,7 @@ def dynamic_parameter_values_by_dynamic(
         grouped[value.dynamic_id].append(
             PolicyParameterValueRead(
                 id=value.id,
-                parameter_id=value.parameter_id,
+                parameter_id=value.dynamic_parameter_id,
                 parameter_name=parameter_name,
                 value=value.value_json,
                 start_date=value.start_date,

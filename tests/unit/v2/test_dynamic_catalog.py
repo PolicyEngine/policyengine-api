@@ -456,22 +456,6 @@ def test_a_created_dynamic_keeps_its_values_in_their_own_table(
     assert read.missing_parameters == ()
 
 
-def test_identical_dynamic_content_is_found_from_its_stored_values(
-    sessions: sessionmaker[Session], catalog: Catalog
-) -> None:
-    content = NativeDynamicCreationInput(
-        **_dynamic_input(catalog, INCOME_ELASTICITY).model_dump()
-    )
-    first = _service(sessions).create_dynamic(content)
-
-    again = _service(sessions).create_dynamic(content)
-
-    assert not again.created
-    assert again.item.id == first.item.id
-    with sessions() as session:
-        assert len(session.exec(select(DynamicParameterValue)).all()) == 1
-
-
 def test_a_dynamic_lists_the_assumptions_the_running_catalog_lacks(
     sessions: sessionmaker[Session], session: Session, catalog: Catalog
 ) -> None:

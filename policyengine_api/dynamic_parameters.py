@@ -9,14 +9,24 @@ these prefixes belong to dynamics with no code change. In policyengine-uk
 2.174.1, ``gov.dynamic.`` holds one parameter,
 ``gov.dynamic.obr_labour_supply_assumptions``, a yes/no switch.
 
-The rule is used in three places:
+The rule is used in these places:
 
+- Catalog publication stores these parameters and their current-law values
+  in ``dynamic_parameters`` and ``dynamic_parameter_values`` (C1 · 50), and
+  every other parameter in ``parameters``; a dynamic's values are
+  ``dynamic_parameter_values`` rows. The policy tree and search file leave
+  them out, with the folders that hold only them
+  (``is_dynamic_parameter_path``).
 - ``POST /v2/policies`` refuses a policy that sets any such parameter, and
-  ``POST /v2/dynamics`` refuses a dynamic that sets any other.
+  ``POST /v2/dynamics`` refuses a dynamic that sets any other: each finds the
+  IDs it lacks in the other table and names them.
 - The copy of each v1 policy into v2 splits the v1 policy's values with
   ``split_legacy_policy_json``: these values become a dynamic and the rest
   the policy.
 - The one-time migration splits v1 policies with the same functions.
+
+C1 · 50's revision, which moved the rows stored before, keeps its own copy of
+the prefixes, and a test keeps the two the same.
 
 The UK renamed ``gov.simulation.labor_supply_responses`` to
 ``gov.simulation.labour_supply_responses`` on 2026-05-01. Its catalog has
@@ -74,6 +84,20 @@ class LegacyPolicySplit:
 def is_dynamic_parameter(country_id: SupportedCountryId, parameter_name: str) -> bool:
     """Return whether the country's parameter belongs in a dynamic, not a policy."""
     return parameter_name.startswith(DYNAMIC_PARAMETER_PREFIXES[country_id])
+
+
+def is_dynamic_parameter_path(country_id: SupportedCountryId, path: str) -> bool:
+    """Return whether a node or parameter path holds only model assumptions.
+
+    That is a dynamic folder itself (``gov.simulation``, US ``simulation``, UK
+    ``gov.dynamic``) or anything below one, a bracket included: the path
+    followed by ``.`` starts with one of the country's prefixes. ``gov`` holds
+    policy parameters too, so it is not one. For a parameter's name this is
+    ``is_dynamic_parameter``. The policy tree and search file leave these
+    paths out, and C1 · 50's revision deletes their stored tree rows by the
+    same rule.
+    """
+    return f"{path}.".startswith(DYNAMIC_PARAMETER_PREFIXES[country_id])
 
 
 def canonical_parameter_name(

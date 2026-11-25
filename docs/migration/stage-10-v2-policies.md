@@ -149,12 +149,22 @@ v1 policy that sets one parameter under both spellings with different values
 fails as `conflicting_values`. The mapping in `legacy_policy_mappings` names the
 policy and the dynamic (`dynamic_id`), or no dynamic when the v1 policy sets no
 assumptions. A v1 policy copied before the split existed keeps its copy: its
-assumptions stay policy values and its mapping names no dynamic, and a UK
-copy made before `gov.dynamic.` joined keeps those values in its policy too,
-until the split command splits it (see "Splitting stored policies that hold
+assumptions stayed policy values and its mapping names no dynamic, and a UK
+copy made before `gov.dynamic.` joined kept those values in its policy too,
+until the split command split it (see "Splitting stored policies that held
 model assumptions" below). Native `POST /v2/policies` refuses such
 values with 422 instead (code `dynamic_parameters`), and they are created
 through `POST /v2/dynamics`.
+
+Since revision `7f7335f0eb31` (C1 · 50), model assumptions are
+`dynamic_parameters` rows and a dynamic's values `dynamic_parameter_values`
+rows, apart from the policy parameters and policies' values. The copy looks
+the policy's names up among policy parameters and the assumptions' among
+dynamic parameters. `POST /v2/policies` binds its IDs to `parameters` and
+names, in its 422 `dynamic_parameters`, those it finds in `dynamic_parameters`
+instead; `POST /v2/dynamics` binds its IDs to `dynamic_parameters` and names,
+in its 422 `policy_parameters`, those it finds in `parameters`. An ID in
+neither answers the generic catalog 422, as before.
 
 A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
