@@ -17,7 +17,10 @@ inserts, and refused updates of tables where the role may not update
 which map only the columns they name. The other refused updates use the
 models: both simulation roles may update ``updated_at`` on the run, budget-window
 run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
-have no ``updated_at``.
+have no ``updated_at``. A column a model's mapper leaves out, such as a report
+run's four older cliff columns until a revision drops them, has no statement
+through the model, so its writes and refusals go through the class that maps
+it, ``ReportRunColumns``.
 """
 
 from __future__ import annotations
@@ -262,7 +265,7 @@ def test_the_simulation_service_creates_rows_and_records_only_its_calls(
         update_row(SimulationRun, ids["run"], started_at=func.now()),
         update_row(SimulationRun, ids["run"], output_uri="gs://bucket/run"),
         update_row(SimulationRun, ids["run"], year=2027),
-        update_row(ReportRun, ids["report_run"], baseline_cliff_gap=1.0),
+        update_row(ReportRunColumns, ids["report_run"], baseline_cliff_gap=1.0),
         insert(PovertyColumns).values(
             id=uuid4(),
             simulation_run_id=ids["run"],
@@ -309,13 +312,19 @@ def test_modal_workers_write_their_run_status_and_results_only(
             status="running",
             started_at=func.now(),
             modal_call_id="fc-coordinator",
+            data_version="1.0.0",
+            spm_provenance={},
+            updated_at=func.now(),
+        )
+    )
+    session.execute(
+        update_row(
+            ReportRunColumns,
+            ids["report_run"],
             baseline_cliff_gap=1.0,
             baseline_cliff_share=0.1,
             reform_cliff_gap=2.0,
             reform_cliff_share=0.2,
-            data_version="1.0.0",
-            spm_provenance={},
-            updated_at=func.now(),
         )
     )
     add_row(
@@ -619,14 +628,21 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
     )
 
 
+# The class that maps the columns each model's mapper leaves out.
+UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {ReportRun: ReportRunColumns}
+
+
 @pytest.mark.parametrize("role_kind", ["simulation_service", "modal_worker"])
 def test_each_simulation_role_updates_exactly_its_declared_columns(
     session: Session, managed_v2_roles: ManagedV2Roles, role_kind: str
 ) -> None:
     """Every column of the run tables is updatable exactly when it is declared.
 
-    Setting a column other than ``updated_at`` also sets ``updated_at``, which
-    both roles may update on each of these tables.
+    Setting a column of a model other than ``updated_at`` also sets
+    ``updated_at``, which both roles may update on each of these tables. A
+    column the model's mapper leaves out (``exclude_properties``) is set
+    through the class in ``UNMAPPED_COLUMN_CLASSES``, which sets only the
+    column; a model with such a column and no class there fails the test.
     """
     role = getattr(managed_v2_roles, role_kind)
     declared = declared_privileges(managed_v2_roles.deployment_environment)[role]
@@ -646,12 +662,22 @@ def test_each_simulation_role_updates_exactly_its_declared_columns(
             and privilege.privilege is TablePrivilege.UPDATE
             for column in privilege.columns
         }
-        for column_attribute in inspect(model).column_attrs:
-            column = getattr(model, column_attribute.key)
+        columns_to_update: list[tuple[type[Any], str]] = [
+            (model, column_attribute.key)
+            for column_attribute in inspect(model).column_attrs
+        ]
+        unmapped_columns = sorted(inspect(model).exclude_properties or ())
+        if unmapped_columns:
+            columns_class = UNMAPPED_COLUMN_CLASSES[model]
+            columns_to_update.extend(
+                (columns_class, column_name) for column_name in unmapped_columns
+            )
+        for statement_model, column_name in columns_to_update:
+            column = getattr(statement_model, column_name)
             # The privilege is checked when the statement starts, so no row is
             # needed.
-            statement = update(model).where(false()).values({column: column})
-            if column_attribute.key in updatable:
+            statement = update(statement_model).where(false()).values({column: column})
+            if column_name in updatable:
                 session.execute(statement)
             else:
                 _refused(session, statement)

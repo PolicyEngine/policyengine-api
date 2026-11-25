@@ -21,6 +21,7 @@ from sqlmodel import col
 from policyengine_api.data.v2.models import (
     BudgetSummary,
     BudgetWindowRun,
+    CliffImpact,
     CongressionalDistrictImpact,
     ConstituencyImpact,
     Country,
@@ -61,10 +62,13 @@ STARTED_AT = datetime(2026, 11, 1, 9, tzinfo=UTC)
 # The year of a report store_report stores, unless it is given another.
 STORED_REPORT_YEAR = 2026
 # The mapped class of each table the simulation service's writer stores
-# result rows in, by the table's name in ``economy_result_rows``.
+# result rows in, by the table's name in ``economy_result_rows``, and of
+# ``cliff_impacts``, where it gives each simulation run's succeeded cliff
+# calculation.
 RESULT_MODELS: dict[str, type[Any]] = {
     model.__tablename__: model
     for model in (
+        CliffImpact,
         LaborSupplyResponse,
         LaborSupplyDecileResponse,
         BudgetSummary,
@@ -377,8 +381,8 @@ def store_report_run(
 ) -> RunIds:
     """Store a run of the report and its two simulation runs.
 
-    With ``result``, the run's result columns and rows are stored as the
-    simulation service's writer stores that economy result.
+    With ``result``, the run's result columns and rows are stored as
+    ``economy_result_rows`` gives them.
     """
     budget_window_year = settings.budget_window_year
     simulation_run_settings = replace(settings, run_id=None)
@@ -439,6 +443,43 @@ def store_report_run(
             for row in rows:
                 add_row(session, RESULT_MODELS[table], id=uuid4(), **row)
     return run_ids
+
+
+def store_cliff_calculation(  # noqa: PLR0913  # the session, the run and its status, then each column a test sets
+    session: Session,
+    simulation_run_id: UUID,
+    status: str,
+    *,
+    created_at: datetime = STARTED_AT,
+    error_message: str | None = None,
+    cliff_gap: float | None = None,
+    cliff_share: float | None = None,
+) -> UUID:
+    """Store one cliff calculation of the simulation run, in the state named.
+
+    A finished calculation has a completion time; a succeeded one needs
+    ``cliff_gap`` and ``cliff_share``, a failed one an ``error_message``.
+    """
+    calculation_id = uuid4()
+    add_row(
+        session,
+        CliffImpact,
+        id=calculation_id,
+        created_at=created_at,
+        updated_at=created_at,
+        simulation_run_id=simulation_run_id,
+        status=status,
+        error_message=error_message,
+        started_at=None if status == "pending" else created_at,
+        completed_at=(
+            created_at + timedelta(minutes=1)
+            if status in {"succeeded", "failed"}
+            else None
+        ),
+        cliff_gap=cliff_gap,
+        cliff_share=cliff_share,
+    )
+    return calculation_id
 
 
 def store_budget_window_run(

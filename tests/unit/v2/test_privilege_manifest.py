@@ -39,6 +39,7 @@ from policyengine_api.data.v2.privileges import (
     stage12_role,
     update_columns,
 )
+from tests.unit.v2.v2_schema_reading import stored_v2_schema
 
 PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
@@ -226,11 +227,12 @@ def _missing(relative_path: str, role: str) -> list[str]:
 
 
 def _column_keys_by_table() -> dict[str, set[str]]:
-    """Return the keys of each v2 table's columns, read through its mapper."""
-    return {
-        mapper.class_.__tablename__: {column.key for column in mapper.columns}
-        for mapper in V2_REGISTRY.mappers
-    }
+    """Return the names of each v2 table's columns, as SQLite's copy stores them.
+
+    A grant is on the table's columns, which include those a mapper leaves
+    out, such as a report run's four older cliff columns.
+    """
+    return {name: set(table.columns) for name, table in stored_v2_schema().items()}
 
 
 def test_every_v2_table_has_an_entry_for_every_managed_role() -> None:

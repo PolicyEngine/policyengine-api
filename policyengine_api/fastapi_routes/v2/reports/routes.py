@@ -99,6 +99,7 @@ from policyengine_api.services.v2.stored_reports.household_results.types import 
     HouseholdResultUnreadableError,
 )
 from policyengine_api.services.v2.stored_reports.validators import (
+    CliffsNotAvailableError,
     CreatedReportUnreadableError,
     ForcedRerunRequiresAdminError,
     ForcedRerunRequiresSignInError,
@@ -131,11 +132,13 @@ REPORT_REFUSALS: tuple[type[Exception], ...] = (
     StoredReportNotFoundError,
     ReportRunNotFoundError,
     ForcedRerunRequiresAdminError,
+    CliffsNotAvailableError,
     *SUBMISSION_REFUSALS,
 )
 REPORT_ERROR_MAPPINGS = (
     V2ErrorMapping((StoredReportNotFoundError, ReportRunNotFoundError), 404),
     V2ErrorMapping((ForcedRerunRequiresAdminError,), 403),
+    V2ErrorMapping((CliffsNotAvailableError,), 422),
     *SUBMISSION_ERROR_MAPPINGS,
     V2ErrorMapping(
         (
@@ -321,10 +324,10 @@ def _rerun_report(
     *,
     country_id: str,
     report_id: UUID,
-    force: bool,
+    body: ReportRerunRequest,
     requester: AccountPrincipal | None,
 ) -> ReportDetailResponse | JSONResponse:
-    """Run the report again and answer it with the run the request ended on.
+    """Run the report again, as ``body`` asks; answer it with the run it ended on.
 
     The simulation service's refusal to run it again now answers 409 with
     the run it names; a report that cannot be read back once its run started
@@ -339,7 +342,8 @@ def _rerun_report(
         report = service.rerun_report(
             country_id=country_id,
             report_id=report_id,
-            force=force,
+            force=body.force,
+            include_cliffs=body.include_cliffs,
             requester=requester,
         )
     except (StandardUserRequiresSignInError, ForcedRerunRequiresSignInError) as error:
@@ -390,7 +394,14 @@ def _add_report_run_routes(
             "side reuses a run of its own simulation that succeeded on those "
             "versions; with force, both simulations are calculated again. A "
             "household report's sides are always calculated again, so force "
-            "changes nothing for it. A budget window's new run is a "
+            "changes nothing for it. With include_cliffs, the simulation "
+            "service also starts a cliff calculation for each of an economy "
+            "report run's simulation runs that has none, or whose newest one "
+            "failed, and the answer's cliffs says how far they have got. A "
+            "simulation service that doesn't calculate cliffs per simulation "
+            "run refuses include_cliffs: true with 422 and starts no run. A "
+            "household report or budget window asking for cliffs answers 422 "
+            "before anything is asked. A budget window's new run is a "
             "budget-window run with a report run for each year, and "
             "with force each year calculates its simulations again. Answers the "
             "report as stored, with the run the simulation service named (a "
@@ -416,7 +427,7 @@ def _add_report_run_routes(
                 service_factory(),
                 country_id=query.country_id,
                 report_id=report_id,
-                force=body.force,
+                body=body,
                 requester=requester,
             )
 
@@ -475,8 +486,12 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "local authority's impact and the codes of those withheld; the "
             "simulation service takes it for uk and its four nations only, on a "
             "release that gives local areas a dataset of their own, and the "
-            "Public API answers its refusal with 422. A household report (kind "
-            "household) "
+            "Public API answers its refusal with 422. With include_cliffs, the "
+            "simulation service also starts a cliff calculation for each of an "
+            "economy report's two simulation runs that has none, or whose newest "
+            "one failed, and joins one under way. A simulation service that "
+            "doesn't calculate cliffs per simulation run refuses include_cliffs: "
+            "true with 422 and creates nothing. A household report (kind household) "
             "is checked the same way, except that the country must have "
             "household calculations instead (a household-only country does), "
             "and the household it names must be stored in the country, with a "
@@ -564,7 +579,10 @@ def build_v2_report_router(dependencies: NativeRouteDependencies) -> APIRouter:
             "its result. Its label and description are the requesting user's "
             "saved report's name and description, null without a user "
             "credential or a saved report. An economy report's run is one report "
-            "run and its result today's economy result. A household report's "
+            "run and its result today's economy result; its cliffs say how far "
+            "the cliff calculations of the run's two simulation runs have got, "
+            "whatever the run's status, and the result's cliff_impact holds them "
+            "once both have succeeded. A household report's "
             "result is each simulation's calculated household, as "
             "/v2/household-calculations answers one, and a failed run gives each "
             "side's error. A budget window's run is a budget-window run with a "

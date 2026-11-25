@@ -13,6 +13,10 @@ of them sends exactly the columns it names, so a refusal fails only for those
 columns. Each class maps one table, with the columns of every test that
 refuses a statement on it; a statement sends only the columns it sets. No
 code creates tables from these classes: Alembic creates them from the models.
+
+``ReportRunColumns`` also maps the four older cliff columns ``ReportRun``'s
+mapper leaves out until a revision drops them. No model maps them, so every
+test that writes them, or is refused them, sends its statement through it.
 """
 
 # No ``from __future__ import annotations``: SQLAlchemy reads the classes'
@@ -140,7 +144,11 @@ class BudgetWindowRunColumns:
 
 @named_column_tables.mapped
 class ReportRunColumns:
-    """A new report run's columns."""
+    """A new report run's columns, and the four older cliff columns.
+
+    ``ReportRun``'s mapper leaves the cliff columns out until a revision drops
+    them, so statements that set them go through this class.
+    """
 
     __tablename__ = "report_runs"
 
@@ -151,6 +159,20 @@ class ReportRunColumns:
     policyengine_version: Mapped[str]
     status: Mapped[str] = mapped_column(_type_of(ReportRun, "status"))
     trigger: Mapped[str | None] = mapped_column(_type_of(ReportRun, "trigger"))
+    baseline_cliff_gap: Mapped[float | None]
+    baseline_cliff_share: Mapped[float | None]
+    reform_cliff_gap: Mapped[float | None]
+    reform_cliff_share: Mapped[float | None]
+
+
+# The report run columns ``ReportRun``'s mapper leaves out, which only
+# ``ReportRunColumns`` maps.
+REPORT_RUN_CLIFF_COLUMNS = (
+    "baseline_cliff_gap",
+    "baseline_cliff_share",
+    "reform_cliff_gap",
+    "reform_cliff_share",
+)
 
 
 @named_column_tables.mapped

@@ -21,6 +21,8 @@ from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResult,
 )
 from policyengine_api.services.v2.stored_reports.types import (
+    CliffCalculationRead,
+    ReportCliffsRead,
     ReportRead,
     ReportRunRead,
     ReportSimulationRead,
@@ -110,6 +112,11 @@ def report_summary_read(**changes: Any) -> ReportSummaryRead:
 def report_read(**changes: Any) -> ReportRead:
     fields = {
         "result": EconomyResult.model_validate(us_economy_result()),
+        "cliffs": ReportCliffsRead(
+            status="succeeded",
+            baseline=CliffCalculationRead(status="succeeded", error_message=None),
+            reform=CliffCalculationRead(status="succeeded", error_message=None),
+        ),
         **report_summary_fields(),
         **changes,
     }

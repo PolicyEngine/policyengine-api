@@ -6,8 +6,12 @@ its baseline and reform simulation runs, results are keyed by run, and a
 household job calculates one household for one year under one policy.
 
 Columns are read from the models' mappers, and keys, constraints and indexes
-from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py).
+from SQLite's copy of the schema (tests/unit/v2/v2_schema_reading.py), as are
+the columns a mapper leaves out, such as a report run's four older cliff
+columns.
 """
+
+from uuid import uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -19,7 +23,11 @@ from policyengine_api.data.v2.models import (
     ReportRun,
     SimulationRun,
 )
-from tests.fixtures.database_sessions import v2_schema_statements
+from tests.fixtures.database_sessions import (
+    recorded_statements,
+    sqlite_v2_sessions,
+    v2_schema_statements,
+)
 from tests.unit.v2.v2_schema_reading import (
     StoredForeignKeyColumn,
     model_columns,
@@ -275,12 +283,17 @@ def test_report_runs_record_their_modal_call() -> None:
 
 
 def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
-    """The comparison parts with no result table are typed, except the receipt."""
+    """The comparison parts with no result table are typed, except the receipt.
+
+    The four cliff columns are read from the stored table: the mapper leaves
+    them out.
+    """
     report_runs = model_columns("report_runs")
+    stored_columns = stored_v2_table("report_runs").columns
 
     for column_name in CLIFF_IMPACT_COLUMNS:
-        assert report_runs[column_name].nullable, column_name
-        assert isinstance(report_runs[column_name].type, sa.Float), column_name
+        assert stored_columns[column_name].nullable, column_name
+        assert isinstance(stored_columns[column_name].type, sa.Float), column_name
     assert "ck_report_runs_cliff_impact_complete" in _check_names("report_runs")
     assert report_runs.spm_provenance.nullable
     spm_type = report_runs.spm_provenance.type
@@ -288,6 +301,53 @@ def test_report_runs_record_cliff_impact_spm_receipt_and_data_version() -> None:
     assert report_runs.data_version.nullable
     assert report_runs.data_version.type.length == 128
     assert {"labor_supply_result", "cliff_impact_result"}.isdisjoint(report_runs.keys())
+
+
+def test_report_runs_load_none_of_their_cliff_columns() -> None:
+    """A run's cliffs are its simulation runs', so API v1 leaves these columns alone.
+
+    They stay SQLModel fields, as rule ``api.data.orm-only`` requires of every
+    column, with no Core column of their own, and the mapper leaves them out
+    until a revision drops them.
+    """
+    loaded_columns = str(sa.select(ReportRun).compile(dialect=postgresql.dialect()))
+
+    assert [name for name in CLIFF_IMPACT_COLUMNS if name in loaded_columns] == []
+    assert set(CLIFF_IMPACT_COLUMNS).isdisjoint(
+        sa.inspect(ReportRun).column_attrs.keys()
+    )
+    assert set(CLIFF_IMPACT_COLUMNS) <= set(ReportRun.model_fields)
+    core_columns = [
+        argument
+        for argument in ReportRun.__table_args__
+        if isinstance(argument, sa.Column)
+    ]
+    assert core_columns == []
+
+
+def test_storing_a_report_run_writes_none_of_its_cliff_columns() -> None:
+    report_run = ReportRun(
+        report_id=uuid4(),
+        baseline_simulation_run_id=uuid4(),
+        reform_simulation_run_id=uuid4(),
+        country_package_version="1.0.0",
+        policyengine_version="4.2.0",
+        baseline_cliff_gap=1.5,
+        baseline_cliff_share=0.1,
+        reform_cliff_gap=2.5,
+        reform_cliff_share=0.2,
+    )
+
+    with (
+        sqlite_v2_sessions() as sessions,
+        recorded_statements(sessions) as statements,
+        sessions.begin() as session,
+    ):
+        session.add(report_run)
+
+    (stored,) = [statement for statement in statements if "INSERT" in statement]
+    assert "report_runs" in stored
+    assert [name for name in CLIFF_IMPACT_COLUMNS if name in stored] == []
 
 
 def test_labor_supply_responses_have_one_typed_row_per_report_run() -> None:

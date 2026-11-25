@@ -11,6 +11,10 @@ import pytest
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
+from policyengine_api.services.v2.stored_reports.types import (
+    CliffCalculationRead,
+    ReportCliffsRead,
+)
 from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
     StoredReportNotFoundError,
@@ -98,6 +102,113 @@ def test_a_report_without_a_run_answers_with_no_run_and_no_result() -> None:
     assert item["status"] == "not_run"
     assert item["run"] is None
     assert item["result"] is None
+
+
+def test_a_report_answers_how_far_each_sides_cliff_calculation_has_got() -> None:
+    service = FakeReportService()
+    service.report = replace(
+        service.report,
+        cliffs=ReportCliffsRead(
+            status="failed",
+            baseline=CliffCalculationRead(status="succeeded", error_message=None),
+            reform=CliffCalculationRead(
+                status="failed", error_message="cliff_share_undefined: no adults"
+            ),
+        ),
+    )
+
+    item = (
+        report_route_client(reports=service)
+        .get(f"/v2/reports/{REPORT_ID}?country_id=us")
+        .json()["result"]["item"]
+    )
+
+    assert item["cliffs"] == {
+        "status": "failed",
+        "baseline": {"status": "succeeded", "error_message": None},
+        "reform": {
+            "status": "failed",
+            "error_message": "cliff_share_undefined: no adults",
+        },
+    }
+
+
+def test_a_report_without_a_run_answers_no_cliffs() -> None:
+    service = FakeReportService()
+    service.report = replace(
+        service.report, status="not_run", run=None, result=None, cliffs=None
+    )
+
+    item = (
+        report_route_client(reports=service)
+        .get(f"/v2/reports/{REPORT_ID}?country_id=us")
+        .json()["result"]["item"]
+    )
+
+    assert item["cliffs"] is None
+
+
+def test_a_listed_report_answers_no_cliffs() -> None:
+    service = FakeReportService(listed=(report_summary_read(),))
+
+    response = report_route_client(reports=service).get(
+        f"/v2/reports?country_id=us&report_id={REPORT_ID}"
+    )
+
+    assert response.status_code == 200, response.text
+    (item,) = response.json()["result"]["items"]
+    assert "cliffs" not in item
+
+
+def test_the_openapi_document_describes_a_reports_cliffs() -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+    schemas = document["components"]["schemas"]
+
+    cliffs = schemas["ReportCliffsItem"]
+    assert set(cliffs["properties"]) == {"status", "baseline", "reform"}
+    assert set(cliffs["properties"]["status"]["enum"]) == {
+        "not_calculated",
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+    }
+    assert set(schemas["CliffCalculationItem"]["properties"]) == {
+        "status",
+        "error_message",
+    }
+    assert "cliffs" in schemas["ReportItem"]["required"]
+    assert "cliffs" not in schemas["ReportSummaryItem"]["properties"]
+
+
+def test_the_openapi_document_says_a_service_may_refuse_to_calculate_cliffs() -> None:
+    document = report_route_client().get("/v2/openapi.json").json()
+    create = document["paths"]["/v2/reports"]["post"]
+    rerun = document["paths"]["/v2/reports/{report_id}/runs"]["post"]
+    schemas = document["components"]["schemas"]
+    descriptions = {
+        "create route": create["description"],
+        "create 422": create["responses"]["422"]["description"],
+        "re-run route": rerun["description"],
+        "re-run 422": rerun["responses"]["422"]["description"],
+        "re-run body": schemas["ReportRerunRequest"]["description"],
+        "cliffs": schemas["ReportCliffsItem"]["description"],
+    }
+
+    def states_the_refusal(description: str) -> bool:
+        words = " ".join(description.replace("`", "").split())
+        return (
+            "doesn't calculate cliffs per simulation run" in words
+            and "include_cliffs: true" in words
+        )
+
+    assert [
+        name
+        for name, description in descriptions.items()
+        if not states_the_refusal(description)
+    ] == []
+    cliffs_description = " ".join(descriptions["cliffs"].replace("`", "").split())
+    assert "a side with no calculation stays not_calculated" in cliffs_description
 
 
 @pytest.mark.parametrize(
