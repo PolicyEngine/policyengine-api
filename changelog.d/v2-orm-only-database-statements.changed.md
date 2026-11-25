@@ -1,1 +1,0 @@
-API v1 runs every database statement through SQLAlchemy's ORM, in its production code, scripts and tests, and rule api.data.orm-only enforces it; the few statements SQLAlchemy can't express, such as GRANT and COPY, are named exceptions. Commands, their arguments and their environment variables are unchanged.
