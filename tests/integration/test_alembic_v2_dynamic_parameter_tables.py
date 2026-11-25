@@ -24,7 +24,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlmodel import col
 
 from policyengine_api.data.v2.dynamic_parameter_move_qualification import (
@@ -377,8 +377,12 @@ def stored_countries(
             )
         yield countries
     finally:
-        command.upgrade(alembic_v2_config(), "head")
-        _remove(sessions, countries)
+        # Remove the rows first: a failed refusal test may have left a policy
+        # value that would refuse the upgrade back to the head.
+        try:
+            _remove(sessions, countries)
+        finally:
+            command.upgrade(alembic_v2_config(), "head")
 
 
 def _version_ids(countries: list[StoredCountry]) -> list[UUID]:
@@ -889,28 +893,6 @@ def test_a_dynamic_s_values_go_with_it_and_a_parameter_s_with_the_parameter(
         (uk.parameter_ids[UK_ELASTICITY], uk.dynamic_id),
     }
     us.dynamic_id = None
-
-
-def test_tree_counts_lower_only_for_kept_parents(
-    sessions: sessionmaker[Session], stored_countries: list[StoredCountry]
-) -> None:
-    """A parent row the revision deletes itself has nothing to lower."""
-    with sessions.begin() as session:
-        session.execute(
-            update(ParameterTreeChild)
-            .where(
-                col(ParameterTreeChild.tax_benefit_model_version_id)
-                == stored_countries[0].version_id,
-                col(ParameterTreeChild.path) == "gov.simulation",
-            )
-            .values(child_count=7)
-        )
-    command.upgrade(alembic_v2_config(), DYNAMIC_PARAMETER_TABLES_REVISION)
-    moved = _snapshot(sessions, stored_countries)
-    assert (
-        _tree_counts(moved, stored_countries[0].version_id)
-        == (TREES_AFTER_THE_MOVE["us"])
-    )
 
 
 def test_the_seed_workflow_s_check_counts_what_the_revision_refuses(

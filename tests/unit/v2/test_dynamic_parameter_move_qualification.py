@@ -22,6 +22,7 @@ from policyengine_api.data.v2.settings import (
 from tests.unit.v2.qualification_sessions import (
     CountingSession,
     QualificationSessions,
+    serve_public_tables,
     serve_read_only_sessions,
 )
 
@@ -33,6 +34,11 @@ ENVIRONMENT = {
     V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
     V2_SUPABASE_ENVIRONMENT: "staging",
 }
+
+
+@pytest.fixture(autouse=True)
+def _every_table_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    serve_public_tables(monkeypatch)
 
 
 def test_the_check_belongs_to_the_dynamic_parameter_tables_revision() -> None:
@@ -125,3 +131,33 @@ def test_main_prints_the_refusal_and_redacts_unexpected_errors(
     assert "qualification failed unexpectedly" in captured.err
     assert "secret" not in captured.err
     assert "private-host" not in captured.err
+
+
+@pytest.mark.parametrize(
+    "public_tables",
+    [(), ("parameters", "tax_benefit_models", "tax_benefit_model_versions")],
+)
+def test_a_target_without_the_catalog_tables_counts_no_value(
+    monkeypatch: pytest.MonkeyPatch, public_tables: tuple[str, ...]
+) -> None:
+    """An empty or partial target, whose revisions are all pending, is qualified.
+
+    As the other check steps do, a missing table counts as holding no row, so
+    a new database can be upgraded and seeded.
+    """
+    serve_public_tables(monkeypatch, public_tables)
+    session = CountingSession(())
+    sessions = QualificationSessions(session)
+
+    evidence = move.qualify_dynamic_parameter_move_if_pending(
+        ENVIRONMENT,
+        session_factories=sessions,
+        pending_checker=lambda _session: True,
+    )
+
+    assert evidence.as_dict()["qualification"] == "performed"
+    assert evidence.as_dict()["counts"] == {
+        "policy_values_naming_dynamic_parameters": 0
+    }
+    assert session.statements == []
+    assert session.rolled_back

@@ -551,8 +551,9 @@ def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
 def test_dynamic_parameters_are_granted_as_policy_parameters_are() -> None:
     """The two dynamic parameter tables take the policy parameter tables' grants.
 
-    Catalog publication writes and analyzes both, and catalog pruning deletes
-    current-law values from the values table. API v1 reads both and inserts a
+    Catalog publication inserts and analyzes both, and catalog pruning deletes
+    current-law values from the values table; nothing updates either. API v1
+    reads both and inserts a
     dynamic's values, which a run of the simulation service and its Modal
     workers reads. Comparison runs never read them.
     """
@@ -573,10 +574,11 @@ def test_dynamic_parameters_are_granted_as_policy_parameters_are() -> None:
                 dynamic_table,
             )
     assert declared[RUNTIME_ROLE]["dynamic_parameter_values"] == READ_INSERT
-    assert (
-        declared[CATALOG_WRITER_ROLE]["dynamic_parameters"]
-        == (declared[CATALOG_WRITER_ROLE]["parameters"])
-    )
+    # Publication only inserts both tables' rows, and pruning deletes only
+    # current-law values: nothing updates either.
+    assert declared[CATALOG_WRITER_ROLE]["dynamic_parameters"] == READ_INSERT | {
+        TablePrivilege.MAINTAIN
+    }
 
 
 def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:
