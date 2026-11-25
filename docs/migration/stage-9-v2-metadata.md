@@ -425,10 +425,13 @@ that serve them.
 ### Dynamic parameter routes
 
 Six read-only routes serve dynamic parameters apart from policy parameters
-(C1 · 51; the user's decision in C1 · 46, Q4). They read only
-`dynamic_parameters` and the rows of `dynamic_parameter_values` that no
-dynamic owns, take their queries from the shared query models, and answer as
-their policy counterparts do:
+(C1 · 51; the user's decision in C1 · 46, Q4). They read dynamic parameters
+and values only from `dynamic_parameters` and the rows of
+`dynamic_parameter_values` that no dynamic owns. The children route and
+`/v2/model-catalog/dynamic-parameters` also read the shared
+`parameter_nodes`' labels, and the children route the `enum_values` of
+`variables`. The routes take their queries from the shared query models and
+answer as their policy counterparts do:
 
 | Route | Query | Policy counterpart |
 | --- | --- | --- |
@@ -682,8 +685,9 @@ PolicyEngine.py version is installed again: `/v2/parameter-values`,
 embed current-law values, and the dynamic category's
 `/v2/dynamic-parameter-values`, `/v2/dynamic-parameter-values/{value_id}`,
 `/v2/model-catalog/dynamic-parameters` and `/v2/dynamic-parameters/children`.
-The children route answers as the policy tree's does, although the rows its
-tree is built from are kept. The other metadata routes, which serve kept rows,
+The children route answers so too, although the rows its tree is built from
+are kept, except from a selection a process kept from before the pruning
+(below). The other metadata routes, which serve kept rows,
 answer as before. The request names data the catalog no longer holds, so the
 answer is a client error: the Public API records every response of 500 or more
 at ERROR, so a 503 would count as a server error in the daily telemetry error

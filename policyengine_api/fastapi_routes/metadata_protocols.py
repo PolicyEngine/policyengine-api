@@ -48,7 +48,7 @@ class V2DynamicParameterResourceReader(Protocol):
     """Read the dynamic parameter category for one v2 metadata request.
 
     Every read selects one country catalog, as ``V2MetadataResourceReader``'s
-    do, and reads only dynamic parameters and their current-law values: a
+    do, and serves only dynamic parameters and their current-law values: a
     policy parameter's ID, or a value a dynamic sets, raises
     ``MetadataResourceNotFoundError``.
     """

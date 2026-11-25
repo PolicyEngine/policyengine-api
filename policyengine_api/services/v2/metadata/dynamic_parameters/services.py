@@ -1,8 +1,11 @@
 """Reads of the dynamic parameter category, which the metadata service hands on.
 
-They read only ``dynamic_parameters`` and the current-law rows of
-``dynamic_parameter_values`` (C1 · 50), so a policy parameter or a dynamic's
-own value is never listed or returned (C1 · 51). Each read selects the
+They read dynamic parameters and values only from ``dynamic_parameters``
+and the current-law rows of ``dynamic_parameter_values`` (C1 · 50), so a
+policy parameter or a dynamic's own value is never listed or returned
+(C1 · 51). The tree and the whole-category read also read the stored labels
+of the shared ``parameter_nodes``, and the tree the ``enum_values`` of
+``variables``. Each read selects the
 catalog version as the policy reads do. The reads of current-law values and
 of the tree answer a pruned version with CatalogValuesPrunedError, as their
 policy counterparts do (C1 · 46, Q3); the reads of parameter rows, which

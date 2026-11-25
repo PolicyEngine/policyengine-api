@@ -1,10 +1,12 @@
 """API v2 routes that serve dynamic parameters and their current-law values.
 
 Dynamic parameters are the model assumptions a dynamic sets
-(``policyengine_api.dynamic_parameters``). These routes read only their own
-tables (C1 · 50), apart from the policy parameter routes (C1 · 46, Q4), and
-mirror those routes' queries, pages and errors. The children route's tree is
-built on each request; there is no search file for this category.
+(``policyengine_api.dynamic_parameters``). These routes read them and their
+values only from their own tables (C1 · 50), apart from the policy parameter
+routes (C1 · 46, Q4), and mirror those routes' queries, pages and errors. The
+children route's tree is built on each request, with the stored labels of
+the shared parameter nodes and the version's enum labels; there is no search
+file for this category.
 """
 
 from __future__ import annotations
