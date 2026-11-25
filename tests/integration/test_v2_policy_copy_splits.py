@@ -56,6 +56,7 @@ from policyengine_api.services.v2.dynamics.services import create_resolved_dynam
 from policyengine_api.services.v2.dynamics.types import ResolvedDynamicCreationInput
 from policyengine_api.services.v2.policies.services import create_resolved_policy
 from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
+from policyengine_api.services.v2.policy_copy_split import services as split_services
 from policyengine_api.services.v2.policy_copy_split.database_session import (
     PolicyCopySplitDatabaseSession,
 )
@@ -1165,6 +1166,92 @@ def test_the_split_gives_way_to_a_live_sign_in_merge(
     [saved_dynamic] = _saved_dynamics(owner_sessions, account_user_id)
     assert saved_dynamic.dynamic_id == split.dynamic.id
     assert _saved_dynamics(owner_sessions, browser_user_id) == []
+
+
+def test_the_split_gives_way_to_a_sign_in_merge_that_waits_first(
+    owner_sessions: sessionmaker[Session],
+    time_limited_sessions: sessionmaker[Session],
+    us_scenario: Scenario,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The merge waits for the saved policy first; the split joins the cycle later.
+
+    Re-pointing the mapping is slowed by 0.7 seconds, as a remote database's
+    round trips might slow the statements between locking the copy and
+    saving the owner's dynamic. The merge, holding the browser user's lock,
+    moves the saved policy meanwhile. It must commit, and the split must
+    give the account the saved dynamic.
+    """
+    scenario = us_scenario
+    old_copy_id = _store_policy(
+        owner_sessions,
+        scenario,
+        scenario.parameter_value(US_TAX_RATE, value=0.3),
+        scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
+    )
+    legacy_policy_id = _store_mapping(owner_sessions, scenario, policy_id=old_copy_id)
+    browser_user_id = _store_user(owner_sessions, scenario)
+    account_user_id = _store_user(owner_sessions, scenario)
+    saved_policy_id = _store_saved_policy(
+        owner_sessions,
+        scenario,
+        user_id=browser_user_id,
+        policy_id=old_copy_id,
+        legacy_policy_id=legacy_policy_id,
+        name="Saved before signing in",
+    )
+    repoint_mapping = split_services.repoint_legacy_policy_mapping
+
+    def slow_repoint_mapping(*arguments: object, **keywords: object) -> None:
+        time.sleep(0.7)
+        repoint_mapping(*arguments, **keywords)
+
+    monkeypatch.setattr(
+        split_services, "repoint_legacy_policy_mapping", slow_repoint_mapping
+    )
+    service = V2PolicyCopySplitService(
+        ActingAsTheSplitRole(time_limited_sessions),
+        attempts=10,
+        retry_delay_seconds=0.2,
+    )
+    split_results: list[PolicyCopySplit] = []
+    split_errors: list[Exception] = []
+
+    def run_split() -> None:
+        try:
+            split_results.extend(service.split_policy_copies())
+        except DBAPIError as error:
+            split_errors.append(error)
+
+    split_thread = threading.Thread(target=run_split)
+    with owner_sessions() as sign_in_session:
+        sign_in_session.exec(
+            select(User).where(User.id == browser_user_id).with_for_update()
+        ).one()
+        split_thread.start()
+        # The split is re-pointing the mapping, slowly, when the merge moves
+        # the browser's saved policies.
+        time.sleep(0.15)
+        sign_in_session.execute(
+            update(UserPolicy)
+            .where(col(UserPolicy.user_id) == browser_user_id)
+            .values(user_id=account_user_id)
+        )
+        sign_in_session.commit()
+    split_thread.join(timeout=60)
+
+    assert not split_thread.is_alive()
+    assert split_errors == []
+    split = _result_for(split_results, old_copy_id)
+    assert split.outcome is PolicyCopyOutcome.DELETED
+    with owner_sessions() as session:
+        saved_policy = session.get(UserPolicy, saved_policy_id)
+        assert (saved_policy.user_id, saved_policy.policy_id) == (
+            account_user_id,
+            split.policy.id,
+        )
+    [saved_dynamic] = _saved_dynamics(owner_sessions, account_user_id)
+    assert saved_dynamic.dynamic_id == split.dynamic.id
 
 
 def test_a_mapping_s_dynamic_on_another_catalog_version_refuses_the_copy(
