@@ -305,15 +305,19 @@ otherwise change those policies silently.
 
 For each such policy, in one transaction, the command
 (`policyengine_api/services/v2/policy_copy_split/services.py`) locks the
-legacy mappings and saved policies that name it, then the policy itself
-(`SELECT … FOR UPDATE`, so nothing can start naming it meanwhile), in the
-order API v1's copy of a v1 saved policy takes the same locks, so the two
-wait for each other instead of deadlocking. Its lock waits end after half a
-second, shorter than PostgreSQL's default one-second `deadlock_timeout`, so
-in any other lock cycle with a live write, such as API v1's sign-in merge
-(which locks a browser's user, then moves its saved policies), the split's
-wait ends first: it rolls back that copy and tries it again, up to five
-times a second apart, and the live write goes ahead. It then:
+legacy mappings that name it, then the policy itself (`SELECT … FOR
+UPDATE`, so nothing can start naming it meanwhile), in the order API v1's
+copy of a v1 saved policy takes the same locks, so the two wait for each
+other instead of deadlocking. It locks each saved policy that names the
+copy only just before saving its owner's dynamic, whose foreign-key check
+waits for any lock on the owner's user, so its two waits come within a few
+statements of each other. Its lock waits end after half a second, shorter
+than PostgreSQL's default one-second `deadlock_timeout`, so in a lock cycle
+with a live write that locks the user first, such as API v1's sign-in merge
+(which locks a browser's user, then moves its saved policies) or a deletion
+of the user, the split's wait ends first: it rolls back that copy and tries
+it again a second later, for five attempts in all, and the live write goes
+ahead. It then:
 
 - finds or creates a policy holding the values that aren't model assumptions,
   empty when there are none, and a dynamic holding the model assumptions,

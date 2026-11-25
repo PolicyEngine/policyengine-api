@@ -20,8 +20,9 @@ It exits with 0 when, afterwards, no stored policy sets a model assumption
 (for the listing: when every copy would be deleted), and with 1 otherwise,
 such as when a copy is kept because a simulation, report or household
 calculation names it, or refused. A copy that waits more than half a second
-for a lock, or meets a deadlock, is rolled back and tried again, up to five
-times a second apart, so the split gives way to API v1's live writes. Any
+for a lock, or meets a deadlock, is rolled back and tried again a second
+later, for five attempts in all, so the split gives way to API v1's live
+writes. Any
 other failure, such as missing settings, an unreachable database (after 10
 seconds) or a copy that still can't get its locks, raises, so Python prints
 its traceback and also exits with 1; the copies already reported have

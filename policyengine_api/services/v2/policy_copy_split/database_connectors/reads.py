@@ -117,6 +117,15 @@ def read_saved_policies_naming_policy(
     return list(session.exec(statement).all())
 
 
+def read_saved_policy_for_update(
+    session: Session, saved_policy_id: UUID
+) -> UserPolicy | None:
+    """Return the saved policy, selected FOR UPDATE, or None if it was deleted."""
+    return session.exec(
+        select(UserPolicy).where(UserPolicy.id == saved_policy_id).with_for_update()
+    ).one_or_none()
+
+
 def count_rows_naming_policy(session: Session, policy_id: UUID) -> CopyReferences:
     """Return how many simulations, reports and household jobs name the policy."""
     simulations = session.exec(

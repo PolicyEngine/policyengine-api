@@ -60,6 +60,7 @@ from policyengine_api.services.v2.policy_copy_split.database_connectors.reads im
     read_policy_ids_setting_parameters,
     read_saved_dynamic_with_name,
     read_saved_policies_naming_policy,
+    read_saved_policy_for_update,
 )
 from policyengine_api.services.v2.policy_copy_split.database_connectors.updates import (
     repoint_legacy_policy_mapping,
@@ -147,20 +148,21 @@ def _mapping_dynamic(
 def _prepare(
     session: Session, policy_id: UUID, *, lock: bool
 ) -> PreparedPolicyCopySplit | None:
-    """Read what the split of one copy needs, locking the rows it changes with ``lock``.
+    """Read what the split of one copy needs, locking the copy with ``lock``.
 
     The locks are taken in the order API v1's copies take them, so the split
     waits for a copy instead of deadlocking with it: the copy of a v1 saved
     policy locks the legacy mapping, then saves a policy naming the mapped
-    copy, whose foreign-key check locks the copy's row. So the mappings and
-    saved policies naming the copy are locked before the copy, and read
-    again once it is locked, since one committed meanwhile can name it and
-    none can be added after. Return None when the policy is no longer stored
-    or sets no model assumption.
+    copy, whose foreign-key check locks the copy's row. So the mappings
+    naming the copy are locked before the copy, and read again once it is
+    locked, since one committed meanwhile can name it and none can be added
+    after. The saved policies naming it are read, not locked: each is locked
+    only just before its owner's saved dynamic is saved
+    (``_StoredSplitRows.current_saved_policy``). Return None when the policy
+    is no longer stored or sets no model assumption.
     """
     if lock:
         read_mappings_naming_policy(session, policy_id, lock=True)
-        read_saved_policies_naming_policy(session, policy_id, lock=True)
     policy = read_policy_for_split(session, policy_id, lock=lock)
     if policy is None:
         return None
@@ -217,7 +219,7 @@ def _prepare(
             ),
         )
         for saved_policy in read_saved_policies_naming_policy(
-            session, policy.id, lock=lock
+            session, policy.id, lock=False
         )
     )
     return replace(
@@ -271,6 +273,15 @@ class _SplitRows(Protocol):
         """Point the mapping at the policy and dynamic."""
         ...
 
+    def current_saved_policy(
+        self, target: SavedPolicyTarget
+    ) -> SavedPolicyTarget | None:
+        """Return the saved policy as it is now, or None if it no longer names the copy.
+
+        A run locks it here, so its owner and name are current.
+        """
+        ...
+
     def repoint_saved_policy(
         self, target: SavedPolicyTarget, *, policy: SplitContent
     ) -> None:
@@ -314,12 +325,21 @@ def _split_prepared(
             )
         )
     saved_policies = []
-    for saved_policy_target in prepared.saved_policy_targets:
-        dynamic = rows.dynamic(saved_policy_target.dynamic)
-        rows.repoint_saved_policy(saved_policy_target, policy=policy)
+    for prepared_target in prepared.saved_policy_targets:
+        dynamic = rows.dynamic(prepared_target.dynamic)
+        # Lock the saved policy only now, just before saving its owner's
+        # dynamic, whose foreign-key check waits for any lock on the owner's
+        # user: the two waits then come within a few statements of each
+        # other, so in a lock cycle with a live write that locks the user
+        # first (API v1's sign-in merge, or a deletion of the user) the
+        # split's half-second lock timeout always ends its wait first.
+        saved_policy_target = rows.current_saved_policy(prepared_target)
+        if saved_policy_target is None:
+            continue
         saved_dynamic_id, saved_dynamic_created = rows.saved_dynamic(
             saved_policy_target, dynamic=dynamic
         )
+        rows.repoint_saved_policy(saved_policy_target, policy=policy)
         saved_policies.append(
             RepointedSavedPolicy(
                 user_policy_id=saved_policy_target.user_policy_id,
@@ -422,6 +442,12 @@ class _ListedSplitRows:
     ) -> None:
         """Change nothing: a listing only reports the mapping."""
 
+    def current_saved_policy(
+        self, target: SavedPolicyTarget
+    ) -> SavedPolicyTarget | None:
+        """Return the saved policy as the listing read it."""
+        return target
+
     def repoint_saved_policy(
         self, target: SavedPolicyTarget, *, policy: SplitContent
     ) -> None:
@@ -466,9 +492,10 @@ def _stored_id(content: SplitContent) -> UUID:
 class _StoredSplitRows:
     """Find or create one copy's rows, and change what names the copy."""
 
-    def __init__(self, session: Session) -> None:
-        """Write through ``session``, in the caller's transaction."""
+    def __init__(self, session: Session, copy_id: UUID) -> None:
+        """Write through ``session``, in the caller's transaction, for one copy."""
         self._session = session
+        self._copy_id = copy_id
         self._policies: dict[str, SplitContent] = {}
         self._dynamics: dict[str, SplitContent] = {}
 
@@ -510,6 +537,23 @@ class _StoredSplitRows:
             policy_id=_stored_id(policy),
             dynamic_id=_stored_id(dynamic),
         )
+
+    def current_saved_policy(
+        self, target: SavedPolicyTarget
+    ) -> SavedPolicyTarget | None:
+        """Lock the saved policy and read it again.
+
+        Its owner may have changed since ``_prepare`` read it, as when a
+        browser's saved policies move to an account at sign-in, and it may
+        have been deleted or pointed elsewhere. The copy is locked, so no
+        saved policy can start naming it.
+        """
+        saved_policy = read_saved_policy_for_update(
+            self._session, target.user_policy_id
+        )
+        if saved_policy is None or saved_policy.policy_id != self._copy_id:
+            return None
+        return replace(target, user_id=saved_policy.user_id, name=saved_policy.name)
 
     def repoint_saved_policy(
         self, target: SavedPolicyTarget, *, policy: SplitContent
@@ -598,15 +642,17 @@ def split_policy_copy_in_session(
         return None
     if prepared.refusal_reason is not None:
         return _refused(prepared, applied=True)
-    return _split_prepared(prepared, _StoredSplitRows(session), applied=True)
+    return _split_prepared(
+        prepared, _StoredSplitRows(session, prepared.policy_id), applied=True
+    )
 
 
 class V2PolicyCopySplitService:
     """List or apply the split of every stored copy, one transaction per copy.
 
     A copy whose transaction meets a lock conflict (the lock timeout ran out,
-    or PostgreSQL found a deadlock) is rolled back and tried again, up to
-    ``attempts`` times, ``retry_delay_seconds`` apart. With the command's
+    or PostgreSQL found a deadlock) is rolled back and tried again,
+    ``retry_delay_seconds`` apart, for ``attempts`` attempts in all. With the command's
     lock timeout shorter than PostgreSQL's deadlock_timeout, the split gives
     way to API v1's live writes in a lock cycle.
     """
