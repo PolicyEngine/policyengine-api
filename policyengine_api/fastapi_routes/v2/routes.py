@@ -33,6 +33,9 @@ from policyengine_api.fastapi_routes.v2.me.user_type_routes import (
 from policyengine_api.fastapi_routes.v2.metadata.catalog_routes import (
     build_v2_model_catalog_router,
 )
+from policyengine_api.fastapi_routes.v2.metadata.dynamic_parameter_routes import (
+    build_v2_dynamic_parameter_router,
+)
 from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
 )
@@ -92,6 +95,7 @@ def build_v2_router(
     router.include_router(build_v2_country_router(dependencies))
     router.include_router(build_v2_metadata_model_router(dependencies))
     router.include_router(build_v2_metadata_parameter_router(dependencies))
+    router.include_router(build_v2_dynamic_parameter_router(dependencies))
     router.include_router(build_v2_metadata_geography_router(dependencies))
     router.include_router(build_v2_model_catalog_router(dependencies))
 

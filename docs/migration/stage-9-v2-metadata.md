@@ -11,7 +11,8 @@ Stage 9 populates the dormant v2 US and UK reference catalogs and exposes
 read-only, resource-specific routes from the Cloud Run ASGI application under
 `/v2`. The routes separately serve tax-benefit models, model versions,
 variables, parameters, direct parameter-tree children, canonical parameter
-values, logical input datasets, regions, and compact economy-selection
+values, dynamic parameters and their values and tree (see "Dynamic parameter
+routes"), logical input datasets, regions, and compact economy-selection
 options. Collection routes require `country_id`, use bounded `offset` and
 `limit` pagination, and never assemble the complete catalog into one response.
 The generated OpenAPI document is available at `GET /v2/openapi.json`.
@@ -142,7 +143,8 @@ pruned version's 404, or 503 for the running version, carries
 `Cache-Control: no-store` (see "Catalog pruning"). A request without it selects the running
 version, which changes on deploy, and may be reused for five minutes
 (`max-age=300`). A response that depends on the request's UTC day, which is
-`GET /v2/parameter-values?current=true` (the values in effect today), takes
+`GET /v2/parameter-values?current=true` and
+`GET /v2/dynamic-parameter-values?current=true` (the values in effect today), take
 the request's instant once: the read selects that day's values, and the
 response may be reused only until the UTC midnight after that instant,
 whichever lifetime would otherwise apply (`max-age=0` if its headers are
@@ -420,6 +422,72 @@ evidence counts them apart (`entity_counts`' `dynamic_parameters` and
 their own tables") describes it and its deploy order. C1 · 51 adds the routes
 that serve them.
 
+### Dynamic parameter routes
+
+Six read-only routes serve dynamic parameters apart from policy parameters
+(C1 · 51; the user's decision in C1 · 46, Q4). They read only
+`dynamic_parameters` and the rows of `dynamic_parameter_values` that no
+dynamic owns, take their queries from the shared query models, and answer as
+their policy counterparts do:
+
+| Route | Query | Policy counterpart |
+| --- | --- | --- |
+| `GET /v2/dynamic-parameters` | `ParameterCollectionQuery`: page, `search`, repeated `name` | `/v2/parameters` |
+| `GET /v2/dynamic-parameters/{parameter_id}` | `CatalogQuery` | `/v2/parameters/{parameter_id}` |
+| `GET /v2/dynamic-parameters/children` | `DynamicParameterChildrenQuery`: page, `parent_path`, `settable` | `/v2/parameters/children` |
+| `GET /v2/dynamic-parameter-values` | `ParameterValueCollectionQuery`: page, `parameter_id`, repeated `parameter_name`, `current` | `/v2/parameter-values` |
+| `GET /v2/dynamic-parameter-values/{value_id}` | `CatalogQuery` | `/v2/parameter-values/{value_id}` |
+| `GET /v2/model-catalog/dynamic-parameters` | `CatalogQuery` | `/v2/model-catalog/parameters`, without names |
+
+- **Items** are the policy routes' items: a parameter's summary (`id`,
+  `name`, `label`, `description`, `data_type`, `unit`, `economy`,
+  `household`) and a value's (`id`, `parameter_id`, `value`, `start_date`,
+  `end_date`). `parameter_id` is the dynamic parameter's catalog ID, which
+  `POST /v2/dynamics` takes.
+- **IDs outside the category** answer 404: a policy parameter's or policy
+  value's ID, a value a dynamic sets, and another version's ID. The policy
+  routes answer 404 for a dynamic parameter's IDs.
+- **Which dynamic parameters a dynamic may set** (C1 · 46, Q5): one whose
+  `economy` or `household` flag is true (`is_dynamic_settable`, beside
+  `is_reform_changeable` in `parameter_tree.py`). The rule names no path, so
+  the US top-level `simulation.*` parameters qualify. At policyengine-us 2.2.2
+  and policyengine-uk 2.174.1 it admits all 29 US and 78 UK dynamic
+  parameters. A version stored before catalog format 2 has null flags, so it
+  admits none. No route carries a field for it: a client reads the two flags.
+  Only the children route filters by it, with `settable=true`. `POST
+  /v2/dynamics` accepts any dynamic parameter of the version.
+- **`/v2/model-catalog/dynamic-parameters`** returns the version's whole
+  category in one response, for v3. It lists every dynamic parameter in name
+  order with its current-law values by date (`start_date`, `end_date`,
+  `value`), plus `node_labels`: each stored ancestor node's stored label, null
+  when it has none. Each request makes three indexed reads of under 300 rows.
+  No process keeps the body (see "Response caching").
+- **`/v2/dynamic-parameters/children`** builds the tree on each request. It
+  reads the version's dynamic parameters, the stored labels of their ancestor
+  nodes, and the `enum_values` of the version's enum variables, then builds
+  the rows with `parameter_tree.build_parameter_tree`, so its labels and
+  order follow the policy tree's rules (see "Parameter tree"). The enum read
+  is the largest: 290 variables and about 346 KB for the US at
+  policyengine-us 2.2.2, 42 and about 30 KB for the UK. There is no stored
+  tree table and no search file for this category.
+  - The top level is `gov`, plus `simulation` for the US. The tree holds only
+    the nodes above a dynamic parameter, so a stored node with no dynamic
+    parameter below it, such as the UK's `gov.simulation.labor_supply_responses`,
+    is left out.
+  - Without `settable`, children are in path order, with a schedule's
+    brackets in bracket order. With it, only the children a dynamic may set,
+    sorted by label, with child counts that count only those.
+  - An unknown parent path has no children. Every version has a tree to
+    build, so the route never answers the policy tree's 503 for a version
+    without one.
+- **Pruned versions** (C1 · 46, Q3): the value routes, the children route and
+  `/v2/model-catalog/dynamic-parameters` answer a pruned version as the policy
+  routes do (see "Catalog pruning"). `/v2/dynamic-parameters` and its detail
+  serve parameter rows, which pruning keeps.
+- **Deploy order:** the routes read the tables that revision `7f7335f0eb31`
+  creates. They merge after C1 · 50, and the seed job applies the revision
+  before the release that serves them starts.
+
 ### Parameter tree
 
 Publication also writes parameter trees into `parameter_tree_children`, which
@@ -610,8 +678,12 @@ and version and saying that its current-law values return when that
 PolicyEngine.py version is installed again: `/v2/parameter-values`,
 `/v2/parameter-values/{value_id}`, `/v2/parameters/children`,
 `/v2/parameters/search-file` (also when revalidated with `If-None-Match`),
-and `/v2/model-catalog/variables` and `/v2/model-catalog/parameters`, which
-embed current-law values. The other metadata routes, which serve kept rows,
+`/v2/model-catalog/variables` and `/v2/model-catalog/parameters`, which
+embed current-law values, and the dynamic category's
+`/v2/dynamic-parameter-values`, `/v2/dynamic-parameter-values/{value_id}`,
+`/v2/model-catalog/dynamic-parameters` and `/v2/dynamic-parameters/children`.
+The children route answers as the policy tree's does, although the rows its
+tree is built from are kept. The other metadata routes, which serve kept rows,
 answer as before. The request names data the catalog no longer holds, so the
 answer is a client error: the Public API records every response of 500 or more
 at ERROR, so a 503 would count as a server error in the daily telemetry error
@@ -630,10 +702,12 @@ these say 404, the running version gets 503 instead, as above.
 - **It selected the version before the pruning.** A read of the deleted rows
   that finds none reads `catalog_values_pruned_at` again and answers 404. A
   read that finds rows, possible only before the pruning committed, answers
-  with them. Two reads need none of the deleted rows to answer:
+  with them. Four reads need none of the deleted rows to answer:
   `/v2/model-catalog/variables` when no variable takes its parts from a
-  parameter, and `/v2/model-catalog/parameters` when none of the requested
-  names is a parameter of the version. With a selection from before the
+  parameter, `/v2/model-catalog/parameters` when none of the requested
+  names is a parameter of the version, `/v2/model-catalog/dynamic-parameters`
+  for a version without dynamic parameters, and `/v2/dynamic-parameters/children`
+  always. With a selection from before the
   pruning these answer 200, holding none of the deleted data, while a process
   that selects the pruned version afresh answers them with 404, as it answers
   every route that serves deleted rows.

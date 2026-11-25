@@ -8,7 +8,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | ---: |
 | route group count | 9 |
 | workflow count | 20 |
-| request count | 113 |
+| request count | 119 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -18,7 +18,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | --- | --- |
 | `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check`, `deployment` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
-| `metadata` | `metadata`, `countries`, `datasets`, `economy-options`, `model-catalog`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
+| `metadata` | `metadata`, `countries`, `datasets`, `dynamic-parameter-values`, `dynamic-parameters`, `economy-options`, `model-catalog`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `dynamics`, `user-policy`, `user-policies`, `user-dynamics` | `policy` | `none` |
 | `household` | `household`, `households`, `household-calculations`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
@@ -255,6 +255,9 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/parameters?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `GET` | `/v2/parameters/children?country_id=us&parent_path=gov` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `GET` | `/v2/parameter-values?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/dynamic-parameters?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/dynamic-parameters/children?country_id=us&parent_path=simulation&settable=true` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/dynamic-parameter-values?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `GET` | `/v2/datasets?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `GET` | `/v2/regions?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `GET` | `/v2/tax-benefit-models/{model_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
@@ -262,6 +265,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/variables/{variable_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/parameters/{parameter_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/parameter-values/{value_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/dynamic-parameters/{parameter_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/dynamic-parameter-values/{value_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/datasets/{dataset_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/regions/{region_id}?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
 | `GET` | `/v2/regions/by-code/state/ca?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.item` |
@@ -271,6 +276,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `GET` | `/v2/model-catalog?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.entities`, `result.basic_inputs`, `result.regions`, `result.datasets`, `result.economy_options`, `result.spm` |
 | `GET` | `/v2/model-catalog/variables?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.variables`, `result.part_parameter_values` |
 | `GET` | `/v2/model-catalog/parameters?country_id=us&name=gov.irs.income.bracket.rates.1` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.parameters`, `result.node_labels`, `result.missing_names` |
+| `GET` | `/v2/model-catalog/dynamic-parameters?country_id=us` | 200 | `metadata` | none | `status`, `message`, `result.policyengine_version`, `result.catalog_format`, `result.parameters`, `result.node_labels` |
 
 ### `simulation_submit_poll`
 

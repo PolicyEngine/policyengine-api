@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     )
     from policyengine_api.data.v2.models import (
         Dataset,
+        DynamicParameter,
         Parameter,
         ParameterValue,
         Region,
@@ -190,8 +191,10 @@ def dated_values_by_parameter_name(
     return values_by_name
 
 
-def metadata_parameter(parameter: Parameter) -> MetadataParameterSummary:
-    """Return the API representation of a stored parameter."""
+def metadata_parameter(
+    parameter: Parameter | DynamicParameter,
+) -> MetadataParameterSummary:
+    """Return the API representation of a stored policy or dynamic parameter."""
     return MetadataParameterSummary(
         id=parameter.id,
         name=parameter.name,

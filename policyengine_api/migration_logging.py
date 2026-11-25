@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 V2_METADATA_RESOURCE_SEGMENTS = frozenset(
     {
         "datasets",
+        "dynamic-parameter-values",
+        "dynamic-parameters",
         "economy-options",
         "parameter-values",
         "parameters",

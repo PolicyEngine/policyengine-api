@@ -1,0 +1,1 @@
+API v1 serves dynamic parameters and their current-law values apart from policy parameters, US `simulation.*` included: `GET /v2/dynamic-parameters` (with `/{parameter_id}` and `/children?settable=true`), `GET /v2/dynamic-parameter-values` (with `/{value_id}`) and `GET /v2/model-catalog/dynamic-parameters`, which returns a version's whole category in one response.

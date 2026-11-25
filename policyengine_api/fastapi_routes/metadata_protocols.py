@@ -9,6 +9,10 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.json_types import JSONObject
+    from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+        DynamicParameterTreeLevel,
+        MetadataCatalogDynamicParametersResult,
+    )
     from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
         MetadataCatalogParametersResult,
@@ -40,6 +44,95 @@ class MetadataReader(Protocol):
         ...
 
 
+class V2DynamicParameterResourceReader(Protocol):
+    """Read the dynamic parameter category for one v2 metadata request.
+
+    Every read selects one country catalog, as ``V2MetadataResourceReader``'s
+    do, and reads only dynamic parameters and their current-law values: a
+    policy parameter's ID, or a value a dynamic sets, raises
+    ``MetadataResourceNotFoundError``.
+    """
+
+    def list_dynamic_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        parameter_filter: ParameterFilter | None = None,
+    ) -> MetadataPageResult[MetadataParameterSummary]:
+        """Return dynamic parameters in name order, optionally filtered.
+
+        The filter's ``search`` is a case-insensitive substring of the name,
+        label or description; its ``names`` keep only those exact names.
+        """
+        ...
+
+    def get_dynamic_parameter(
+        self,
+        country_id: str,
+        parameter_id: UUID,
+        policyengine_version: str | None = None,
+    ) -> MetadataDetailResult[MetadataParameterSummary]:
+        """Return one dynamic parameter of the selected catalog by UUID."""
+        ...
+
+    def list_dynamic_parameter_children(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        level: DynamicParameterTreeLevel | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> MetadataPageResult[MetadataParameterChild]:
+        """Return the nodes and dynamic parameters one level below the parent path.
+
+        An empty parent path lists the top level of the dynamic parameter
+        tree; the level's ``settable`` keeps only what a dynamic may set.
+        """
+        ...
+
+    def list_dynamic_parameter_values(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        value_filter: ParameterValueFilter | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
+        """Return current-law dynamic values, optionally for some parameters.
+
+        The filter's ``parameter_id`` or ``parameter_names`` select dynamic
+        parameters. With its ``current``, only values in effect on the UTC day
+        of its ``now`` (default: the present) are returned.
+        """
+        ...
+
+    def get_dynamic_parameter_value(
+        self,
+        country_id: str,
+        value_id: UUID,
+        policyengine_version: str | None = None,
+    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]:
+        """Return one current-law dynamic value of the selected catalog by UUID."""
+        ...
+
+    def get_catalog_dynamic_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> MetadataCatalogDynamicParametersResult:
+        """Return every dynamic parameter of the selected version, in name order.
+
+        Each carries its current-law values; the result also carries the
+        stored labels of their ancestor nodes.
+        """
+        ...
+
+
 class V2MetadataResourceReader(Protocol):
     """Own the database session used by one v2 metadata resource request.
 
@@ -52,6 +145,11 @@ class V2MetadataResourceReader(Protocol):
 
     def close(self) -> None:
         """Release the request's database session, even after a failed read."""
+        ...
+
+    @property
+    def dynamic_parameters(self) -> V2DynamicParameterResourceReader:
+        """Return the reads of the dynamic parameter category, on this session."""
         ...
 
     def list_models(

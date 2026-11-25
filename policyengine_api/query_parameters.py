@@ -282,8 +282,8 @@ class RegionCollectionQuery(CatalogPageQuery):
     )
 
 
-class ParameterChildrenQuery(CatalogPageQuery):
-    """Query contract for one level of a catalog version's parameter tree."""
+class ParameterTreeLevelQuery(CatalogPageQuery):
+    """Query contract shared by the routes that list one level of a parameter tree."""
 
     parent_path: str = Field(
         default="",
@@ -293,11 +293,29 @@ class ParameterChildrenQuery(CatalogPageQuery):
             "top level. A bracket schedule's brackets are its children."
         ),
     )
+
+
+class ParameterChildrenQuery(ParameterTreeLevelQuery):
+    """Query contract for one level of a catalog version's parameter tree."""
+
     reform_changeable: bool = Field(
         default=False,
         description=(
             "List only the children a reform can change, sorted by label, with "
             "child counts that count only those"
+        ),
+    )
+
+
+class DynamicParameterChildrenQuery(ParameterTreeLevelQuery):
+    """Query contract for one level of a catalog version's dynamic parameter tree."""
+
+    settable: bool = Field(
+        default=False,
+        description=(
+            "List only the children a dynamic may set (a dynamic parameter "
+            "whose economy or household flag is true, and every node above "
+            "one), sorted by label, with child counts that count only those"
         ),
     )
 
