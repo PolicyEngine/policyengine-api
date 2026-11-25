@@ -89,3 +89,13 @@ def test_the_job_publishes_selected_folders_of_the_installed_models() -> None:
         "uv run --frozen --extra dev python scripts/reconcile_v2_privileges.py verify"
     ) < commands.index(step["run"])
     assert (REPO / INSTALLED_FOLDERS_TEST).exists()
+
+
+def test_the_job_publishes_dynamic_parameters_into_their_own_tables() -> None:
+    """Publication's Postgres tests for the dynamic parameter tables run (C1 · 50)."""
+    commands = _step_commands(_runtime_job())
+
+    assert any(
+        "tests/integration/test_v2_catalog_publication_dynamic_parameters.py" in command
+        for command in commands
+    )

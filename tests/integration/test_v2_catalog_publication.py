@@ -1159,7 +1159,7 @@ def _stored_search_file(
             )
         ).one()
     content = gzip.decompress(row.compressed_content)
-    assert row.file_format == 1
+    assert row.file_format == 2
     assert row.content_sha256 == hashlib.sha256(content).hexdigest()
     assert row.uncompressed_size == len(content)
     assert row.compressed_size == len(row.compressed_content)
@@ -1194,7 +1194,7 @@ def _search_file_count(sessions: sessionmaker[Session], version: str | None) -> 
 
 def _fixture_search_file(country_id: str, version: str) -> dict:
     return {
-        "format": 1,
+        "format": 2,
         "country_id": country_id,
         "policyengine_version": version,
         "parameters": [

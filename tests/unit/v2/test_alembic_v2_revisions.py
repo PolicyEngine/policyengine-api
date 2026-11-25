@@ -5,6 +5,7 @@ post-generation corrections; these tests read the revision files and check the
 operations each one runs.
 """
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -14,12 +15,15 @@ from alembic.script import ScriptDirectory
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import V2_TABLE_NAMES
+from policyengine_api.dynamic_parameters import DYNAMIC_PARAMETER_PREFIXES
 
 POST_BASELINE_TABLE_NAMES = frozenset(
     {
         "budget_window_runs",
         "cliff_impacts",
         "countries",
+        "dynamic_parameter_values",
+        "dynamic_parameters",
         "legacy_household_mappings",
         "legacy_policy_mappings",
         "legacy_user_mappings",
@@ -77,16 +81,20 @@ CLIFF_IMPACTS_REVISION = "bc334f9877b7"
 # The report column drops revision, on the cliff impacts revision, and
 # parent of the user dynamics revision.
 REPORT_COLUMN_DROPS_REVISION = "4e30076d4b9f"
-# The user dynamics revision, on the report column drops revision.
+# The user dynamics revision, on the report column drops revision, and parent
+# of the dynamic parameter tables revision.
 USER_DYNAMICS_REVISION = "d417fe8b1b17"
+# The dynamic parameter tables revision, on the user dynamics revision.
+DYNAMIC_PARAMETER_TABLES_REVISION = "7f7335f0eb31"
 
 
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
-    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
+    assert V2_ALEMBIC_HEAD_REVISION == DYNAMIC_PARAMETER_TABLES_REVISION
     assert [revision.revision for revision in script.walk_revisions()] == [
+        DYNAMIC_PARAMETER_TABLES_REVISION,
         USER_DYNAMICS_REVISION,
         REPORT_COLUMN_DROPS_REVISION,
         CLIFF_IMPACTS_REVISION,
@@ -1347,7 +1355,6 @@ def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
     ]
     downgrade = revision[revision.index("def downgrade()") :]
 
-    assert V2_ALEMBIC_HEAD_REVISION == USER_DYNAMICS_REVISION
     assert (
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
         in revision
@@ -1378,3 +1385,82 @@ def test_user_dynamics_revision_creates_only_the_saved_dynamics_table() -> None:
     assert upgrade.count('ondelete="CASCADE"') == 1
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
+
+
+def _dynamic_parameter_tables_revision_path() -> Path:
+    (path,) = (REPO / "migrations/v2/versions").glob(
+        f"{DYNAMIC_PARAMETER_TABLES_REVISION}_*.py"
+    )
+    return path
+
+
+def test_dynamic_parameter_tables_revision_creates_two_tables_and_moves_rows() -> None:
+    """The revision after user dynamics adds the two tables, then moves rows.
+
+    Its tables and indexes are generated. Its one data step is the user's
+    migration decision (C1 · 46, Q2), written by hand: after the generated
+    tables are created it moves every stored dynamic parameter and value into
+    them, and before the generated drops its downgrade moves them back. It has
+    no other correction.
+    """
+    revision = _dynamic_parameter_tables_revision_path().read_text(encoding="utf-8")
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    downgrade = revision[revision.index("def downgrade()") :]
+    parent = USER_DYNAMICS_REVISION
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert re.search(
+        rf"""down_revision: Union\[str, None\] = ["']{parent}["']""", revision
+    )
+    assert "C1 · 46" in revision
+    assert "Q2" in revision
+    assert re.findall(r"""op\.create_table\(\s*["'](\w+)["']""", upgrade) == [
+        "dynamic_parameters",
+        "dynamic_parameter_values",
+    ]
+    assert sorted(
+        re.findall(r"""op\.create_index\(\s*(?:op\.f\()?["'](\w+)["']""", upgrade)
+    ) == [
+        "ix_dynamic_parameter_values_parameter_period",
+        "ix_dynamic_parameters_tax_benefit_model_version_id",
+        "uq_dynamic_parameter_values_current_law_parameter_start_date",
+        "uq_dynamic_parameter_values_dynamic_parameter_start_date",
+    ]
+    assert sorted(re.findall(r"""op\.drop_table\(\s*["'](\w+)["']""", downgrade)) == [
+        "dynamic_parameter_values",
+        "dynamic_parameters",
+    ]
+    assert revision.count("Approved hand-written data step") == 2
+    assert "Post-generation correction" not in revision
+    assert "op.bulk_insert(" not in revision
+    move = upgrade.index("_move_dynamic_parameters_into_their_tables()")
+    assert upgrade.rindex("op.create_index(") < move
+    move_back = downgrade.index("_move_dynamic_parameters_back()")
+    assert move_back < downgrade.index("op.drop_index(")
+    for table in ("parameters", "parameter_values", "parameter_tree_children"):
+        assert f'op.drop_table("{table}")' not in revision
+
+
+def test_dynamic_parameter_tables_revision_keeps_its_own_copy_of_the_prefixes() -> None:
+    """The revision classifies with a frozen copy that matches the package's.
+
+    A revision runs once per database, so it never imports application code
+    that may change; publication compares the installed version's rows with
+    the package's own classification right after it.
+    """
+    path = _dynamic_parameter_tables_revision_path()
+    source = path.read_text(encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("dynamic_parameter_tables", path)
+    assert spec is not None
+    assert spec.loader is not None
+    revision = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revision)
+
+    assert "policyengine_api" not in source
+    package_prefixes = dict(DYNAMIC_PARAMETER_PREFIXES)
+    assert package_prefixes == revision.DYNAMIC_PARAMETER_PREFIXES

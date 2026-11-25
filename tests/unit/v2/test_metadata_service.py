@@ -657,7 +657,7 @@ def test_the_selected_version_search_file_is_returned_as_stored(
     catalog_session.add(
         ParameterSearchFile(
             tax_benefit_model_version_id=model_version.id,
-            file_format=1,
+            file_format=2,
             compressed_content=encoded.compressed_content,
             content_sha256=encoded.content_sha256,
             uncompressed_size=encoded.uncompressed_size,
@@ -673,7 +673,7 @@ def test_the_selected_version_search_file_is_returned_as_stored(
 
     assert content_sha256 == encoded.content_sha256
     assert search_file.policyengine_version == POLICYENGINE_VERSION
-    assert search_file.file_format == 1
+    assert search_file.file_format == 2
     assert search_file.compressed_content == encoded.compressed_content
     assert search_file.content_sha256 == encoded.content_sha256
     assert search_file.uncompressed_size == encoded.uncompressed_size

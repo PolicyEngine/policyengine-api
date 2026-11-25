@@ -165,6 +165,8 @@ RUN_INPUT_TABLES = frozenset(
         "datasets",
         "parameters",
         "parameter_values",
+        "dynamic_parameters",
+        "dynamic_parameter_values",
     }
 )
 RESULT_TABLES = frozenset(
@@ -418,16 +420,19 @@ def test_the_catalog_writer_may_analyze_the_tables_publication_refreshes() -> No
         for table, privileges in writer_tables.items()
         if TablePrivilege.MAINTAIN in privileges
     } == set(CATALOG_STATISTICS_TABLES)
+    assert {"dynamic_parameters", "dynamic_parameter_values"} <= set(
+        CATALOG_STATISTICS_TABLES
+    )
 
 
 def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> None:
-    """Catalog pruning deletes from three tables and marks the pruned version.
+    """Catalog pruning deletes from four tables and marks the pruned version.
 
-    It removes an older version's current-law parameter values, parameter tree
-    rows and parameter search file, and records the pruning on the version's
-    row, so the catalog writer holds DELETE on those three tables only and
-    UPDATE on the model versions. It never deletes parameters, model versions
-    or anything a policy or dynamic owns.
+    It removes an older version's current-law values of policy and dynamic
+    parameters, its parameter tree rows and its parameter search file, and
+    records the pruning on the version's row, so the catalog writer holds
+    DELETE on those four tables only and UPDATE on the model versions. It never
+    deletes parameters, model versions or anything a policy or dynamic owns.
     """
     catalog_writer = declared_privileges(TEST_ENVIRONMENT)[CATALOG_WRITER_ROLE]
 
@@ -435,7 +440,12 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         table
         for table, privileges in catalog_writer.items()
         if TablePrivilege.DELETE in privileges
-    } == {"parameter_values", "parameter_tree_children", "parameter_search_files"}
+    } == {
+        "parameter_values",
+        "dynamic_parameter_values",
+        "parameter_tree_children",
+        "parameter_search_files",
+    }
     assert TablePrivilege.UPDATE in catalog_writer["tax_benefit_model_versions"]
     # MAINTAIN is for ANALYZE after publication, not for deleting.
     assert catalog_writer["parameter_tree_children"] == frozenset(
@@ -450,6 +460,15 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
     )
     assert catalog_writer["parameter_values"] == READ_WRITE | {TablePrivilege.MAINTAIN}
+    # Nothing in publication updates a value, so the new table has no UPDATE.
+    assert catalog_writer["dynamic_parameter_values"] == frozenset(
+        {
+            TablePrivilege.SELECT,
+            TablePrivilege.INSERT,
+            TablePrivilege.DELETE,
+            TablePrivilege.MAINTAIN,
+        }
+    )
 
 
 def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:
@@ -527,6 +546,37 @@ def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
     assert declared[SIMULATION_SERVICE_ROLE]["dynamics"] == READ
     assert declared[MODAL_WORKER_ROLE]["dynamics"] == READ
     assert declared[CATALOG_WRITER_ROLE]["dynamics"] == NO_ACCESS
+
+
+def test_dynamic_parameters_are_granted_as_policy_parameters_are() -> None:
+    """The two dynamic parameter tables take the policy parameter tables' grants.
+
+    Catalog publication writes and analyzes both, and catalog pruning deletes
+    current-law values from the values table. API v1 reads both and inserts a
+    dynamic's values, which a run of the simulation service and its Modal
+    workers reads. Comparison runs never read them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    for policy_table, dynamic_table in (
+        ("parameters", "dynamic_parameters"),
+        ("parameter_values", "dynamic_parameter_values"),
+    ):
+        for role in (
+            RUNTIME_ROLE,
+            SIMULATION_SERVICE_ROLE,
+            MODAL_WORKER_ROLE,
+            stage12_role(TEST_ENVIRONMENT),
+        ):
+            assert declared[role][dynamic_table] == declared[role][policy_table], (
+                role,
+                dynamic_table,
+            )
+    assert declared[RUNTIME_ROLE]["dynamic_parameter_values"] == READ_INSERT
+    assert (
+        declared[CATALOG_WRITER_ROLE]["dynamic_parameters"]
+        == (declared[CATALOG_WRITER_ROLE]["parameters"])
+    )
 
 
 def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:

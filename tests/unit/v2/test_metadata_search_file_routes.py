@@ -44,7 +44,7 @@ SEARCH_FILE_PATH = "/v2/parameters/search-file"
 
 
 SEARCH_FILE_CONTENT: ParameterSearchFileDocument = {
-    "format": 1,
+    "format": 2,
     "country_id": "us",
     "policyengine_version": "4.20.3",
     "parameters": [
@@ -65,7 +65,7 @@ def _search_file_reader(*, error: Exception | None = None) -> ResourceReader:
     encoded = encode_parameter_search_file(SEARCH_FILE_CONTENT)
     stored = MetadataParameterSearchFile(
         policyengine_version="4.20.3",
-        file_format=1,
+        file_format=2,
         compressed_content=encoded.compressed_content,
         content_sha256=encoded.content_sha256,
         uncompressed_size=encoded.uncompressed_size,
@@ -137,7 +137,7 @@ def test_a_large_uncompressed_search_file_names_accept_encoding_once_in_vary() -
     encoded = encode_parameter_search_file(content)
     stored = MetadataParameterSearchFile(
         policyengine_version="4.20.3",
-        file_format=1,
+        file_format=2,
         compressed_content=encoded.compressed_content,
         content_sha256=encoded.content_sha256,
         uncompressed_size=encoded.uncompressed_size,

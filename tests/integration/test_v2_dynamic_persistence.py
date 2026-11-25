@@ -2,7 +2,9 @@
 
 The services run as API v1's runtime role, which proves its declared
 privileges cover them (rule ``api.v2.runtime-privileges-tested-as-runtime-role``);
-the catalog is written and everything removed as the superuser.
+the catalog is written and everything removed as the superuser. Model
+assumptions are ``dynamic_parameters`` rows and a dynamic's values
+``dynamic_parameter_values`` rows (C1 · 50).
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from sqlalchemy import delete, or_, select
 
 from policyengine_api.data.v2.models import (
     Dynamic,
+    DynamicParameter,
+    DynamicParameterValue,
     LegacyPolicyMapping,
     Parameter,
     ParameterValue,
@@ -23,6 +27,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.dynamic_parameters import is_dynamic_parameter
 from policyengine_api.services.v2.dynamics.database_session import (
     DynamicDatabaseSession,
 )
@@ -72,7 +77,10 @@ def _store_catalog(
         metadata_time_periods=[2026],
     )
     parameters = [
-        Parameter(name=name, tax_benefit_model_version=version) for name in names
+        (DynamicParameter if is_dynamic_parameter(country_id, name) else Parameter)(
+            name=name, tax_benefit_model_version=version
+        )
+        for name in names
     ]
     session.add_all(parameters)
     session.flush()
@@ -110,6 +118,11 @@ def _remove_catalog(
             )
         )
         session.execute(
+            delete(DynamicParameterValue).where(
+                DynamicParameterValue.dynamic_id.in_(dynamic_ids)
+            )
+        )
+        session.execute(
             delete(Dynamic).where(Dynamic.tax_benefit_model_id == catalog.model_id)
         )
         session.execute(
@@ -118,6 +131,11 @@ def _remove_catalog(
         session.execute(
             delete(Parameter).where(
                 Parameter.tax_benefit_model_version_id == catalog.version_id
+            )
+        )
+        session.execute(
+            delete(DynamicParameter).where(
+                DynamicParameter.tax_benefit_model_version_id == catalog.version_id
             )
         )
         session.execute(
@@ -208,16 +226,33 @@ def _snapshot(
 
 
 def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[str]:
-    owner = (
-        ParameterValue.policy_id == policy_id
-        if policy_id is not None
-        else ParameterValue.dynamic_id == dynamic_id
+    """Return the names a policy's or a dynamic's stored values set.
+
+    A policy's values are ``parameter_values`` rows; a dynamic's are
+    ``dynamic_parameter_values`` rows, and it sets no ``parameter_values`` row.
+    """
+    if policy_id is not None:
+        return set(
+            session.scalars(
+                select(Parameter.name)
+                .join(ParameterValue, ParameterValue.parameter_id == Parameter.id)
+                .where(ParameterValue.policy_id == policy_id)
+            )
+        )
+    assert (
+        session.scalars(
+            select(ParameterValue.id).where(ParameterValue.dynamic_id == dynamic_id)
+        ).all()
+        == []
     )
     return set(
         session.scalars(
-            select(Parameter.name)
-            .join(ParameterValue, ParameterValue.parameter_id == Parameter.id)
-            .where(owner)
+            select(DynamicParameter.name)
+            .join(
+                DynamicParameterValue,
+                DynamicParameterValue.dynamic_parameter_id == DynamicParameter.id,
+            )
+            .where(DynamicParameterValue.dynamic_id == dynamic_id)
         )
     )
 

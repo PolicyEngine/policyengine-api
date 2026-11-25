@@ -1,8 +1,10 @@
 """Binding dynamics and policies to a catalog, and keeping their parameters apart.
 
 A dynamic holds only parameters under ``gov.simulation.`` (plus the US's
-``simulation.`` and the UK's ``gov.dynamic.``), and a policy holds none of
-them; each is refused with the parameter names it may not set.
+``simulation.`` and the UK's ``gov.dynamic.``), which are stored in
+``dynamic_parameters`` (C1 · 50), and a policy holds none of them; each is
+refused with the parameter names it may not set, found in the other table.
+A dynamic's values are stored in ``dynamic_parameter_values``.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlmodel import select
 
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
@@ -20,10 +23,14 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
 from policyengine_api.data.v2.models import (
     V2_REGISTRY,
     Dynamic,
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
+    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.dynamic_parameters import is_dynamic_parameter
 from policyengine_api.services.v2.dynamics.database_session import (
     DynamicDatabaseSession,
 )
@@ -66,6 +73,25 @@ TAX_RATE = "gov.irs.income.rate"
 RUNNING_VERSION = "5.2.0"
 
 
+def _store_parameters(
+    session: Session,
+    version: TaxBenefitModelVersion,
+    country_id: str,
+    names: tuple[str, ...],
+) -> dict[str, UUID]:
+    """Store each parameter in its own table, as catalog publication does."""
+    parameter_ids: dict[str, UUID] = {}
+    for name in names:
+        parameter_class = (
+            DynamicParameter if is_dynamic_parameter(country_id, name) else Parameter
+        )
+        parameter = parameter_class(name=name, tax_benefit_model_version=version)
+        session.add(parameter)
+        parameter_ids[name] = parameter.id
+    session.commit()
+    return parameter_ids
+
+
 class Catalog:
     """A US catalog version with two dynamic parameters and one policy parameter."""
 
@@ -77,12 +103,12 @@ class Catalog:
             current_law_id=1,
             metadata_time_periods=[2026],
         )
-        self.parameter_ids = {}
-        for name in (INCOME_ELASTICITY, MARGINAL_TAX_RATE_DELTA, TAX_RATE):
-            parameter = Parameter(name=name, tax_benefit_model_version=self.version)
-            session.add(parameter)
-            self.parameter_ids[name] = parameter.id
-        session.commit()
+        self.parameter_ids = _store_parameters(
+            session,
+            self.version,
+            "us",
+            (INCOME_ELASTICITY, MARGINAL_TAX_RATE_DELTA, TAX_RATE),
+        )
 
 
 @pytest.fixture
@@ -305,12 +331,12 @@ class UkCatalog:
             current_law_id=1,
             metadata_time_periods=[2026],
         )
-        self.parameter_ids = {}
-        for name in (UK_OBR_LABOUR_SUPPLY_SWITCH, UK_INCOME_ELASTICITY, UK_TAX_RATE):
-            parameter = Parameter(name=name, tax_benefit_model_version=self.version)
-            session.add(parameter)
-            self.parameter_ids[name] = parameter.id
-        session.commit()
+        self.parameter_ids = _store_parameters(
+            session,
+            self.version,
+            "uk",
+            (UK_OBR_LABOUR_SUPPLY_SWITCH, UK_INCOME_ELASTICITY, UK_TAX_RATE),
+        )
 
 
 @pytest.fixture
@@ -389,3 +415,93 @@ def test_a_uk_dynamic_setting_a_policy_parameter_names_gov_dynamic_as_allowed(
 
     assert refusal.value.parameter_names == (UK_TAX_RATE,)
     assert "gov.dynamic" in str(refusal.value)
+
+
+def _service(sessions: sessionmaker[Session]) -> V2DynamicService:
+    return V2DynamicService(
+        DynamicDatabaseSession(sessions),
+        running_policyengine_version=RUNNING_VERSION,
+    )
+
+
+def test_a_created_dynamic_keeps_its_values_in_their_own_table(
+    sessions: sessionmaker[Session], catalog: Catalog
+) -> None:
+    created = _service(sessions).create_dynamic(
+        NativeDynamicCreationInput(
+            **_dynamic_input(
+                catalog, INCOME_ELASTICITY, MARGINAL_TAX_RATE_DELTA
+            ).model_dump()
+        )
+    )
+
+    assert created.created
+    with sessions() as session:
+        stored = session.exec(select(DynamicParameterValue)).all()
+        assert {
+            (value.dynamic_parameter_id, value.dynamic_id, value.value_json)
+            for value in stored
+        } == {
+            (catalog.parameter_ids[INCOME_ELASTICITY], created.item.id, 0.25),
+            (catalog.parameter_ids[MARGINAL_TAX_RATE_DELTA], created.item.id, 0.25),
+        }
+        assert session.exec(select(ParameterValue)).all() == []
+    read = _service(sessions).get_dynamic(country_id="us", dynamic_id=created.item.id)
+    assert [
+        (value.parameter_id, value.parameter_name) for value in read.parameter_values
+    ] == [
+        (catalog.parameter_ids[INCOME_ELASTICITY], INCOME_ELASTICITY),
+        (catalog.parameter_ids[MARGINAL_TAX_RATE_DELTA], MARGINAL_TAX_RATE_DELTA),
+    ]
+    assert read.missing_parameters == ()
+
+
+def test_identical_dynamic_content_is_found_from_its_stored_values(
+    sessions: sessionmaker[Session], catalog: Catalog
+) -> None:
+    content = NativeDynamicCreationInput(
+        **_dynamic_input(catalog, INCOME_ELASTICITY).model_dump()
+    )
+    first = _service(sessions).create_dynamic(content)
+
+    again = _service(sessions).create_dynamic(content)
+
+    assert not again.created
+    assert again.item.id == first.item.id
+    with sessions() as session:
+        assert len(session.exec(select(DynamicParameterValue)).all()) == 1
+
+
+def test_a_dynamic_lists_the_assumptions_the_running_catalog_lacks(
+    sessions: sessionmaker[Session], session: Session, catalog: Catalog
+) -> None:
+    """``missing_parameters`` looks the names up among dynamic parameters."""
+    older = TaxBenefitModelVersion(
+        model=catalog.model,
+        version="5.1.0",
+        current_law_id=1,
+        metadata_time_periods=[2026],
+    )
+    older_ids = _store_parameters(
+        session,
+        older,
+        "us",
+        (INCOME_ELASTICITY, "gov.simulation.retired_assumption"),
+    )
+    created = _service(sessions).create_dynamic(
+        NativeDynamicCreationInput(
+            country_id="us",
+            tax_benefit_model_id=catalog.model.id,
+            policyengine_version="5.1.0",
+            parameter_values=[
+                {
+                    "parameter_id": parameter_id,
+                    "value": 0.25,
+                    "start_date": "2026-01-01T00:00:00Z",
+                }
+                for parameter_id in older_ids.values()
+            ],
+        )
+    )
+
+    assert created.item.missing_parameters == ("gov.simulation.retired_assumption",)
