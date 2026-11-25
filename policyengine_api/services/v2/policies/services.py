@@ -274,8 +274,10 @@ def mirror_legacy_policy_in_session(
     mapping names both. A v1 policy that sets no assumptions maps to no
     dynamic. A v1 policy that already has a v2 copy returns that copy without
     being translated again, so writing it again after a PolicyEngine.py or
-    country package upgrade still succeeds; a copy made before the split
-    existed keeps its assumptions in its policy and maps to no dynamic. Raise
+    country package upgrade still succeeds. A copy made before the split
+    existed maps to no dynamic; operator step C1 · 49 moved its assumptions
+    into a dynamic before revision 7f7335f0eb31, after which no policy can
+    hold one. Raise
     LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
     different source hash.
     """

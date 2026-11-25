@@ -1645,8 +1645,10 @@ upgrade. Publication then writes, compares, restores and prunes both tables
 (`policyengine_api/data/v2/catalog/dynamic_parameter_records.py`), builds the
 policy tree without dynamic parameters and their folders, and writes the
 search file in format 2, which lists none of them; versions stored before keep
-their format 1 files, which the previous release serves, and answer 503 from
-`/v2/parameters/search-file` until a publication writes their format 2 file.
+their format 1 files, which the previous release serves. Publication writes a
+format 2 file only for the version it installs, so an older stored version
+answers 503 from `/v2/parameters/search-file` until a release installs it
+again (after it has been pruned, publishing it restores its file too).
 
 **The downgrade** copies both tables back into `parameters` and
 `parameter_values` (with a null `policy_id`), with their IDs, versions
@@ -1697,8 +1699,8 @@ and its `allowList.ts` forwards neither `/v2/dynamics` nor
 `/v2/user-dynamics`.
 
 The runtime role reads both tables and inserts dynamics' values; the catalog
-writer inserts both, updates `dynamic_parameters`, deletes only current-law
-values (pruning) and analyzes both (`MAINTAIN`); the simulation service and
+writer inserts both, deletes only current-law values (pruning) and analyzes
+both (`MAINTAIN`), and updates neither; the simulation service and
 its Modal workers read both, which C1 · 52 needs; comparison runs have no
 access. `parameter_values.dynamic_id`, its single-owner check and its partial
 unique index stay until C1 · 53, because older simulation service releases

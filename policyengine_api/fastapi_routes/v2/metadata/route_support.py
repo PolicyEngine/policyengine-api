@@ -124,10 +124,10 @@ PARAMETER_SEARCH_FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "The initialized v2 catalog is unavailable, or the catalog version "
-            "has no parameter search file: only catalog format 2 versions that "
-            "publication has published, or run with installed, since search files "
-            "were added have one. The message then names the version."
-            + PRUNED_RUNNING_VERSION_DESCRIPTION
+            "has no parameter search file of the current format: only catalog "
+            "format 2 versions that publication has published, or run with "
+            "installed, since that format was added have one. The message then "
+            "names the version." + PRUNED_RUNNING_VERSION_DESCRIPTION
         ),
     },
 }

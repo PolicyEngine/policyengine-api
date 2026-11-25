@@ -315,9 +315,10 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
     ),
     # Model assumptions, apart from the policy parameters since C1 · 50, granted
-    # as those are: publication writes them, and a run reads a dynamic's.
+    # as those are, but publication only inserts them, and a run reads a
+    # dynamic's.
     "dynamic_parameters": _access(
-        runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
+        runtime=READ, catalog_writer=READ_INSERT | _ANALYZE, **_RUN_INPUT_READS
     ),
     # Their current-law values, which catalog pruning deletes from an older
     # version, and every dynamic's values, which API v1 inserts with its

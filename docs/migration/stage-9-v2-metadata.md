@@ -487,8 +487,10 @@ publishes into `parameter_search_files`: one gzip-compressed JSON file per
 version and file format, with the SHA-256 of the uncompressed JSON. The current
 format is 2 (C1 · 50), which leaves model assumptions and their folders out of
 every list, as the tree does; format 1 listed them. Versions stored before
-keep their format 1 files, which the previous release serves, and have no
-format 2 file until a publication of the version writes one. The file holds
+keep their format 1 files, which the previous release serves. Publication
+writes a format 2 file only for the version it installs, so an older stored
+version has none, and the route answers 503 for it, until a release installs
+it again. The file holds
 what the app's newer interface's parameter search reads:
 
 - every parameter a reform can change (the parameter tree's rule) with its

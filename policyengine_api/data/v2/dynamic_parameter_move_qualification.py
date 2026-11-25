@@ -11,6 +11,8 @@ Operator step C1 · 49 splits such policies into a policy and a dynamic.
 
 A parameter is a model assumption of its country, the country of its
 catalog version's model ``policyengine-<country>``, as the revision decides.
+As in the other check steps, a missing table holds no row: on a new or reset
+database every revision is pending and none of the tables exists yet.
 """
 
 from __future__ import annotations
@@ -46,6 +48,15 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 DYNAMIC_PARAMETER_TABLES_REVISION = "7f7335f0eb31"
+# The tables the count reads; it counts nothing unless all of them exist.
+COUNTED_TABLES = frozenset(
+    {
+        "parameter_values",
+        "parameters",
+        "tax_benefit_model_versions",
+        "tax_benefit_models",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -117,7 +128,15 @@ def _names_a_dynamic_parameter() -> ColumnElement[bool]:
 
 
 def count_policy_values_naming_dynamic_parameters(session: Session) -> int:
-    """Count the policy values whose parameter the revision would move."""
+    """Count the policy values whose parameter the revision would move.
+
+    Return 0 without a statement on a database lacking any of the tables.
+    """
+    from policyengine_api.data.v2.database import v2_schema_inspector
+
+    existing_tables = set(v2_schema_inspector(session).get_table_names(schema="public"))
+    if not existing_tables.issuperset(COUNTED_TABLES):
+        return 0
     count = session.scalar(
         select(func.count())
         .select_from(ParameterValue)
