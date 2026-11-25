@@ -9,6 +9,8 @@ only at the rows the test wrote, since the command reads every stored policy.
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -16,17 +18,21 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, delete, or_
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, col, select
 
+from policyengine_api.data.v2.database import unpooled_v2_read_only_sessions
 from policyengine_api.data.v2.models import (
+    Dataset,
     Dynamic,
     LegacyPolicyMapping,
     Parameter,
     ParameterValue,
     Policy,
     Report,
+    Simulation,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     User,
@@ -187,6 +193,16 @@ def _remove(owner_engine: Engine, scenario: Scenario) -> None:
         )
         session.execute(
             delete(Report).where(Report.tax_benefit_model_id == scenario.model_id)
+        )
+        session.execute(
+            delete(Simulation).where(
+                Simulation.tax_benefit_model_version_id == scenario.version_id
+            )
+        )
+        session.execute(
+            delete(Dataset).where(
+                Dataset.tax_benefit_model_version_id == scenario.version_id
+            )
         )
         session.execute(
             delete(Policy).where(Policy.tax_benefit_model_id == scenario.model_id)
@@ -766,3 +782,164 @@ def test_one_copy_splits_in_a_caller_owned_transaction(
 
     with Session(split_role_engine) as session:
         assert split_policy_copy_in_session(session, uuid4()) is None
+
+
+def test_a_copy_a_simulation_names_is_kept(
+    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+) -> None:
+    scenario = us_scenario
+    old_copy_id = _store_policy(
+        owner_engine,
+        scenario,
+        scenario.parameter_value(US_TAX_RATE, value=0.3),
+        scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
+    )
+    with Session(owner_engine) as session:
+        dataset = Dataset(
+            name="split-test-dataset",
+            year=2026,
+            is_output_dataset=False,
+            tax_benefit_model_version_id=scenario.version_id,
+        )
+        session.add(dataset)
+        session.flush()
+        simulation = Simulation(
+            dataset_id=dataset.id,
+            tax_benefit_model_version_id=scenario.version_id,
+            policy_id=old_copy_id,
+        )
+        session.add(simulation)
+        session.commit()
+        simulation_id = simulation.id
+
+    split = _result_for(
+        list(_service(split_role_engine).split_policy_copies()), old_copy_id
+    )
+
+    assert split.outcome is PolicyCopyOutcome.KEPT
+    assert (
+        split.references.simulations,
+        split.references.reports,
+        split.references.household_jobs,
+    ) == (1, 0, 0)
+    assert _policy_exists(owner_engine, old_copy_id)
+    with Session(owner_engine) as session:
+        assert session.get(Simulation, simulation_id).policy_id == old_copy_id
+
+
+def test_the_split_waits_for_a_live_saved_policy_copy_instead_of_deadlocking(
+    owner_engine: Engine, split_role_engine: Engine, us_scenario: Scenario
+) -> None:
+    """API v1's copy of a v1 saved policy locks the mapping, then names the copy.
+
+    It holds the mapping row FOR UPDATE, then inserts a saved policy naming
+    the mapped copy, whose foreign-key check locks the copy's row. The split
+    takes the same two locks in the same order, so it waits for the copy to
+    commit, and then re-points the saved policy the copy added.
+    """
+    scenario = us_scenario
+    old_copy_id = _store_policy(
+        owner_engine,
+        scenario,
+        scenario.parameter_value(US_TAX_RATE, value=0.3),
+        scenario.parameter_value(US_INCOME_ELASTICITY, value=0.25),
+    )
+    legacy_policy_id = _store_mapping(owner_engine, scenario, policy_id=old_copy_id)
+    user_id = _store_user(owner_engine, scenario)
+    split_results: list[PolicyCopySplit] = []
+    split_errors: list[Exception] = []
+
+    def run_split() -> None:
+        try:
+            split_results.extend(_service(split_role_engine).split_policy_copies())
+        except DBAPIError as error:
+            split_errors.append(error)
+
+    split_thread = threading.Thread(target=run_split)
+    with Session(owner_engine) as live_copy:
+        live_copy.exec(
+            select(LegacyPolicyMapping)
+            .where(
+                LegacyPolicyMapping.country_id == scenario.country_id,
+                LegacyPolicyMapping.legacy_policy_id == legacy_policy_id,
+            )
+            .with_for_update()
+        ).one()
+        split_thread.start()
+        # Give the split time to reach its locks while the mapping is held.
+        time.sleep(0.5)
+        saved_policy = UserPolicy(
+            user_id=user_id,
+            country_id=scenario.country_id,
+            policy_id=old_copy_id,
+            legacy_policy_id=legacy_policy_id,
+            name="Saved while splitting",
+        )
+        live_copy.add(saved_policy)
+        live_copy.commit()
+        saved_policy_id = saved_policy.id
+    split_thread.join(timeout=60)
+
+    assert not split_thread.is_alive()
+    assert split_errors == []
+    split = _result_for(split_results, old_copy_id)
+    assert split.outcome is PolicyCopyOutcome.DELETED
+    assert [repointed.user_policy_id for repointed in split.saved_policies] == [
+        saved_policy_id
+    ]
+    assert _saved_policy_target(owner_engine, saved_policy_id) == split.policy.id
+    assert not _policy_exists(owner_engine, old_copy_id)
+
+
+def test_the_listing_reports_rows_an_earlier_copy_creates_as_reused(
+    owner_engine: Engine, split_role_engine: Engine, uk_scenario: Scenario
+) -> None:
+    """Applying commits each copy before the next, so later copies reuse its rows.
+
+    The listing reports what applying then does: the second copy's dynamic
+    and saved dynamic are the first copy's.
+    """
+    scenario = uk_scenario
+    copy_ids = [
+        _store_policy(
+            owner_engine,
+            scenario,
+            scenario.parameter_value(UK_TAX_RATE, value=tax_rate),
+            scenario.parameter_value(UK_OBR_SWITCH, value=False),
+        )
+        for tax_rate in (0.21, 0.22)
+    ]
+    user_id = _store_user(owner_engine, scenario)
+    for copy_id in copy_ids:
+        _store_saved_policy(
+            owner_engine, scenario, user_id=user_id, policy_id=copy_id, name=None
+        )
+
+    listed = _service(split_role_engine, read_only=True).list_policy_copy_splits()
+    applied = list(_service(split_role_engine).split_policy_copies())
+
+    def created_rows(split: PolicyCopySplit) -> tuple[bool, bool, list[bool]]:
+        return (
+            split.policy.created,
+            split.dynamic.created,
+            [saved.saved_dynamic_created for saved in split.saved_policies],
+        )
+
+    assert [created_rows(_result_for(listed, copy_id)) for copy_id in copy_ids] == [
+        (True, True, [True]),
+        (True, False, [False]),
+    ]
+    assert [created_rows(_result_for(applied, copy_id)) for copy_id in copy_ids] == [
+        created_rows(_result_for(listed, copy_id)) for copy_id in copy_ids
+    ]
+    assert len(_saved_dynamics(owner_engine, user_id)) == 1
+
+
+def test_the_listing_s_sessions_refuse_writes(disposable_v2_database_url: str) -> None:
+    with (
+        unpooled_v2_read_only_sessions(disposable_v2_database_url) as sessions,
+        sessions() as session,
+    ):
+        session.add(User(user_type="unauthenticated"))
+        with pytest.raises(DBAPIError, match="read-only transaction"):
+            session.flush()

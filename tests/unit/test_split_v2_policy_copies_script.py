@@ -15,10 +15,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.settings import (
     V2_POLICY_COPY_SPLIT_DATABASE_URL,
+    V2_SUPABASE_ENVIRONMENT,
+    V2_SUPABASE_PROJECT_REF,
     V2ConfigurationError,
 )
 from policyengine_api.services.v2.policy_copy_split.types import (
@@ -273,6 +276,53 @@ def test_the_command_needs_its_own_database_url(monkeypatch) -> None:
         split_v2_policy_copies.splitter_on_temporary_role(writable=False),
     ):
         pass
+
+
+@pytest.mark.parametrize(
+    ("run", "expected_opener"),
+    [("listing", "unpooled_v2_read_only_sessions"), ("apply", "unpooled_v2_sessions")],
+)
+def test_the_command_lists_read_only_and_bounds_its_waits(
+    monkeypatch, run: str, expected_opener: str
+) -> None:
+    """The listing's transactions are READ ONLY, and no wait lasts indefinitely.
+
+    The URL gains a connection timeout, and a lock and statement timeout, so
+    a lock wait can't hold the copy's row lock indefinitely.
+    """
+    from policyengine_api.data.v2 import database
+
+    project_ref = "abcdefghijklmnopqrst"
+    monkeypatch.setenv(
+        V2_POLICY_COPY_SPLIT_DATABASE_URL,
+        f"postgresql+psycopg://policy-copy-split:password@db.{project_ref}."
+        "supabase.co:5432/postgres?sslmode=require",
+    )
+    monkeypatch.setenv(V2_SUPABASE_PROJECT_REF, project_ref)
+    monkeypatch.setenv(V2_SUPABASE_ENVIRONMENT, "staging")
+    opened: list[tuple[str, object]] = []
+
+    def recording_opener(name: str):
+        @contextmanager
+        def open_sessions(url):
+            opened.append((name, url))
+            yield sessionmaker()
+
+        return open_sessions
+
+    for name in ("unpooled_v2_read_only_sessions", "unpooled_v2_sessions"):
+        monkeypatch.setattr(database, name, recording_opener(name))
+
+    with split_v2_policy_copies.splitter_on_temporary_role(
+        writable=run == "apply"
+    ) as splitter:
+        assert hasattr(splitter, "split_policy_copies")
+
+    [(opener, url)] = opened
+    assert opener == expected_opener
+    assert url.query["connect_timeout"] == "10"
+    assert url.query["options"] == "-c lock_timeout=10000 -c statement_timeout=60000"
+    assert url.query["sslmode"] == "require"
 
 
 def test_the_command_refuses_unknown_arguments() -> None:
