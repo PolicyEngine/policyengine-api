@@ -21,7 +21,9 @@ runs every pending revision in:
 1. It locks the parameters it moves, so no value can start naming one, and
    refuses, changing nothing, while a policy value names one: deleting the
    parameter would delete that value with it and silently change the policy.
-   Operator step C1 · 49 splits such policies first.
+   Operator step C1 · 49 splits such policies first. It also refuses while a
+   dynamic's value names a parameter it doesn't move, which the new tables
+   can't hold and no reader would find after the move.
 2. It copies every version's dynamic parameters, their current-law values and
    every dynamic's values into the new tables, with their IDs and creation
    times, so stored dynamics' content hashes, which cover parameter IDs, stay
@@ -235,6 +237,23 @@ def _move_dynamic_parameters_into_their_tables() -> None:
             "parameters out of parameters would delete the values and change the "
             "policies; split those policies into a policy and a dynamic first "
             "(operator step C1 · 49), then upgrade again"
+        )
+        raise RuntimeError(msg)
+    stranded_values = bind.execute(
+        sa.select(sa.func.count())
+        .select_from(_parameter_values)
+        .where(
+            _parameter_values.c.dynamic_id.is_not(None),
+            _parameter_values.c.parameter_id.not_in(moved_ids),
+        )
+    ).scalar_one()
+    if stranded_values:
+        msg = (
+            "the upgrade to 7f7335f0eb31 stopped, changing nothing: dynamic values "
+            f"name policy parameters ({stranded_values} found), which "
+            "dynamic_parameter_values can't hold, so the move would leave them "
+            "where no reader finds them; delete or correct them first, then "
+            "upgrade again"
         )
         raise RuntimeError(msg)
 

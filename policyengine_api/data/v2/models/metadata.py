@@ -624,10 +624,12 @@ class ParameterTreeChild(IdentifiedModel, table=True):
     Catalog publication writes a version's rows from the installed packages'
     catalog: for each version it publishes, and for the installed version when
     it is stored with catalog format 2 but without a tree. Other versions have
-    no rows. Every node and parameter of the version is one row under its
-    parent's path ("" for top-level paths), so listing one level reads one
-    index. ``position`` orders all children of a parent; ``reform_position``
-    orders only those a reform can change and is null for the others. Node rows
+    no rows. Every policy parameter of the version, and every node above one,
+    is one row under its parent's path ("" for top-level paths), so listing
+    one level reads one index; model assumptions (``DynamicParameter``) and
+    the folders that hold only them have no rows. ``position`` orders all
+    children of a parent; ``reform_position`` orders only those a reform can
+    change and is null for the others. Node rows
     count their direct children; parameter rows reference their parameter and
     copy its flags.
     """

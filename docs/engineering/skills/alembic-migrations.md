@@ -1618,6 +1618,11 @@ schema check in, so a failure anywhere changes nothing:
    "Qualify the pending dynamic parameter move"
    (`scripts/qualify_v2_dynamic_parameter_move.py`) counts the same values
    while the revision is pending, so a deploy stops before Alembic starts.
+   The step classifies with the package's prefixes, which a test keeps equal
+   to the revision's. The revision also refuses while a dynamic's value names
+   a parameter it doesn't move: the new tables can't hold such a value, and
+   after the move no reader would find it. `require_dynamic_parameters` has
+   refused such values since dynamics were added, so none is expected.
 2. It copies every stored version's dynamic parameters into
    `dynamic_parameters`, and their current-law values and every dynamic's
    values into `dynamic_parameter_values`, with their IDs and `created_at`.
@@ -1642,8 +1647,10 @@ which `test_dynamic_parameter_tables_revision_keeps_its_own_copy_of_the_prefixes
 keeps equal to the package's, and catalog publication compares the installed
 version's rows with the package's own classification right after the
 upgrade. Publication then writes, compares, restores and prunes both tables
-(`policyengine_api/data/v2/catalog/dynamic_parameter_records.py`), builds the
-policy tree without dynamic parameters and their folders, and writes the
+(`publication_inserts`, `publication_reconciliation` and
+`publication_pruning`, classifying records with `dynamic_parameter_records`),
+builds the policy tree without dynamic parameters and their folders, and
+writes the
 search file in format 2, which lists none of them; versions stored before keep
 their format 1 files, which the previous release serves. Publication writes a
 format 2 file only for the version it installs, so an older stored version
