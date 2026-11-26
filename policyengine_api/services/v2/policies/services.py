@@ -255,7 +255,8 @@ def mirror_legacy_policy_in_session(
 
     The policy is translated against the running catalog, whichever country
     package version it was saved under. Its model assumptions (every
-    ``gov.simulation.`` value, and the US's ``simulation.``) are copied into
+    ``gov.simulation.`` value, the US's ``simulation.`` and the UK's
+    ``gov.dynamic.``) are copied into
     a dynamic, with the UK's old labour-supply spelling rewritten, and the
     rest into the policy, which is empty when nothing else remains; the
     mapping names both. A v1 policy that sets no assumptions maps to no

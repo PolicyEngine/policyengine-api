@@ -9,6 +9,6 @@ class DynamicCreateRequest(DynamicCreationInput):
     """Native body containing immutable dynamic content only.
 
     A dynamic holds the model's assumptions: parameters under
-    ``gov.simulation``, and in the US also ``simulation``. Any other
-    parameter belongs in a policy (``POST /v2/policies``).
+    ``gov.simulation``, plus ``simulation`` in the US and ``gov.dynamic`` in
+    the UK. Any other parameter belongs in a policy (``POST /v2/policies``).
     """

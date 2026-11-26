@@ -34,7 +34,8 @@ DynamicParameterValueInputs = Annotated[
         min_length=1,
         description=(
             "The model assumptions the dynamic sets, by catalog parameter ID: "
-            "parameters under gov.simulation, and in the US also simulation. "
+            "parameters under gov.simulation, plus simulation in the US and "
+            "gov.dynamic in the UK. "
             "At least one: for none, send dynamic_id null."
         ),
     ),

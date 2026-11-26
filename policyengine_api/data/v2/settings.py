@@ -23,6 +23,8 @@ V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
 V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE = "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"  # noqa: S105  # an environment variable name, not a secret
 V2_MIGRATION_DATABASE_URL = "V2_MIGRATION_DATABASE_URL"
 V2_DATA_WRITE_DATABASE_URL = "V2_DATA_WRITE_DATABASE_URL"
+# The temporary role C1 · 49 creates to run scripts/split_v2_policy_copies.py.
+V2_POLICY_COPY_SPLIT_DATABASE_URL = "V2_POLICY_COPY_SPLIT_DATABASE_URL"
 V2_SUPABASE_PROJECT_REF = "V2_SUPABASE_PROJECT_REF"
 V2_SUPABASE_ENVIRONMENT = "V2_SUPABASE_ENVIRONMENT"
 
@@ -265,6 +267,32 @@ def load_v2_migration_database_settings(
         setting_name=V2_MIGRATION_DATABASE_URL,
         environ=values,
     )
+
+
+def load_v2_policy_copy_split_database_settings(
+    environ: Mapping[str, str] | None = None,
+) -> V2DatabaseSettings:
+    """Load the policy copy split command's temporary Postgres identity explicitly.
+
+    The operator creates the role for the run with the grants
+    ``privileges.POLICY_COPY_SPLIT_PRIVILEGES`` declares, and drops it after.
+    Supavisor's transaction-mode port is refused, as for the runtime: it
+    doesn't keep the command's lock and statement timeouts.
+    """
+    values = _environment(environ)
+    settings = _database_settings(
+        _required(values, V2_POLICY_COPY_SPLIT_DATABASE_URL),
+        setting_name=V2_POLICY_COPY_SPLIT_DATABASE_URL,
+        environ=values,
+    )
+    if settings.connection.url.port == SUPABASE_TRANSACTION_POOLER_PORT:
+        msg = (
+            f"{V2_POLICY_COPY_SPLIT_DATABASE_URL} must use a direct connection or "
+            "Supavisor session mode on port 5432 so the command's lock and "
+            "statement timeouts are applied"
+        )
+        raise V2ConfigurationError(msg)
+    return settings
 
 
 def load_v2_data_write_database_settings(

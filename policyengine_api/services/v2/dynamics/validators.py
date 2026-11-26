@@ -36,8 +36,9 @@ class DynamicSetsPolicyParametersError(ValueError):
     """Raised when a dynamic sets parameters that are not model assumptions.
 
     A dynamic holds only parameters under ``gov.simulation.``, plus the US's
-    ``simulation.`` (``policyengine_api.dynamic_parameters``); the others
-    belong in a policy. ``parameter_names`` lists them, sorted.
+    ``simulation.`` and the UK's ``gov.dynamic.``
+    (``policyengine_api.dynamic_parameters``); the others belong in a policy.
+    ``parameter_names`` lists them, sorted.
     """
 
     def __init__(self, parameter_names: tuple[str, ...]) -> None:
@@ -49,9 +50,9 @@ class DynamicSetsPolicyParametersError(ValueError):
         """Say which parameters to send as a policy, and where."""
         return (
             "A dynamic holds only the model's assumptions, the parameters under "
-            "gov.simulation (and, in the US, simulation): send the others as a "
-            "policy through POST /v2/policies. This dynamic sets: "
-            + ", ".join(self.parameter_names)
+            "gov.simulation (plus simulation in the US and gov.dynamic in the "
+            "UK): send the others as a policy through POST /v2/policies. This "
+            "dynamic sets: " + ", ".join(self.parameter_names)
         )
 
 

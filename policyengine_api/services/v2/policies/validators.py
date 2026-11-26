@@ -65,8 +65,9 @@ class PolicySetsDynamicParametersError(ValueError):
     """Raised when a policy sets parameters only a dynamic may hold.
 
     These are the model's assumptions, every parameter under
-    ``gov.simulation.`` plus the US's ``simulation.``
-    (``policyengine_api.dynamic_parameters``), sent as a dynamic through
+    ``gov.simulation.`` plus the US's ``simulation.`` and the UK's
+    ``gov.dynamic.`` (``policyengine_api.dynamic_parameters``), sent as a
+    dynamic through
     ``POST /v2/dynamics``. ``parameter_names`` lists them, sorted.
     """
 
@@ -79,9 +80,9 @@ class PolicySetsDynamicParametersError(ValueError):
         """Say which parameters to send as a dynamic, and where."""
         return (
             "A policy cannot set the model's assumptions, the parameters under "
-            "gov.simulation (and, in the US, simulation): send them as a "
-            "dynamic through POST /v2/dynamics. This policy sets: "
-            + ", ".join(self.parameter_names)
+            "gov.simulation (plus simulation in the US and gov.dynamic in the "
+            "UK): send them as a dynamic through POST /v2/dynamics. This policy "
+            "sets: " + ", ".join(self.parameter_names)
         )
 
 
