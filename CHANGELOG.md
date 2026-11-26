@@ -1,3 +1,10 @@
+## [5.57.1] - 2026-11-26
+
+### Changed
+
+- UK `gov.dynamic.` parameters (in policyengine-uk 2.174.1, the yes/no switch `gov.dynamic.obr_labour_supply_assumptions`) are now model assumptions, like `gov.simulation.`: `POST /v2/policies` refuses them with 422 `dynamic_parameters`, `POST /v2/dynamics` accepts them, and the v1-to-v2 policy copy puts them in the copy's dynamic. A new command, `scripts/split_v2_policy_copies.py`, splits every stored v2 policy that sets a model assumption into a policy and a dynamic on its own catalog version, re-points its legacy policy mappings and saved policies (giving each saved policy's owner a saved dynamic with its name), and deletes the old policy once nothing names it; it only lists what it would change unless given `--apply`, and runs as a temporary database role (`docs/migration/stage-10-v2-policies.md`).
+
+
 ## [5.57.0] - 2026-11-26
 
 ### Added
