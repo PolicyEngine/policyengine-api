@@ -26,8 +26,9 @@ what each of its route's answers means; this module holds what they share:
   and the report re-run client, the statuses of a created record
   (``CREATED_STATUSES``), of a refusal (``REFUSAL_STATUSES``) and of an
   answer sent before the service's route writes anything
-  (``SENT_BEFORE_ROUTE_STATUSES``), and the codes of a refusal of a row the
-  Public API does not check (``CALLER_ROW_REFUSAL_CODES``);
+  (``SENT_BEFORE_ROUTE_STATUSES``), and, for those and the household
+  calculation client, the codes of a refusal of a row the caller chose
+  (``CALLER_ROW_REFUSAL_CODES``);
 - the messages for an answer lost after the request may have arrived
   (``answer_lost``) and for a failure after the service may have created
   what was submitted (``created_but_failed``), each ending with
@@ -78,7 +79,9 @@ REFUSAL_STATUSES = frozenset({HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_E
 # dataset), or a dynamic the catalog version its default worker runs does not
 # have. Each is the caller's error and answers 422. Any other 400 is a state
 # of the service, such as a catalog version missing while a release deploys,
-# or a row the Public API already checked, and answers 503.
+# or a row the Public API already checked, and answers 503. Of these, the
+# household calculation route answers only ``unknown_dynamic``, for a dynamic
+# the country does not store.
 CALLER_ROW_REFUSAL_CODES = frozenset(
     {"unknown_region", "unknown_dataset", "unknown_dynamic"}
 )

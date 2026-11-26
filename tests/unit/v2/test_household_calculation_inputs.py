@@ -25,6 +25,7 @@ from policyengine_api.services.v2.policies.validators import (
 
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-0000000000a1")
 POLICY_ID = UUID("00000000-0000-4000-8000-0000000000b1")
+DYNAMIC_ID = UUID("00000000-0000-4000-8000-0000000000c1")
 COUNTRIES = (
     CountryRead(id="uk", household_enabled=True, society_wide_enabled=False),
     CountryRead(id="us", household_enabled=True, society_wide_enabled=True),
@@ -46,9 +47,24 @@ def test_a_calculation_needs_only_a_country_and_a_household() -> None:
 
     assert calculation.country_id == "us"
     assert calculation.policy_id is None
+    assert calculation.dynamic_id is None
     assert calculation.axes is None
     assert calculation.add_missing_variables is False
     assert calculation.spm is None
+
+
+@pytest.mark.parametrize("policy_id", [POLICY_ID, None])
+def test_a_calculation_may_name_a_dynamic_with_or_without_a_policy(
+    policy_id: UUID | None,
+) -> None:
+    calculation = _calculation(policy_id=policy_id, dynamic_id=str(DYNAMIC_ID))
+
+    assert calculation.dynamic_id == DYNAMIC_ID
+    assert calculation.policy_id == policy_id
+
+
+def test_a_null_dynamic_names_none() -> None:
+    assert _calculation(dynamic_id=None).dynamic_id is None
 
 
 def test_axis_groups_whose_grid_reaches_the_point_limit_are_accepted() -> None:
@@ -94,6 +110,7 @@ def test_an_axis_keeps_only_the_keys_its_caller_gave() -> None:
         pytest.param({"spm": {"geography_kind": "metro"}}, id="metro-without-id"),
         pytest.param({"add_missing_variables": "sometimes"}, id="not-a-boolean"),
         pytest.param({"country_id": "fr"}, id="unsupported-country"),
+        pytest.param({"dynamic_id": "not-a-uuid"}, id="dynamic-not-a-uuid"),
     ],
 )
 def test_a_malformed_calculation_is_refused(changes) -> None:
