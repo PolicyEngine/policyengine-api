@@ -258,8 +258,9 @@ def _kept_rows(sessions: sessionmaker[Session], model_name: str, version: str) -
 def _owned_rows(sessions: sessionmaker[Session]) -> dict[str, list[tuple]]:
     """Return every policy, dynamic and value a policy owns.
 
-    A dynamic's values are ``dynamic_parameter_values`` rows, whose pruning
-    ``test_v2_catalog_publication_dynamic_parameters`` checks.
+    A dynamic's values are ``dynamic_parameter_values`` rows, which this
+    module's catalog has no parameter for: that pruning keeps them is checked
+    in ``test_v2_catalog_publication_dynamic_parameters``.
     """
     return {
         "owned_values": _rows(
