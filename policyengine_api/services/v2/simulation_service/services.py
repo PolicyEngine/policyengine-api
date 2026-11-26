@@ -8,12 +8,11 @@ country's ``countries`` row allows economy calculations (a household-only
 country does not), that each policy the submission names is stored in the
 country, through the same service as ``/v2/policies`` (current law names
 none), and that none of those policies sets a parameter the running catalog
-version lacks (``require_runnable_policies``, which re-runs call too). An
-economy simulation, economy report or budget window then has each dynamic it
-names checked the same way, through the same service as ``/v2/dynamics``
-(none means no assumptions beyond the model's defaults):
-``require_runnable_dynamics``.
-Only then is the simulation service asked. The submission's region is
+version lacks (``require_runnable_policies``, which re-runs call too). Each
+dynamic the submission names is then checked the same way, through the same
+service as ``/v2/dynamics`` (none means no assumptions beyond the model's
+defaults): ``require_runnable_dynamics``, which household calculations call
+too. Only then is the simulation service asked. The submission's region is
 checked by the simulation service, which reads it, and the region's dataset,
 in the catalog version its default worker runs.
 
@@ -21,8 +20,9 @@ A household report is checked the same way, except that its country's row
 must allow household calculations instead (a household-only country passes),
 and the household it names must be stored in the country, through the same
 service as ``/v2/households``, with a default year, which the report
-calculates; the household is checked before the policies. These are the
-checks ``/v2/household-calculations`` makes, with the same errors.
+calculates; the household is checked before the policies, and the policies
+before the dynamics. These are the checks ``/v2/household-calculations``
+makes, with the same errors.
 
 Running a stored report again (``POST /reports/{report_id}/runs``) checks
 its country as a new report of its kind is checked, then the policies its
@@ -237,10 +237,11 @@ class SimulationSubmissionService:
         allows household calculations, then HouseholdNotFoundError for a
         household the country does not store, then
         HouseholdCalculationYearError for one with no default year, then the
-        policy checks' errors
-        (the baseline's policy first, and only the baseline's for a report of
-        the baseline alone), SubmissionStorageError when the database or its
+        policy checks' errors, then the dynamic checks' errors (in each, the
+        baseline's first, and only the baseline's for a report of the
+        baseline alone), SubmissionStorageError when the database or its
         catalog cannot be read, and then the simulation service's errors.
+        Each side keeps its own dynamic: nothing requires the two to match.
         """
         country_id = report.country_id
         with _storage_failures():
@@ -249,11 +250,18 @@ class SimulationSubmissionService:
                 country_id=country_id, household_id=report.household_id
             )
         require_default_year(household.default_year)
-        policy_ids = [report.baseline.policy_id]
+        sides = [report.baseline]
         if report.reform is not None:
-            policy_ids.append(report.reform.policy_id)
+            sides.append(report.reform)
         require_runnable_policies(
-            self._policies, country_id=country_id, policy_ids=policy_ids
+            self._policies,
+            country_id=country_id,
+            policy_ids=[side.policy_id for side in sides],
+        )
+        require_runnable_dynamics(
+            self._dynamics,
+            country_id=country_id,
+            dynamic_ids=[side.dynamic_id for side in sides],
         )
         return self._client_factory().submit_household_report(report)
 

@@ -21,13 +21,13 @@ the one it gives local areas. A budget window goes to the same
 ``POST /reports`` as ``report_type`` ``budget_window``, naming its first
 year and ``budget_window_size`` in place of the year, and no
 ``include_cliffs``. A household report goes there too, as ``report_type``
-``household``, naming the stored household, each simulation's policy (the
-reform null for a report of the baseline alone), but no year: the
-simulation service calculates the household's default year, adding every
-variable the household lacks. None names a PolicyEngine.py version: the
-simulation service runs its default worker's. None names a label or a
-description, which belong to users' saved reports. The simulation service
-answers:
+``household``, naming the stored household, each simulation's policy, and
+its dynamic only when it names one (the reform null for a report of the
+baseline alone), but no year: the simulation service calculates the
+household's default year, adding every variable the household lacks. None
+names a PolicyEngine.py version: the simulation service runs its default
+worker's. None names a label or a description, which belong to users'
+saved reports. The simulation service answers:
 
 - 201 or 202 with the created record's ID and its first run's ID: for a
   budget window, its budget-window run's ID (``budget_window_run_id``). One
@@ -276,13 +276,25 @@ def budget_window_request(report: BudgetWindowReportCreationInput) -> dict[str, 
 
 
 def _household_policy_choice(choice: HouseholdPolicyChoice) -> dict[str, str | None]:
-    return {"policy_id": None if choice.policy_id is None else str(choice.policy_id)}
+    """Return a household side's policy, and its dynamic only when it names one.
+
+    The simulation service's release before it took a household side's
+    dynamic refuses any side naming the field, so a side without one sends
+    none and is accepted by either release.
+    """
+    side: dict[str, str | None] = {
+        "policy_id": None if choice.policy_id is None else str(choice.policy_id)
+    }
+    if choice.dynamic_id is not None:
+        side["dynamic_id"] = str(choice.dynamic_id)
+    return side
 
 
 def household_report_request(report: HouseholdReportCreationInput) -> dict[str, Any]:
     """Return the simulation service's request body for the household report.
 
-    ``reform`` is null for a report of the baseline alone.
+    ``reform`` is null for a report of the baseline alone. Each side names
+    its dynamic only when it has one.
     """
     return {
         "country": report.country_id,

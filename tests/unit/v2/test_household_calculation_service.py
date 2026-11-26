@@ -8,8 +8,19 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import OperationalError
 
+from policyengine_api.data.v2.catalog.catalog_selection_validation import (
+    MetadataCatalogUnavailableError,
+)
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+    DynamicStorageError,
+)
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
+)
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
@@ -27,14 +38,18 @@ from policyengine_api.services.v2.simulation_service.types import (
 )
 from tests.fixtures.household_calculation_documents import JOB_ID
 from tests.unit.v2.household_calculation_support import (
+    ASSUMED_PARAMETER,
+    DYNAMIC_ID,
     HOUSEHOLD_ID,
     POLICY_ID,
     REFORMED_PARAMETER,
     FakeCountries,
+    FakeDynamics,
     FakeHouseholds,
     FakePolicies,
     FakeSimulation,
     calculation_input,
+    dynamic_read,
     household_read,
     policy_read,
 )
@@ -57,6 +72,7 @@ class Services:
         self.countries = FakeCountries()
         self.households = FakeHouseholds()
         self.policies = FakePolicies()
+        self.dynamics = FakeDynamics()
         self.simulation = FakeSimulation()
         self.simulation_requests = 0
 
@@ -66,9 +82,12 @@ class Services:
 
     def service(self, database=None) -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=self.countries,
-            households=self.households,
-            policies=self.policies,
+            sources=HouseholdCalculationSources(
+                countries=self.countries,
+                households=self.households,
+                policies=self.policies,
+                dynamics=self.dynamics,
+            ),
             database_session=database or UnreadableDatabase(),
             simulation_factory=self.simulation_factory,
         )
@@ -198,6 +217,116 @@ def test_the_simulation_services_refusals_reach_the_caller(services, refusal) ->
 
     with pytest.raises(type(refusal), match=str(refusal)):
         services.service().submit_calculation(calculation_input())
+
+
+def test_a_calculation_without_a_dynamic_reads_none(services) -> None:
+    submitted = services.service().submit_calculation(calculation_input())
+
+    assert services.dynamics.reads == []
+    assert submitted.dynamic_id is None
+    (sent,) = services.simulation.submissions
+    assert sent.dynamic_id is None
+
+
+def test_a_calculation_naming_a_dynamic_is_sent_once_it_is_checked(services) -> None:
+    calculation = calculation_input(dynamic_id=DYNAMIC_ID)
+
+    submitted = services.service().submit_calculation(calculation)
+
+    assert services.dynamics.reads == [("us", DYNAMIC_ID)]
+    assert services.simulation.submissions == [calculation]
+    assert submitted.dynamic_id == DYNAMIC_ID
+    assert submitted.policy_id == POLICY_ID
+
+
+def test_a_dynamic_of_current_law_is_checked_and_sent(services) -> None:
+    submitted = services.service().submit_calculation(
+        calculation_input(policy_id=None, dynamic_id=DYNAMIC_ID)
+    )
+
+    assert services.policies.reads == []
+    assert services.dynamics.reads == [("us", DYNAMIC_ID)]
+    assert (submitted.policy_id, submitted.dynamic_id) == (None, DYNAMIC_ID)
+
+
+@pytest.mark.parametrize("stored_in", ["uk", None])
+def test_another_countrys_or_no_stored_dynamic_is_not_found(
+    services, stored_in
+) -> None:
+    del services.dynamics.dynamics[("us", DYNAMIC_ID)]
+    if stored_in is not None:
+        services.dynamics.dynamics[(stored_in, DYNAMIC_ID)] = dynamic_read()
+
+    with pytest.raises(DynamicNotFoundError, match=str(DYNAMIC_ID)):
+        services.service().submit_calculation(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert services.dynamics.reads == [("us", DYNAMIC_ID)]
+    assert services.simulation_requests == 0
+
+
+def test_a_dynamic_setting_parameters_the_catalog_lacks_is_refused(services) -> None:
+    services.dynamics.dynamics[("us", DYNAMIC_ID)] = dynamic_read(
+        missing_parameters=(ASSUMED_PARAMETER,)
+    )
+
+    with pytest.raises(DynamicParametersMissingError) as refused:
+        services.service().submit_calculation(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert isinstance(refused.value, PolicyParametersMissingError)
+    assert refused.value.dynamic_id == DYNAMIC_ID
+    assert refused.value.missing_parameters == (ASSUMED_PARAMETER,)
+    assert services.simulation_requests == 0
+
+
+def test_a_dynamic_no_published_catalog_could_check_is_sent(services) -> None:
+    services.dynamics.dynamics[("us", DYNAMIC_ID)] = dynamic_read(
+        missing_parameters=None
+    )
+
+    services.service().submit_calculation(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert len(services.simulation.submissions) == 1
+
+
+def test_the_policy_is_checked_before_the_dynamic(services) -> None:
+    services.policies.policies[("us", POLICY_ID)] = policy_read(
+        missing_parameters=(REFORMED_PARAMETER,)
+    )
+
+    with pytest.raises(PolicyParametersMissingError) as refused:
+        services.service().submit_calculation(calculation_input(dynamic_id=uuid4()))
+
+    assert not isinstance(refused.value, DynamicParametersMissingError)
+    assert services.dynamics.reads == []
+    assert services.simulation_requests == 0
+
+
+def test_the_default_year_is_checked_before_the_dynamic(services) -> None:
+    services.households.households[("us", HOUSEHOLD_ID)] = household_read(
+        default_year=None
+    )
+
+    with pytest.raises(HouseholdCalculationYearError):
+        services.service().submit_calculation(calculation_input(dynamic_id=uuid4()))
+
+    assert services.dynamics.reads == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        DynamicStorageError("dynamics cannot be read"),
+        OperationalError("SELECT dynamics", {}, Exception("connection refused")),
+        MetadataCatalogUnavailableError("catalog cannot be queried"),
+    ],
+)
+def test_a_dynamic_read_that_fails_is_a_storage_error(services, error) -> None:
+    services.dynamics.error = error
+
+    with pytest.raises(HouseholdCalculationStorageError):
+        services.service().submit_calculation(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert services.simulation_requests == 0
 
 
 def test_an_unreadable_database_while_checking_is_a_storage_error(services) -> None:
