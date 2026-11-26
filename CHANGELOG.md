@@ -1,3 +1,10 @@
+## [5.57.0] - 2026-11-26
+
+### Added
+
+- `/v2/household-calculations` and household reports on `/v2/reports` take an optional `dynamic_id` (each report side its own), checked as economy reports check one: 404 when the request's country does not store it, and 422 `missing_parameters` for parameters the running catalog version lacks. API v1 sends a named dynamic to the simulation service, which applies it, and household calculations answer the `dynamic_id` they apply.
+
+
 ## [5.56.0] - 2026-11-25
 
 ### Added

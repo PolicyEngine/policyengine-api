@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.dynamics.types import CheckedDynamicRead
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
     HouseholdCalculationInput,
@@ -22,10 +24,12 @@ from tests.fixtures.household_calculation_documents import JOB_ID
 
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-0000000000a1")
 POLICY_ID = UUID("00000000-0000-4000-8000-0000000000b1")
+DYNAMIC_ID = UUID("00000000-0000-4000-8000-0000000000c1")
 MODEL_ID = UUID("00000000-0000-4000-8000-0000000000d1")
 CATALOG_VERSION_ID = UUID("00000000-0000-4000-8000-0000000000e1")
 CREATED_AT = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
 REFORMED_PARAMETER = "gov.irs.credits.ctc.amount.base[0].amount"
+ASSUMED_PARAMETER = "gov.simulation.labor_supply_responses.elasticities.income"
 
 
 def household_read(*, default_year: int | None = 2026) -> HouseholdRead:
@@ -57,6 +61,31 @@ def policy_read(
                 parameter_id=POLICY_ID,
                 parameter_name=REFORMED_PARAMETER,
                 value=3000,
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
+                end_date=None,
+            ),
+        ),
+        missing_parameters=missing_parameters,
+    )
+
+
+def dynamic_read(
+    *, missing_parameters: tuple[str, ...] | None = ()
+) -> CheckedDynamicRead:
+    """Return the stored US dynamic, checked against the running catalog."""
+    return CheckedDynamicRead(
+        id=DYNAMIC_ID,
+        country_id="us",
+        tax_benefit_model_id=MODEL_ID,
+        tax_benefit_model_version_id=CATALOG_VERSION_ID,
+        created_at=CREATED_AT,
+        updated_at=CREATED_AT,
+        parameter_values=(
+            PolicyParameterValueRead(
+                id=DYNAMIC_ID,
+                parameter_id=DYNAMIC_ID,
+                parameter_name=ASSUMED_PARAMETER,
+                value=0.1,
                 start_date=datetime(2026, 1, 1, tzinfo=UTC),
                 end_date=None,
             ),
@@ -129,6 +158,32 @@ class FakePolicies:
             msg = f"Policy {policy_id} not found."
             raise PolicyNotFoundError(msg)
         return policy
+
+
+@dataclass
+class FakeDynamics:
+    """Stored dynamics by country and ID; records each read.
+
+    With ``error``, every read raises it, as a database or catalog that
+    cannot be read does.
+    """
+
+    dynamics: dict[tuple[str, UUID], CheckedDynamicRead] = field(
+        default_factory=lambda: {("us", DYNAMIC_ID): dynamic_read()}
+    )
+    error: Exception | None = None
+    reads: list[tuple[str, UUID]] = field(default_factory=list)
+
+    def get_dynamic(self, *, country_id: str, dynamic_id: UUID) -> CheckedDynamicRead:
+        """Return the dynamic or raise DynamicNotFoundError."""
+        self.reads.append((country_id, dynamic_id))
+        if self.error is not None:
+            raise self.error
+        dynamic = self.dynamics.get((country_id, dynamic_id))
+        if dynamic is None:
+            msg = f"Dynamic {dynamic_id} not found."
+            raise DynamicNotFoundError(msg)
+        return dynamic
 
 
 @dataclass

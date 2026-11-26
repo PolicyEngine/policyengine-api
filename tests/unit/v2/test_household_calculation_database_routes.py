@@ -1,15 +1,15 @@
 """Submit household calculations through the route and the database-backed services.
 
-The countries, households and policies services read a SQLite database with
-the v2 tables, so the policy check runs the real catalog query; only the
-simulation service is a stand-in.
+The countries, households, policies and dynamics services read a SQLite
+database with the v2 tables, so the policy and dynamic checks run the real
+catalog query; only the simulation service is a stand-in.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -20,6 +20,9 @@ from flask import Flask
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.models import (
     Country,
+    Dynamic,
+    DynamicParameter,
+    DynamicParameterValue,
     Household,
     Parameter,
     ParameterValue,
@@ -41,11 +44,18 @@ from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import V2DynamicService
 from policyengine_api.services.v2.household_calculations.database_session import (
     HouseholdCalculationDatabaseSession,
 )
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
+)
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
 )
 from policyengine_api.services.v2.households.database_session import (
     HouseholdDatabaseSession,
@@ -69,6 +79,8 @@ RUNNING_VERSION = "6.10.0"
 EARLIER_VERSION = "6.9.0"
 KEPT_PARAMETER = "gov.example.rate"
 REMOVED_PARAMETER = "gov.example.removed_rate"
+KEPT_ASSUMPTION = "gov.simulation.example_elasticity"
+REMOVED_ASSUMPTION = "gov.simulation.removed_elasticity"
 CALCULATIONS = "/v2/household-calculations"
 STORED_AT = datetime(2026, 11, 10, tzinfo=UTC)
 
@@ -83,18 +95,57 @@ def sessions() -> Iterator[sessionmaker[Session]]:
 
 def _catalog_version(
     session: Session, model: TaxBenefitModel, version: str, names: list[str]
-) -> dict[str, Parameter]:
+) -> dict[str, Any]:
+    """Store a catalog version with these parameters, keyed by name.
+
+    Model assumptions are ``dynamic_parameters`` rows and the others
+    ``parameters`` rows, as catalog publication stores them (C1 · 50).
+    """
     model_version = TaxBenefitModelVersion(
         model=model, version=version, current_law_id=1, metadata_time_periods=[2026]
     )
     parameters = {
-        name: Parameter(name=name, tax_benefit_model_version=model_version)
+        name: (DynamicParameter if name.startswith("gov.simulation.") else Parameter)(
+            name=name, tax_benefit_model_version=model_version
+        )
         for name in names
     }
     session.add(model_version)
     session.add_all(parameters.values())
     session.flush()
     return parameters
+
+
+def _dynamic(
+    session: Session,
+    parameters: dict[str, Any],
+    hash_seed: str,
+    *,
+    country_id: str = "us",
+):
+    model_version = next(iter(parameters.values())).tax_benefit_model_version
+    dynamic = Dynamic(
+        country_id=country_id,
+        tax_benefit_model_id=model_version.model_id,
+        tax_benefit_model_version_id=model_version.id,
+        canonicalization_version=1,
+        content_hash=hash_seed * 64,
+        created_at=STORED_AT,
+        updated_at=STORED_AT,
+    )
+    session.add(dynamic)
+    session.flush()
+    session.add_all(
+        DynamicParameterValue(
+            dynamic_parameter_id=parameter.id,
+            value_json=0.1,
+            start_date=STORED_AT,
+            dynamic_id=dynamic.id,
+        )
+        for name, parameter in parameters.items()
+        if name.startswith("gov.simulation.")
+    )
+    return dynamic
 
 
 def _policy(session: Session, parameters: dict[str, Parameter], hash_seed: str):
@@ -117,21 +168,35 @@ def _policy(session: Session, parameters: dict[str, Parameter], hash_seed: str):
             start_date=STORED_AT,
             policy_id=policy.id,
         )
-        for parameter in parameters.values()
+        for name, parameter in parameters.items()
+        if not name.startswith("gov.simulation.")
     )
     return policy
 
 
+def _uk_dynamic(session: Session) -> Dynamic:
+    """Store the UK, a UK catalog version and a dynamic of it."""
+    session.add(Country(id="uk", household_enabled=True, society_wide_enabled=True))
+    model = TaxBenefitModel(name="policyengine-uk")
+    parameters = _catalog_version(session, model, RUNNING_VERSION, [KEPT_ASSUMPTION])
+    return _dynamic(session, parameters, "e", country_id="uk")
+
+
 @pytest.fixture
 def stored(sessions) -> dict[str, object]:
-    """Store the US, a household, and a policy on each of two catalog versions."""
+    """Store the US, a household, and a policy and a dynamic on two catalog versions."""
     with sessions() as session:
         session.add(Country(id="us", household_enabled=True, society_wide_enabled=True))
         model = TaxBenefitModel(name="policyengine-us")
         earlier = _catalog_version(
-            session, model, EARLIER_VERSION, [KEPT_PARAMETER, REMOVED_PARAMETER]
+            session,
+            model,
+            EARLIER_VERSION,
+            [KEPT_PARAMETER, REMOVED_PARAMETER, KEPT_ASSUMPTION, REMOVED_ASSUMPTION],
         )
-        running = _catalog_version(session, model, RUNNING_VERSION, [KEPT_PARAMETER])
+        running = _catalog_version(
+            session, model, RUNNING_VERSION, [KEPT_PARAMETER, KEPT_ASSUMPTION]
+        )
         household = Household(
             country_id="us",
             default_year=2026,
@@ -144,9 +209,28 @@ def stored(sessions) -> dict[str, object]:
             "household": household,
             "earlier_policy": _policy(session, earlier, "a"),
             "running_policy": _policy(session, running, "b"),
+            "earlier_dynamic": _dynamic(session, earlier, "c"),
+            "running_dynamic": _dynamic(session, running, "d"),
+            "uk_dynamic": _uk_dynamic(session),
         }
         session.commit()
     return {name: row.id for name, row in rows.items()}
+
+
+def _sources(sessions: sessionmaker[Session]) -> HouseholdCalculationSources:
+    """Read the countries, households, policies and dynamics from ``sessions``."""
+    return HouseholdCalculationSources(
+        countries=V2CountryService(CountryDatabaseSession(sessions)),
+        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
+        policies=V2PolicyService(
+            PolicyDatabaseSession(sessions),
+            running_policyengine_version=RUNNING_VERSION,
+        ),
+        dynamics=V2DynamicService(
+            DynamicDatabaseSession(sessions),
+            running_policyengine_version=RUNNING_VERSION,
+        ),
+    )
 
 
 @pytest.fixture
@@ -158,12 +242,7 @@ def simulation() -> FakeSimulation:
 def client(sessions, simulation) -> TestClient:
     def service() -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=V2CountryService(CountryDatabaseSession(sessions)),
-            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-            policies=V2PolicyService(
-                PolicyDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
+            sources=_sources(sessions),
             database_session=HouseholdCalculationDatabaseSession(sessions),
             simulation_factory=lambda: simulation,
         )
@@ -214,6 +293,63 @@ def test_a_policy_setting_parameters_the_running_catalog_lacks_is_refused(
     assert response.status_code == 422
     assert response.json()["code"] == "missing_parameters"
     assert response.json()["missing_parameters"] == [REMOVED_PARAMETER]
+    assert simulation.submissions == []
+
+
+def test_a_dynamic_stored_on_the_running_catalog_is_submitted(
+    client, stored, simulation
+) -> None:
+    body = {
+        **_body(stored, "running_policy"),
+        "dynamic_id": str(stored["running_dynamic"]),
+    }
+
+    response = client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 202
+    assert response.json()["result"]["item"]["dynamic_id"] == str(
+        stored["running_dynamic"]
+    )
+    (sent,) = simulation.submissions
+    assert sent.dynamic_id == stored["running_dynamic"]
+
+
+def test_a_dynamic_setting_parameters_the_running_catalog_lacks_is_refused(
+    client, stored, simulation
+) -> None:
+    body = {**_body(stored, None), "dynamic_id": str(stored["earlier_dynamic"])}
+
+    response = client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "missing_parameters"
+    assert response.json()["missing_parameters"] == [REMOVED_ASSUMPTION]
+    assert response.json()["message"].startswith(
+        f"Dynamic {stored['earlier_dynamic']} sets"
+    )
+    assert simulation.submissions == []
+
+
+def test_another_countrys_dynamic_is_not_found_in_the_database(
+    client, stored, simulation
+) -> None:
+    body = {**_body(stored, "running_policy"), "dynamic_id": str(stored["uk_dynamic"])}
+
+    response = client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 404
+    assert str(stored["uk_dynamic"]) in response.json()["message"]
+    assert simulation.submissions == []
+
+
+def test_an_unknown_dynamic_is_not_found_in_the_database(
+    client, stored, simulation
+) -> None:
+    body = {**_body(stored, "running_policy"), "dynamic_id": str(uuid4())}
+
+    response = client.post(CALCULATIONS, json=body)
+
+    assert response.status_code == 404
     assert simulation.submissions == []
 
 
@@ -293,12 +429,7 @@ def client_with_simulation_client(sessions, simulation_recorder) -> TestClient:
 
     def service() -> V2HouseholdCalculationService:
         return V2HouseholdCalculationService(
-            countries=V2CountryService(CountryDatabaseSession(sessions)),
-            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-            policies=V2PolicyService(
-                PolicyDatabaseSession(sessions),
-                running_policyengine_version=RUNNING_VERSION,
-            ),
+            sources=_sources(sessions),
             database_session=HouseholdCalculationDatabaseSession(sessions),
             simulation_factory=lambda: (
                 SimulationHouseholdCalculationClient.from_environment(
@@ -453,3 +584,24 @@ def test_a_failed_attempt_returns_the_attempts_observability_id(
         response.headers[OBSERVABILITY_ID_HEADER]
         == (attempted.headers[OBSERVABILITY_ID_HEADER])
     )
+
+
+def test_a_dynamic_is_sent_to_the_simulation_service_only_when_named(
+    client_with_simulation_client, stored, simulation_recorder
+) -> None:
+    with_dynamic = {
+        **_body(stored, "running_policy"),
+        "dynamic_id": str(stored["running_dynamic"]),
+    }
+
+    named = client_with_simulation_client.post(CALCULATIONS, json=with_dynamic)
+    unnamed = client_with_simulation_client.post(
+        CALCULATIONS, json=_body(stored, "running_policy")
+    )
+
+    assert [named.status_code, unnamed.status_code] == [202, 202]
+    sent_with, sent_without = (
+        json.loads(request.content) for request in simulation_recorder.requests
+    )
+    assert sent_with["dynamic_id"] == str(stored["running_dynamic"])
+    assert "dynamic_id" not in sent_without

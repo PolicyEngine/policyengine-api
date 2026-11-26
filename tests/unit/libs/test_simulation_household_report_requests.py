@@ -24,6 +24,7 @@ from policyengine_api.services.v2.simulation_service.types import (
     SubmittedReport,
 )
 from tests.unit.libs.test_simulation_reports import (
+    DYNAMIC_ID,
     ENVIRONMENT_VARIABLES,
     POLICY_ID,
     REPORT_CREATED,
@@ -34,6 +35,8 @@ from tests.unit.libs.test_simulation_reports import (
 )
 
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-00000000b101")
+OTHER_DYNAMIC_ID = UUID("00000000-0000-0000-0000-00000000b102")
+ASSUMED_PARAMETER = "gov.simulation.labour_supply_responses.income_elasticity"
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +94,97 @@ def test_a_report_of_the_baseline_alone_sends_a_null_reform() -> None:
         "baseline": {"policy_id": str(POLICY_ID)},
         "reform": None,
     }
+
+
+def test_each_sides_dynamic_is_sent_with_its_policy() -> None:
+    # A report has one set of model assumptions (C1 · 35's Q5), but each side
+    # names its own dynamic, as for an economy report.
+    body = household_report_input(
+        baseline={"dynamic_id": str(DYNAMIC_ID)},
+        reform={"policy_id": str(POLICY_ID), "dynamic_id": str(OTHER_DYNAMIC_ID)},
+    )
+
+    assert household_report_request(body) == {
+        "country": "uk",
+        "report_type": "household",
+        "household_id": str(HOUSEHOLD_ID),
+        "baseline": {"policy_id": None, "dynamic_id": str(DYNAMIC_ID)},
+        "reform": {"policy_id": str(POLICY_ID), "dynamic_id": str(OTHER_DYNAMIC_ID)},
+    }
+
+
+def test_a_side_without_a_dynamic_leaves_it_out() -> None:
+    # The simulation service before it took a dynamic refuses any side naming
+    # the field, so a null one is not sent.
+    body = household_report_input(
+        baseline={"policy_id": None, "dynamic_id": None},
+        reform={"policy_id": str(POLICY_ID), "dynamic_id": str(DYNAMIC_ID)},
+    )
+
+    request = household_report_request(body)
+
+    assert request["baseline"] == {"policy_id": None}
+    assert request["reform"] == {
+        "policy_id": str(POLICY_ID),
+        "dynamic_id": str(DYNAMIC_ID),
+    }
+
+
+def test_a_report_of_the_baseline_alone_sends_its_dynamic() -> None:
+    body = household_report_input(baseline={"dynamic_id": str(DYNAMIC_ID)}, reform=None)
+
+    request = household_report_request(body)
+
+    assert request["baseline"] == {"policy_id": None, "dynamic_id": str(DYNAMIC_ID)}
+    assert request["reform"] is None
+
+
+def test_a_dynamic_the_service_cannot_find_is_the_callers_error() -> None:
+    service = RecordingService(
+        status_code=400,
+        body={
+            "code": "unknown_dynamic",
+            "detail": "uk has no stored dynamic the request's reform names.",
+        },
+    )
+
+    # The route answers SimulationServiceInvalidRequestError with 422.
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit_household_report(
+            household_report_input(reform={"dynamic_id": str(DYNAMIC_ID)})
+        )
+
+    assert str(refused.value) == (
+        "The simulation service cannot run this request (unknown_dynamic): "
+        "uk has no stored dynamic the request's reform names."
+    )
+
+
+def test_a_sides_dynamic_the_service_cannot_calculate_is_refused_at_its_field() -> None:
+    service = RecordingService(
+        status_code=422,
+        body={
+            "code": "missing_parameters",
+            "detail": [
+                {
+                    "loc": ["body", "reform", "dynamic_id", ASSUMED_PARAMETER],
+                    "msg": "the catalog version for .py 6.10.0 has no such parameter",
+                    "type": "missing_parameter",
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit_household_report(
+            household_report_input(reform={"dynamic_id": str(DYNAMIC_ID)})
+        )
+
+    assert str(refused.value) == (
+        "The simulation service cannot run this request (missing_parameters): "
+        f"reform.dynamic_id.{ASSUMED_PARAMETER}: the catalog version for .py "
+        "6.10.0 has no such parameter"
+    )
 
 
 def test_a_household_report_the_service_refuses_is_reported_with_its_reason() -> None:

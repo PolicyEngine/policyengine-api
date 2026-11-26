@@ -22,16 +22,23 @@ from sqlalchemy import delete
 from sqlmodel import col
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v2.models import HouseholdJob
+from policyengine_api.data.v2.models import Dynamic, HouseholdJob
 from policyengine_api.services.v2.countries.database_session import (
     CountryDatabaseSession,
 )
 from policyengine_api.services.v2.countries.services import V2CountryService
+from policyengine_api.services.v2.dynamics.database_session import (
+    DynamicDatabaseSession,
+)
+from policyengine_api.services.v2.dynamics.services import V2DynamicService
 from policyengine_api.services.v2.household_calculations.database_session import (
     HouseholdCalculationDatabaseSession,
 )
 from policyengine_api.services.v2.household_calculations.services import (
     V2HouseholdCalculationService,
+)
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
 )
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationNotFoundError,
@@ -82,6 +89,8 @@ class StoredJobs:
     refused: UUID
     failed_unexpectedly: UUID
     pending: UUID
+    with_dynamic: UUID
+    dynamic_id: UUID
 
 
 def _insert_job(
@@ -124,6 +133,18 @@ def stored_jobs(
             refused=uuid4(),
             failed_unexpectedly=uuid4(),
             pending=uuid4(),
+            with_dynamic=uuid4(),
+            dynamic_id=uuid4(),
+        )
+        add_row(
+            session,
+            Dynamic,
+            id=jobs.dynamic_id,
+            country_id="us",
+            tax_benefit_model_id=rows.model_id,
+            tax_benefit_model_version_id=rows.version_id,
+            canonicalization_version=1,
+            content_hash=uuid4().hex * 2,
         )
         _insert_job(
             session,
@@ -152,6 +173,9 @@ def stored_jobs(
             completed_at=COMPLETED_AT,
         )
         _insert_job(session, rows, jobs.pending, "pending")
+        _insert_job(
+            session, rows, jobs.with_dynamic, "pending", dynamic_id=jobs.dynamic_id
+        )
     try:
         yield jobs
     finally:
@@ -161,6 +185,7 @@ def stored_jobs(
                     col(HouseholdJob.household_id) == rows.household_id
                 )
             )
+            session.execute(delete(Dynamic).where(col(Dynamic.id) == jobs.dynamic_id))
             delete_public_api_rows(session, rows)
 
 
@@ -177,10 +202,16 @@ def runtime_service(
     """Return the household calculation service, reading as the runtime role."""
     sessions = v2_sessions_as_role(managed_v2_roles.runtime)
     return V2HouseholdCalculationService(
-        countries=V2CountryService(CountryDatabaseSession(sessions)),
-        households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
-        policies=V2PolicyService(
-            PolicyDatabaseSession(sessions), running_policyengine_version="6.10.0"
+        sources=HouseholdCalculationSources(
+            countries=V2CountryService(CountryDatabaseSession(sessions)),
+            households=V2HouseholdService(HouseholdDatabaseSession(sessions)),
+            policies=V2PolicyService(
+                PolicyDatabaseSession(sessions), running_policyengine_version="6.10.0"
+            ),
+            dynamics=V2DynamicService(
+                DynamicDatabaseSession(sessions),
+                running_policyengine_version="6.10.0",
+            ),
         ),
         database_session=HouseholdCalculationDatabaseSession(sessions),
         simulation_factory=_no_simulation_service,
@@ -196,6 +227,7 @@ def test_the_runtime_role_reads_a_succeeded_calculation_in_its_stored_order(
     assert calculation.household_id == stored_jobs.public_api_rows.household_id
     assert calculation.catalog_version_id == stored_jobs.public_api_rows.version_id
     assert calculation.policy_id is None
+    assert calculation.dynamic_id is None
     assert calculation.status == "succeeded"
     assert calculation.completed_at == COMPLETED_AT
     assert calculation.error is None
@@ -242,3 +274,12 @@ def test_the_runtime_role_reads_an_unfinished_calculation(
 def test_an_unknown_calculation_is_not_found(stored_jobs, runtime_service) -> None:
     with pytest.raises(HouseholdCalculationNotFoundError):
         runtime_service.get_calculation(uuid4())
+
+
+def test_the_runtime_role_reads_the_dynamic_a_calculation_names(
+    stored_jobs, runtime_service
+) -> None:
+    calculation = runtime_service.get_calculation(stored_jobs.with_dynamic)
+
+    assert calculation.dynamic_id == stored_jobs.dynamic_id
+    assert calculation.policy_id is None

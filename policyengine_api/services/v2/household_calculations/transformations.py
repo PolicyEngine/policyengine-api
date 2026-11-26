@@ -62,6 +62,7 @@ def household_calculation_read(
         country_id=job.country,
         household_id=job.household_id,
         policy_id=job.policy_id,
+        dynamic_id=job.dynamic_id,
         year=job.year,
         catalog_version_id=job.tax_benefit_model_version_id,
         country_package_version=job.country_package_version,
@@ -99,5 +100,6 @@ def household_calculation_submitted(
         country_id=calculation.country_id,
         household_id=calculation.household_id,
         policy_id=calculation.policy_id,
+        dynamic_id=calculation.dynamic_id,
         year=year,
     )

@@ -734,6 +734,7 @@
             "result.item.country_id",
             "result.item.household_id",
             "result.item.policy_id",
+            "result.item.dynamic_id",
             "result.item.year"
           ]
         },
@@ -750,6 +751,7 @@
             "result.item.country_id",
             "result.item.household_id",
             "result.item.policy_id",
+            "result.item.dynamic_id",
             "result.item.year",
             "result.item.catalog_version_id",
             "result.item.country_package_version",

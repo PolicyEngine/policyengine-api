@@ -47,6 +47,9 @@ from policyengine_api.libs.user_auth import (
 )
 from policyengine_api.readiness import is_ready
 from policyengine_api.request_caller import current_request_caller
+from policyengine_api.services.v2.household_calculations.types import (
+    HouseholdCalculationSources,
+)
 from policyengine_api.services.v2.metadata.process_state import (
     SelectedCatalogStore,
 )
@@ -224,9 +227,12 @@ def _default_v2_household_calculation_service_factory() -> (
     )
 
     return V2HouseholdCalculationService(
-        countries=_default_v2_country_service_factory(),
-        households=_default_v2_household_service_factory(),
-        policies=_default_v2_policy_service_factory(),
+        sources=HouseholdCalculationSources(
+            countries=_default_v2_country_service_factory(),
+            households=_default_v2_household_service_factory(),
+            policies=_default_v2_policy_service_factory(),
+            dynamics=_default_v2_dynamic_service_factory(),
+        ),
         database_session=HouseholdCalculationDatabaseSession(get_v2_session_factory()),
         simulation_factory=process_simulation_household_calculation_client,
     )
