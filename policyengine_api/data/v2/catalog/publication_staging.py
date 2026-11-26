@@ -12,6 +12,9 @@ import sqlalchemy as sa
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
+from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+    is_dynamic_record,
+)
 from policyengine_api.data.v2.catalog.publication_staging_base import (
     STAGING_METADATA,
     STAGING_MODELS,
@@ -131,7 +134,7 @@ def _parameter_node_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]
 
 
 def _parameter_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
-    """Yield one row per parameter, in bounded batches."""
+    """Yield one row per parameter, in bounded batches, marking model assumptions."""
     for batch in iter_batches(country.parameters, batch_size=COPY_BATCH_SIZE):
         for record in batch:
             yield (
@@ -144,6 +147,7 @@ def _parameter_rows(country: CountryCatalog) -> Iterator[tuple[object, ...]]:
                 record.unit,
                 record.economy,
                 record.household,
+                is_dynamic_record(country.country_id, record.name),
             )
 
 

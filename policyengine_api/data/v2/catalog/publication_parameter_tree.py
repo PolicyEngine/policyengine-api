@@ -15,6 +15,10 @@ table changes.
 Other stored versions get no tree here: deriving their rows from what earlier
 releases stored would be a data migration, which the migration rules leave to
 a human decision.
+
+The tree holds policy parameters only (C1 · 50): model assumptions, stored in
+``dynamic_parameters``, and the folders that hold only them are not rows of it
+(``dynamic_parameter_records``).
 """
 
 from __future__ import annotations
@@ -27,6 +31,10 @@ from uuid import uuid4
 import sqlalchemy as sa
 from sqlmodel import col
 
+from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+    policy_node_records,
+    policy_parameter_records,
+)
 from policyengine_api.data.v2.catalog.parameter_tree import (
     ParameterTreeChildRow,
     TreeNodeSource,
@@ -95,14 +103,17 @@ def _stored_parameter_ids(session: Session, version_id: UUID) -> dict[str, UUID]
 def catalog_parameter_tree(
     country: CountryCatalog, stored_parameter_ids: dict[str, UUID]
 ) -> tuple[ParameterTreeChildRow, ...]:
-    """Build a country version's tree from its catalog records.
+    """Build a country version's policy tree from its catalog records.
 
-    Each parameter row references the stored parameter of the same name;
-    raise CatalogPublicationError if a catalog parameter has no stored row.
+    It holds the policy parameters and the nodes outside the folders of model
+    assumptions. Each parameter row references the stored parameter of the
+    same name; raise CatalogPublicationError if a policy parameter of the
+    catalog has no stored row.
     """
+    parameters = policy_parameter_records(country)
     missing = [
         parameter.name
-        for parameter in country.parameters
+        for parameter in parameters
         if parameter.name not in stored_parameter_ids
     ]
     if missing:
@@ -114,7 +125,7 @@ def catalog_parameter_tree(
     return build_parameter_tree(
         nodes=[
             TreeNodeSource(name=node.name, label=node.label)
-            for node in country.parameter_nodes
+            for node in policy_node_records(country)
         ],
         parameters=[
             TreeParameterSource(
@@ -124,7 +135,7 @@ def catalog_parameter_tree(
                 economy=parameter.economy,
                 household=parameter.household,
             )
-            for parameter in country.parameters
+            for parameter in parameters
         ],
         enum_labels=enum_value_labels(country),
     )

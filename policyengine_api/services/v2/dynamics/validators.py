@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from policyengine_api.dynamic_parameters import is_dynamic_parameter
 from policyengine_api.services.v2.policies.validators import (
     PolicyParametersMissingError,
 )
@@ -12,8 +11,6 @@ from policyengine_api.services.v2.policies.validators import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from uuid import UUID
-
-    from policyengine_api.supported_countries import SupportedCountryId
 
 
 class DynamicNotFoundError(LookupError):
@@ -77,21 +74,15 @@ class DynamicParametersMissingError(PolicyParametersMissingError):
         )
 
 
-def require_dynamic_parameters(
-    country_id: SupportedCountryId, parameter_names: Iterable[str]
-) -> None:
-    """Raise DynamicSetsPolicyParametersError unless each parameter is an assumption."""
-    policy_parameter_names = tuple(
-        sorted(
-            {
-                name
-                for name in parameter_names
-                if not is_dynamic_parameter(country_id, name)
-            }
-        )
-    )
-    if policy_parameter_names:
-        raise DynamicSetsPolicyParametersError(policy_parameter_names)
+def require_dynamic_parameters(policy_parameter_names: Iterable[str]) -> None:
+    """Raise DynamicSetsPolicyParametersError when the dynamic sets policy parameters.
+
+    ``policy_parameter_names`` names the requested parameters found among the
+    catalog version's policy parameters rather than its dynamic parameters.
+    """
+    names = tuple(sorted(set(policy_parameter_names)))
+    if names:
+        raise DynamicSetsPolicyParametersError(names)
 
 
 def require_dynamic_parameters_present(

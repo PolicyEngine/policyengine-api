@@ -77,12 +77,61 @@ def _file(
 def test_the_file_names_its_format_country_and_version() -> None:
     search_file = _file([])
 
-    assert search_file["format"] == PARAMETER_SEARCH_FILE_FORMAT == 1
+    assert search_file["format"] == PARAMETER_SEARCH_FILE_FORMAT == 2
     assert search_file["country_id"] == "uk"
     assert search_file["policyengine_version"] == "6.10.0"
     assert search_file["parameters"] == []
     assert search_file["other_parameters"] == []
     assert search_file["nodes"] == []
+
+
+def test_model_assumptions_and_their_folders_are_left_out() -> None:
+    """From format 2, a file lists only policy parameters (C1 · 50).
+
+    A UK model assumption is under ``gov.simulation.`` or ``gov.dynamic.``;
+    neither it nor those folders are listed, changeable or not.
+    """
+    search_file = _file(
+        [
+            _parameter("gov.hmrc.rate"),
+            _parameter("gov.hmrc.hidden", flags=(False, False)),
+            _parameter("gov.simulation.labour_supply_responses.income_elasticity"),
+            _parameter("gov.simulation.unflagged", flags=(None, None)),
+            _parameter("gov.dynamic.obr_labour_supply_assumptions"),
+        ],
+        nodes=[
+            TreeNodeSource(name="gov", label="Government"),
+            TreeNodeSource(name="gov.hmrc", label="HMRC"),
+            TreeNodeSource(name="gov.simulation", label="Simulation"),
+            TreeNodeSource(
+                name="gov.simulation.labour_supply_responses",
+                label="Labour supply responses",
+            ),
+            TreeNodeSource(name="gov.dynamic", label="Dynamic"),
+        ],
+    )
+
+    assert [entry["path"] for entry in search_file["parameters"]] == ["gov.hmrc.rate"]
+    assert search_file["other_parameters"] == [
+        {"path": "gov.hmrc.hidden", "label": None}
+    ]
+    assert [node["path"] for node in search_file["nodes"]] == ["gov", "gov.hmrc"]
+
+
+def test_another_country_s_assumption_folder_is_a_policy_folder() -> None:
+    """Only the UK keeps model assumptions under ``gov.dynamic.``."""
+    search_file = build_parameter_search_file(
+        country_id="us",
+        policyengine_version="6.10.0",
+        parameters=[_parameter("gov.dynamic.example"), _parameter("gov.simulation.x")],
+        nodes=[TreeNodeSource(name="gov.dynamic", label="Dynamic scoring")],
+        editability=_always_editable("gov.dynamic.example", "gov.simulation.x"),
+    )
+
+    assert [entry["path"] for entry in search_file["parameters"]] == [
+        "gov.dynamic.example"
+    ]
+    assert [node["path"] for node in search_file["nodes"]] == ["gov.dynamic"]
 
 
 def test_each_changeable_parameter_has_what_v3_search_indexes() -> None:

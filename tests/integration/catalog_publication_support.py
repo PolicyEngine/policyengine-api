@@ -21,6 +21,7 @@ from sqlmodel import col
 
 from policyengine_api.data.v2.models import (
     Dataset,
+    DynamicParameter,
     Parameter,
     ParameterNode,
     ParameterValue,
@@ -117,8 +118,8 @@ def clear_version_format_2_fields(*conditions: ColumnElement[bool]) -> Update:
 def clear_format_2_fields(session: Session) -> None:
     """Make every stored version look as if published before catalog format 2.
 
-    Clears the versions' format 2 fields, and those of their variables and
-    parameters, in the Session's transaction.
+    Clears the versions' format 2 fields, and those of their variables,
+    parameters and dynamic parameters, in the Session's transaction.
     """
     session.execute(clear_version_format_2_fields())
     session.execute(
@@ -134,3 +135,4 @@ def clear_format_2_fields(session: Session) -> None:
         )
     )
     session.execute(update(Parameter).values(economy=None, household=None))
+    session.execute(update(DynamicParameter).values(economy=None, household=None))

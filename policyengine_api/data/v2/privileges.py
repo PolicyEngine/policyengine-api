@@ -60,13 +60,6 @@ The Public API reads the simulation tables it serves, and writes none of them.
 The migration role (``policyengine_v2_migrator``) owns every table, and
 Supabase's ``postgres`` role administers the project; neither is managed here.
 
-``POLICY_COPY_SPLIT_PRIVILEGES`` declares what the policy copy split command
-(``scripts/split_v2_policy_copies.py``) needs, for the temporary role
-``policyengine_v2_policy_copy_split`` that an operator creates for one run
-(C1 · 49) and drops afterwards. No deploy grants, checks or reports it: it is
-not one of the managed roles, and ``docs/migration/stage-10-v2-policies.md``
-gives the statements that create and drop it.
-
 Extra privileges a database holds beyond this manifest are reported, not
 revoked, with one exception: a privilege a role holds on a whole table that
 this manifest declares for named columns only is revoked, with the role's
@@ -241,27 +234,6 @@ def _run_table(
     )
 
 
-# The policy copy split's temporary role (see the module docstring). It locks
-# and deletes the old copies (their values go with them by the foreign key's
-# cascade), re-points legacy mappings and saved policies, inserts policies,
-# dynamics, their values and saved dynamics, and reads the catalog and the
-# rows that may name a copy.
-POLICY_COPY_SPLIT_ROLE: Final = "policyengine_v2_policy_copy_split"
-_READ_UPDATE: Final = frozenset({TablePrivilege.SELECT, TablePrivilege.UPDATE})
-POLICY_COPY_SPLIT_PRIVILEGES: Final[dict[str, frozenset[DeclaredPrivilege]]] = {
-    "dynamics": READ_INSERT,
-    "household_jobs": READ,
-    "legacy_policy_mappings": _READ_UPDATE,
-    "parameter_values": READ_INSERT,
-    "parameters": READ,
-    "policies": READ_WRITE,
-    "reports": READ,
-    "simulations": READ,
-    "tax_benefit_model_versions": READ,
-    "user_dynamics": READ_INSERT,
-    "user_policies": _READ_UPDATE,
-}
-
 # The Modal workers write results, keyed by run, once each.
 _RESULT = _access(runtime=READ, modal_worker=READ_INSERT)
 # What a run needs from the Public API's policies, dynamics, households and
@@ -315,7 +287,7 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # The UK areas disclosure control withheld from a local-area run's results.
     "withheld_area_codes": _RESULT,
     # Metadata catalog: the catalog writer publishes it, the Public API reads it.
-    # The writer also analyzes seven of them after every publication (_ANALYZE).
+    # The writer also analyzes nine of them after every publication (_ANALYZE).
     "dataset_versions": _access(catalog_writer=READ),
     "datasets": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
@@ -332,14 +304,29 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     "parameter_tree_children": _access(
         runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
     ),
-    # API v1 also inserts a v2 policy's or dynamic's own parameter
-    # values. Catalog pruning deletes an older version's current-law values
-    # (those with no policy or dynamic), never a policy's or a dynamic's.
+    # API v1 also inserts a v2 policy's own parameter values. Catalog pruning
+    # deletes an older version's current-law values (those with no policy or
+    # dynamic), never a policy's. Dynamics' values were moved to
+    # dynamic_parameter_values (C1 · 50).
     "parameter_values": _access(
         runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS
     ),
     "parameters": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS
+    ),
+    # Model assumptions, apart from the policy parameters since C1 · 50, granted
+    # as those are, but publication only inserts them, and a run reads a
+    # dynamic's.
+    "dynamic_parameters": _access(
+        runtime=READ, catalog_writer=READ_INSERT | _ANALYZE, **_RUN_INPUT_READS
+    ),
+    # Their current-law values, which catalog pruning deletes from an older
+    # version, and every dynamic's values, which API v1 inserts with its
+    # dynamic and never changes. Publication never updates a value.
+    "dynamic_parameter_values": _access(
+        runtime=READ_INSERT,
+        catalog_writer=READ_INSERT_DELETE | _ANALYZE,
+        **_RUN_INPUT_READS,
     ),
     "regions": _access(
         runtime=READ, catalog_writer=READ_INSERT_UPDATE | _ANALYZE, **_RUN_INPUT_READS

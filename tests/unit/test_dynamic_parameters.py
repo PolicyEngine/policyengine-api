@@ -9,6 +9,7 @@ from policyengine_api.dynamic_parameters import (
     ConflictingParameterSpellingsError,
     canonical_parameter_name,
     is_dynamic_parameter,
+    is_dynamic_parameter_path,
     split_legacy_policy_json,
 )
 from policyengine_api.supported_countries import SupportedCountryId
@@ -61,6 +62,69 @@ def test_other_parameters_are_not_dynamic(
     country_id: SupportedCountryId, parameter_name: str
 ) -> None:
     assert not is_dynamic_parameter(country_id, parameter_name)
+
+
+@pytest.mark.parametrize(
+    ("country_id", "path"),
+    [
+        # The folders themselves, which hold only dynamic parameters.
+        ("us", "gov.simulation"),
+        ("us", "simulation"),
+        ("uk", "gov.simulation"),
+        ("uk", "gov.dynamic"),
+        # Folders, brackets and parameters below them.
+        ("us", "gov.simulation.labor_supply_responses"),
+        ("us", "gov.simulation.labor_supply_responses.elasticities.income"),
+        ("us", "simulation.marginal_tax_rate_delta"),
+        ("uk", "gov.simulation.labour_supply_responses"),
+        ("uk", "gov.simulation.schedule[0]"),
+        ("uk", "gov.simulation.schedule[0].rate"),
+        ("uk", UK_OBR_LABOUR_SUPPLY_SWITCH),
+    ],
+)
+def test_dynamic_folders_and_everything_below_them_are_dynamic_paths(
+    country_id: SupportedCountryId, path: str
+) -> None:
+    assert is_dynamic_parameter_path(country_id, path)
+
+
+@pytest.mark.parametrize(
+    ("country_id", "path"),
+    [
+        # "gov" holds policy parameters too.
+        ("us", "gov"),
+        ("uk", "gov"),
+        ("us", "gov.irs"),
+        ("us", "gov.simulations_count"),
+        ("us", "simulationX"),
+        # Each country's own folders only.
+        ("us", "gov.dynamic"),
+        ("uk", "simulation"),
+        ("uk", "simulation.marginal_tax_rate_delta"),
+        ("uk", "gov.dynamics"),
+        ("us", ""),
+    ],
+)
+def test_policy_folders_and_parameters_are_not_dynamic_paths(
+    country_id: SupportedCountryId, path: str
+) -> None:
+    assert not is_dynamic_parameter_path(country_id, path)
+
+
+def test_every_dynamic_parameter_has_a_dynamic_path() -> None:
+    """A parameter is a dynamic path exactly when it is a dynamic parameter."""
+    for country_id in DYNAMIC_PARAMETER_PREFIXES:
+        for name in (
+            US_INCOME_ELASTICITY,
+            UK_INCOME_ELASTICITY,
+            UK_OBR_LABOUR_SUPPLY_SWITCH,
+            "simulation.marginal_tax_rate_delta",
+            "gov.hmrc.rate",
+            "gov.dynamics_count",
+        ):
+            assert is_dynamic_parameter_path(country_id, name) == (
+                is_dynamic_parameter(country_id, name)
+            )
 
 
 def test_only_the_uk_old_labour_supply_spelling_is_rewritten() -> None:
@@ -175,3 +239,17 @@ def test_gov_dynamic_has_one_spelling_and_is_never_rewritten() -> None:
     assert canonical_parameter_name("uk", UK_OBR_LABOUR_SUPPLY_SWITCH) == (
         UK_OBR_LABOUR_SUPPLY_SWITCH
     )
+
+
+def test_publication_refuses_to_classify_an_unsupported_country() -> None:
+    """A catalog country with no prefixes can't be split into the two tables."""
+    from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+        is_dynamic_record,
+    )
+    from policyengine_api.data.v2.catalog.publication_types import (
+        CatalogPublicationError,
+    )
+
+    assert is_dynamic_record("uk", "gov.dynamic.obr_labour_supply_assumptions")
+    with pytest.raises(CatalogPublicationError, match="'ca' is not a supported"):
+        is_dynamic_record("ca", "gov.simulation.example")

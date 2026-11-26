@@ -14,11 +14,13 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import (
+    DynamicParameter,
     LegacyPolicyMapping,
     Parameter,
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.dynamic_parameters import is_dynamic_parameter
 from policyengine_api.services.v2.dynamics import services as dynamic_services
 from policyengine_api.services.v2.dynamics.types import (
     DynamicCreationResult,
@@ -90,7 +92,12 @@ def catalog_session():
 
 def _add_running_catalog(
     session: Session, *, country_id: str, parameter_names: list[str]
-) -> tuple[TaxBenefitModelVersion, dict[str, Parameter]]:
+) -> tuple[TaxBenefitModelVersion, dict[str, Parameter | DynamicParameter]]:
+    """Store the running catalog, each parameter in its own table (C1 · 50).
+
+    Model assumptions are ``dynamic_parameters`` rows, the rest ``parameters``
+    rows, as catalog publication stores them.
+    """
     model = TaxBenefitModel(name=f"policyengine-{country_id}")
     version = TaxBenefitModelVersion(
         model=model,
@@ -98,8 +105,10 @@ def _add_running_catalog(
         current_law_id=1,
         metadata_time_periods=[2026],
     )
-    parameters = {
-        name: Parameter(name=name, tax_benefit_model_version=version)
+    parameters: dict[str, Parameter | DynamicParameter] = {
+        name: (
+            DynamicParameter if is_dynamic_parameter(country_id, name) else Parameter
+        )(name=name, tax_benefit_model_version=version)
         for name in parameter_names
     }
     session.add(version)
@@ -559,3 +568,44 @@ def test_a_copy_that_loses_the_mapping_race_reports_the_mapped_dynamic(
         dynamic_id=None,
         dynamic_created=False,
     )
+
+
+def test_a_model_assumption_found_only_among_policy_parameters_is_missing(
+    catalog_session: Session, recorded_writes: RecordedCopyWrites
+) -> None:
+    """The copy looks each part's names up in its own table.
+
+    A model assumption found only among policy parameters is missing from the
+    running catalog, as it would be after C1 · 50's revision moved it, and the
+    copy fails before anything is written.
+    """
+    model = TaxBenefitModel(name="policyengine-us")
+    version = TaxBenefitModelVersion(
+        model=model,
+        version=RUNNING_POLICYENGINE_VERSION,
+        current_law_id=1,
+        metadata_time_periods=[2026],
+    )
+    catalog_session.add_all(
+        [
+            version,
+            Parameter(name="gov.dol.minimum_wage", tax_benefit_model_version=version),
+            Parameter(name=US_INCOME_ELASTICITY, tax_benefit_model_version=version),
+        ]
+    )
+    catalog_session.commit()
+    snapshot = _snapshot(
+        country_id="us",
+        legacy_policy_id=502,
+        api_version="1.600.0",
+        policy_json={
+            "gov.dol.minimum_wage": {"2026": 9},
+            US_INCOME_ELASTICITY: {"2026": 0.25},
+        },
+    )
+
+    with pytest.raises(LegacyPolicyTranslationError) as failure:
+        _copy(catalog_session, snapshot)
+
+    assert failure.value.reason is LegacyPolicyTranslationReason.MISSING_PARAMETERS
+    assert recorded_writes == RecordedCopyWrites()

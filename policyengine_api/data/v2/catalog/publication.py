@@ -15,6 +15,9 @@ from policyengine_api.data.v2.alembic_revision import (
     ALEMBIC_REVISION_TABLE,
     AlembicRevision,
 )
+from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+    is_dynamic_record,
+)
 from policyengine_api.data.v2.catalog.publication_inserts import publish_new_country
 from policyengine_api.data.v2.catalog.publication_parameter_search_file import (
     assert_parameter_search_files_written,
@@ -304,6 +307,7 @@ def _prune_older_versions(
                     country_id=country_id,
                     policyengine_version=stored.version,
                     parameter_values=deleted.parameter_values,
+                    dynamic_parameter_values=deleted.dynamic_parameter_values,
                     parameter_tree_children=deleted.parameter_tree_children,
                     parameter_search_files=deleted.parameter_search_files,
                 )
@@ -461,7 +465,7 @@ def _evidence(
     """
     kept_region_summaries = stored_versions.kept_region_summaries
     kept_countries = {country_id for country_id, *_counts in kept_region_summaries}
-    entity_counts = catalog.entity_counts()
+    entity_counts = _stored_entity_counts(catalog)
     entity_counts["regions"] += sum(
         stored - staged for _country, _version, stored, staged in kept_region_summaries
     )
@@ -489,6 +493,28 @@ def _evidence(
         parameter_trees_written=parameter_trees_written,
         parameter_search_files_written=parameter_search_files_written,
     )
+
+
+def _stored_entity_counts(catalog: NormalizedCatalog) -> dict[str, int]:
+    """Return the catalog's counts, with model assumptions counted apart.
+
+    ``parameters`` and ``parameter_values`` count the rows stored in those
+    tables, and ``dynamic_parameters`` and ``dynamic_parameter_values`` the
+    model assumptions and their current-law values.
+    """
+    counts = catalog.entity_counts()
+    dynamic_parameters = [
+        parameter
+        for country in catalog.countries
+        for parameter in country.parameters
+        if is_dynamic_record(country.country_id, parameter.name)
+    ]
+    dynamic_values = sum(len(parameter.values) for parameter in dynamic_parameters)
+    counts["parameters"] -= len(dynamic_parameters)
+    counts["parameter_values"] -= dynamic_values
+    counts["dynamic_parameters"] = len(dynamic_parameters)
+    counts["dynamic_parameter_values"] = dynamic_values
+    return counts
 
 
 def _kept_region_summary(

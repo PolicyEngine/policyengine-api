@@ -396,3 +396,81 @@ def add_format_2_variable_records(model: SimpleNamespace) -> None:
     for variable in variables:
         model.variables.append(variable)
         model.variables_by_name[variable.name] = variable
+
+
+# Each country's model assumptions (policyengine_api.dynamic_parameters):
+# parameter names with their current-law value, and the folders above them,
+# with their labels. The US has top-level ``simulation`` and the UK
+# ``gov.dynamic``.
+DYNAMIC_PARAMETER_RECORDS = {
+    "us": {
+        "gov.simulation.labor_supply_responses.elasticities.income": 0.1,
+        "simulation.marginal_tax_rate_delta": 1_000,
+    },
+    "uk": {
+        "gov.simulation.labour_supply_responses.income_elasticity": 0.05,
+        "gov.dynamic.obr_labour_supply_assumptions": True,
+    },
+}
+DYNAMIC_PARAMETER_FOLDERS = {
+    "us": {
+        "gov.simulation": "Simulation",
+        "gov.simulation.labor_supply_responses": "Labor supply responses",
+        "gov.simulation.labor_supply_responses.elasticities": "Elasticities",
+        "simulation": "Simulation settings",
+    },
+    "uk": {
+        "gov.simulation": "Simulation",
+        "gov.simulation.labour_supply_responses": "Labour supply responses",
+        "gov.dynamic": "Dynamic",
+    },
+}
+
+
+def add_dynamic_parameter_records(model: SimpleNamespace, country_id: str) -> None:
+    """Add the country's model assumptions and their folders to a model fixture.
+
+    Each parameter has one current-law value from 2025 on and both flags set,
+    as .py gives a parameter whose package sets neither (UK
+    ``gov.dynamic.obr_labour_supply_assumptions``).
+    """
+    for name, label in DYNAMIC_PARAMETER_FOLDERS[country_id].items():
+        node = SimpleNamespace(name=name, label=label, description=None)
+        model.parameter_nodes.append(node)
+        model.parameter_nodes_by_name[name] = node
+    for name, value in DYNAMIC_PARAMETER_RECORDS[country_id].items():
+        parameter = SimpleNamespace(
+            name=name,
+            label=f"{name.rsplit('.', 1)[-1].replace('_', ' ').capitalize()}",
+            description=f"The model assumption {name}",
+            data_type=type(value),
+            unit=None,
+            economy=True,
+            household=True,
+            parameter_values=[
+                SimpleNamespace(
+                    value=value,
+                    start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                    end_date=None,
+                )
+            ],
+        )
+        model.parameters.append(parameter)
+        model.parameters_by_name[name] = parameter
+
+
+def catalog_with_dynamic_parameters(
+    *,
+    policyengine_version: str = POLICYENGINE_VERSION,
+) -> NormalizedCatalog:
+    """Return the normalized fixture with each country's model assumptions."""
+    models = source_models(policyengine_version=policyengine_version)
+    for country_id, model in models.items():
+        add_dynamic_parameter_records(model, country_id)
+    return extract_catalog(
+        bundle=bundle(policyengine_version=policyengine_version),
+        policyengine_version=policyengine_version,
+        models=models,
+        installed_version=installed_version,
+        region_references=region_references(),
+    )

@@ -19,6 +19,8 @@ from policyengine_api.data.v2.catalog.publication_staging_base import (
 )
 from policyengine_api.data.v2.models import (
     Dataset,
+    DynamicParameter,
+    DynamicParameterValue,
     Parameter,
     ParameterNode,
     ParameterValue,
@@ -257,48 +259,64 @@ INSERT_PARAMETER_NODES = sa.insert(ParameterNode).from_select(
     .where(col(StagedParameterNode.country_id) == COUNTRY_ID),
 )
 
-INSERT_PARAMETERS = sa.insert(Parameter).from_select(
-    [
-        "id",
-        "created_at",
-        "name",
-        "label",
-        "description",
-        "data_type",
-        "unit",
-        "economy",
-        "household",
-        "tax_benefit_model_version_id",
-    ],
-    sa.select(
-        col(StagedParameter.id),
-        sa.func.current_timestamp(),
-        col(StagedParameter.name),
-        col(StagedParameter.label),
-        col(StagedParameter.description),
-        col(StagedParameter.data_type),
-        col(StagedParameter.unit),
-        col(StagedParameter.economy),
-        col(StagedParameter.household),
-        col(TaxBenefitModelVersion.id),
-    )
-    .select_from(
-        sa.join(
-            StagedParameter,
-            StagedModel,
-            col(StagedModel.country_id) == col(StagedParameter.country_id),
+
+def _parameters_insert(
+    model: type[Parameter | DynamicParameter], *, dynamic: bool
+) -> sa.Insert:
+    """Insert the staged parameters of one kind into ``model``'s table.
+
+    Model assumptions (``StagedParameter.is_dynamic``) go to
+    ``dynamic_parameters``, the others to ``parameters``, with the same columns.
+    """
+    return sa.insert(model).from_select(
+        [
+            "id",
+            "created_at",
+            "name",
+            "label",
+            "description",
+            "data_type",
+            "unit",
+            "economy",
+            "household",
+            "tax_benefit_model_version_id",
+        ],
+        sa.select(
+            col(StagedParameter.id),
+            sa.func.current_timestamp(),
+            col(StagedParameter.name),
+            col(StagedParameter.label),
+            col(StagedParameter.description),
+            col(StagedParameter.data_type),
+            col(StagedParameter.unit),
+            col(StagedParameter.economy),
+            col(StagedParameter.household),
+            col(TaxBenefitModelVersion.id),
         )
-        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
-        .join(
-            TaxBenefitModelVersion,
-            sa.and_(
-                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
-                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
-            ),
+        .select_from(
+            sa.join(
+                StagedParameter,
+                StagedModel,
+                col(StagedModel.country_id) == col(StagedParameter.country_id),
+            )
+            .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
+            .join(
+                TaxBenefitModelVersion,
+                sa.and_(
+                    col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                    col(TaxBenefitModelVersion.version) == col(StagedModel.version),
+                ),
+            )
         )
+        .where(
+            col(StagedParameter.country_id) == COUNTRY_ID,
+            col(StagedParameter.is_dynamic).is_(sa.true() if dynamic else sa.false()),
+        ),
     )
-    .where(col(StagedParameter.country_id) == COUNTRY_ID),
-)
+
+
+INSERT_PARAMETERS = _parameters_insert(Parameter, dynamic=False)
+INSERT_DYNAMIC_PARAMETERS = _parameters_insert(DynamicParameter, dynamic=True)
 
 INSERT_PARAMETER_VALUES = sa.insert(ParameterValue).from_select(
     [
@@ -344,6 +362,57 @@ INSERT_PARAMETER_VALUES = sa.insert(ParameterValue).from_select(
                 col(Parameter.tax_benefit_model_version_id)
                 == col(TaxBenefitModelVersion.id),
                 col(Parameter.name) == col(StagedParameterValue.parameter_name),
+            ),
+        )
+    )
+    .where(col(StagedParameterValue.country_id) == COUNTRY_ID),
+)
+
+# A model assumption's current-law values, joined to the stored dynamic
+# parameter of the same name, as INSERT_PARAMETER_VALUES joins the others: each
+# of the two inserts only the values of its own kind of parameter.
+INSERT_DYNAMIC_PARAMETER_VALUES = sa.insert(DynamicParameterValue).from_select(
+    [
+        "id",
+        "created_at",
+        "dynamic_parameter_id",
+        "value_json",
+        "start_date",
+        "end_date",
+        "dynamic_id",
+    ],
+    sa.select(
+        col(StagedParameterValue.id),
+        sa.func.current_timestamp(),
+        col(DynamicParameter.id),
+        sa.cast(
+            col(StagedParameterValue.value_json),
+            column_type(DynamicParameterValue, "value_json"),
+        ),
+        col(StagedParameterValue.start_date),
+        col(StagedParameterValue.end_date),
+        sa.cast(sa.null(), column_type(DynamicParameterValue, "dynamic_id")),
+    )
+    .select_from(
+        sa.join(
+            StagedParameterValue,
+            StagedModel,
+            col(StagedModel.country_id) == col(StagedParameterValue.country_id),
+        )
+        .join(TaxBenefitModel, col(TaxBenefitModel.name) == col(StagedModel.name))
+        .join(
+            TaxBenefitModelVersion,
+            sa.and_(
+                col(TaxBenefitModelVersion.model_id) == col(TaxBenefitModel.id),
+                col(TaxBenefitModelVersion.version) == col(StagedModel.version),
+            ),
+        )
+        .join(
+            DynamicParameter,
+            sa.and_(
+                col(DynamicParameter.tax_benefit_model_version_id)
+                == col(TaxBenefitModelVersion.id),
+                col(DynamicParameter.name) == col(StagedParameterValue.parameter_name),
             ),
         )
     )
@@ -418,7 +487,9 @@ SET_BASED_INSERT_STATEMENTS = (
     INSERT_VARIABLES,
     INSERT_PARAMETER_NODES,
     INSERT_PARAMETERS,
+    INSERT_DYNAMIC_PARAMETERS,
     INSERT_PARAMETER_VALUES,
+    INSERT_DYNAMIC_PARAMETER_VALUES,
     INSERT_REGIONS,
 )
 

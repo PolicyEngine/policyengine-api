@@ -89,8 +89,9 @@ def parameter_search_file_unavailable_error(
     """Return the error for a selected version that has no parameter search file."""
     msg = (
         f"catalog version {selected.policyengine_version} has no parameter search "
-        "file: only catalog format 2 versions that catalog publication has "
-        "published, or run with installed, since search files were added have one"
+        "file of the current format: only catalog format 2 versions that catalog "
+        "publication has published, or run with installed, since that format "
+        "was added have one"
     )
     return ParameterSearchFileUnavailableError(msg)
 

@@ -38,7 +38,14 @@ from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
-from tests.fixtures.v2_catalog import normalized_catalog
+from policyengine_api.dynamic_parameters import (
+    is_dynamic_parameter,
+    is_dynamic_parameter_path,
+)
+from tests.fixtures.v2_catalog import (
+    catalog_with_dynamic_parameters,
+    normalized_catalog,
+)
 
 REPO = Path(__file__).parents[3]
 
@@ -228,7 +235,9 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
             "variables",
             "parameter nodes",
             "parameters",
+            "dynamic parameters",
             "parameter values",
+            "dynamic parameter values",
             "datasets",
         ]
         pairs = (*comparisons, ("regions", *region_pair))
@@ -242,14 +251,15 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
             len(staged.selected_columns) == len(stored.selected_columns)
             for _table_name, staged, stored in pairs
         )
-    # Format 2 compares model versions, variables and parameters on more fields.
-    # Regions are compared separately, on the same fields in both formats.
+    # Format 2 compares model versions, variables, parameters and dynamic
+    # parameters on more fields. Regions are compared separately, on the same
+    # fields in both formats.
     assert [
         len(format_2[1].selected_columns) - len(format_1[1].selected_columns)
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
-    ] == [3, 8, 0, 2, 0, 0]
+    ] == [3, 8, 0, 2, 2, 0, 0, 0]
 
     class Result:
         def scalar_one(self):
@@ -287,12 +297,13 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
         time_period_updates=(("us", "6.7.5", (2035, 2034, 2023, 2022), (2035, 2034)),),
         parameter_trees_written=(("policyengine-uk", "6.7.5", 2_430),),
         parameter_search_files_written=(("policyengine-uk", "6.7.5", 412_000, 61_000),),
-        restored_catalog_versions=(("uk", "6.7.4", 1_172_130),),
+        restored_catalog_versions=(("uk", "6.7.4", 1_172_130, 218),),
         pruned_catalog_versions=(
             publication_types.PrunedCatalogVersion(
                 country_id="us",
                 policyengine_version="6.6.0",
                 parameter_values=1_172_130,
+                dynamic_parameter_values=218,
                 parameter_tree_children=101_000,
                 parameter_search_files=1,
             ),
@@ -364,6 +375,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "country_id": "uk",
                 "policyengine_version": "6.7.4",
                 "parameter_values": 1_172_130,
+                "dynamic_parameter_values": 218,
             }
         ],
         "pruned_catalog_versions": [
@@ -372,6 +384,7 @@ def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:
                 "policyengine_version": "6.6.0",
                 "deleted_rows": {
                     "parameter_values": 1_172_130,
+                    "dynamic_parameter_values": 218,
                     "parameter_tree_children": 101_000,
                     "parameter_search_files": 1,
                 },
@@ -456,6 +469,41 @@ def test_a_catalog_tree_needs_a_stored_row_for_every_parameter() -> None:
         ),
     ):
         catalog_parameter_tree(country, {})
+
+
+@pytest.mark.parametrize("country_id", ["us", "uk"])
+def test_a_catalog_tree_leaves_out_model_assumptions_and_their_folders(
+    country_id: str,
+) -> None:
+    """The policy tree holds only policy parameters, from catalog format 2 on.
+
+    Model assumptions are stored in ``dynamic_parameters``, so the tree needs
+    stored rows only for the other parameters, and neither the assumptions nor
+    their folders (``gov.simulation``, US ``simulation``, UK ``gov.dynamic``)
+    are rows of it, although the nodes table holds those folders.
+    """
+    country = catalog_with_dynamic_parameters().country(country_id)
+    policy_parameter_ids = {
+        parameter.name: uuid4()
+        for parameter in country.parameters
+        if not is_dynamic_parameter(country_id, parameter.name)
+    }
+    assert any(
+        is_dynamic_parameter_path(country_id, node.name)
+        for node in country.parameter_nodes
+    )
+
+    rows = catalog_parameter_tree(country, policy_parameter_ids)
+
+    assert {row.path for row in rows if row.child_type == "parameter"} == set(
+        policy_parameter_ids
+    )
+    assert not [
+        row.path for row in rows if is_dynamic_parameter_path(country_id, row.path)
+    ]
+    assert {row.path for row in rows if row.parent_path == ""} == {"gov"}
+    (gov,) = (row for row in rows if row.path == "gov")
+    assert gov.child_count == 1
 
 
 def _kept_region_records(

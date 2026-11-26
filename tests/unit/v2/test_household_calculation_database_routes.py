@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -21,6 +21,8 @@ from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.models import (
     Country,
     Dynamic,
+    DynamicParameter,
+    DynamicParameterValue,
     Household,
     Parameter,
     ParameterValue,
@@ -93,12 +95,19 @@ def sessions() -> Iterator[sessionmaker[Session]]:
 
 def _catalog_version(
     session: Session, model: TaxBenefitModel, version: str, names: list[str]
-) -> dict[str, Parameter]:
+) -> dict[str, Any]:
+    """Store a catalog version with these parameters, keyed by name.
+
+    Model assumptions are ``dynamic_parameters`` rows and the others
+    ``parameters`` rows, as catalog publication stores them (C1 · 50).
+    """
     model_version = TaxBenefitModelVersion(
         model=model, version=version, current_law_id=1, metadata_time_periods=[2026]
     )
     parameters = {
-        name: Parameter(name=name, tax_benefit_model_version=model_version)
+        name: (DynamicParameter if name.startswith("gov.simulation.") else Parameter)(
+            name=name, tax_benefit_model_version=model_version
+        )
         for name in names
     }
     session.add(model_version)
@@ -109,7 +118,7 @@ def _catalog_version(
 
 def _dynamic(
     session: Session,
-    parameters: dict[str, Parameter],
+    parameters: dict[str, Any],
     hash_seed: str,
     *,
     country_id: str = "us",
@@ -127,8 +136,8 @@ def _dynamic(
     session.add(dynamic)
     session.flush()
     session.add_all(
-        ParameterValue(
-            parameter_id=parameter.id,
+        DynamicParameterValue(
+            dynamic_parameter_id=parameter.id,
             value_json=0.1,
             start_date=STORED_AT,
             dynamic_id=dynamic.id,

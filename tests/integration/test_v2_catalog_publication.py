@@ -370,6 +370,9 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
         "parameter_nodes": before_counts["parameter_nodes"],
         "parameters": before_counts["parameters"],
         "parameter_values": before_counts["parameter_values"],
+        # The fixture catalog holds no model assumption.
+        "dynamic_parameters": 0,
+        "dynamic_parameter_values": 0,
         "datasets": before_counts["datasets"],
         "regions": before_counts["regions"],
     }
@@ -1159,7 +1162,7 @@ def _stored_search_file(
             )
         ).one()
     content = gzip.decompress(row.compressed_content)
-    assert row.file_format == 1
+    assert row.file_format == 2
     assert row.content_sha256 == hashlib.sha256(content).hexdigest()
     assert row.uncompressed_size == len(content)
     assert row.compressed_size == len(row.compressed_content)
@@ -1194,7 +1197,7 @@ def _search_file_count(sessions: sessionmaker[Session], version: str | None) -> 
 
 def _fixture_search_file(country_id: str, version: str) -> dict:
     return {
-        "format": 1,
+        "format": 2,
         "country_id": country_id,
         "policyengine_version": version,
         "parameters": [

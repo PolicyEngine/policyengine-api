@@ -376,6 +376,7 @@ def _fixture_pruned(country_id: str, version: str) -> PrunedCatalogVersion:
         country_id=country_id,
         policyengine_version=version,
         parameter_values=FIXTURE_PRUNED_ROWS["parameter_values"],
+        dynamic_parameter_values=0,
         parameter_tree_children=FIXTURE_PRUNED_ROWS["tree_rows"],
         parameter_search_files=FIXTURE_PRUNED_ROWS["search_files"],
     )
@@ -483,8 +484,8 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
         for version in (PREVIOUS_VERSION, INSTALLED_VERSION):
             assert _pruned_at(publication_sessions, model_name, version) is None
     assert rollback.restored_catalog_versions == (
-        ("us", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"]),
-        ("uk", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"]),
+        ("us", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"], 0),
+        ("uk", OLD_VERSION, FIXTURE_PRUNED_ROWS["parameter_values"], 0),
     )
     assert rollback.parameter_trees_written == (
         (UK_MODEL, OLD_VERSION, FIXTURE_PRUNED_ROWS["tree_rows"]),
@@ -503,11 +504,13 @@ def test_republishing_a_pruned_version_restores_what_its_publication_wrote(
             "country_id": "us",
             "policyengine_version": OLD_VERSION,
             "parameter_values": FIXTURE_PRUNED_ROWS["parameter_values"],
+            "dynamic_parameter_values": 0,
         },
         {
             "country_id": "uk",
             "policyengine_version": OLD_VERSION,
             "parameter_values": FIXTURE_PRUNED_ROWS["parameter_values"],
+            "dynamic_parameter_values": 0,
         },
     ]
     assert again.restored_catalog_versions == ()
@@ -1016,6 +1019,7 @@ def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
             country_id="us",
             policyengine_version=OLD_VERSION,
             parameter_values=0,
+            dynamic_parameter_values=0,
             parameter_tree_children=0,
             parameter_search_files=0,
         ),
@@ -1072,7 +1076,7 @@ def test_every_publication_records_when_it_published_the_version(
 
     assert {
         (country_id, version)
-        for country_id, version, _values in restoring.restored_catalog_versions
+        for country_id, version, *_values in restoring.restored_catalog_versions
     } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
     for model_name in MODEL_NAMES:
         assert first[model_name] is not None
@@ -1306,7 +1310,7 @@ def test_restoring_a_version_stored_before_catalog_format_2_writes_values_only(
         assert _pruned_at(publication_sessions, model_name, OLD_VERSION) is None
     assert {
         (country_id, version)
-        for country_id, version, _values in restoring.restored_catalog_versions
+        for country_id, version, *_values in restoring.restored_catalog_versions
     } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
     assert restoring.parameter_trees_written == ()
     assert restoring.parameter_search_files_written == ()

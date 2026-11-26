@@ -192,7 +192,7 @@ Use three separately managed database credentials:
 | Operation | Configuration | Required database access |
 | --- | --- | --- |
 | Alembic schema upgrade | `V2_MIGRATION_DATABASE_URL` | Reviewed v2 schema changes; no application-runtime use |
-| Catalog publication | `V2_DATA_WRITE_DATABASE_URL` | Row insertion, update, selection, deletion from `parameter_values`, `parameter_tree_children` and `parameter_search_files` (catalog pruning), `ANALYZE` of the catalog tables (`MAINTAIN`, which also allows `VACUUM`, `CLUSTER`, `REINDEX` and `LOCK TABLE` on them), temporary tables, and transaction-scoped advisory locks; no persistent schema changes |
+| Catalog publication | `V2_DATA_WRITE_DATABASE_URL` | Row insertion, update, selection, deletion from `parameter_values`, `dynamic_parameter_values`, `parameter_tree_children` and `parameter_search_files` (catalog pruning), `ANALYZE` of the catalog tables (`MAINTAIN`, which also allows `VACUUM`, `CLUSTER`, `REINDEX` and `LOCK TABLE` on them), temporary tables, and transaction-scoped advisory locks; no persistent schema changes |
 | Preview GET requests | `V2_RUNTIME_DATABASE_URL` or `V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE` | Catalog selection only during Stage 9; no migration access |
 
 Do not place more than one database URL in the environment of either the
@@ -403,10 +403,29 @@ the previous release keep the years they already read until they stop, and an
 HTTP cache can keep a response with the previous years until it expires (five
 minutes, or a day for a request naming `policyengine_version`).
 
+### Dynamic parameters
+
+Since revision `7f7335f0eb31` (C1 · 50), publication stores a version's model
+assumptions, the parameters a dynamic may set
+(`policyengine_api/dynamic_parameters.py`: `gov.simulation.`, US `simulation.`
+and UK `gov.dynamic.`), in `dynamic_parameters`, and their current-law values
+in `dynamic_parameter_values`, with the same catalog IDs as before. Every other
+parameter stays in `parameters`, so the policy routes (`/v2/parameters`,
+`/v2/parameter-values`, `/v2/model-catalog/parameters`), the parameter tree
+and the search file no longer list them. Publication compares, restores and
+prunes both tables as it does `parameters` and `parameter_values`, and the
+evidence counts them apart (`entity_counts`' `dynamic_parameters` and
+`dynamic_parameter_values`). The revision moved every stored version's rows;
+`docs/engineering/skills/alembic-migrations.md` ("API v2 dynamic parameters in
+their own tables") describes it and its deploy order. C1 · 51 adds the routes
+that serve them.
+
 ### Parameter tree
 
 Publication also writes parameter trees into `parameter_tree_children`, which
-`/v2/parameters/children` reads one level at a time. A tree is built from a
+`/v2/parameters/children` reads one level at a time. A tree holds policy
+parameters only: model assumptions, and the folders that hold only them
+(`gov.simulation`, US `simulation`, UK `gov.dynamic`), are not rows of it. A tree is built from a
 catalog version's parameter and node records: every node and parameter is one
 row under its parent's path, a `[` starts a child as a `.` does (so a bracket schedule is one node
 whose children are its brackets, labelled "Bracket 1", "Bracket 2" and so on),
@@ -465,8 +484,14 @@ version.
 
 Publication also writes the parameter search file of each catalog version it
 publishes into `parameter_search_files`: one gzip-compressed JSON file per
-version and file format, with the SHA-256 of the uncompressed JSON. The file
-holds what the app's newer interface's parameter search reads:
+version and file format, with the SHA-256 of the uncompressed JSON. The current
+format is 2 (C1 · 50), which leaves model assumptions and their folders out of
+every list, as the tree does; format 1 listed them. Versions stored before
+keep their format 1 files, which the previous release serves. Publication
+writes a format 2 file only for the version it installs, so an older stored
+version has none, and the route answers 503 for it, until a release installs
+it again. The file holds
+what the app's newer interface's parameter search reads:
 
 - every parameter a reform can change (the parameter tree's rule) with its
   path, stored label, unit, description, and whether a draft can edit its
@@ -546,12 +571,14 @@ of a new version took 17 to 20 minutes in production, inside the job's
 
 Pruning a version runs one transaction that deletes its current-law
 `parameter_values` (rows of its parameters with neither a `policy_id` nor a
-`dynamic_id`), its `parameter_tree_children` rows and its
-`parameter_search_files` rows, and sets its `catalog_values_pruned_at`. It
-never deletes `parameters` rows, whose deletion would cascade to saved
-reforms' values, and keeps the version's model version row, parameter nodes,
+`dynamic_id`), its current-law `dynamic_parameter_values` (rows of its
+dynamic parameters with no `dynamic_id`), its `parameter_tree_children` rows
+and its `parameter_search_files` rows, and sets its
+`catalog_values_pruned_at`. It never deletes `parameters` or
+`dynamic_parameters` rows, whose deletion would cascade to saved reforms' and
+dynamics' values, and keeps the version's model version row, parameter nodes,
 variables, regions and datasets, and every policy, dynamic and value a
-policy or dynamic owns. This is the one exception to the Alembic skill's rule
+policy or dynamic owns. The evidence's `deleted_rows` counts each table. This is the one exception to the Alembic skill's rule
 that the catalog seeder deletes no retained domain data; its scope is in
 `docs/engineering/skills/alembic-migrations.md` ("Catalog pruning").
 
@@ -640,8 +667,9 @@ parameters` it walks `uq_parameters_model_version_name` and takes 4.1 ms
 (UK: 4.9 ms).
 
 Every publication therefore runs one `ANALYZE` over `datasets`,
-`parameter_nodes`, `parameter_tree_children`, `parameter_values`,
-`parameters`, `regions` and `variables` once it has committed and pruned, and
+`dynamic_parameter_values`, `dynamic_parameters`, `parameter_nodes`,
+`parameter_tree_children`, `parameter_values`, `parameters`, `regions` and
+`variables` once it has committed and pruned, and
 lists them in the evidence's `catalog_tables_analyzed`. It takes a few seconds
 and blocks no reads. A failed `ANALYZE` doesn't undo the publication: the
 evidence lists no tables and names the failure in `catalog_statistics_failure`
@@ -652,7 +680,7 @@ analyzes again.
 `ANALYZE` needs the table's owner or the `MAINTAIN` privilege (PostgreSQL 17),
 and PostgreSQL skips any other table with only a warning. The migration role
 owns the tables, so the manifest grants the catalog writer `MAINTAIN` on these
-seven, the deploy's `apply` step grants it before publication runs, and
+nine, the deploy's `apply` step grants it before publication runs, and
 publication fails before writing anything if its role lacks it. PostgreSQL 17
 has no narrower privilege: `MAINTAIN` also allows `VACUUM` (`FULL` included),
 `CLUSTER`, `REINDEX`, `REFRESH MATERIALIZED VIEW` and `LOCK TABLE` on those

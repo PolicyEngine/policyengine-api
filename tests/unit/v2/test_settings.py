@@ -5,7 +5,6 @@ import pytest
 from policyengine_api.data.v2.settings import (
     V2_DATA_WRITE_DATABASE_URL,
     V2_MIGRATION_DATABASE_URL,
-    V2_POLICY_COPY_SPLIT_DATABASE_URL,
     V2_RUNTIME_DATABASE_URL,
     V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE,
     V2_SUPABASE_ENVIRONMENT,
@@ -13,7 +12,6 @@ from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     load_v2_data_write_database_settings,
     load_v2_migration_database_settings,
-    load_v2_policy_copy_split_database_settings,
     load_v2_runtime_database_settings,
 )
 
@@ -55,27 +53,6 @@ def test_runtime_migration_and_data_write_urls_are_explicit_and_separate() -> No
     assert migration.connection.url.username == "migrator"
     assert data_write.connection.url.username == "data-writer"
     assert runtime.target == migration.target == data_write.target
-
-
-def test_the_policy_copy_split_url_is_its_own_setting() -> None:
-    """The split command connects as C1 · 49's temporary role, by its own URL."""
-    split_url = (
-        f"postgresql+psycopg://policy-copy-split:test-split-password@db.{PROJECT_REF}."
-        "supabase.co:5432/postgres?sslmode=require"
-    )
-    environment = {
-        **TARGET_ENVIRONMENT,
-        V2_MIGRATION_DATABASE_URL: MIGRATION_URL,
-        V2_POLICY_COPY_SPLIT_DATABASE_URL: split_url,
-    }
-
-    settings = load_v2_policy_copy_split_database_settings(environment)
-
-    assert settings.connection.url.username == "policy-copy-split"
-    with pytest.raises(V2ConfigurationError, match=V2_POLICY_COPY_SPLIT_DATABASE_URL):
-        load_v2_policy_copy_split_database_settings(
-            {**TARGET_ENVIRONMENT, V2_MIGRATION_DATABASE_URL: MIGRATION_URL}
-        )
 
 
 def test_postgres_password_is_hidden_from_string_and_repr() -> None:
@@ -197,10 +174,6 @@ def test_runtime_rejects_non_persistent_postgres_targets(url: str) -> None:
         (V2_RUNTIME_DATABASE_URL, load_v2_runtime_database_settings),
         (V2_MIGRATION_DATABASE_URL, load_v2_migration_database_settings),
         (V2_DATA_WRITE_DATABASE_URL, load_v2_data_write_database_settings),
-        (
-            V2_POLICY_COPY_SPLIT_DATABASE_URL,
-            load_v2_policy_copy_split_database_settings,
-        ),
     ],
 )
 def test_every_database_url_must_identify_the_configured_supabase_project(
@@ -241,21 +214,6 @@ def test_runtime_rejects_transaction_pooling_without_session_timeouts() -> None:
                 **TARGET_ENVIRONMENT,
                 V2_RUNTIME_DATABASE_URL: (
                     f"postgresql+psycopg://runtime.{PROJECT_REF}:password@"
-                    "aws-0-us-east-2.pooler.supabase.com:6543/"
-                    "postgres?sslmode=require"
-                ),
-            }
-        )
-
-
-def test_the_policy_copy_split_url_refuses_transaction_pooling() -> None:
-    """Transaction pooling drops the command's lock and statement timeouts."""
-    with pytest.raises(V2ConfigurationError, match="session mode on port 5432"):
-        load_v2_policy_copy_split_database_settings(
-            {
-                **TARGET_ENVIRONMENT,
-                V2_POLICY_COPY_SPLIT_DATABASE_URL: (
-                    f"postgresql+psycopg://policy-copy-split.{PROJECT_REF}:password@"
                     "aws-0-us-east-2.pooler.supabase.com:6543/"
                     "postgres?sslmode=require"
                 ),

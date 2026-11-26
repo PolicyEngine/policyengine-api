@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserDynamic, UserPolicy
     from policyengine_api.data.v2.models.households import HouseholdJob
     from policyengine_api.data.v2.models.metadata import (
+        DynamicParameterValue,
         ParameterValue,
         TaxBenefitModelVersion,
     )
@@ -152,7 +153,7 @@ class Dynamic(TimestampedModel, table=True):
     tax_benefit_model_version: "TaxBenefitModelVersion" = Relationship(
         back_populates="dynamics"
     )
-    parameter_values: list["ParameterValue"] = Relationship(
+    parameter_values: list["DynamicParameterValue"] = Relationship(
         back_populates="dynamic",
         cascade_delete=True,
     )

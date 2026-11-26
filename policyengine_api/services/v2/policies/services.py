@@ -8,6 +8,10 @@ from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogNotPublishedError,
 )
+from policyengine_api.services.v2.dynamics.database_connectors.reads import (
+    read_dynamic_parameters_by_name,
+    read_version_dynamic_parameter_names,
+)
 from policyengine_api.services.v2.dynamics.transformations import (
     dynamic_creation_input,
 )
@@ -71,6 +75,7 @@ if TYPE_CHECKING:
 
     from sqlmodel import Session
 
+    from policyengine_api.data.v2.models import DynamicParameter, Parameter
     from policyengine_api.services.v2.policies.database_session import (
         PolicyDatabaseSession,
     )
@@ -85,9 +90,11 @@ def resolve_policy_creation_input(
 ) -> ResolvedPolicyCreationInput:
     """Bind policy content to the selected catalog's model version.
 
-    Raise PolicyCatalogValidationError if the model or any parameter id is not
-    part of the selected catalog, and PolicySetsDynamicParametersError if any
-    parameter is one only a dynamic may hold.
+    Its parameter IDs name the version's policy parameters. Raise
+    PolicyCatalogValidationError if the model or any parameter id is in
+    neither of the version's parameter tables, and
+    PolicySetsDynamicParametersError, naming them, if any is one of its
+    dynamic parameters, which only a dynamic may hold.
     """
     selected = read_policy_catalog(
         session,
@@ -103,12 +110,17 @@ def resolve_policy_creation_input(
         model_version_id=selected.model_version.id,
         requested_ids=requested_parameter_ids,
     )
+    dynamic_parameter_names = read_version_dynamic_parameter_names(
+        session,
+        model_version_id=selected.model_version.id,
+        requested_ids=requested_parameter_ids - set(parameter_names),
+    )
     resolved = validate_policy_catalog(
         policy_input,
         selected=selected,
-        resolved_parameter_ids=set(parameter_names),
+        resolved_parameter_ids={*parameter_names, *dynamic_parameter_names},
     )
-    refuse_dynamic_parameters(policy_input.country_id, parameter_names.values())
+    refuse_dynamic_parameters(dynamic_parameter_names.values())
     return resolved
 
 
@@ -262,8 +274,10 @@ def mirror_legacy_policy_in_session(
     mapping names both. A v1 policy that sets no assumptions maps to no
     dynamic. A v1 policy that already has a v2 copy returns that copy without
     being translated again, so writing it again after a PolicyEngine.py or
-    country package upgrade still succeeds; a copy made before the split
-    existed keeps its assumptions in its policy and maps to no dynamic. Raise
+    country package upgrade still succeeds. A copy made before the split
+    existed maps to no dynamic; operator step C1 · 49 moved its assumptions
+    into a dynamic before revision 7f7335f0eb31, after which no policy can
+    hold one. Raise
     LegacyPolicyMappingIntegrityError if the v1 id is already mapped with a
     different source hash.
     """
@@ -296,11 +310,20 @@ def mirror_legacy_policy_in_session(
         running_policyengine_version=running_policyengine_version,
     )
     split = split_legacy_policy(snapshot)
-    parameters = read_parameters_by_name(
-        session,
-        model_version_id=selected.model_version.id,
-        names={*split.policy_values, *split.dynamic_values},
-    )
+    # Each part's names are looked up in its own table (C1 · 50): the policy's
+    # among policy parameters, the model assumptions among dynamic parameters.
+    parameters: dict[str, Parameter | DynamicParameter] = {
+        **read_parameters_by_name(
+            session,
+            model_version_id=selected.model_version.id,
+            names=set(split.policy_values),
+        ),
+        **read_dynamic_parameters_by_name(
+            session,
+            model_version_id=selected.model_version.id,
+            names=set(split.dynamic_values),
+        ),
+    }
     translation = translate_legacy_policy(
         snapshot,
         selected=selected,

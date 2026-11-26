@@ -25,13 +25,16 @@ from policyengine_api.services.v2.dynamics.database_connectors.reads import (
     read_dynamic_by_content_identity,
     read_dynamic_parameter_values,
     read_dynamic_parameter_values_with_names,
+    read_dynamic_parameters_by_name,
     read_dynamic_row,
+    read_version_dynamic_parameter_names,
 )
 from policyengine_api.services.v2.dynamics.transformations import (
     checked_dynamic_read,
     dynamic_creation_input,
     dynamic_parameter_values_by_dynamic,
     dynamic_read,
+    stored_dynamic_creation_input,
 )
 from policyengine_api.services.v2.dynamics.types import (
     CheckedDynamicRead,
@@ -51,7 +54,6 @@ from policyengine_api.services.v2.dynamics.validators import (
 )
 from policyengine_api.services.v2.policies.database_connectors.reads import (
     read_model_version,
-    read_parameters_by_name,
     read_policy_catalog,
     read_version_parameter_names,
 )
@@ -59,7 +61,6 @@ from policyengine_api.services.v2.policies.transformations import (
     canonical_policy_document,
     canonicalize_policy,
     policy_missing_parameters,
-    stored_policy_creation_input,
 )
 from policyengine_api.services.v2.policies.validators import validate_policy_catalog
 
@@ -97,9 +98,11 @@ def resolve_dynamic_creation_input(
 ) -> ResolvedDynamicCreationInput:
     """Bind dynamic content to the selected catalog's model version.
 
-    Raise PolicyCatalogValidationError if the model or any parameter id is not
-    part of the selected catalog, and DynamicSetsPolicyParametersError if any
-    parameter is not one of the model's assumptions.
+    Its parameter IDs name the version's dynamic parameters. Raise
+    PolicyCatalogValidationError if the model or any parameter id is in
+    neither of the version's parameter tables, and
+    DynamicSetsPolicyParametersError, naming them, if any is one of its policy
+    parameters.
     """
     selected = read_policy_catalog(
         session,
@@ -107,17 +110,23 @@ def resolve_dynamic_creation_input(
         policyengine_version=policyengine_version,
         running_policyengine_version=running_policyengine_version,
     )
-    parameter_names = read_version_parameter_names(
+    requested_ids = {value.parameter_id for value in dynamic_input.parameter_values}
+    dynamic_parameter_names = read_version_dynamic_parameter_names(
         session,
         model_version_id=selected.model_version.id,
-        requested_ids={value.parameter_id for value in dynamic_input.parameter_values},
+        requested_ids=requested_ids,
+    )
+    policy_parameter_names = read_version_parameter_names(
+        session,
+        model_version_id=selected.model_version.id,
+        requested_ids=requested_ids - set(dynamic_parameter_names),
     )
     resolved = validate_policy_catalog(
         dynamic_input,
         selected=selected,
-        resolved_parameter_ids=set(parameter_names),
+        resolved_parameter_ids={*dynamic_parameter_names, *policy_parameter_names},
     )
-    require_dynamic_parameters(dynamic_input.country_id, parameter_names.values())
+    require_dynamic_parameters(policy_parameter_names.values())
     return dynamic_creation_input(resolved)
 
 
@@ -160,7 +169,7 @@ def create_resolved_dynamic(
     if model_version is None:
         msg = "stored dynamic references an absent model version"
         raise DynamicCreationIntegrityError(msg)
-    stored_input = stored_policy_creation_input(
+    stored_input = stored_dynamic_creation_input(
         existing,
         model_version,
         read_dynamic_parameter_values(session, existing.id),
@@ -212,7 +221,7 @@ def with_missing_dynamic_parameters(
         if dynamic.tax_benefit_model_version_id == running_model_version_id
         else {value.parameter_name for value in dynamic.parameter_values}
     )
-    running_parameters = read_parameters_by_name(
+    running_parameters = read_dynamic_parameters_by_name(
         session, model_version_id=running_model_version_id, names=names_to_check
     )
     return checked_dynamic_read(

@@ -15,4 +15,5 @@ uv run --frozen --extra dev pytest -q \
   tests/integration/test_alembic_v2_cliff_impacts.py \
   tests/integration/test_alembic_v2_dynamics.py \
   tests/integration/test_alembic_v2_report_column_drops.py \
-  tests/integration/test_alembic_v2_user_dynamics.py
+  tests/integration/test_alembic_v2_user_dynamics.py \
+  tests/integration/test_alembic_v2_dynamic_parameter_tables.py

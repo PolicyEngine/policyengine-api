@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 CATALOG_STATISTICS_TABLES: Final = (
     "datasets",
+    "dynamic_parameter_values",
+    "dynamic_parameters",
     "parameter_nodes",
     "parameter_tree_children",
     "parameter_values",

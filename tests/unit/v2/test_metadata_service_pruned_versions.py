@@ -98,7 +98,7 @@ def _add_us_tree_row_and_search_file(session: Session) -> None:
     session.add(
         ParameterSearchFile(
             tax_benefit_model_version_id=model_version.id,
-            file_format=1,
+            file_format=2,
             compressed_content=encoded.compressed_content,
             content_sha256=encoded.content_sha256,
             uncompressed_size=encoded.uncompressed_size,

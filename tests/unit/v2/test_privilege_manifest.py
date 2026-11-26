@@ -23,8 +23,6 @@ from policyengine_api.data.v2.privileges import (
     CATALOG_WRITER_ROLE,
     MODAL_WORKER_ROLE,
     NO_ACCESS,
-    POLICY_COPY_SPLIT_PRIVILEGES,
-    POLICY_COPY_SPLIT_ROLE,
     READ,
     READ_INSERT,
     READ_INSERT_DELETE,
@@ -47,9 +45,6 @@ PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 PROOF_FIXTURES = PROJECT_ROOT / "rules/fixtures/api.v2.runtime-privileges-declared"
 STAGE12_PACKAGES = frozenset({"comparison_runs"})
-# Run once, by hand, as a temporary role the operator creates with
-# POLICY_COPY_SPLIT_PRIVILEGES (C1 · 48 and C1 · 49), never as a managed role.
-POLICY_COPY_SPLIT_PACKAGES = frozenset({"policy_copy_split"})
 TEST_ENVIRONMENT = "staging"
 # The rows the simulation service creates, and the run tables among them. A
 # simulation run's cliff calculation is started and finished like a run.
@@ -170,6 +165,8 @@ RUN_INPUT_TABLES = frozenset(
         "datasets",
         "parameters",
         "parameter_values",
+        "dynamic_parameters",
+        "dynamic_parameter_values",
     }
 )
 RESULT_TABLES = frozenset(
@@ -207,21 +204,9 @@ def _connector_modules(*, stage12: bool) -> list[str]:
         path.relative_to(SERVICES_ROOT).as_posix()
         for path in SERVICES_ROOT.glob("*/database_connectors/*.py")
         if path.name != "__init__.py"
-        and path.parts[-3] not in POLICY_COPY_SPLIT_PACKAGES
         and (path.parts[-3] in STAGE12_PACKAGES) is stage12
     )
     assert paths, "no connector modules found"
-    return paths
-
-
-def _policy_copy_split_connector_modules() -> list[str]:
-    paths = sorted(
-        path.relative_to(SERVICES_ROOT).as_posix()
-        for package in POLICY_COPY_SPLIT_PACKAGES
-        for path in (SERVICES_ROOT / package / "database_connectors").glob("*.py")
-        if path.name != "__init__.py"
-    )
-    assert paths, "no policy copy split connector modules found"
     return paths
 
 
@@ -284,72 +269,6 @@ def test_stage12_connectors_need_only_declared_stage12_privileges(
     relative_path: str,
 ) -> None:
     assert _missing(relative_path, stage12_role(TEST_ENVIRONMENT)) == []
-
-
-@pytest.mark.parametrize("relative_path", _policy_copy_split_connector_modules())
-def test_policy_copy_split_connectors_need_only_the_temporary_role_s_privileges(
-    relative_path: str,
-) -> None:
-    requirements = required_privileges(
-        SERVICES_ROOT / relative_path, _table_by_model(), connector=relative_path
-    )
-
-    assert requirements, "the analysis found no table this connector uses"
-    assert [
-        f"{missing.connector}: {missing.privilege} on {missing.table_name} "
-        f"({missing.reason})"
-        for missing in undeclared_requirements(
-            requirements, POLICY_COPY_SPLIT_PRIVILEGES
-        )
-    ] == []
-
-
-def test_the_policy_copy_split_role_deletes_only_policies_and_is_not_managed() -> None:
-    """The split command's temporary role changes only what the split must change.
-
-    It deletes old policy copies (their values go with them by the foreign
-    key's cascade), locks them, re-points legacy mappings and saved policies,
-    and inserts policies, dynamics, their values and saved dynamics. It reads
-    the catalog and the simulations, reports and household calculations that
-    may name a copy. No deploy grants it anything: the operator creates it for
-    C1 · 49 and drops it afterwards.
-    """
-    write_privileges = {
-        table: privileges & WRITE_PRIVILEGES
-        for table, privileges in POLICY_COPY_SPLIT_PRIVILEGES.items()
-        if privileges & WRITE_PRIVILEGES
-    }
-
-    assert write_privileges == {
-        "dynamics": {TablePrivilege.INSERT},
-        "legacy_policy_mappings": {TablePrivilege.UPDATE},
-        "parameter_values": {TablePrivilege.INSERT},
-        "policies": {
-            TablePrivilege.INSERT,
-            TablePrivilege.UPDATE,
-            TablePrivilege.DELETE,
-        },
-        "user_dynamics": {TablePrivilege.INSERT},
-        "user_policies": {TablePrivilege.UPDATE},
-    }
-    assert {
-        table
-        for table, privileges in POLICY_COPY_SPLIT_PRIVILEGES.items()
-        if privileges == READ
-    } == {
-        "household_jobs",
-        "parameters",
-        "reports",
-        "simulations",
-        "tax_benefit_model_versions",
-    }
-    assert set(POLICY_COPY_SPLIT_PRIVILEGES) <= set(TABLE_ACCESS)
-    assert all(
-        TablePrivilege.SELECT in privileges
-        for privileges in POLICY_COPY_SPLIT_PRIVILEGES.values()
-    )
-    assert POLICY_COPY_SPLIT_ROLE == "policyengine_v2_policy_copy_split"
-    assert POLICY_COPY_SPLIT_ROLE not in declared_privileges(TEST_ENVIRONMENT)
 
 
 def test_stage12_role_name_follows_the_deployment_environment() -> None:
@@ -501,16 +420,19 @@ def test_the_catalog_writer_may_analyze_the_tables_publication_refreshes() -> No
         for table, privileges in writer_tables.items()
         if TablePrivilege.MAINTAIN in privileges
     } == set(CATALOG_STATISTICS_TABLES)
+    assert {"dynamic_parameters", "dynamic_parameter_values"} <= set(
+        CATALOG_STATISTICS_TABLES
+    )
 
 
 def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> None:
-    """Catalog pruning deletes from three tables and marks the pruned version.
+    """Catalog pruning deletes from four tables and marks the pruned version.
 
-    It removes an older version's current-law parameter values, parameter tree
-    rows and parameter search file, and records the pruning on the version's
-    row, so the catalog writer holds DELETE on those three tables only and
-    UPDATE on the model versions. It never deletes parameters, model versions
-    or anything a policy or dynamic owns.
+    It removes an older version's current-law values of policy and dynamic
+    parameters, its parameter tree rows and its parameter search file, and
+    records the pruning on the version's row, so the catalog writer holds
+    DELETE on those four tables only and UPDATE on the model versions. It never
+    deletes parameters, model versions or anything a policy or dynamic owns.
     """
     catalog_writer = declared_privileges(TEST_ENVIRONMENT)[CATALOG_WRITER_ROLE]
 
@@ -518,7 +440,12 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         table
         for table, privileges in catalog_writer.items()
         if TablePrivilege.DELETE in privileges
-    } == {"parameter_values", "parameter_tree_children", "parameter_search_files"}
+    } == {
+        "parameter_values",
+        "dynamic_parameter_values",
+        "parameter_tree_children",
+        "parameter_search_files",
+    }
     assert TablePrivilege.UPDATE in catalog_writer["tax_benefit_model_versions"]
     # MAINTAIN is for ANALYZE after publication, not for deleting.
     assert catalog_writer["parameter_tree_children"] == frozenset(
@@ -533,6 +460,15 @@ def test_the_catalog_writer_deletes_only_the_rows_catalog_pruning_removes() -> N
         {TablePrivilege.SELECT, TablePrivilege.INSERT, TablePrivilege.DELETE}
     )
     assert catalog_writer["parameter_values"] == READ_WRITE | {TablePrivilege.MAINTAIN}
+    # Nothing in publication updates a value, so the new table has no UPDATE.
+    assert catalog_writer["dynamic_parameter_values"] == frozenset(
+        {
+            TablePrivilege.SELECT,
+            TablePrivilege.INSERT,
+            TablePrivilege.DELETE,
+            TablePrivilege.MAINTAIN,
+        }
+    )
 
 
 def test_the_public_api_records_user_type_changes_but_never_rewrites_them() -> None:
@@ -610,6 +546,39 @@ def test_api_v1_creates_and_reads_dynamics_but_never_changes_them() -> None:
     assert declared[SIMULATION_SERVICE_ROLE]["dynamics"] == READ
     assert declared[MODAL_WORKER_ROLE]["dynamics"] == READ
     assert declared[CATALOG_WRITER_ROLE]["dynamics"] == NO_ACCESS
+
+
+def test_dynamic_parameters_are_granted_as_policy_parameters_are() -> None:
+    """The two dynamic parameter tables take the policy parameter tables' grants.
+
+    Catalog publication inserts and analyzes both, and catalog pruning deletes
+    current-law values from the values table; nothing updates either. API v1
+    reads both and inserts a
+    dynamic's values, which a run of the simulation service and its Modal
+    workers reads. Comparison runs never read them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    for policy_table, dynamic_table in (
+        ("parameters", "dynamic_parameters"),
+        ("parameter_values", "dynamic_parameter_values"),
+    ):
+        for role in (
+            RUNTIME_ROLE,
+            SIMULATION_SERVICE_ROLE,
+            MODAL_WORKER_ROLE,
+            stage12_role(TEST_ENVIRONMENT),
+        ):
+            assert declared[role][dynamic_table] == declared[role][policy_table], (
+                role,
+                dynamic_table,
+            )
+    assert declared[RUNTIME_ROLE]["dynamic_parameter_values"] == READ_INSERT
+    # Publication only inserts both tables' rows, and pruning deletes only
+    # current-law values: nothing updates either.
+    assert declared[CATALOG_WRITER_ROLE]["dynamic_parameters"] == READ_INSERT | {
+        TablePrivilege.MAINTAIN
+    }
 
 
 def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:

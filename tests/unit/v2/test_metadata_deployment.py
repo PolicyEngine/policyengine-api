@@ -131,6 +131,29 @@ def test_user_association_qualification_precedes_schema_upgrade() -> None:
     assert household_qualification < user_association_qualification < upgrade
 
 
+def test_dynamic_parameter_move_qualification_precedes_schema_upgrade() -> None:
+    """The read-only check before C1 · 50's revision runs last, as the migrator."""
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+
+    user_association_qualification = workflow.index(
+        "scripts/qualify_v2_user_association_migration.py"
+    )
+    move_qualification = workflow.index("scripts/qualify_v2_dynamic_parameter_move.py")
+    upgrade = workflow.index("migrate_v2_metadata_schema.sh")
+    step = _step(
+        workflow,
+        "Qualify the pending dynamic parameter move",
+        "Upgrade and verify the v2 schema",
+    )
+
+    assert user_association_qualification < move_qualification < upgrade
+    assert "uv run --frozen python scripts/qualify_v2_dynamic_parameter_move.py" in (
+        step
+    )
+    assert "V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}" in step
+    assert "V2_DATA_WRITE_DATABASE_URL" not in step
+
+
 def test_declared_privileges_are_granted_and_verified_before_catalog_seeding() -> None:
     workflow = _read(".github/workflows/seed-v2-database.yml")
 

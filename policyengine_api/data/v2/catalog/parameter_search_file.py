@@ -21,6 +21,13 @@ never depends on the day it was built.
 
 Catalog publication builds the file from the installed packages' catalog
 (``country_search_file``) for the version it publishes.
+
+From format 2 (C1 · 50), the file lists only policy parameters: model
+assumptions (``policyengine_api.dynamic_parameters``) and the folders that
+hold only them are left out of every list, as they are of the policy tree.
+A stored file of the current format can't change, so the format changed with
+them; versions stored before have format 1 files, which the previous release
+serves.
 """
 
 from __future__ import annotations
@@ -32,6 +39,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
+from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+    is_dynamic_path,
+)
 from policyengine_api.data.v2.catalog.parameter_tree import (
     REFORM_TREE_PREFIX,
     TreeNodeSource,
@@ -47,7 +57,7 @@ if TYPE_CHECKING:
         ParameterRecord,
     )
 
-PARAMETER_SEARCH_FILE_FORMAT = 1
+PARAMETER_SEARCH_FILE_FORMAT = 2
 
 # Repeated builds of the same rows must give the same bytes, so the gzip header
 # carries no timestamp.
@@ -194,13 +204,16 @@ def build_parameter_search_file(
     fields and editability; ``other_parameters`` lists the other parameters
     under ``gov`` with their labels; ``nodes`` lists ``gov`` and every node
     under it that has a stored label. A parameter without current-law values cannot be
-    edited.
+    edited. The country's model assumptions, and the folders that hold only
+    them, are in none of the lists.
     """
     editability_by_name = _editability(editability)
     changeable: list[SearchFileParameterEntry] = []
     others: list[SearchFileLabelEntry] = []
     for parameter in sorted(parameters, key=lambda parameter: parameter.name):
-        if not parameter.name.startswith(REFORM_TREE_PREFIX):
+        if not parameter.name.startswith(REFORM_TREE_PREFIX) or is_dynamic_path(
+            country_id, parameter.name
+        ):
             continue
         label = _stored_label(parameter.label)
         if not is_reform_changeable(
@@ -222,7 +235,10 @@ def build_parameter_search_file(
     labelled_nodes: list[SearchFileNodeEntry] = [
         {"path": node.name, "label": node.label}
         for node in sorted(nodes, key=lambda node: node.name)
-        if _is_gov_node(node.name) and node.label is not None and node.label.strip()
+        if _is_gov_node(node.name)
+        and not is_dynamic_path(country_id, node.name)
+        and node.label is not None
+        and node.label.strip()
     ]
     return {
         "format": PARAMETER_SEARCH_FILE_FORMAT,

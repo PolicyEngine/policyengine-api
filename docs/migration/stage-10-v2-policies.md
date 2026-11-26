@@ -149,12 +149,22 @@ v1 policy that sets one parameter under both spellings with different values
 fails as `conflicting_values`. The mapping in `legacy_policy_mappings` names the
 policy and the dynamic (`dynamic_id`), or no dynamic when the v1 policy sets no
 assumptions. A v1 policy copied before the split existed keeps its copy: its
-assumptions stay policy values and its mapping names no dynamic, and a UK
-copy made before `gov.dynamic.` joined keeps those values in its policy too,
-until the split command splits it (see "Splitting stored policies that hold
+assumptions stayed policy values and its mapping names no dynamic, and a UK
+copy made before `gov.dynamic.` joined kept those values in its policy too,
+until the split command split it (see "Splitting stored policies that held
 model assumptions" below). Native `POST /v2/policies` refuses such
 values with 422 instead (code `dynamic_parameters`), and they are created
 through `POST /v2/dynamics`.
+
+Since revision `7f7335f0eb31` (C1 · 50), model assumptions are
+`dynamic_parameters` rows and a dynamic's values `dynamic_parameter_values`
+rows, apart from the policy parameters and policies' values. The copy looks
+the policy's names up among policy parameters and the assumptions' among
+dynamic parameters. `POST /v2/policies` binds its IDs to `parameters` and
+names, in its 422 `dynamic_parameters`, those it finds in `dynamic_parameters`
+instead; `POST /v2/dynamics` binds its IDs to `dynamic_parameters` and names,
+in its 422 `policy_parameters`, those it finds in `parameters`. An ID in
+neither answers the generic catalog 422, as before.
 
 A saved-policy mutation commits
 its source row, incremented revision, and complete event in one Cloud SQL
@@ -291,174 +301,19 @@ The Public API also no longer serves Canada, Nigeria and Israel: their v1
 policy requests are rejected as unknown countries before any write, so every
 v1 policy write is now for a country that v2 supports.
 
-## Splitting stored policies that hold model assumptions
+## Splitting stored policies that held model assumptions
 
-`scripts/split_v2_policy_copies.py` (C1 · 48, run as the operator step C1 · 49)
-splits every stored v2 policy that sets a model assumption: a parameter under
-`gov.simulation.`, US `simulation.` or UK `gov.dynamic.`
-(`policyengine_api/dynamic_parameters.py`). The v1-to-v2 copy made such
-policies before it split model assumptions off, and for UK `gov.dynamic.`
-values until that prefix joined; a v1 policy is never copied again. C1 · 50's
-revision, which moves dynamic parameters into their own tables, refuses to
-run while any policy value names one, because the foreign key's cascade would
-otherwise change those policies silently.
+Until C1 · 36, the v1-to-v2 copy kept a v1 policy's model assumptions in its
+v2 policy, and UK `gov.dynamic.` values until C1 · 48. A one-time command
+added by C1 · 48, `scripts/split_v2_policy_copies.py`, split every such
+stored policy into a policy and a dynamic on its own catalog version,
+re-pointed its legacy mappings and saved policies, gave each saved policy's
+owner a saved dynamic with its name, and deleted the old copy once nothing
+named it. The operator step C1 · 49 ran it in staging and production, as a
+temporary database role, before C1 · 50's revision.
 
-For each such policy, in one transaction, the command
-(`policyengine_api/services/v2/policy_copy_split/services.py`) locks the
-legacy mappings that name it, then the policy itself (`SELECT … FOR
-UPDATE`, so nothing can start naming it meanwhile), in the order API v1's
-copy of a v1 saved policy takes the same locks, so the two wait for each
-other instead of deadlocking. It locks each saved policy that names the
-copy only just before saving its owner's dynamic, whose foreign-key check
-waits for any lock on the owner's user, so its two waits come within a few
-statements of each other. Its lock waits end after half a second, shorter
-than PostgreSQL's default one-second `deadlock_timeout`, so in a lock cycle
-with a live write that locks the user first, such as API v1's sign-in merge
-(which locks a browser's user, then moves its saved policies) or a deletion
-of the user, the split's wait ends first: it rolls back that copy and tries
-it again a second later, for five attempts in all, and the live write goes
-ahead. It then:
-
-- finds or creates a policy holding the values that aren't model assumptions,
-  empty when there are none, and a dynamic holding the model assumptions,
-  both on the copy's own catalog version, with the same parameter IDs, values
-  and dates, through the services `POST /v2/policies` and `POST /v2/dynamics`
-  store them with;
-- points each `legacy_policy_mappings` row that names the copy at that policy
-  and dynamic. A mapping that already names a dynamic (a UK copy made after
-  C1 · 36 holding `gov.dynamic.` values) gets one dynamic holding that
-  dynamic's values and the copy's model assumptions together; the earlier
-  dynamic is kept;
-- points each `user_policies` row that names the copy at that policy, keeping
-  its name, description, `baseline` and `provenance`, and gives its owner a `user_dynamics` row
-  with the saved policy's name and no description, naming the dynamic the
-  saved policy's own v1 policy's mapping now names, or else the copy's
-  dynamic. When the owner already has a saved dynamic in that country naming
-  the same dynamic with the same name (two null names count as the same),
-  that one is reused;
-- deletes the copy, and its values with it, once nothing names it.
-
-A copy that a `simulations`, `reports` or `household_jobs` row names is
-split and its mappings and saved policies are re-pointed, but the copy is
-kept: those rows' keys hash the policy, and their `policy_id` is `ON DELETE
-SET NULL`, so deleting the copy would silently make them current law. A copy
-whose mapping's dynamic sets one of its model assumptions for the same start
-date differently, is bound to another catalog version, or would hold more
-than 1,000 values together with it, is refused, and nothing changes for it.
-The user decided these cases on 2026-11-25.
-
-Running the command again changes nothing: a re-pointed mapping or saved
-policy no longer names the copy, and the policy and dynamic are found by
-their content hashes. A kept copy is listed as kept again, and a refused
-copy as refused.
-
-### Deploy order
-
-1. API v1's release containing C1 · 48 (and so C1 · 36 and C1 · 43) deploys
-   in the environment, so the v1-to-v2 copy there splits UK `gov.dynamic.`
-   values too and no new policy holding model assumptions is stored.
-2. C1 · 49 runs the command there: the read-only listing, then `--apply`,
-   then the listing again. That listing lists nothing and exits with 0, or
-   lists only kept and refused copies and exits with 1. Each of those still
-   holds model assumptions as policy values, so the operator settles it by
-   hand first (for example by deleting the test simulations, reports or
-   household calculations that name it), with the user's approval.
-3. Only then, once a listing lists nothing, does C1 · 50's revision run in
-   that environment.
-
-### The temporary role
-
-The command connects as `policyengine_v2_policy_copy_split`, which holds only
-the grants `POLICY_COPY_SPLIT_PRIVILEGES` declares
-(`policyengine_api/data/v2/privileges.py`; a test checks the statements below
-match it). No deploy grants, checks or reports the role. Create it in the
-environment's v2 database, as a login that may grant on the migration role's
-tables, with a SCRAM-SHA-256 verifier made locally in place of the password,
-so the database never receives the password itself. Each block is one
-statement, so `supabase db query` takes it in one call:
-
-```sql
-DO $$
-BEGIN
-  CREATE ROLE policyengine_v2_policy_copy_split LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT PASSWORD '<SCRAM-SHA-256 verifier>';
-  GRANT USAGE ON SCHEMA public TO policyengine_v2_policy_copy_split;
-  GRANT DELETE, INSERT, SELECT, UPDATE ON TABLE public.policies TO policyengine_v2_policy_copy_split;
-  GRANT INSERT, SELECT ON TABLE public.dynamics TO policyengine_v2_policy_copy_split;
-  GRANT INSERT, SELECT ON TABLE public.parameter_values TO policyengine_v2_policy_copy_split;
-  GRANT INSERT, SELECT ON TABLE public.user_dynamics TO policyengine_v2_policy_copy_split;
-  GRANT SELECT ON TABLE public.household_jobs TO policyengine_v2_policy_copy_split;
-  GRANT SELECT ON TABLE public.parameters TO policyengine_v2_policy_copy_split;
-  GRANT SELECT ON TABLE public.reports TO policyengine_v2_policy_copy_split;
-  GRANT SELECT ON TABLE public.simulations TO policyengine_v2_policy_copy_split;
-  GRANT SELECT ON TABLE public.tax_benefit_model_versions TO policyengine_v2_policy_copy_split;
-  GRANT SELECT, UPDATE ON TABLE public.legacy_policy_mappings TO policyengine_v2_policy_copy_split;
-  GRANT SELECT, UPDATE ON TABLE public.user_policies TO policyengine_v2_policy_copy_split;
-END
-$$;
-```
-
-Deleting a policy needs no privilege on `parameter_values`: PostgreSQL runs a
-foreign key's cascade as the table's owner. After the run, revoke each grant
-and drop the role, as the login that created it. `DROP OWNED BY` would need
-the role's own privileges, which a login that isn't a superuser lacks on
-PostgreSQL 16 and later, so each grant is revoked by name:
-
-```sql
-DO $$
-BEGIN
-  REVOKE ALL ON TABLE public.dynamics FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.household_jobs FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.legacy_policy_mappings FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.parameter_values FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.parameters FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.policies FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.reports FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.simulations FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.tax_benefit_model_versions FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.user_dynamics FROM policyengine_v2_policy_copy_split;
-  REVOKE ALL ON TABLE public.user_policies FROM policyengine_v2_policy_copy_split;
-  REVOKE USAGE ON SCHEMA public FROM policyengine_v2_policy_copy_split;
-  DROP ROLE policyengine_v2_policy_copy_split;
-END
-$$;
-```
-
-### Running it
-
-From a checkout of the deployed release, with three variables set in the
-shell for the run only:
-
-- `V2_POLICY_COPY_SPLIT_DATABASE_URL`: the temporary role's
-  `postgresql+psycopg://` URL with `sslmode=require` (or `verify-ca` or
-  `verify-full`), on the project's direct host or its pooler in session
-  mode on port 5432. Transaction mode (port 6543) is refused, because it
-  doesn't keep the command's timeouts;
-- `V2_SUPABASE_PROJECT_REF` and `V2_SUPABASE_ENVIRONMENT`: the values of the
-  GitHub Actions environment variables of the same names, which the command
-  checks the URL against.
-
-```bash
-uv run --frozen python scripts/split_v2_policy_copies.py
-uv run --frozen python scripts/split_v2_policy_copies.py --apply
-```
-
-Without `--apply`, every transaction is `READ ONLY`, and the command lists
-for each copy the policy and dynamic it would point at (by ID when stored,
-otherwise by content hash), each legacy mapping (country and v1 policy ID,
-with the dynamic it named before) and saved policy it would re-point, each
-saved dynamic it would add or reuse, and whether the copy would be deleted,
-kept (with how many simulations, reports and household calculations name it)
-or refused (with the reason). With `--apply` it reports the same with the IDs
-of the rows it points at or creates, as each copy's transaction commits. It
-prints no URL, saved-policy name or user ID.
-
-The listing reports a row that an earlier copy in the same run would create
-as reused, since `--apply` commits each copy before the next.
-
-It exits with 0 when no stored policy sets a model assumption afterwards (for
-the listing: when every listed copy would be deleted), and with 1 otherwise.
-Missing settings, a failed connection, or a copy that still can't get its
-locks after five attempts raise, and also exit with 1; the copies already
-reported have committed, and running the command again carries on. The
-command adds a 10-second connection timeout, a half-second lock timeout and
-a 60-second statement timeout to the URL.
+C1 · 50 removed the command. Its revision moves dynamic parameters into
+`dynamic_parameters` and refuses to run while any policy value names one, so
+afterwards no stored policy can hold a model assumption and the command has
+nothing to split. The command is in the repository's history at C1 · 48's
+merge.

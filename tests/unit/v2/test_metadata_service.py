@@ -657,7 +657,7 @@ def test_the_selected_version_search_file_is_returned_as_stored(
     catalog_session.add(
         ParameterSearchFile(
             tax_benefit_model_version_id=model_version.id,
-            file_format=1,
+            file_format=2,
             compressed_content=encoded.compressed_content,
             content_sha256=encoded.content_sha256,
             uncompressed_size=encoded.uncompressed_size,
@@ -673,7 +673,7 @@ def test_the_selected_version_search_file_is_returned_as_stored(
 
     assert content_sha256 == encoded.content_sha256
     assert search_file.policyengine_version == POLICYENGINE_VERSION
-    assert search_file.file_format == 1
+    assert search_file.file_format == 2
     assert search_file.compressed_content == encoded.compressed_content
     assert search_file.content_sha256 == encoded.content_sha256
     assert search_file.uncompressed_size == encoded.uncompressed_size
@@ -704,7 +704,8 @@ def test_a_version_without_a_search_file_of_the_current_format_is_unavailable(
     assert str(raised_for_hash.value) == str(raised.value)
 
     assert str(raised.value) == (
-        f"catalog version {POLICYENGINE_VERSION} has no parameter search file: "
-        "only catalog format 2 versions that catalog publication has published, "
-        "or run with installed, since search files were added have one"
+        f"catalog version {POLICYENGINE_VERSION} has no parameter search file of "
+        "the current format: only catalog format 2 versions that catalog "
+        "publication has published, or run with installed, since that format "
+        "was added have one"
     )

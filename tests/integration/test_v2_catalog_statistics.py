@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 UNDEFINED_TABLE_FAILURE = "psycopg.errors.UndefinedTable (SQLSTATE 42P01)"
 ANALYZED_TABLES = (
     "datasets",
+    "dynamic_parameter_values",
+    "dynamic_parameters",
     "parameter_nodes",
     "parameter_tree_children",
     "parameter_values",
