@@ -13,7 +13,6 @@ from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
     Country,
-    Dynamic,
     Household,
     LegacyPolicyMapping,
     LegacyUserMapping,
@@ -261,34 +260,13 @@ def test_policy_content_hash_is_unique_per_canonicalization_version() -> None:
             session.commit()
 
 
-def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
-    model, version, parameter, policy = _policy_graph(content_hash="b" * 64)
-    dynamic = Dynamic(
-        country_id="us",
-        tax_benefit_model_id=model.id,
-        tax_benefit_model_version_id=version.id,
-        canonicalization_version=1,
-        content_hash="d" * 64,
-    )
+def test_policy_parameter_value_period_and_identity_constraints() -> None:
+    _model, _version, parameter, policy = _policy_graph(content_hash="b" * 64)
     start = datetime(2026, 1, 1, tzinfo=UTC)
 
     with _relational_sqlite_session() as session:
         session.add_all([parameter, policy])
         session.commit()
-        session.add(dynamic)
-        session.commit()
-
-        invalid_owner = ParameterValue(
-            parameter_id=parameter.id,
-            policy_id=policy.id,
-            dynamic_id=dynamic.id,
-            value_json={"rate": 0.1},
-            start_date=start,
-        )
-        session.add(invalid_owner)
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
 
         invalid_period = ParameterValue(
             parameter_id=parameter.id,

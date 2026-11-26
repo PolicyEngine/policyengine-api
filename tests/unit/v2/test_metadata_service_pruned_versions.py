@@ -137,7 +137,6 @@ def _prune_us_version(session: Session) -> None:
         select(ParameterValue).where(
             col(ParameterValue.parameter_id).in_(version_parameter_ids),
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         )
     ).all()
     tree_rows = session.exec(

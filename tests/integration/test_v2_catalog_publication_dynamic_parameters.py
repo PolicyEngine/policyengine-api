@@ -146,7 +146,6 @@ def _current_law_values(
             .where(
                 col(Parameter.tax_benefit_model_version_id) == version_id,
                 col(ParameterValue.policy_id).is_(None),
-                col(ParameterValue.dynamic_id).is_(None),
             )
         )
         dynamic_values = session.execute(

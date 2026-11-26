@@ -4,7 +4,6 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +14,6 @@ from policyengine_api.data.v2.models import (
     Dynamic,
     LegacyPolicyMapping,
     Parameter,
-    ParameterValue,
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
@@ -23,12 +21,9 @@ from policyengine_api.data.v2.models import (
 from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
 from tests.unit.v2.v2_schema_reading import (
-    declared_index,
     model_columns,
     stored_v2_table,
 )
-
-START_DATE = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 @contextmanager
@@ -101,23 +96,6 @@ def test_dynamics_have_policies_columns_and_no_name_or_description() -> None:
     }
 
 
-def test_a_dynamic_s_values_are_unique_per_parameter_and_start_date() -> None:
-    index = declared_index(
-        ParameterValue, "uq_parameter_values_dynamic_parameter_start_date"
-    )
-
-    assert index.unique
-    assert tuple(column.name for column in index.columns) == (
-        "dynamic_id",
-        "parameter_id",
-        "start_date",
-    )
-    assert str(index.dialect_options["postgresql"]["where"]) == (
-        "dynamic_id IS NOT NULL"
-    )
-    assert str(index.dialect_options["sqlite"]["where"]) == "dynamic_id IS NOT NULL"
-
-
 def test_legacy_policy_mappings_name_an_optional_dynamic_of_their_country() -> None:
     mappings = stored_v2_table("legacy_policy_mappings")
 
@@ -149,31 +127,6 @@ def test_identical_dynamic_content_is_stored_once() -> None:
         session.rollback()
         session.add(_dynamic(model, version, content_hash="e" * 64))
         session.commit()
-
-
-def test_a_dynamic_sets_one_value_per_parameter_and_start_date() -> None:
-    model, version, parameter = _catalog()
-
-    with (
-        _sqlite_sessions_with_foreign_keys() as sessions,
-        sessions(expire_on_commit=True) as session,
-    ):
-        session.add_all([model, version, parameter])
-        session.commit()
-        dynamic = _dynamic(model, version)
-        session.add(dynamic)
-        session.commit()
-        for value in (0.1, 0.2):
-            session.add(
-                ParameterValue(
-                    parameter_id=parameter.id,
-                    dynamic_id=dynamic.id,
-                    value_json=value,
-                    start_date=START_DATE,
-                )
-            )
-        with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
-            session.commit()
 
 
 def test_a_mapping_cannot_name_another_country_s_dynamic() -> None:

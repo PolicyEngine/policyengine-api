@@ -10,7 +10,6 @@ the upgrade fails while ``dynamics`` has a row, and the downgrade, which adds
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -24,8 +23,6 @@ from sqlmodel import col
 from policyengine_api.data.v2.models import (
     Dynamic,
     LegacyPolicyMapping,
-    Parameter,
-    ParameterValue,
     Policy,
 )
 from tests.fixtures.database_sessions import schema_inspector
@@ -156,18 +153,6 @@ def _insert_dynamic(
     return dynamic_id
 
 
-def _insert_parameter(session: Session, rows: PublicApiRows) -> UUID:
-    parameter_id = uuid4()
-    add_row(
-        session,
-        Parameter,
-        id=parameter_id,
-        name="gov.simulation.labor_supply_responses.elasticities.income",
-        tax_benefit_model_version_id=rows.version_id,
-    )
-    return parameter_id
-
-
 def _insert_policy(session: Session, rows: PublicApiRows, *, country_id: str) -> UUID:
     policy_id = uuid4()
     add_row(
@@ -249,35 +234,21 @@ def test_the_revision_changes_only_dynamics_their_values_and_mappings(
     command.check(config)
 
 
-def test_a_dynamic_is_stored_once_and_sets_one_value_per_parameter_and_date(
-    session: Session,
-) -> None:
+def test_a_dynamic_is_stored_once(session: Session) -> None:
+    """A dynamic is unique by its content hash, which has 64 characters.
+
+    The revision's partial unique index on a dynamic's ``parameter_values`` is
+    gone at the head: revision 7f7335f0eb31 moved dynamics' values to
+    ``dynamic_parameter_values``, which keeps that rule, and revision
+    1c651058fac5 dropped ``parameter_values.dynamic_id`` with the index.
+    """
     rows = insert_public_api_rows(session)
-    parameter_id = _insert_parameter(session, rows)
-    dynamic_id = _insert_dynamic(session, rows)
+    _insert_dynamic(session, rows)
 
     with refused(session, match="uq_dynamics_canonicalization_content_hash"):
         _insert_dynamic(session, rows)
     with refused(session, match="ck_dynamics_content_hash_length"):
         _insert_dynamic(session, rows, content_hash="short")
-
-    value = {
-        "parameter_id": parameter_id,
-        "dynamic_id": dynamic_id,
-        "value_json": 0.1,
-        "start_date": datetime(2026, 1, 1, tzinfo=UTC),
-    }
-    add_row(session, ParameterValue, id=uuid4(), **value)
-    with refused(session, match="uq_parameter_values_dynamic_parameter_start_date"):
-        add_row(session, ParameterValue, id=uuid4(), **value)
-    # Another dynamic may set the same parameter from the same date.
-    other_dynamic_id = _insert_dynamic(session, rows, content_hash="e" * 64)
-    add_row(
-        session,
-        ParameterValue,
-        id=uuid4(),
-        **{**value, "dynamic_id": other_dynamic_id},
-    )
 
 
 def test_a_mapping_names_a_dynamic_of_its_country_which_stays_while_named(

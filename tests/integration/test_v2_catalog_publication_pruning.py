@@ -189,7 +189,6 @@ def _prunable_rows(
             .where(
                 col(Parameter.tax_benefit_model_version_id) == version_id,
                 col(ParameterValue.policy_id).is_(None),
-                col(ParameterValue.dynamic_id).is_(None),
             )
             .order_by(col(ParameterValue.id)),
         ),
@@ -257,7 +256,11 @@ def _kept_rows(sessions: sessionmaker[Session], model_name: str, version: str) -
 
 
 def _owned_rows(sessions: sessionmaker[Session]) -> dict[str, list[tuple]]:
-    """Return every policy, dynamic and value a policy or dynamic owns."""
+    """Return every policy, dynamic and value a policy owns.
+
+    A dynamic's values are ``dynamic_parameter_values`` rows, whose pruning
+    ``test_v2_catalog_publication_dynamic_parameters`` checks.
+    """
     return {
         "owned_values": _rows(
             sessions,
@@ -269,14 +272,8 @@ def _owned_rows(sessions: sessionmaker[Session]) -> dict[str, list[tuple]]:
                 col(ParameterValue.start_date),
                 col(ParameterValue.end_date),
                 col(ParameterValue.policy_id),
-                col(ParameterValue.dynamic_id),
             )
-            .where(
-                sa.or_(
-                    col(ParameterValue.policy_id).is_not(None),
-                    col(ParameterValue.dynamic_id).is_not(None),
-                )
-            )
+            .where(col(ParameterValue.policy_id).is_not(None))
             .order_by(col(ParameterValue.id)),
         ),
         "policies": _rows(
@@ -291,7 +288,7 @@ def _owned_rows(sessions: sessionmaker[Session]) -> dict[str, list[tuple]]:
 def _add_saved_reform_and_dynamic(
     sessions: sessionmaker[Session], version: str
 ) -> None:
-    """Store a policy and a dynamic, each with its own value of a US parameter."""
+    """Store a policy with its own value of a US parameter, and a dynamic."""
     with sessions() as session:
         model = session.exec(
             select(TaxBenefitModel).where(TaxBenefitModel.name == US_MODEL)
@@ -331,12 +328,6 @@ def _add_saved_reform_and_dynamic(
                     value_json=0.5,
                     start_date=datetime(2026, 1, 1, tzinfo=UTC),
                     policy_id=policy.id,
-                ),
-                ParameterValue(
-                    parameter_id=parameter.id,
-                    value_json=0.3,
-                    start_date=datetime(2026, 1, 1, tzinfo=UTC),
-                    dynamic_id=dynamic.id,
                 ),
             ]
         )
@@ -389,10 +380,10 @@ def test_publication_prunes_versions_older_than_the_kept_ones_as_the_writer(
 ) -> None:
     """Pruning deletes exactly the old version's current-law data, as the writer.
 
-    The old version holds a saved reform and a dynamic, each with its own
-    value. Only the old version's current-law values, tree rows and search
-    file go; its marker is set. The kept versions, the reform, the dynamic,
-    their values, the old version's parameters and every other row stay.
+    The old version holds a saved reform with its own value, and a dynamic.
+    Only the old version's current-law values, tree rows and search file go;
+    its marker is set. The kept versions, the reform and its value, the
+    dynamic, the old version's parameters and every other row stay.
     """
     writer_sessions = v2_sessions_as_role(CATALOG_WRITER_ROLE)
     _publish(writer_sessions, OLD_VERSION)
@@ -417,7 +408,8 @@ def test_publication_prunes_versions_older_than_the_kept_ones_as_the_writer(
         _fixture_pruned("us", OLD_VERSION),
     )
     assert third.catalog_pruning_failures == ()
-    assert len(owned_before["owned_values"]) == 2
+    assert len(owned_before["owned_values"]) == 1
+    assert len(owned_before["dynamics"]) == 1
     assert _owned_rows(publication_sessions) == owned_before
     for model_name in MODEL_NAMES:
         old_kept, old_prunable = before[(model_name, OLD_VERSION)]
@@ -999,7 +991,6 @@ def test_a_version_without_current_law_rows_is_marked_pruned_with_zero_counts(
         session.execute(
             sa.delete(ParameterValue).where(
                 col(ParameterValue.policy_id).is_(None),
-                col(ParameterValue.dynamic_id).is_(None),
                 col(ParameterValue.parameter_id).in_(
                     sa.select(col(Parameter.id)).where(
                         col(Parameter.tax_benefit_model_version_id) == us_old_id

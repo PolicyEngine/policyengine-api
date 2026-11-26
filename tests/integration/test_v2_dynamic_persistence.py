@@ -110,12 +110,7 @@ def _remove_catalog(
             )
         )
         session.execute(
-            delete(ParameterValue).where(
-                or_(
-                    ParameterValue.policy_id.in_(policy_ids),
-                    ParameterValue.dynamic_id.in_(dynamic_ids),
-                )
-            )
+            delete(ParameterValue).where(ParameterValue.policy_id.in_(policy_ids))
         )
         session.execute(
             delete(DynamicParameterValue).where(
@@ -229,7 +224,8 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
     """Return the names a policy's or a dynamic's stored values set.
 
     A policy's values are ``parameter_values`` rows; a dynamic's are
-    ``dynamic_parameter_values`` rows, and it sets no ``parameter_values`` row.
+    ``dynamic_parameter_values`` rows (``parameter_values`` has no
+    ``dynamic_id`` since revision 1c651058fac5).
     """
     if policy_id is not None:
         return set(
@@ -239,12 +235,6 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
                 .where(ParameterValue.policy_id == policy_id)
             )
         )
-    assert (
-        session.scalars(
-            select(ParameterValue.id).where(ParameterValue.dynamic_id == dynamic_id)
-        ).all()
-        == []
-    )
     return set(
         session.scalars(
             select(DynamicParameter.name)

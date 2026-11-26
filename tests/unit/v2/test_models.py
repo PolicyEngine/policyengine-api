@@ -207,10 +207,7 @@ def test_policy_parameter_values_use_jsonb_and_enforce_period_identity() -> None
 
     postgres_type = columns.value_json.type.dialect_impl(postgresql.dialect())
     assert isinstance(postgres_type, postgresql.JSONB)
-    assert {
-        "ck_parameter_values_single_owner",
-        "ck_parameter_values_effective_period",
-    } <= values.constraint_names
+    assert "ck_parameter_values_effective_period" in values.constraint_names
     assert ("policy_id", "parameter_id", "start_date") in values.unique_column_sets
     assert sa.inspect(ParameterValue).relationships["policy"].back_populates == (
         "parameter_values"
@@ -478,13 +475,12 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
         "ck_countries_society_wide_requires_household",
         "ck_report_runs_terminal_completion",
         "ck_simulation_runs_terminal_completion",
-        "ck_parameter_values_single_owner",
     }.issubset(constraint_names)
     assert {
         "ix_users_email",
         "ix_simulation_runs_current_output",
         "ix_report_runs_current_output",
-        "uq_parameter_values_canonical_parameter_start_date",
+        "uq_parameter_values_current_law_parameter_start_date",
     }.issubset(index_names)
 
 
@@ -517,9 +513,14 @@ def test_stage9_uses_policyengine_version_as_its_only_catalog_release_identity()
     assert ("model_id", "version") in unique_column_sets
 
 
-def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> None:
+def test_current_law_parameter_values_have_a_partial_unique_index() -> None:
+    """A parameter has one current-law value per start date: a value with no policy.
+
+    Revision 1c651058fac5 renamed the index when its condition lost
+    ``dynamic_id``: Alembic compares an index's condition by its name only.
+    """
     index = declared_index(
-        ParameterValue, "uq_parameter_values_canonical_parameter_start_date"
+        ParameterValue, "uq_parameter_values_current_law_parameter_start_date"
     )
 
     assert index.unique
@@ -527,8 +528,24 @@ def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> No
         "parameter_id",
         "start_date",
     )
-    predicate = str(index.dialect_options["postgresql"]["where"])
-    assert predicate == "policy_id IS NULL AND dynamic_id IS NULL"
+    assert str(index.dialect_options["postgresql"]["where"]) == "policy_id IS NULL"
+    assert str(index.dialect_options["sqlite"]["where"]) == "policy_id IS NULL"
+
+
+def test_parameter_values_hold_only_policy_and_current_law_values() -> None:
+    """A dynamic's values are ``dynamic_parameter_values`` rows since C1 · 50.
+
+    ``parameter_values`` has no ``dynamic_id`` column, no key to ``dynamics``,
+    no check that a row names one owner, and no index of a dynamic's values.
+    """
+    values = stored_v2_table("parameter_values")
+
+    assert "dynamic_id" not in values.columns
+    assert "dynamic_id" not in model_columns(ParameterValue)
+    assert values.foreign_keys_to("dynamics") == ()
+    assert "ck_parameter_values_single_owner" not in values.constraint_names
+    assert "uq_parameter_values_dynamic_parameter_start_date" not in values.indexes
+    assert "uq_parameter_values_canonical_parameter_start_date" not in values.indexes
 
 
 def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:
