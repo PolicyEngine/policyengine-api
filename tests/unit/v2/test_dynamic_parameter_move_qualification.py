@@ -161,3 +161,34 @@ def test_a_target_without_the_catalog_tables_counts_no_value(
     }
     assert session.statements == []
     assert session.rolled_back
+
+
+def test_main_prints_the_evidence_and_exits_zero(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence = move.DynamicParameterMoveQualification(
+        environment="staging",
+        project_ref="abcdefghijklmnopqrst",
+        policy_values_naming_dynamic_parameters=0,
+    )
+    monkeypatch.setattr(
+        move, "qualify_dynamic_parameter_move_if_pending", lambda: evidence
+    )
+
+    assert move.main() == 0
+    assert json.loads(capsys.readouterr().out) == evidence.as_dict()
+
+
+def test_the_pending_check_asks_about_the_dynamic_parameter_tables_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked: list[str] = []
+
+    def pending(_session: object, revision: str) -> bool:
+        asked.append(revision)
+        return True
+
+    monkeypatch.setattr(move, "v2_revision_is_pending", pending)
+
+    assert move.dynamic_parameter_move_is_pending(object())
+    assert asked == ["7f7335f0eb31"]
