@@ -108,6 +108,8 @@ def test_catalog_rows_project_every_record_field_in_column_order() -> None:
             record.unit,
             record.economy,
             record.household,
+            # The fixture catalog's parameters are all policy parameters.
+            False,
         )
         for record in country.parameters
     ]

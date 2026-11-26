@@ -1076,7 +1076,7 @@ def test_every_publication_records_when_it_published_the_version(
 
     assert {
         (country_id, version)
-        for country_id, version, _values in restoring.restored_catalog_versions
+        for country_id, version, *_values in restoring.restored_catalog_versions
     } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
     for model_name in MODEL_NAMES:
         assert first[model_name] is not None
@@ -1310,7 +1310,7 @@ def test_restoring_a_version_stored_before_catalog_format_2_writes_values_only(
         assert _pruned_at(publication_sessions, model_name, OLD_VERSION) is None
     assert {
         (country_id, version)
-        for country_id, version, _values in restoring.restored_catalog_versions
+        for country_id, version, *_values in restoring.restored_catalog_versions
     } == {("us", OLD_VERSION), ("uk", OLD_VERSION)}
     assert restoring.parameter_trees_written == ()
     assert restoring.parameter_search_files_written == ()
