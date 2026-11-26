@@ -33,8 +33,10 @@ from policyengine_api.services.v2.policy_copy_split.types import (
     PolicyCopyRefusalReason,
 )
 from policyengine_api.services.v2.policy_copy_split.validators import (
+    PolicyCopyIntegrityError,
     PolicyCopySplitRefusedError,
     merge_dynamic_content,
+    require_stored_row,
 )
 
 MODEL_ID = UUID("00000000-0000-0000-0000-00000000a001")
@@ -312,3 +314,19 @@ def test_a_merged_dynamic_over_the_value_limit_refuses_the_copy() -> None:
         )
 
     assert refusal.value.reason is PolicyCopyRefusalReason.TOO_MANY_VALUES
+
+
+def test_a_refusal_names_its_reason() -> None:
+    refusal = PolicyCopySplitRefusedError(
+        PolicyCopyRefusalReason.CONFLICTING_DYNAMIC_VALUES
+    )
+
+    assert "conflicting_dynamic_values" in str(refusal)
+
+
+def test_a_missing_row_a_foreign_key_requires_is_an_integrity_error() -> None:
+    assert require_stored_row(POLICY_ID, "the copy's ID") == POLICY_ID
+    with pytest.raises(
+        PolicyCopyIntegrityError, match=r"model version of policy .* is missing"
+    ):
+        require_stored_row(None, f"model version of policy {POLICY_ID}")

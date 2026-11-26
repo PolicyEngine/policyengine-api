@@ -218,9 +218,7 @@ def _prepare(
                 )
             ),
         )
-        for saved_policy in read_saved_policies_naming_policy(
-            session, policy.id, lock=False
-        )
+        for saved_policy in read_saved_policies_naming_policy(session, policy.id)
     )
     return replace(
         prepared,

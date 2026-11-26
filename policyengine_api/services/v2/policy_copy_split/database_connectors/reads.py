@@ -101,20 +101,20 @@ def read_mappings_naming_policy(
 
 
 def read_saved_policies_naming_policy(
-    session: Session, policy_id: UUID, *, lock: bool
+    session: Session, policy_id: UUID
 ) -> list[UserPolicy]:
-    """Return the saved policies that name the policy, oldest first.
+    """Return the saved policies that name the policy, oldest first, unlocked.
 
-    With ``lock``, they are selected FOR UPDATE.
+    The split locks each only just before saving its owner's dynamic
+    (``read_saved_policy_for_update``).
     """
-    statement = (
-        select(UserPolicy)
-        .where(UserPolicy.policy_id == policy_id)
-        .order_by(col(UserPolicy.created_at), col(UserPolicy.id))
+    return list(
+        session.exec(
+            select(UserPolicy)
+            .where(UserPolicy.policy_id == policy_id)
+            .order_by(col(UserPolicy.created_at), col(UserPolicy.id))
+        ).all()
     )
-    if lock:
-        statement = statement.with_for_update()
-    return list(session.exec(statement).all())
 
 
 def read_saved_policy_for_update(
