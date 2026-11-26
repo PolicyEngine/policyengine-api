@@ -55,5 +55,22 @@ jobs:
       - name: Build and deploy collector
         id: collector
         run: bash .github/scripts/deploy_observability_collector.sh
+      # gcloud can't mint an identity token with an audience from the workload
+      # identity federation credential above, so this step mints it. It writes
+      # no credentials file and sets no variables, so gcloud keeps the first
+      # step's sign-in.
+      - name: Mint an identity token for the deployed collector
+        id: collector_token
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.collector.outputs.service_url }}
+          id_token_include_email: true
+          create_credentials_file: false
+          export_environment_variables: false
       - name: Verify Google Cloud ingestion and log rejection
+        env:
+          COLLECTOR_ID_TOKEN: ${{ steps.collector_token.outputs.id_token }}
         run: bash .github/scripts/verify_observability_collector.sh '${{ steps.collector.outputs.service_url }}'
