@@ -5,6 +5,7 @@ set -euo pipefail
 uv run --frozen --extra dev pytest -q \
   tests/unit/v2/test_alembic_v2.py \
   tests/unit/v2/test_alembic_v2_revisions.py \
+  tests/unit/v2/test_alembic_v2_dynamic_revisions.py \
   tests/integration/test_alembic_v2_lifecycle.py \
   tests/integration/test_alembic_v2_catalog_tables.py \
   tests/integration/test_alembic_v2_simulation_runs.py \
@@ -16,4 +17,5 @@ uv run --frozen --extra dev pytest -q \
   tests/integration/test_alembic_v2_dynamics.py \
   tests/integration/test_alembic_v2_report_column_drops.py \
   tests/integration/test_alembic_v2_user_dynamics.py \
-  tests/integration/test_alembic_v2_dynamic_parameter_tables.py
+  tests/integration/test_alembic_v2_dynamic_parameter_tables.py \
+  tests/integration/test_alembic_v2_parameter_values_dynamic_id_drop.py

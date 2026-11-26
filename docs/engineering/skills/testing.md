@@ -303,7 +303,7 @@ The generated-only v2 Alembic chain and disposable Postgres lifecycle:
 
 ```bash
 uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/v2/test_alembic_v2_revisions.py \
-  tests/unit/test_alembic_workflows.py -q
+  tests/unit/v2/test_alembic_v2_dynamic_revisions.py tests/unit/test_alembic_workflows.py -q
 V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
   uv run pytest tests/integration/test_alembic_v2_lifecycle.py tests/integration/test_alembic_v2_catalog_tables.py -q
 ```
@@ -642,6 +642,7 @@ uv run --frozen pytest \
   tests/unit/v2/test_models.py \
   tests/unit/v2/test_alembic_v2.py \
   tests/unit/v2/test_alembic_v2_revisions.py \
+  tests/unit/v2/test_alembic_v2_dynamic_revisions.py \
   tests/unit/test_readiness.py \
   tests/unit/test_cloud_run_deploy_scripts.py \
   tests/unit/test_migration_contract_artifacts.py \

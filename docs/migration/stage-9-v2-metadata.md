@@ -641,8 +641,8 @@ of a new version took 17 to 20 minutes in production, inside the job's
 `policyengine_api/data/v2/catalog/publication_pruning.py`.
 
 Pruning a version runs one transaction that deletes its current-law
-`parameter_values` (rows of its parameters with neither a `policy_id` nor a
-`dynamic_id`), its current-law `dynamic_parameter_values` (rows of its
+`parameter_values` (rows of its parameters with no `policy_id`), its
+current-law `dynamic_parameter_values` (rows of its
 dynamic parameters with no `dynamic_id`), its `parameter_tree_children` rows
 and its `parameter_search_files` rows, and sets its
 `catalog_values_pruned_at`. It never deletes `parameters` or

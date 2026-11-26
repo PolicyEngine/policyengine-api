@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
-V2_ALEMBIC_HEAD_REVISION = "7f7335f0eb31"
+V2_ALEMBIC_HEAD_REVISION = "1c651058fac5"
 DISPOSABLE_DATABASE_NAME = "policyengine_v2_alembic_test"
 DISPOSABLE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
 MIGRATION_ROLE = "policyengine_v2_migrator"

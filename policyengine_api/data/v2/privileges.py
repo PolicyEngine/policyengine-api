@@ -305,8 +305,8 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
         runtime=READ, catalog_writer=READ_INSERT_DELETE | _ANALYZE
     ),
     # API v1 also inserts a v2 policy's own parameter values. Catalog pruning
-    # deletes an older version's current-law values (those with no policy or
-    # dynamic), never a policy's. Dynamics' values were moved to
+    # deletes an older version's current-law values (those with no policy),
+    # never a policy's. Dynamics' values were moved to
     # dynamic_parameter_values (C1 · 50).
     "parameter_values": _access(
         runtime=READ_INSERT, catalog_writer=READ_WRITE | _ANALYZE, **_RUN_INPUT_READS

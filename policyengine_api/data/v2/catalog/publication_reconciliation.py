@@ -345,7 +345,6 @@ def _comparison_pairs(
         .where(
             selected_version,
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         )
     )
 
@@ -579,15 +578,13 @@ def count_region_differences(
 def assert_canonical_value_uniqueness(session: Session) -> None:
     """Raise CatalogPublicationError if a parameter has duplicate current-law values.
 
-    Current-law values are those with neither a policy nor a dynamic, in
-    either table; each parameter may have only one per start date.
+    Current-law values are those with no policy in ``parameter_values`` and
+    those with no dynamic in ``dynamic_parameter_values``; each parameter may
+    have only one per start date.
     """
     duplicates = (
         sa.select(col(ParameterValue.parameter_id))
-        .where(
-            col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
-        )
+        .where(col(ParameterValue.policy_id).is_(None))
         .group_by(
             col(ParameterValue.parameter_id),
             col(ParameterValue.start_date),
