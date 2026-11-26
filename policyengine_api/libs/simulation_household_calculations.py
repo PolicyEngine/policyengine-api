@@ -9,9 +9,11 @@ the same gateway credentials (``GATEWAY_AUTH_*``), request and observability
 ID headers, transport and instrumentation as every other simulation call.
 
 The request names the country, the stored household and the stored policy
-(null for current law), ``add_missing_variables``, and the axes and SPM
-settings only when the caller gave them. The simulation service's answers
-are read as follows.
+(null for current law), ``add_missing_variables``, and the stored dynamic,
+the axes and the SPM settings only when the caller gave them: the
+simulation service's release before it took a dynamic refuses any request
+naming the field, so a calculation without one is accepted by either
+release. The simulation service's answers are read as follows.
 
 The job was created:
 
@@ -21,7 +23,8 @@ No job of the submission will run, so the service is unavailable
 (SimulationServiceUnavailableError, which the route answers 503):
 
 - 400 when a household, policy or catalog version it names does not exist
-  (the Public API checks the first two first), with the service's reason;
+  (the Public API checks the first two first), with the service's reason,
+  unless its code names a row the caller chose (below);
 - 401, 403, 404, 405, 413 and 429, which its authentication, routing,
   body-size and rate limits answer before its route runs;
 - its own 503, which names its code, when it is not configured, cannot read
@@ -33,10 +36,17 @@ No job of the submission will run, so the service is unavailable
 
 The caller's data was refused:
 
-- 422 with its reasons (a malformed request, or one its household contract
-  refuses), one per field as FastAPI writes them, which reach the caller as
-  SimulationServiceInvalidRequestError. A 422 of another shape is
-  unavailable.
+- 422 with its reasons (a malformed request, one its household contract
+  refuses, a dynamic setting parameters its catalog version lacks, or a
+  parameter both the policy and the dynamic set, each located at
+  ``dynamic_id``), one per field as FastAPI writes them, which reach the
+  caller as SimulationServiceInvalidRequestError. A 422 of another shape is
+  unavailable;
+- 400 with a code in ``CALLER_ROW_REFUSAL_CODES`` and a readable reason,
+  as the report route's: ``unknown_dynamic`` for a dynamic the country does
+  not store (API v1 checks it first), which reaches the caller as
+  SimulationServiceInvalidRequestError with its code and reason, as on the
+  economy routes. One whose reason cannot be read is unavailable.
 
 The job may exist, and no route finds a household job without its ID, so the
 message asks the caller to submit the calculation again and says that this
@@ -95,6 +105,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from policyengine_api.libs.simulation_service_answers import (
+    CALLER_ROW_REFUSAL_CODES,
     PROXY_STAND_IN_STATUSES,
     AnswerModel,
     Refusal,
@@ -184,8 +195,9 @@ def household_calculation_request(
 ) -> dict[str, Any]:
     """Return the simulation service's request body for the calculation.
 
-    ``axes`` and ``spm`` are sent only when the caller gave them; each axis
-    and the SPM settings keep only the fields the caller gave.
+    ``dynamic_id``, ``axes`` and ``spm`` are sent only when the caller gave
+    them; each axis and the SPM settings keep only the fields the caller
+    gave.
     """
     body: dict[str, Any] = {
         "country": calculation.country_id,
@@ -193,8 +205,10 @@ def household_calculation_request(
         "policy_id": (
             None if calculation.policy_id is None else str(calculation.policy_id)
         ),
-        "add_missing_variables": calculation.add_missing_variables,
     }
+    if calculation.dynamic_id is not None:
+        body["dynamic_id"] = str(calculation.dynamic_id)
+    body["add_missing_variables"] = calculation.add_missing_variables
     if calculation.axes is not None:
         body["axes"] = [
             [axis.model_dump(mode="json", exclude_unset=True) for axis in group]
@@ -229,10 +243,14 @@ def post_household_calculation(
     return SimulationAnswer(status_code=response.status_code, content=response.content)
 
 
-def _invalid_request_reason(refusal: Refusal) -> str:
-    """Return the service's reason, or each refused field and why."""
+def _invalid_request_reason(refusal: Refusal, code: str | None = None) -> str:
+    """Return the service's reason, or each refused field and why.
+
+    ``code`` is the service's code, named when given.
+    """
+    named_code = "" if code is None else f" ({code})"
     return (
-        "The simulation service cannot calculate this household: "
+        f"The simulation service cannot calculate this household{named_code}: "
         f"{refusal_reason(refusal)}"
     )
 
@@ -336,11 +354,12 @@ class SimulationHouseholdCalculationClient:
         """Submit the calculation and return the job the service created.
 
         Raise SimulationServiceInvalidRequestError with the service's reasons
-        when it refuses the caller's data (422);
+        when it refuses the caller's data (422, or 400 naming a row the
+        caller chose, such as ``unknown_dynamic``);
         SimulationServiceUnavailableError when no job of the submission will
-        run (its 400, the statuses it answers before its route runs, its own
-        503, a connection never made or a gateway token that cannot be
-        fetched); SimulationServiceInternalError when it failed (500); and
+        run (any other 400, the statuses it answers before its route runs,
+        its own 503, a connection never made or a gateway token that cannot
+        be fetched); SimulationServiceInternalError when it failed (500); and
         SimulationServiceAnswerUnreadableError when it accepted the
         calculation but its answer cannot be read, it answered any other
         status, its answer was lost after the submission may have reached it,
@@ -384,6 +403,10 @@ def _accepted_job(answer: SimulationAnswer) -> HouseholdCalculationAccepted:
             _invalid_request_reason(read.refusal)
         )
     if read.status_code == HTTPStatus.BAD_REQUEST:
+        if read.refusal is not None and read.code in CALLER_ROW_REFUSAL_CODES:
+            raise SimulationServiceInvalidRequestError(
+                _invalid_request_reason(read.refusal, read.code)
+            )
         raise SimulationServiceUnavailableError(_refused(read))
     if read.status_code in STATUSES_AFTER_WHICH_NO_JOB_RUNS:
         raise SimulationServiceUnavailableError(_unavailable(read))

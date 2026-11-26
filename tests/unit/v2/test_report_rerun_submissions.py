@@ -246,6 +246,27 @@ def test_a_household_reports_rerun_is_sent_where_only_households_are_calculated(
     assert policies.asked == [STORED_POLICY_ID]
 
 
+def test_a_household_reports_rerun_reads_no_dynamic() -> None:
+    # The re-run names only the report: the simulation service reads each
+    # stored side's policy and dynamic itself, so each side keeps its dynamic,
+    # which was checked when the report was created.
+    client = RecordingSimulationService()
+    dynamics = StoredDynamics()
+    service = SimulationSubmissionService(
+        countries=StoredCountries(society_wide_enabled=False),
+        households=UnreadHouseholds(),
+        policies=StoredPolicies(),
+        dynamics=dynamics,
+        client_factory=lambda: client,
+    )
+    rerun = rerun_input(None, STORED_POLICY_ID, kind="household")
+
+    service.rerun_report(rerun)
+
+    assert client.reruns == [rerun]
+    assert dynamics.asked == []
+
+
 def test_a_household_report_of_the_baseline_alone_checks_the_baseline_policy() -> None:
     client = RecordingSimulationService()
     policies = StoredPolicies()

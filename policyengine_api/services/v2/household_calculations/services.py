@@ -5,11 +5,15 @@ row allows household calculations (a household-only country does), that the
 stored household and policy exist in that country, through the same
 services as ``/v2/households`` and ``/v2/policies`` (so one of another
 country, or none, is not found), that the household has a default year, and
-that the policy sets no parameter the running catalog version lacks. Only
-then does it send the simulation service the IDs and options. The simulation
-service reads the household, the policy's parameter values and the catalog
-version from the Public API's tables itself, inserts the job and calculates
-the household's default year; each submission creates a new job.
+that the policy sets no parameter the running catalog version lacks. A
+dynamic the calculation names is then checked as an economy simulation's
+is, by ``simulation_service.services.require_runnable_dynamics`` through the
+same service as ``/v2/dynamics``: stored in the country, and setting no
+parameter the running catalog version lacks. Only then does it send the
+simulation service the IDs and options. The simulation service reads the
+household, the policy's and the dynamic's parameter values and the catalog
+version from API v1's tables itself, inserts the job and calculates the
+household's default year; each submission creates a new job.
 
 Reading a calculation reads its job from ``household_jobs``, which the
 simulation service inserts and its household function completes; it never
@@ -43,6 +47,9 @@ from policyengine_api.services.v2.household_calculations.validators import (
 from policyengine_api.services.v2.policies.validators import (
     require_policy_parameters_present,
 )
+from policyengine_api.services.v2.simulation_service.validators import (
+    SubmissionStorageError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -52,13 +59,11 @@ if TYPE_CHECKING:
         HouseholdCalculationDatabaseSession,
     )
     from policyengine_api.services.v2.household_calculations.types import (
-        CountrySource,
         HouseholdCalculationInput,
         HouseholdCalculationRead,
+        HouseholdCalculationSources,
         HouseholdCalculationSubmitted,
         HouseholdCalculationSubmitter,
-        HouseholdSource,
-        PolicySource,
     )
 
 
@@ -67,11 +72,17 @@ def _storage_failures() -> Iterator[None]:
     """Raise HouseholdCalculationStorageError for a failed database read.
 
     That includes the policy check's catalog query, which the policy service
-    reports as MetadataCatalogUnavailableError.
+    reports as MetadataCatalogUnavailableError, and the dynamic check's
+    reads, which ``require_runnable_dynamics`` reports as
+    SubmissionStorageError.
     """
     try:
         yield
-    except (SQLAlchemyError, MetadataCatalogUnavailableError) as error:
+    except (
+        SQLAlchemyError,
+        MetadataCatalogUnavailableError,
+        SubmissionStorageError,
+    ) as error:
         msg = "V2 household calculation storage is unavailable"
         raise HouseholdCalculationStorageError(msg) from error
 
@@ -82,22 +93,19 @@ class V2HouseholdCalculationService:
     def __init__(
         self,
         *,
-        countries: CountrySource,
-        households: HouseholdSource,
-        policies: PolicySource,
+        sources: HouseholdCalculationSources,
         database_session: HouseholdCalculationDatabaseSession,
         simulation_factory: Callable[[], HouseholdCalculationSubmitter],
     ) -> None:
         """Read through these services and sessions for one request.
 
-        ``simulation_factory`` returns the simulation service's client only
-        once a submission is sent to it, so a request the Public API refuses
-        gets its own answer even when the simulation service is not
-        configured, and a read never needs it.
+        A submission is checked against ``sources``; a read reads only
+        ``database_session``. ``simulation_factory`` returns the simulation
+        service's client only once a submission is sent to it, so a request
+        the Public API refuses gets its own answer even when the simulation
+        service is not configured, and a read never needs it.
         """
-        self._countries = countries
-        self._households = households
-        self._policies = policies
+        self._sources = sources
         self._database_session = database_session
         self._simulation_factory = simulation_factory
 
@@ -107,27 +115,42 @@ class V2HouseholdCalculationService:
         """Send the calculation to the simulation service and return its new job.
 
         Raise HouseholdCalculationCountryError, HouseholdNotFoundError,
-        PolicyNotFoundError, HouseholdCalculationYearError or
-        PolicyParametersMissingError, in that order, before anything is sent;
-        HouseholdCalculationStorageError when the database cannot be read;
-        and the simulation service's errors when it refuses the calculation.
+        PolicyNotFoundError, HouseholdCalculationYearError,
+        PolicyParametersMissingError, DynamicNotFoundError or
+        DynamicParametersMissingError, in that order, before anything is
+        sent; HouseholdCalculationStorageError when the database cannot be
+        read; and the simulation service's errors when it refuses the
+        calculation.
         """
+        # Imported here: ruff's banned-module-level-imports lists every v2
+        # services module, so each loads only when a request uses it.
+        from policyengine_api.services.v2.simulation_service.services import (
+            require_runnable_dynamics,
+        )
+
         country_id = calculation.country_id
+        sources = self._sources
         with _storage_failures():
-            require_household_country(self._countries.list_countries(), country_id)
-            household = self._households.get_household(
+            require_household_country(sources.countries.list_countries(), country_id)
+            household = sources.households.get_household(
                 country_id=country_id, household_id=calculation.household_id
             )
             policy = (
                 None
                 if calculation.policy_id is None
-                else self._policies.get_policy(
+                else sources.policies.get_policy(
                     country_id=country_id, policy_id=calculation.policy_id
                 )
             )
         year = require_default_year(household.default_year)
         if policy is not None:
             require_policy_parameters_present(policy.id, policy.missing_parameters)
+        with _storage_failures():
+            require_runnable_dynamics(
+                sources.dynamics,
+                country_id=country_id,
+                dynamic_ids=(calculation.dynamic_id,),
+            )
         accepted = self._simulation_factory().submit(calculation)
         return household_calculation_submitted(calculation, accepted, year=year)
 

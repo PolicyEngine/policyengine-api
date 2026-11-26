@@ -2,8 +2,8 @@
 
 The calculation runs on the simulation service, which records it as a job in
 ``household_jobs``; the routes need no account. Submitting sends the
-simulation service the stored household's and policy's IDs once the Public
-API's own checks pass; reading reads the job from the database and never
+simulation service the stored household's, policy's and dynamic's IDs once
+API v1's own checks pass; reading reads the job from the database and never
 calls the simulation service.
 """
 
@@ -39,6 +39,7 @@ from policyengine_api.fastapi_routes.v2.household_calculations.response_models i
 )
 from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import current_observability_id
+from policyengine_api.services.v2.dynamics.validators import DynamicNotFoundError
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationNotFoundError,
@@ -82,6 +83,7 @@ HOUSEHOLD_CALCULATION_ERROR_MAPPINGS = (
         (
             HouseholdNotFoundError,
             PolicyNotFoundError,
+            DynamicNotFoundError,
             HouseholdCalculationNotFoundError,
         ),
         404,

@@ -32,8 +32,9 @@ class HouseholdCalculationSubmittedItem(StrictHouseholdCalculationAPIModel):
     """A calculation the simulation service accepted.
 
     Poll ``GET /v2/household-calculations/{calculation_id}`` until ``status``
-    is ``succeeded`` or ``failed``. ``year`` is the household's default year,
-    which is calculated.
+    is ``succeeded`` or ``failed``. ``dynamic_id`` is the dynamic whose model
+    assumptions apply, null for none. ``year`` is the household's default
+    year, which is calculated.
     """
 
     calculation_id: UUID
@@ -41,6 +42,7 @@ class HouseholdCalculationSubmittedItem(StrictHouseholdCalculationAPIModel):
     country_id: str
     household_id: UUID
     policy_id: UUID | None
+    dynamic_id: UUID | None
     year: int
 
     @classmethod
@@ -90,15 +92,17 @@ class HouseholdCalculationItem(StrictHouseholdCalculationAPIModel):
     """A household calculation and its outcome.
 
     ``status`` moves from ``pending`` through ``running`` to ``succeeded``,
-    with ``result``, or ``failed``, with ``error``. ``catalog_version_id``,
-    ``country_package_version`` and ``policyengine_version`` are those the
-    calculation runs with.
+    with ``result``, or ``failed``, with ``error``. ``dynamic_id`` is the
+    dynamic whose model assumptions apply, null for none or once the dynamic
+    is deleted. ``catalog_version_id``, ``country_package_version`` and
+    ``policyengine_version`` are those the calculation runs with.
     """
 
     calculation_id: UUID
     country_id: str
     household_id: UUID
     policy_id: UUID | None
+    dynamic_id: UUID | None
     year: int
     catalog_version_id: UUID
     country_package_version: str
@@ -158,7 +162,10 @@ class HouseholdCalculationResponse(
 HOUSEHOLD_CALCULATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
-        "description": "The household, policy or calculation does not exist.",
+        "description": (
+            "The household, policy or dynamic a submission names is not stored "
+            "in its country, or the calculation does not exist."
+        ),
     },
     422: {
         "model": V2ErrorResponse,
@@ -199,9 +206,12 @@ SUBMISSION_REFUSAL_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": (
             "The request does not match the schema; the country does not offer "
             "household calculations; the household has no default year; the "
-            "policy sets parameters the running catalog version does not have "
-            "(code missing_parameters, which names them); or the simulation "
-            "service refuses the caller's data, with its reason in the message."
+            "policy or the dynamic sets parameters the running catalog version "
+            "does not have (code missing_parameters, which names them; the "
+            "policy is checked first); or the simulation service refuses the "
+            "caller's data, with its reason in the message: its 422, such as a "
+            "parameter both the policy and the dynamic set, or its 400 for a "
+            "dynamic it does not find, with its code."
         ),
     },
     503: {

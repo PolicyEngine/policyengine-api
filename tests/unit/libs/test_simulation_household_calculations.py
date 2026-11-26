@@ -29,6 +29,8 @@ from policyengine_api.services.v2.simulation_service.types import (
 )
 from tests.fixtures.household_calculation_documents import JOB_ID
 from tests.unit.v2.household_calculation_support import (
+    ASSUMED_PARAMETER,
+    DYNAMIC_ID,
     HOUSEHOLD_ID,
     POLICY_ID,
     calculation_input,
@@ -159,6 +161,30 @@ def test_current_law_sends_a_null_policy() -> None:
     assert service.sent_body()["policy_id"] is None
 
 
+def test_a_calculation_naming_a_dynamic_sends_it() -> None:
+    service = RecordingService()
+
+    service.client().submit(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert service.sent_body() == {
+        "country": "us",
+        "household_id": str(HOUSEHOLD_ID),
+        "policy_id": str(POLICY_ID),
+        "dynamic_id": str(DYNAMIC_ID),
+        "add_missing_variables": False,
+    }
+
+
+def test_a_calculation_without_a_dynamic_leaves_it_out() -> None:
+    # The simulation service before it took a dynamic refuses any request
+    # naming the field, so a null one is not sent.
+    service = RecordingService()
+
+    service.client().submit(calculation_input(dynamic_id=None))
+
+    assert "dynamic_id" not in service.sent_body()
+
+
 def test_axes_and_spm_settings_are_sent_only_as_the_caller_gave_them() -> None:
     service = RecordingService()
     axis = {"name": "employment_income", "count": 5, "min": 0, "max": 50_000}
@@ -263,6 +289,65 @@ def test_a_reference_the_service_cannot_find_is_unavailable_with_its_reason() ->
     assert str(refused.value) == (
         "The simulation service refused the calculation (unknown_household): "
         f"Household {HOUSEHOLD_ID} not found"
+    )
+
+
+def test_a_dynamic_the_service_cannot_find_is_the_callers_error() -> None:
+    # As for an economy report: the 400 names a row the caller chose.
+    service = RecordingService(
+        400, {"code": "unknown_dynamic", "detail": f"us has no dynamic {DYNAMIC_ID}"}
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert _route_status(refused.value) == 422
+    assert str(refused.value) == (
+        "The simulation service cannot calculate this household (unknown_dynamic): "
+        f"us has no dynamic {DYNAMIC_ID}"
+    )
+
+
+def test_a_dynamic_refusal_whose_reason_cannot_be_read_is_unavailable() -> None:
+    service = RecordingService(400, {"code": "unknown_dynamic"})
+
+    with pytest.raises(SimulationServiceUnavailableError) as refused:
+        service.client().submit(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert _route_status(refused.value) == 503
+    assert str(refused.value) == (
+        "The simulation service refused the calculation (400 unknown_dynamic)."
+    )
+
+
+def test_a_dynamic_the_service_cannot_calculate_is_refused_at_its_field() -> None:
+    service = RecordingService(
+        422,
+        {
+            "detail": [
+                {
+                    "loc": ["body", "dynamic_id", ASSUMED_PARAMETER],
+                    "msg": "the catalog version for .py 6.10.0 has no such parameter",
+                    "type": "missing_parameter",
+                },
+                {
+                    "loc": ["body", "dynamic_id", "gov.simulation.example"],
+                    "msg": "the policy and the dynamic both set this parameter",
+                    "type": "overlapping_parameter",
+                },
+            ]
+        },
+    )
+
+    with pytest.raises(SimulationServiceInvalidRequestError) as refused:
+        service.client().submit(calculation_input(dynamic_id=DYNAMIC_ID))
+
+    assert _route_status(refused.value) == 422
+    assert str(refused.value) == (
+        "The simulation service cannot calculate this household: "
+        f"dynamic_id.{ASSUMED_PARAMETER}: the catalog version for .py 6.10.0 has "
+        "no such parameter; dynamic_id.gov.simulation.example: the policy and the "
+        "dynamic both set this parameter"
     )
 
 

@@ -15,6 +15,11 @@ from policyengine_api.data.v2.catalog.catalog_selection_validation import (
     MetadataCatalogUnavailableError,
 )
 from policyengine_api.services.v2.countries.types import CountryRead
+from policyengine_api.services.v2.dynamics.validators import (
+    DynamicNotFoundError,
+    DynamicParametersMissingError,
+    DynamicStorageError,
+)
 from policyengine_api.services.v2.household_calculations.validators import (
     HouseholdCalculationCountryError,
     HouseholdCalculationYearError,
@@ -40,11 +45,15 @@ from policyengine_api.services.v2.simulation_service.validators import (
 from tests.unit.v2.test_simulation_submissions import (
     HOUSEHOLD_ONLY_UK,
     OTHER_POLICY_ID,
+    OUTDATED_DYNAMIC_ID,
     OUTDATED_POLICY_ID,
+    REMOVED_ASSUMPTIONS,
     REMOVED_PARAMETERS,
     SECOND_OUTDATED_POLICY_ID,
     SERVED_COUNTRIES,
+    STORED_DYNAMIC_ID,
     STORED_POLICY_ID,
+    UK_DYNAMIC_ID,
     StoredCountries,
     StoredDynamics,
     StoredPolicies,
@@ -130,12 +139,13 @@ def household_submissions(
     countries: list[CountryRead] = SERVED_COUNTRIES,
     households: StoredHouseholds | None = None,
     policies: StoredPolicies | None = None,
+    dynamics: StoredDynamics | None = None,
 ) -> SimulationSubmissionService:
     return SimulationSubmissionService(
         countries=StoredCountries(countries=countries),
         households=households or StoredHouseholds(),
         policies=policies or StoredPolicies(),
-        dynamics=StoredDynamics(),
+        dynamics=dynamics or StoredDynamics(),
         client_factory=client_factory,
     )
 
@@ -273,6 +283,151 @@ def test_a_report_of_the_baseline_alone_checks_only_the_baselines_policy() -> No
     assert client.household_reports[0].reform is None
 
 
+def test_each_sides_dynamic_is_checked_in_the_country_and_sent() -> None:
+    client = RecordingHouseholdReportService()
+    dynamics = StoredDynamics()
+    report = household_report_input(
+        baseline={"dynamic_id": str(STORED_DYNAMIC_ID)},
+        reform={
+            "policy_id": str(STORED_POLICY_ID),
+            "dynamic_id": str(STORED_DYNAMIC_ID),
+        },
+    )
+
+    household_submissions(lambda: client, dynamics=dynamics).submit_household_report(
+        report
+    )
+
+    assert client.household_reports == [report]
+    assert client.household_reports[0].baseline.dynamic_id == STORED_DYNAMIC_ID
+    assert client.household_reports[0].reform is not None
+    assert client.household_reports[0].reform.dynamic_id == STORED_DYNAMIC_ID
+    # The one dynamic both sides name is read once.
+    assert dynamics.asked == [("us", STORED_DYNAMIC_ID)]
+
+
+@pytest.mark.parametrize("side", ["baseline", "reform"])
+def test_one_side_may_name_a_dynamic_the_other_does_not(side: str) -> None:
+    # As for an economy report, each side keeps its own dynamic, and nothing
+    # requires the two to match.
+    client = RecordingHouseholdReportService()
+    dynamics = StoredDynamics()
+    report = household_report_input(**{side: {"dynamic_id": str(STORED_DYNAMIC_ID)}})
+
+    household_submissions(lambda: client, dynamics=dynamics).submit_household_report(
+        report
+    )
+
+    assert client.household_reports == [report]
+    assert dynamics.asked == [("us", STORED_DYNAMIC_ID)]
+
+
+def test_a_household_report_without_dynamics_reads_none() -> None:
+    dynamics = StoredDynamics()
+    client = RecordingHouseholdReportService()
+
+    household_submissions(lambda: client, dynamics=dynamics).submit_household_report(
+        household_report_input()
+    )
+
+    assert dynamics.asked == []
+
+
+@pytest.mark.parametrize("side", ["baseline", "reform"])
+def test_a_sides_dynamic_of_another_country_is_not_found(side: str) -> None:
+    service = household_submissions(unconfigured_client)
+
+    with pytest.raises(DynamicNotFoundError, match=str(UK_DYNAMIC_ID)):
+        service.submit_household_report(
+            household_report_input(**{side: {"dynamic_id": str(UK_DYNAMIC_ID)}})
+        )
+
+
+def test_a_uk_household_report_takes_a_uk_dynamic() -> None:
+    client = RecordingHouseholdReportService()
+    dynamics = StoredDynamics()
+    report = household_report_input(
+        country_id="uk", baseline={"dynamic_id": str(UK_DYNAMIC_ID)}, reform=None
+    )
+
+    household_submissions(
+        lambda: client, countries=HOUSEHOLD_ONLY_UK, dynamics=dynamics
+    ).submit_household_report(report)
+
+    assert client.household_reports == [report]
+    assert dynamics.asked == [("uk", UK_DYNAMIC_ID)]
+
+
+def test_a_sides_dynamic_setting_parameters_the_catalog_lacks_is_refused() -> None:
+    service = household_submissions(unconfigured_client)
+
+    with pytest.raises(DynamicParametersMissingError) as refused:
+        service.submit_household_report(
+            household_report_input(
+                reform={
+                    "policy_id": str(STORED_POLICY_ID),
+                    "dynamic_id": str(OUTDATED_DYNAMIC_ID),
+                }
+            )
+        )
+
+    assert isinstance(refused.value, PolicyParametersMissingError)
+    assert refused.value.dynamic_id == OUTDATED_DYNAMIC_ID
+    assert refused.value.missing_parameters == REMOVED_ASSUMPTIONS
+
+
+def test_a_household_reports_policies_are_checked_before_its_dynamics() -> None:
+    dynamics = StoredDynamics()
+    service = household_submissions(unconfigured_client, dynamics=dynamics)
+
+    with pytest.raises(PolicyNotFoundError):
+        service.submit_household_report(
+            household_report_input(
+                baseline={"dynamic_id": str(UK_DYNAMIC_ID)},
+                reform={"policy_id": str(OTHER_POLICY_ID)},
+            )
+        )
+
+    assert dynamics.asked == []
+
+
+def test_a_report_of_the_baseline_alone_checks_only_the_baselines_dynamic() -> None:
+    client = RecordingHouseholdReportService()
+    dynamics = StoredDynamics()
+    report = household_report_input(
+        baseline={"dynamic_id": str(STORED_DYNAMIC_ID)}, reform=None
+    )
+
+    household_submissions(lambda: client, dynamics=dynamics).submit_household_report(
+        report
+    )
+
+    assert dynamics.asked == [("us", STORED_DYNAMIC_ID)]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        DynamicStorageError("dynamics cannot be read"),
+        OperationalError("SELECT dynamics", {}, Exception("connection refused")),
+        MetadataCatalogUnavailableError("catalog cannot be queried"),
+    ],
+)
+def test_a_household_reports_dynamic_read_that_fails_is_a_storage_failure(
+    error: Exception,
+) -> None:
+    service = household_submissions(
+        unconfigured_client, dynamics=StoredDynamics(error=error)
+    )
+
+    with pytest.raises(SubmissionStorageError) as failure:
+        service.submit_household_report(
+            household_report_input(baseline={"dynamic_id": str(STORED_DYNAMIC_ID)})
+        )
+
+    assert failure.value.__cause__ is error
+
+
 @pytest.mark.parametrize(
     ("households", "policies"),
     [
@@ -327,7 +482,9 @@ def test_a_household_report_without_a_reform_is_of_the_baseline_alone() -> None:
         pytest.param({"year": 2026}, id="year"),
         # A household report always adds every variable the household lacks.
         pytest.param({"add_missing_variables": True}, id="add-missing-variables"),
-        pytest.param({"baseline": {"dynamic_id": str(uuid4())}}, id="dynamic"),
+        pytest.param(
+            {"baseline": {"dynamic_id": "not-a-uuid"}}, id="dynamic-not-a-uuid"
+        ),
         pytest.param({"region_code": "us"}, id="region"),
         pytest.param({"household_id": "not-a-uuid"}, id="household-not-a-uuid"),
         pytest.param({"kind": "economy"}, id="another-kind"),

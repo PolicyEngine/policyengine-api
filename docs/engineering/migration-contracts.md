@@ -123,8 +123,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Method | Path | Status | Route group | Required headers | Stable response fields |
 | --- | --- | ---: | --- | --- | --- |
-| `POST` | `/v2/household-calculations` | 202 | `household` | none | `status`, `message`, `result.item.calculation_id`, `result.item.status`, `result.item.country_id`, `result.item.household_id`, `result.item.policy_id`, `result.item.year` |
-| `GET` | `/v2/household-calculations/{calculation_id}` | 200 | `household` | none | `status`, `message`, `result.item.calculation_id`, `result.item.country_id`, `result.item.household_id`, `result.item.policy_id`, `result.item.year`, `result.item.catalog_version_id`, `result.item.country_package_version`, `result.item.policyengine_version`, `result.item.status`, `result.item.created_at`, `result.item.started_at`, `result.item.completed_at`, `result.item.result`, `result.item.error` |
+| `POST` | `/v2/household-calculations` | 202 | `household` | none | `status`, `message`, `result.item.calculation_id`, `result.item.status`, `result.item.country_id`, `result.item.household_id`, `result.item.policy_id`, `result.item.dynamic_id`, `result.item.year` |
+| `GET` | `/v2/household-calculations/{calculation_id}` | 200 | `household` | none | `status`, `message`, `result.item.calculation_id`, `result.item.country_id`, `result.item.household_id`, `result.item.policy_id`, `result.item.dynamic_id`, `result.item.year`, `result.item.catalog_version_id`, `result.item.country_package_version`, `result.item.policyengine_version`, `result.item.status`, `result.item.created_at`, `result.item.started_at`, `result.item.completed_at`, `result.item.result`, `result.item.error` |
 
 ### `user_household_associations_v2`
 
