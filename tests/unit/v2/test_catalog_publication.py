@@ -235,7 +235,9 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
             "variables",
             "parameter nodes",
             "parameters",
+            "dynamic parameters",
             "parameter values",
+            "dynamic parameter values",
             "datasets",
         ]
         pairs = (*comparisons, ("regions", *region_pair))
@@ -249,14 +251,15 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
             len(staged.selected_columns) == len(stored.selected_columns)
             for _table_name, staged, stored in pairs
         )
-    # Format 2 compares model versions, variables and parameters on more fields.
-    # Regions are compared separately, on the same fields in both formats.
+    # Format 2 compares model versions, variables, parameters and dynamic
+    # parameters on more fields. Regions are compared separately, on the same
+    # fields in both formats.
     assert [
         len(format_2[1].selected_columns) - len(format_1[1].selected_columns)
         for format_1, format_2 in zip(
             format_1_comparisons, format_2_comparisons, strict=True
         )
-    ] == [3, 8, 0, 2, 0, 0]
+    ] == [3, 8, 0, 2, 2, 0, 0, 0]
 
     class Result:
         def scalar_one(self):

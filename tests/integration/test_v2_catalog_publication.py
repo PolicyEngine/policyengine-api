@@ -370,6 +370,9 @@ def test_stored_version_keeps_its_published_regions_and_logs_the_difference(
         "parameter_nodes": before_counts["parameter_nodes"],
         "parameters": before_counts["parameters"],
         "parameter_values": before_counts["parameter_values"],
+        # The fixture catalog holds no model assumption.
+        "dynamic_parameters": 0,
+        "dynamic_parameter_values": 0,
         "datasets": before_counts["datasets"],
         "regions": before_counts["regions"],
     }
