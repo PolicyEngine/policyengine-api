@@ -239,3 +239,17 @@ def test_gov_dynamic_has_one_spelling_and_is_never_rewritten() -> None:
     assert canonical_parameter_name("uk", UK_OBR_LABOUR_SUPPLY_SWITCH) == (
         UK_OBR_LABOUR_SUPPLY_SWITCH
     )
+
+
+def test_publication_refuses_to_classify_an_unsupported_country() -> None:
+    """A catalog country with no prefixes can't be split into the two tables."""
+    from policyengine_api.data.v2.catalog.dynamic_parameter_records import (
+        is_dynamic_record,
+    )
+    from policyengine_api.data.v2.catalog.publication_types import (
+        CatalogPublicationError,
+    )
+
+    assert is_dynamic_record("uk", "gov.dynamic.obr_labour_supply_assumptions")
+    with pytest.raises(CatalogPublicationError, match="'ca' is not a supported"):
+        is_dynamic_record("ca", "gov.simulation.example")
