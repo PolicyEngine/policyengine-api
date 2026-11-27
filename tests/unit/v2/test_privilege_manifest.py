@@ -599,3 +599,20 @@ def test_api_v1_saves_users_dynamics_as_it_saves_their_policies() -> None:
     for role, tables in declared.items():
         if role != RUNTIME_ROLE:
             assert tables["user_dynamics"] == NO_ACCESS, role
+
+
+def test_api_v1_publishes_saved_reports_and_never_rewrites_a_version() -> None:
+    """API v1 writes published reports and the runs each has shown.
+
+    It changes and deletes a published report, whose versions go with it
+    through their foreign key, but never changes or deletes a version
+    itself. No other role reads them.
+    """
+    declared = declared_privileges(TEST_ENVIRONMENT)
+
+    assert declared[RUNTIME_ROLE]["published_reports"] == READ_WRITE
+    assert declared[RUNTIME_ROLE]["published_report_versions"] == READ_INSERT
+    for role, tables in declared.items():
+        if role != RUNTIME_ROLE:
+            assert tables["published_reports"] == NO_ACCESS, role
+            assert tables["published_report_versions"] == NO_ACCESS, role
