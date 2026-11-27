@@ -1,3 +1,10 @@
+## [5.58.1] - 2026-11-27
+
+### Changed
+
+- API v1 no longer reads or writes `parameter_values.dynamic_id`, which no row has set since dynamics' values moved to `dynamic_parameter_values`; the table keeps the column until a later release drops it, and this release keeps serving once it does.
+
+
 ## [5.58.0] - 2026-11-27
 
 ### Added
