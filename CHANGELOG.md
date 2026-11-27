@@ -1,3 +1,10 @@
+## [5.59.0] - 2026-11-27
+
+### Removed
+
+- `parameter_values` no longer has `dynamic_id`: since revision `7f7335f0eb31` a dynamic's values are `dynamic_parameter_values` rows. Revision `1c651058fac5` drops the column with its key to `dynamics`, the single-owner check `ck_parameter_values_single_owner` and the per-dynamic index `uq_parameter_values_dynamic_parameter_start_date`, and replaces the current-law index with `uq_parameter_values_current_law_parameter_start_date` on `policy_id IS NULL`. A `parameter_values` row is now a policy's value or a current-law value.
+
+
 ## [5.58.1] - 2026-11-27
 
 ### Changed
