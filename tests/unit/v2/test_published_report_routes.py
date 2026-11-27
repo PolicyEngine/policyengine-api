@@ -543,22 +543,54 @@ def test_published_reports_are_logged_with_reports() -> None:
     assert infer_route_group(PUBLICATION_PATH) == "report"
 
 
-def test_openapi_documents_the_public_read_without_security() -> None:
+def test_openapi_documents_the_public_read_with_no_credential() -> None:
     client, _publications, _user_types = _client()
 
     paths = client.get("/v2/openapi.json").json()["paths"]
 
     public = paths["/v2/published-reports/{user_report_id}"]["get"]
-    assert "security" not in public
     assert set(public["responses"]) == {"200", "404", "422", "500", "503"}
-    assert [parameter["name"] for parameter in public["parameters"]] == [
-        "user_report_id",
-        "country_id",
-        "version_id",
-    ]
+    assert [
+        (parameter["name"], parameter["in"]) for parameter in public["parameters"]
+    ] == [("user_report_id", "path"), ("country_id", "query"), ("version_id", "query")]
     owner = paths["/v2/user-reports/{association_id}/publication"]
     assert set(owner) == {"post", "get", "patch", "delete"}
-    assert set(owner["post"]["responses"]) >= {"201", "401", "403", "404", "409"}
     assert set(paths["/v2/user-reports/{association_id}/publication/versions"]) == {
         "post"
     }
+
+
+def test_openapi_lists_each_owner_routes_own_failures() -> None:
+    client, _publications, _user_types = _client()
+
+    paths = client.get("/v2/openapi.json").json()["paths"]
+    publication = paths["/v2/user-reports/{association_id}/publication"]
+    versions = paths["/v2/user-reports/{association_id}/publication/versions"]
+
+    for operation in (publication["post"], publication["patch"], versions["post"]):
+        assert set(operation["responses"]) >= {"401", "403", "404", "409", "413"}
+        assert "author or admin" in operation["responses"]["403"]["description"]
+    for operation in (publication["get"], publication["delete"]):
+        assert {"409", "413"}.isdisjoint(operation["responses"])
+        assert "author" not in operation["responses"]["403"]["description"]
+    for operation in (*publication.values(), versions["post"]):
+        assert "400" not in operation["responses"]
+        assert "v1" not in operation["responses"]["422"]["description"]
+
+
+def test_openapi_shows_no_edit_field_as_nullable() -> None:
+    client, _publications, _user_types = _client()
+
+    schemas = client.get("/v2/openapi.json").json()["components"]["schemas"]
+    fields = schemas["PublicationPatchRequest"]["properties"]
+
+    assert set(fields) == {
+        "summary",
+        "author_ids",
+        "tags",
+        "content",
+        "show_past_versions",
+    }
+    for name, field in fields.items():
+        alternatives = field.get("anyOf", [field])
+        assert {"type": "null"} not in alternatives, name

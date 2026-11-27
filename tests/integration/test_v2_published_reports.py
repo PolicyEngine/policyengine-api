@@ -10,6 +10,7 @@ has none of the published-report tables.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -46,12 +47,14 @@ from policyengine_api.services.v2.user_reports.database_session import (
     UserReportDatabaseSession,
 )
 from policyengine_api.services.v2.user_reports.services import V2UserReportService
-from tests.fixtures.database_sessions import schema_inspector
+from policyengine_api.services.v2.user_reports.types import UserReportUpdateInput
+from tests.fixtures.database_sessions import recorded_statements, schema_inspector
 from tests.fixtures.economy_results import us_economy_result
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config
 from tests.integration.simulation_rows import add_row, refused
 from tests.integration.stored_report_rows import (
     STARTED_AT,
+    BudgetWindowYear,
     RunSettings,
     delete_catalog,
     store_budget_window_run,
@@ -477,3 +480,132 @@ def test_the_previous_revision_has_no_published_report_tables(
     assert foreign_keys == {
         "fk_published_reports_user_report_report": ("CASCADE", "RESTRICT")
     }
+
+
+def _locks(statements: list[str], table: str) -> bool:
+    """Return whether a statement selected from ``table`` FOR UPDATE."""
+    return any(
+        statement.lstrip().upper().startswith("SELECT")
+        and f"FROM {table}" in statement
+        and "FOR UPDATE" in statement
+        for statement in statements
+    )
+
+
+def test_writes_lock_the_rows_they_check(
+    runtime_sessions: sessionmaker[Session], published: dict[str, Any]
+) -> None:
+    """Each write locks what it checks, so a concurrent write waits for it.
+
+    A publish and a saved report's edit lock the saved report, so a name
+    can't be cleared while a publish reads it; an edit, a move and a
+    withdrawal lock the page, so none of them runs on a page another has
+    just withdrawn.
+    """
+    service = _service(runtime_sessions)
+    principal = published["principal"]
+    user_report_id = published["user_report_id"]
+    owner_operations = {
+        "edit": lambda: service.update_publication(
+            principal=principal,
+            country_id="us",
+            user_report_id=user_report_id,
+            publication_input=PublicationUpdateInput(show_past_versions=True),
+        ),
+        "move": lambda: service.add_publication_version(
+            principal=principal,
+            country_id="us",
+            user_report_id=user_report_id,
+            version_input=PublicationVersionInput(run_id=published["newer_run_id"]),
+        ),
+        "withdraw": lambda: service.withdraw_publication(
+            principal=principal, country_id="us", user_report_id=user_report_id
+        ),
+        "publish": lambda: service.publish_report(
+            principal=principal,
+            country_id="us",
+            user_report_id=user_report_id,
+            publication_input=_publication_input(published["run_id"]),
+        ),
+        "rename": lambda: V2UserReportService(
+            UserReportDatabaseSession(runtime_sessions)
+        ).patch_user_report(
+            principal=principal,
+            country_id="us",
+            association_id=user_report_id,
+            association_input=UserReportUpdateInput(name="A new title"),
+        ),
+    }
+    locked: dict[str, tuple[bool, bool]] = {}
+    for name, operation in owner_operations.items():
+        with recorded_statements(runtime_sessions) as statements:
+            operation()
+        locked[name] = (
+            _locks(statements, "published_reports"),
+            _locks(statements, "user_report_associations"),
+        )
+
+    assert locked == {
+        "edit": (True, False),
+        "move": (True, False),
+        "withdraw": (True, False),
+        "publish": (False, True),
+        "rename": (False, True),
+    }
+
+
+def test_a_budget_window_is_published_with_its_window_run(
+    owner_sessions: sessionmaker[Session],
+    runtime_sessions: sessionmaker[Session],
+    catalog: CatalogRows,
+    author: tuple[UserPrincipal, UUID],
+) -> None:
+    principal, user_id = author
+    succeeded = RunSettings(
+        versions=CURRENT_VERSIONS, status="succeeded", created_at=STARTED_AT
+    )
+    with owner_sessions.begin() as session:
+        window = store_report(session, catalog, budget_window_size=2)
+        window_run_id = store_budget_window_run(session, catalog, window, succeeded)
+        for year in (2026, 2027):
+            store_report_run(
+                session,
+                catalog,
+                window,
+                replace(
+                    succeeded,
+                    budget_window_year=BudgetWindowYear(
+                        budget_window_run_id=window_run_id, year=year
+                    ),
+                ),
+            )
+        user_report_id = _saved_report(
+            session, user_id=user_id, report_id=window.report_id
+        )
+
+    publication = _service(runtime_sessions).publish_report(
+        principal=principal,
+        country_id="us",
+        user_report_id=user_report_id,
+        publication_input=_publication_input(window_run_id),
+    )
+
+    assert [
+        (version.run_id, version.policyengine_version)
+        for version in publication.versions
+    ] == [(window_run_id, CURRENT_VERSIONS["policyengine_version"])]
+    with (
+        owner_sessions.begin() as session,
+        refused(
+            session,
+            IntegrityError,
+            match="uq_published_report_versions_user_report_window_run",
+        ),
+    ):
+        add_row(
+            session,
+            PublishedReportVersion,
+            id=uuid4(),
+            user_report_id=user_report_id,
+            budget_window_run_id=window_run_id,
+        )

@@ -148,3 +148,8 @@ def test_an_edit_may_send_every_field_a_publication_has_but_its_run() -> None:
         "content",
         "show_past_versions",
     }
+
+
+def test_an_edit_sends_at_least_one_field() -> None:
+    with pytest.raises(ValidationError, match="at least one field"):
+        PublicationUpdateInput.model_validate({})

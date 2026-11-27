@@ -14,7 +14,13 @@ from uuid import uuid4
 
 import pytest
 
-from policyengine_api.data.v2.models import PublishedReport, ReportRun, ReportRunStatus
+from policyengine_api.data.v2.models import (
+    PublishedReport,
+    ReportRun,
+    ReportRunStatus,
+    User,
+)
+from policyengine_api.services.v2.identity.types import UnauthenticatedPrincipal
 from policyengine_api.services.v2.published_reports.types import (
     OutputBlock,
     PublicationCreateInput,
@@ -211,8 +217,9 @@ def test_a_saved_report_naming_only_a_v1_report_cannot_be_published(sessions) ->
         _publish(published_report_service(sessions), saved, uuid4())
 
 
-def test_a_saved_report_without_a_name_cannot_be_published(sessions) -> None:
-    saved, run_id = _saved_report_with_run(sessions, name=None)
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_a_saved_report_without_a_name_cannot_be_published(sessions, name) -> None:
+    saved, run_id = _saved_report_with_run(sessions, name=name)
 
     with pytest.raises(UnpublishableUserReportError, match="name"):
         _publish(published_report_service(sessions), saved, run_id)
@@ -584,7 +591,8 @@ def test_a_page_read_with_no_versions_is_not_found(sessions) -> None:
         )
 
 
-def test_a_published_saved_reports_name_cannot_be_cleared(sessions) -> None:
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_a_published_saved_reports_name_cannot_be_cleared(sessions, name) -> None:
     saved, run_id = _saved_report_with_run(sessions)
     _publish(published_report_service(sessions), saved, run_id)
     user_reports = V2UserReportService(UserReportDatabaseSession(sessions))
@@ -594,7 +602,7 @@ def test_a_published_saved_reports_name_cannot_be_cleared(sessions) -> None:
             principal=saved.principal,
             country_id="us",
             association_id=saved.user_report_id,
-            association_input=UserReportUpdateInput(name=None),
+            association_input=UserReportUpdateInput(name=name),
         )
     renamed = user_reports.patch_user_report(
         principal=saved.principal,
@@ -619,3 +627,36 @@ def test_an_unpublished_saved_reports_name_can_be_cleared(sessions) -> None:
     )
 
     assert unnamed.name is None
+
+
+def test_a_signed_out_browser_owns_no_page_and_is_not_provisioned(sessions) -> None:
+    saved, run_id = _saved_report_with_run(sessions)
+    service = published_report_service(sessions)
+    _publish(service, saved, run_id)
+    browser = UnauthenticatedPrincipal(user_id=uuid4())
+
+    for owner_operation in (
+        service.get_publication,
+        service.withdraw_publication,
+    ):
+        with pytest.raises(UserReportNotFoundError):
+            owner_operation(
+                principal=browser,
+                country_id="us",
+                user_report_id=saved.user_report_id,
+            )
+    with pytest.raises(UserReportNotFoundError):
+        service.publish_report(
+            principal=browser,
+            country_id="us",
+            user_report_id=saved.user_report_id,
+            publication_input=PublicationCreateInput.model_validate(
+                publication_body(run_id)
+            ),
+        )
+
+    with sessions() as session:
+        assert session.get(User, browser.user_id) is None
+    assert service.get_published_report(
+        country_id="us", user_report_id=saved.user_report_id
+    )
