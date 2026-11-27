@@ -371,9 +371,12 @@ succeeded job whose result can't be read is 500.
 The call to the simulation service goes through
 `policyengine_api/libs/simulation_household_calculations.py`, at
 `SIMULATION_ENTRYPOINT_URL` with the gateway credentials of every other
-simulation call. `post_household_calculation` is the only code that sends
-the request, so moving to the generated simulation client changes that
-function and the dependency.
+simulation call. `post_household_calculation`
+(`policyengine_api/libs/simulation_service_operations.py`) is the only code
+that sends the request: it builds it with the simulation service's generated
+client, `policyengine-api-simulation-client`, from its
+`submit_household_calculation` operation and `HouseholdCalculationRequest`
+model.
 
 The live staging job runs, after the other live tests: a submit and read
 cycle, six calculations submitted at once (each accepted within

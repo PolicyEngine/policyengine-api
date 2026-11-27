@@ -51,6 +51,13 @@ dependencies = [
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
     "policyengine[models]==6.20.0",
+    # The simulation service's generated client, which builds the requests of
+    # the detailed-save API's household calculation, simulation and report
+    # routes (policyengine_api.libs.simulation_service_operations). The pin is
+    # a release whose request models hold every field those requests send;
+    # moving it is its own change, tested by
+    # tests/unit/libs/test_simulation_generated_client.py.
+    "policyengine-api-simulation-client==0.20261127.430",
     "pydantic",
     "pymysql",
     "python-dotenv",

@@ -98,13 +98,14 @@ household calculation client shares.
 ``POST /reports/{report_id}/runs``; how it reads that route's answers is in
 ``policyengine_api.libs.simulation_report_reruns``.
 
-Wiring the generated simulation client: ``post_simulation``,
-``post_report`` and ``post_report_rerun`` are the only code that sends a
-request, and each returns the status and body, which the rest of these
-modules read. Once a
-``policyengine-api-simulation-client`` release has the three routes, depend
-on that release and make each function call the generated operation, as its
-docstring says.
+Each request goes through the simulation service's generated client:
+``post_simulation``, ``post_report`` and ``post_report_rerun``
+(``policyengine_api.libs.simulation_service_operations``) build it with the
+route's generated operation (``create_simulation``, ``create_report`` and
+``rerun_report``) and request model (``EconomySimulationRequest``;
+``EconomyReportRequest``, ``BudgetWindowReportRequest`` or
+``HouseholdReportRequest``; ``ReportRerunRequest``), send it, and return the
+status and body, which the rest of these modules read.
 """
 
 from __future__ import annotations
@@ -116,10 +117,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from policyengine_api.libs.simulation_report_reruns import (
-    post_report_rerun,
-    start_report_rerun,
-)
+from policyengine_api.libs.simulation_report_reruns import start_report_rerun
 from policyengine_api.libs.simulation_service_answers import (
     CALLER_ROW_REFUSAL_CODES,
     CREATED_STATUSES,
@@ -138,6 +136,11 @@ from policyengine_api.libs.simulation_service_answers import (
     simulation_service_http_client,
     status_and_code,
     submit_again,
+)
+from policyengine_api.libs.simulation_service_operations import (
+    post_report,
+    post_report_rerun,
+    post_simulation,
 )
 from policyengine_api.services.v2.simulation_service.types import (
     SimulationServiceAnswerUnreadableError,
@@ -165,6 +168,8 @@ if TYPE_CHECKING:
         StartedReportRun,
     )
 
+# The routes' paths, which tests check requests against. Each generated
+# operation holds its own copy, which it sends the request to.
 SIMULATIONS_PATH = "/simulations"
 REPORTS_PATH = "/reports"
 
@@ -305,39 +310,6 @@ def household_report_request(report: HouseholdReportCreationInput) -> dict[str, 
             None if report.reform is None else _household_policy_choice(report.reform)
         ),
     }
-
-
-def post_simulation(
-    http_client: httpx.Client, body: dict[str, Any]
-) -> SimulationAnswer:
-    """Send one simulation to the simulation service and return its answer.
-
-    Raise httpx.HTTPError when no answer arrives, and GatewayAuthError when
-    the gateway token cannot be fetched. ``http_client`` has the service's
-    base URL. To send through the generated client instead, this body
-    becomes (the operation and model names are those the simulation
-    service's OpenAPI document gives the route)::
-
-        client = Client(base_url=str(http_client.base_url))
-        client.set_httpx_client(http_client)
-        response = create_simulation.sync_detailed(
-            client=client, body=SimulationRequest.from_dict(body)
-        )
-        return SimulationAnswer(int(response.status_code), response.content)
-    """
-    response = http_client.post(SIMULATIONS_PATH, json=body)
-    return SimulationAnswer(status_code=response.status_code, content=response.content)
-
-
-def post_report(http_client: httpx.Client, body: dict[str, Any]) -> SimulationAnswer:
-    """Send one report to the simulation service and return its answer.
-
-    As ``post_simulation``; with the generated client, the operation is the
-    report route's (``create_report.sync_detailed`` with
-    ``ReportRequest.from_dict(body)``).
-    """
-    response = http_client.post(REPORTS_PATH, json=body)
-    return SimulationAnswer(status_code=response.status_code, content=response.content)
 
 
 def _refusal(answer: SimulationAnswer) -> _Refusal | None:
