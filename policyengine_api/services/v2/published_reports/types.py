@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -60,9 +61,20 @@ OutputKey = Annotated[
     str,
     StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=MAXIMUM_NAME_LENGTH),
 ]
+
+
+def _without_nul(text: str) -> str:
+    """Refuse a NUL character (U+0000), which PostgreSQL can't store in text."""
+    if "\x00" in text:
+        msg = "Text can't hold a NUL character (U+0000)"
+        raise ValueError(msg)
+    return text
+
+
 PublishedSummary = Annotated[
     str,
     StringConstraints(min_length=1, max_length=MAXIMUM_PUBLISHED_SUMMARY_LENGTH),
+    AfterValidator(_without_nul),
 ]
 AuthorIds = Annotated[
     list[WebsiteId], Field(min_length=1, max_length=MAXIMUM_PUBLISHED_AUTHORS)
@@ -81,7 +93,9 @@ class MarkdownBlock(StrictPublicationModel):
 
     type: Literal["markdown"]
     markdown: Annotated[
-        str, StringConstraints(min_length=1, max_length=MAXIMUM_MARKDOWN_LENGTH)
+        str,
+        StringConstraints(min_length=1, max_length=MAXIMUM_MARKDOWN_LENGTH),
+        AfterValidator(_without_nul),
     ]
 
 
@@ -155,12 +169,14 @@ class PublicationCreateInput(PublicationFields):
     run_id: ResourceId
 
 
-def _without_null_alternatives(schema: dict[str, Any]) -> None:
-    """Show each optional field of an edit's schema as its type alone.
+def _edit_schema(schema: dict[str, Any]) -> None:
+    """Show an edit's schema as the edit is checked.
 
-    An edit may leave a field out but never send it as null, so the null
-    alternative and null default the field's ``| None`` gives are removed.
+    An edit sends at least one field, and may leave a field out but never
+    send it as null, so each field shows its type alone, without the null
+    alternative and null default its ``| None`` gives.
     """
+    schema["minProperties"] = 1
     for name, field in schema.get("properties", {}).items():
         alternatives = [
             alternative
@@ -182,9 +198,7 @@ class PublicationUpdateInput(StrictPublicationModel):
     An edit sends at least one of them, and none as null.
     """
 
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra=_without_null_alternatives
-    )
+    model_config = ConfigDict(extra="forbid", json_schema_extra=_edit_schema)
 
     summary: PublishedSummary | None = None
     author_ids: AuthorIds | None = None

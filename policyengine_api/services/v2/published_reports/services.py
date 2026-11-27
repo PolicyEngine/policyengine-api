@@ -70,6 +70,7 @@ from policyengine_api.services.v2.published_reports.validators import (
 )
 from policyengine_api.services.v2.stored_reports.transformations import report_kind
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
+    lock_owned_user_report_row,
     read_owned_user_policy_row,
     read_owned_user_report_row,
 )
@@ -133,15 +134,11 @@ def _owned_user_report(
     )
     if owner is None:
         association = None
-    elif lock:
-        association = publication_reads.lock_owned_user_report_row(
-            session,
-            user_id=owner.user_id,
-            country_id=country_id,
-            user_report_id=user_report_id,
-        )
     else:
-        association = read_owned_user_report_row(
+        read_saved_report = (
+            lock_owned_user_report_row if lock else read_owned_user_report_row
+        )
+        association = read_saved_report(
             session,
             user_id=owner.user_id,
             country_id=country_id,

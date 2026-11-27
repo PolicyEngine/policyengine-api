@@ -110,36 +110,62 @@ PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     500: USER_RESOURCE_ERROR_RESPONSES[500],
     503: USER_RESOURCE_ERROR_RESPONSES[503],
 }
-PUBLICATION_WRITE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    403: {
-        "model": V2ErrorResponse,
-        "description": (
-            "Publishing, editing and moving a published report need an author "
-            "or admin; machine (client-credentials) principals are not "
-            "permitted."
-        ),
-    },
+_AUTHOR_REQUIRED = {
+    "model": V2ErrorResponse,
+    "description": (
+        "Publishing, editing and moving a published report need an author or "
+        "admin; machine (client-credentials) principals are not permitted."
+    ),
+}
+_BODY_TOO_LARGE = {
+    "model": V2ErrorResponse,
+    "description": "The request body exceeds 16 MiB.",
+}
+PUBLISH_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    403: _AUTHOR_REQUIRED,
     404: {
         "model": V2ErrorResponse,
         "description": (
-            "The saved report does not exist, belongs to another user or is "
-            "not published (to edit or move it), or the run is not one of its "
-            "report's runs."
+            "The saved report does not exist or belongs to another user, or "
+            "the run is not one of its report's runs."
         ),
     },
     409: {
         "model": V2ErrorResponse,
         "description": (
             "The saved report is published already, names only a v1 report "
-            "output or has no name; or the run has not succeeded, or the page "
-            "has shown it already."
+            "output or has no name; or the run has not succeeded."
         ),
     },
-    413: {
-        "model": V2ErrorResponse,
-        "description": "The request body exceeds 16 MiB.",
-    },
+    413: _BODY_TOO_LARGE,
 }
+EDIT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    403: _AUTHOR_REQUIRED,
+    404: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The saved report does not exist, belongs to another user, or is "
+            "not published."
+        ),
+    },
+    413: _BODY_TOO_LARGE,
+}
+MOVE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    403: _AUTHOR_REQUIRED,
+    404: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The saved report does not exist, belongs to another user or is "
+            "not published, or the run is not one of its report's runs."
+        ),
+    },
+    409: {
+        "model": V2ErrorResponse,
+        "description": "The run has not succeeded, or the page has shown it already.",
+    },
+    413: _BODY_TOO_LARGE,
+}
+
 PUBLISHED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
@@ -248,7 +274,7 @@ def build_v2_user_report_publication_router(
         response_model=PublicationDetailResponse,
         status_code=201,
         dependencies=[Depends(require_author)],
-        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
+        responses=PUBLISH_ERROR_RESPONSES,
         summary="Publish one of the current user's saved reports",
         description=(
             "Authors and admins only (403 below author). Publishes the saved "
@@ -313,7 +339,7 @@ def build_v2_user_report_publication_router(
         path,
         response_model=PublicationDetailResponse,
         dependencies=[Depends(require_author)],
-        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
+        responses=EDIT_ERROR_RESPONSES,
         summary="Edit the current user's published report",
         description=(
             "Authors and admins only (403 below author). Sets the fields "
@@ -369,7 +395,7 @@ def build_v2_user_report_publication_router(
         response_model=PublicationDetailResponse,
         status_code=201,
         dependencies=[Depends(require_author)],
-        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
+        responses=MOVE_ERROR_RESPONSES,
         summary="Move the current user's published report to another run",
         description=(
             "Authors and admins only (403 below author). The page shows the "

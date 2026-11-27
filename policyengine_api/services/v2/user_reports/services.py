@@ -40,6 +40,9 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+from policyengine_api.services.v2.published_reports.database_connectors.reads import (
+    read_publication_row,
+)
 from policyengine_api.services.v2.report_run_records.database_connectors import (
     reads as record_reads,
 )
@@ -57,7 +60,6 @@ from policyengine_api.services.v2.user_reports.database_connectors.reads import 
     read_owned_user_report_row,
     read_report_budget_window_size,
     read_report_exists,
-    read_user_report_published,
     read_user_report_row,
     read_user_report_rows,
 )
@@ -492,9 +494,10 @@ class V2UserReportService:
                 require_published_report_kept(
                     association=association,
                     association_input=association_input,
-                    published=read_user_report_published(
-                        session, association_id=association.id
-                    ),
+                    published=read_publication_row(
+                        session, user_report_id=association.id
+                    )
+                    is not None,
                 )
             validate_stored_report(
                 session, country_id=country_id, report_id=association_input.report_id

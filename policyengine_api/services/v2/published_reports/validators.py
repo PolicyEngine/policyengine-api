@@ -14,6 +14,7 @@ from policyengine_api.services.v2.associations.validators import (
     AssociationConflictError,
     AssociationNotFoundError,
 )
+from policyengine_api.services.v2.user_reports.validators import is_blank_name
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -77,7 +78,7 @@ def require_publishable(association: UserReportAssociation) -> UUID:
             "only a saved report of a detailed-save report can be published"
         )
         raise UnpublishableUserReportError(msg)
-    if not (association.name or "").strip():
+    if is_blank_name(association.name):
         msg = (
             f"Saved report {association.id} has no name, which its published "
             "page shows as its title; name it first"

@@ -119,6 +119,15 @@ def require_owned_user_policy(*, owned: bool, user_policy_id: UUID) -> None:
         raise AssociationLinkNotFoundError(msg)
 
 
+def is_blank_name(name: str | None) -> bool:
+    """Return whether a saved report's name is missing or only blanks.
+
+    A published report's title is its saved report's name, so such a name
+    can't be published or left on a published saved report.
+    """
+    return not (name or "").strip()
+
+
 def require_published_report_kept(
     *,
     association: UserReportAssociation,
@@ -140,7 +149,7 @@ def require_published_report_kept(
             "another report; withdraw its published page first"
         )
         raise PublishedUserReportRepointError(msg)
-    if "name" in supplied and not (association_input.name or "").strip():
+    if "name" in supplied and is_blank_name(association_input.name):
         msg = (
             f"Saved report {association.id} is published, and its name is the "
             "page's title; give it another name, or withdraw the page first"
