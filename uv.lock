@@ -2981,7 +2981,7 @@ models = [
 
 [[package]]
 name = "policyengine-api"
-version = "5.59.0"
+version = "5.59.1"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
@@ -3006,6 +3006,7 @@ dependencies = [
     { name = "openai" },
     { name = "packaging" },
     { name = "policyengine", extra = ["models"] },
+    { name = "policyengine-api-simulation-client" },
     { name = "policyengine-observability", extra = ["flask", "google", "httpx", "otlp-grpc"] },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -3073,6 +3074,7 @@ requires-dist = [
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
     { name = "policyengine", extras = ["models"], specifier = "==6.20.0" },
+    { name = "policyengine-api-simulation-client", specifier = "==0.20261127.430" },
     { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.3,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
@@ -3098,6 +3100,19 @@ provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 telemetry-error-issues = [{ name = "google-cloud-bigquery", specifier = ">=3.30,<4" }]
+
+[[package]]
+name = "policyengine-api-simulation-client"
+version = "0.20261127.430"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ee/5b/23ee4708a81ca8cb80da3f299d66530f2c9b014dbef7298b017394e5ef2a/policyengine_api_simulation_client-0.20261127.430.tar.gz", hash = "sha256:fd65475e32eeb3eec9478565df42a524c2fa0a5d66945e5ce8f45f67846d5da4", size = 73000, upload-time = "2026-11-27T16:28:23.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/c4/bf8755ea496cf6dd774c944952baf9e14e41355ea70beb20dfcaa5fff095/policyengine_api_simulation_client-0.20261127.430-py3-none-any.whl", hash = "sha256:bfa200907750af00adee1c310cec7b851c1a2a0d3d5a3c717d33f65ccd17b444", size = 161942, upload-time = "2026-11-27T16:28:22.018Z" },
+]
 
 [[package]]
 name = "policyengine-core"
