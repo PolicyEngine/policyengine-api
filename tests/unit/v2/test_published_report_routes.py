@@ -13,10 +13,13 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from policyengine_api.data.v2.models import UserType
 from policyengine_api.migration_flags import infer_route_group
 from policyengine_api.services.v2.published_reports.types import (
+    MarkdownBlock,
+    OutputBlock,
     PublicationRead,
     PublicationVersionRead,
     PublishedReportRead,
@@ -71,6 +74,10 @@ CONTENT = [
     {"type": "markdown", "markdown": "## Why this reform"},
     {"type": "output", "output": "budgetary_impact"},
 ]
+CONTENT_BLOCKS = [
+    MarkdownBlock(type="markdown", markdown="## Why this reform"),
+    OutputBlock(type="output", output="budgetary_impact"),
+]
 VERSION = PublicationVersionRead(
     id=VERSION_ID,
     run_id=RUN_ID,
@@ -94,7 +101,7 @@ def _publication() -> PublicationRead:
         summary="What a larger child tax credit costs.",
         author_ids=["nikhil-woodruff"],
         tags=["us"],
-        content=CONTENT,
+        content=CONTENT_BLOCKS,
         show_past_versions=False,
         versions=(VERSION,),
         published_at=PUBLISHED_AT,
@@ -124,7 +131,7 @@ def _published_report() -> PublishedReportRead:
         summary="What a larger child tax credit costs.",
         author_ids=["nikhil-woodruff"],
         tags=["us"],
-        content=CONTENT,
+        content=CONTENT_BLOCKS,
         show_past_versions=False,
         saved_report=PublishedSavedReportRead(
             source_note="From the chat",
@@ -347,9 +354,11 @@ def test_the_owner_routes_check_their_query(query: str) -> None:
     assert publications.calls == []
 
 
-def test_a_page_of_the_largest_allowed_size_is_accepted() -> None:
+@pytest.mark.parametrize("character", ["m", "€"])
+def test_a_page_of_the_largest_allowed_size_is_accepted(character: str) -> None:
+    """The limits hold for Markdown of one-byte and three-byte characters."""
     client, publications, _user_types = _client()
-    content = [{"type": "markdown", "markdown": "m" * 20_000}] * 100
+    content = [{"type": "markdown", "markdown": character * 20_000}] * 100
 
     response = client.post(
         f"{PUBLICATION_PATH}?country_id=us",
@@ -360,17 +369,33 @@ def test_a_page_of_the_largest_allowed_size_is_accepted() -> None:
     assert len(publications.calls[0][1]["publication_input"].content) == 100
 
 
-def test_a_body_over_four_mebibytes_is_refused() -> None:
+def test_a_body_over_sixteen_mebibytes_is_refused() -> None:
     client, publications, _user_types = _client()
 
     response = client.post(
         f"{PUBLICATION_PATH}?country_id=us",
-        content=b"{" + b" " * (4 * 1024 * 1024) + b"}",
+        content=b"{" + b" " * (16 * 1024 * 1024) + b"}",
         headers={"Content-Type": "application/json"},
     )
 
     assert response.status_code == 413
     assert publications.calls == []
+
+
+def test_a_publication_the_database_refuses_answers_a_conflict() -> None:
+    """Two publishes or moves at once: the database's keys refuse the second."""
+    publications = RecordingService()
+    publications.error = IntegrityError(
+        "INSERT INTO published_report_versions", {}, Exception("duplicate key")
+    )
+    client, _publications, _user_types = _client(publications)
+
+    response = client.post(
+        f"{PUBLICATION_PATH}/versions?country_id=us", json={"run_id": str(RUN_ID)}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "The record conflicts with stored state"
 
 
 def test_repointing_a_published_saved_report_answers_a_conflict() -> None:

@@ -14,8 +14,9 @@ from uuid import uuid4
 
 import pytest
 
-from policyengine_api.data.v2.models import ReportRunStatus
+from policyengine_api.data.v2.models import PublishedReport, ReportRun, ReportRunStatus
 from policyengine_api.services.v2.published_reports.types import (
+    OutputBlock,
     PublicationCreateInput,
     PublicationUpdateInput,
     PublicationVersionInput,
@@ -36,6 +37,7 @@ from policyengine_api.services.v2.user_reports.database_session import (
 from policyengine_api.services.v2.user_reports.services import V2UserReportService
 from policyengine_api.services.v2.user_reports.types import UserReportUpdateInput
 from policyengine_api.services.v2.user_reports.validators import (
+    PublishedUserReportNameRequiredError,
     PublishedUserReportRepointError,
     UserReportNotFoundError,
 )
@@ -131,7 +133,7 @@ def test_an_author_publishes_a_succeeded_run_of_their_saved_report(sessions) -> 
     assert publication.summary == "What a larger child tax credit costs and who gains."
     assert publication.author_ids == ["nikhil-woodruff"]
     assert publication.tags == ["us", "child-tax-credit"]
-    assert publication.content == [
+    assert [block.model_dump() for block in publication.content] == [
         {"type": "markdown", "markdown": "## Why this reform"},
         {"type": "output", "output": "budgetary_impact"},
         {"type": "output", "output": "poverty_impact"},
@@ -268,7 +270,7 @@ def test_the_author_edits_the_fields_sent_and_keeps_the_others(sessions) -> None
     )
 
     assert edited.summary == "A shorter summary."
-    assert edited.content == [{"type": "output", "output": "budgetary_impact"}]
+    assert edited.content == [OutputBlock(type="output", output="budgetary_impact")]
     assert edited.show_past_versions is True
     assert edited.author_ids == published.author_ids
     assert edited.tags == published.tags
@@ -538,3 +540,82 @@ def test_an_unpublished_saved_report_can_be_repointed(sessions) -> None:
     )
 
     assert repointed.report_id == other_report_id
+
+
+def test_a_succeeded_forced_run_can_be_published(sessions) -> None:
+    saved, _run_id = _saved_report_with_run(sessions)
+    assert saved.report_id is not None
+    with sessions.begin() as session:
+        forced_run_id = store_report_run(session, saved.report_id, days_later=1)
+        forced_run = session.get(ReportRun, forced_run_id)
+        assert forced_run is not None
+        forced_run.forced = True
+
+    publication = _publish(published_report_service(sessions), saved, forced_run_id)
+
+    assert [version.run_id for version in publication.versions] == [forced_run_id]
+
+
+def test_a_page_read_with_no_versions_is_not_found(sessions) -> None:
+    """A withdrawal committed between a read's statements leaves it no versions."""
+    saved, _run_id = _saved_report_with_run(sessions)
+    with sessions.begin() as session:
+        session.add(
+            PublishedReport(
+                user_report_id=saved.user_report_id,
+                report_id=saved.report_id,
+                summary="Withdrawn while it was read.",
+                author_ids=["nikhil-woodruff"],
+                tags=[],
+                content=[],
+            )
+        )
+    service = published_report_service(sessions)
+
+    with pytest.raises(PublishedReportNotFoundError):
+        service.get_published_report(
+            country_id="us", user_report_id=saved.user_report_id
+        )
+    with pytest.raises(PublicationNotFoundError):
+        service.get_publication(
+            principal=saved.principal,
+            country_id="us",
+            user_report_id=saved.user_report_id,
+        )
+
+
+def test_a_published_saved_reports_name_cannot_be_cleared(sessions) -> None:
+    saved, run_id = _saved_report_with_run(sessions)
+    _publish(published_report_service(sessions), saved, run_id)
+    user_reports = V2UserReportService(UserReportDatabaseSession(sessions))
+
+    with pytest.raises(PublishedUserReportNameRequiredError):
+        user_reports.patch_user_report(
+            principal=saved.principal,
+            country_id="us",
+            association_id=saved.user_report_id,
+            association_input=UserReportUpdateInput(name=None),
+        )
+    renamed = user_reports.patch_user_report(
+        principal=saved.principal,
+        country_id="us",
+        association_id=saved.user_report_id,
+        association_input=UserReportUpdateInput(name="A new title"),
+    )
+
+    assert renamed.name == "A new title"
+
+
+def test_an_unpublished_saved_reports_name_can_be_cleared(sessions) -> None:
+    saved, _run_id = _saved_report_with_run(sessions)
+
+    unnamed = V2UserReportService(
+        UserReportDatabaseSession(sessions)
+    ).patch_user_report(
+        principal=saved.principal,
+        country_id="us",
+        association_id=saved.user_report_id,
+        association_input=UserReportUpdateInput(name=None),
+    )
+
+    assert unnamed.name is None

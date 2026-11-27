@@ -79,6 +79,7 @@ if TYPE_CHECKING:
 PREVIOUS_REVISION = "1c651058fac5"
 NEWER_VERSIONS = {**CURRENT_VERSIONS, "policyengine_version": "4.3.0"}
 PUBLISHED_TABLES = ("published_reports", "published_report_versions")
+PUBLISHED_REPORT_KEY = "fk_published_reports_user_report_report"
 
 
 @pytest.fixture
@@ -325,13 +326,19 @@ def test_the_database_refuses_to_repoint_a_published_saved_report(
     with owner_sessions.begin() as session:
         other_report_id = store_report(session, catalog).report_id
 
-    with runtime_sessions.begin() as session, refused(session, IntegrityError):
+    with (
+        runtime_sessions.begin() as session,
+        refused(session, IntegrityError, match=PUBLISHED_REPORT_KEY),
+    ):
         session.execute(
             update(UserReportAssociation)
             .where(col(UserReportAssociation.id) == published["user_report_id"])
             .values(report_id=other_report_id)
         )
-    with runtime_sessions.begin() as session, refused(session, IntegrityError):
+    with (
+        runtime_sessions.begin() as session,
+        refused(session, IntegrityError, match=PUBLISHED_REPORT_KEY),
+    ):
         session.execute(
             update(UserReportAssociation)
             .where(col(UserReportAssociation.id) == published["user_report_id"])
@@ -349,13 +356,57 @@ def test_the_database_refuses_to_repoint_a_published_saved_report(
 def test_a_run_a_page_has_shown_cannot_be_deleted(
     owner_sessions: sessionmaker[Session], published: dict[str, Any]
 ) -> None:
-    with owner_sessions.begin() as session, refused(session, IntegrityError):
+    with (
+        owner_sessions.begin() as session,
+        refused(
+            session,
+            IntegrityError,
+            match="fk_published_report_versions_report_run_id_report_runs",
+        ),
+    ):
         session.execute(
             delete(ReportRun).where(col(ReportRun.id) == published["run_id"])
         )
 
     with owner_sessions() as session:
         assert session.get(ReportRun, published["run_id"]) is not None
+
+
+def test_a_second_page_or_a_second_version_of_one_run_is_refused(
+    owner_sessions: sessionmaker[Session], published: dict[str, Any]
+) -> None:
+    """Two publishes or moves at once: the database's keys refuse the second."""
+    with (
+        owner_sessions.begin() as session,
+        refused(session, IntegrityError, match="pk_published_reports"),
+    ):
+        add_row(
+            session,
+            PublishedReport,
+            user_report_id=published["user_report_id"],
+            report_id=published["report"].report_id,
+            summary="A second page",
+            author_ids=["nikhil-woodruff"],
+            tags=[],
+            content=[],
+        )
+    with (
+        owner_sessions.begin() as session,
+        refused(
+            session,
+            IntegrityError,
+            match="uq_published_report_versions_user_report_id_report_run_id",
+        ),
+    ):
+        add_row(
+            session,
+            PublishedReportVersion,
+            id=uuid4(),
+            user_report_id=published["user_report_id"],
+            report_run_id=published["run_id"],
+        )
+
+    assert _row_counts(owner_sessions, published["user_report_id"]) == (1, 1)
 
 
 @pytest.mark.parametrize("runs", ["none", "both"])
