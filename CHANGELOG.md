@@ -1,3 +1,10 @@
+## [5.59.1] - 2026-11-27
+
+### Changed
+
+- API v1 sends its requests to the simulation service (household calculations, simulations, reports and report re-runs) through the generated `policyengine-api-simulation-client`, pinned to 0.20261127.430; the requests, and the answers API v1 gives its callers, are unchanged.
+
+
 ## [5.59.0] - 2026-11-27
 
 ### Removed
