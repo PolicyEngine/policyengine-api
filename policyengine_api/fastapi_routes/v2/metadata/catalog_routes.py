@@ -12,6 +12,7 @@ from policyengine_api.fastapi_routes.v2.metadata.query_support import (
     CatalogQueryDependency,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
+    MetadataCatalogDynamicParametersResponse,
     MetadataCatalogParametersResponse,
     MetadataCatalogVariablesResponse,
     MetadataModelCatalogResponse,
@@ -121,6 +122,31 @@ def build_v2_model_catalog_router(
             MetadataCatalogParametersResponse,
             lambda reader: reader.get_catalog_parameters(
                 query.country_id, query.policyengine_version, names=query.name
+            ),
+        )
+
+    @router.get(
+        "/model-catalog/dynamic-parameters",
+        response_model=MetadataCatalogDynamicParametersResponse,
+        responses=CURRENT_LAW_VALUE_ERROR_RESPONSES,
+        summary="Get every dynamic parameter of one PolicyEngine.py catalog version",
+        description=(
+            "Returns all of the selected version's dynamic parameters (the "
+            "model assumptions a dynamic sets) in name order, in one response: "
+            "each with its catalog ID, which POST /v2/dynamics takes, its "
+            "economy and household flags (a dynamic may set it when either is "
+            "true) and its current-law values by date, plus the stored labels "
+            "of their ancestor nodes. It takes no names."
+        ),
+    )
+    def get_catalog_dynamic_parameters(
+        query: CatalogQueryDependency,
+    ) -> MetadataCatalogDynamicParametersResponse | JSONResponse:
+        return read_resource(
+            dependencies,
+            MetadataCatalogDynamicParametersResponse,
+            lambda reader: reader.dynamic_parameters.get_catalog_dynamic_parameters(
+                query.country_id, query.policyengine_version
             ),
         )
 

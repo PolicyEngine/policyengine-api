@@ -1,0 +1,1 @@
+Request logs of the `/v2/model-catalog` routes record Supabase as their database read source and no write source, as the other v2 metadata reads do, instead of the sources `DB_READ_METADATA` and `DB_WRITE_METADATA` select for the `metadata` route group.

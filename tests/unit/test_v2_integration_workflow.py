@@ -91,6 +91,20 @@ def test_the_job_publishes_selected_folders_of_the_installed_models() -> None:
     assert (REPO / INSTALLED_FOLDERS_TEST).exists()
 
 
+def test_the_job_runs_the_dynamic_parameter_routes_postgres_tests() -> None:
+    """The dynamic parameter routes' Postgres tests run, as the runtime role too.
+
+    Their module reads every route against PostgreSQL and makes the reads as
+    policyengine_v2_runtime (C1 · 51).
+    """
+    commands = _step_commands(_runtime_job())
+
+    assert any(
+        "tests/integration/test_v2_dynamic_parameter_routes.py" in command
+        for command in commands
+    )
+
+
 def test_the_job_publishes_dynamic_parameters_into_their_own_tables() -> None:
     """Publication's Postgres tests for the dynamic parameter tables run (C1 · 50)."""
     commands = _step_commands(_runtime_job())

@@ -49,6 +49,19 @@ PRUNED_DATA_ROUTES = [
         f"/v2/model-catalog/parameters?{VERSION_QUERY}&name=gov.example.rate",
         "get_catalog_parameters",
     ),
+    (f"/v2/dynamic-parameter-values?{VERSION_QUERY}", "list_dynamic_parameter_values"),
+    (
+        f"/v2/dynamic-parameter-values/{PRUNED_VALUE_ID}?{VERSION_QUERY}",
+        "get_dynamic_parameter_value",
+    ),
+    (
+        f"/v2/dynamic-parameters/children?{VERSION_QUERY}",
+        "list_dynamic_parameter_children",
+    ),
+    (
+        f"/v2/model-catalog/dynamic-parameters?{VERSION_QUERY}",
+        "get_catalog_dynamic_parameters",
+    ),
 ]
 
 

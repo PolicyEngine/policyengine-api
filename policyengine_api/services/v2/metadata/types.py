@@ -178,11 +178,14 @@ class MetadataVariable(StrictResponseModel):
 
 
 class MetadataParameterSummary(StrictResponseModel):
-    """A policy parameter, described without its values.
+    """A policy or dynamic parameter, described without its values.
 
-    Its current-law values are listed by GET /v2/parameter-values. economy and
-    household say whether a reform of an economy or of a household may change
-    it; they are null in versions published before catalog format 2.
+    A policy parameter's current-law values are listed by GET
+    /v2/parameter-values, and a dynamic parameter's by GET
+    /v2/dynamic-parameter-values. economy and household say whether a reform
+    of an economy or of a household may change it; they are null in versions
+    published before catalog format 2. A dynamic may set a dynamic parameter
+    when either is true.
     """
 
     id: UUID

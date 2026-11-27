@@ -33,6 +33,14 @@ economy or household flag is set and whose path names neither ``taxsim``,
 ``gov.abolitions`` nor ``pycache``, and every node with such a parameter
 below it. Trees are written only for versions with catalog format 2, so every
 parameter has both flags.
+
+The dynamic parameter tree (``/v2/dynamic-parameters/children``) is built
+with the same function on each request, from a version's dynamic parameters
+and the stored labels of their ancestor nodes, with
+``is_dynamic_settable_parameter`` in place of the reform rule: a dynamic
+parameter whose economy or household flag is set, with no path requirement
+(C1 · 46, Q5). Its rows' ``reform_*`` fields then describe the parameters a
+dynamic may set.
 """
 
 from __future__ import annotations
@@ -43,7 +51,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
     from uuid import UUID
 
 REFORM_TREE_PREFIX = "gov."
@@ -244,6 +252,39 @@ def is_reform_changeable_parameter(parameter: TreeParameterSource) -> bool:
     )
 
 
+def is_dynamic_settable(*, economy: bool | None, household: bool | None) -> bool:
+    """Return whether a dynamic may set a dynamic parameter with these flags.
+
+    Its economy or household flag is set (C1 · 46, Q5). Unlike
+    ``is_reform_changeable``, the rule names no path, so the US top-level
+    ``simulation.*`` parameters qualify. A parameter without flags, stored
+    before catalog format 2, is not settable. ``POST /v2/dynamics`` doesn't
+    apply the rule: it accepts any dynamic parameter of the version.
+    """
+    return bool(economy) or bool(household)
+
+
+def is_dynamic_settable_parameter(parameter: TreeParameterSource) -> bool:
+    """Return whether a dynamic may set this dynamic parameter."""
+    return is_dynamic_settable(economy=parameter.economy, household=parameter.household)
+
+
+def enum_labels_by_value(
+    enum_values: Iterable[tuple[str, object]],
+) -> dict[str, frozenset[str]]:
+    """Return the labels a version's enum variables give each value's name.
+
+    ``enum_values`` holds each enum value's name and label, from every enum
+    variable of the version; a value without a label adds none. Labels are
+    compared as text, as ``build_parameter_tree`` reads them.
+    """
+    labels: dict[str, set[str]] = defaultdict(set)
+    for value, label in enum_values:
+        if label is not None:
+            labels[value].add(str(label))
+    return {value: frozenset(names) for value, names in labels.items()}
+
+
 def _ancestors(path: str) -> list[str]:
     ancestors = []
     current = parent_path(path)
@@ -318,11 +359,17 @@ def build_parameter_tree(
     nodes: Iterable[TreeNodeSource],
     parameters: Iterable[TreeParameterSource],
     enum_labels: Mapping[str, frozenset[str]] | None = None,
+    is_changeable: Callable[
+        [TreeParameterSource], bool
+    ] = is_reform_changeable_parameter,
 ) -> tuple[ParameterTreeChildRow, ...]:
     """Return one row per node and parameter of a version, parents first.
 
     ``enum_labels`` maps each enum value's name to the labels the version's
     enum variables give it, for recognising labels PolicyEngine.py made.
+    ``is_changeable`` says which parameters the rows' ``reform_*`` fields
+    keep: a reform's (the default), or, for the dynamic parameter tree,
+    ``is_dynamic_settable_parameter``.
     """
     parameters_by_path = {parameter.name: parameter for parameter in parameters}
     stored_labels = {node.name: node.label for node in nodes}
@@ -333,7 +380,7 @@ def build_parameter_tree(
 
     changeable: set[str] = set()
     for parameter in parameters_by_path.values():
-        if is_reform_changeable_parameter(parameter):
+        if is_changeable(parameter):
             changeable.add(parameter.name)
             changeable.update(_ancestors(parameter.name))
 

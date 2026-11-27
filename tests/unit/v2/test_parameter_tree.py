@@ -9,7 +9,11 @@ from policyengine_api.data.v2.catalog.parameter_tree import (
     TreeNodeSource,
     TreeParameterSource,
     build_parameter_tree,
+    enum_labels_by_value,
     generated_label,
+    is_dynamic_settable,
+    is_dynamic_settable_parameter,
+    is_reform_changeable_parameter,
     parent_path,
 )
 
@@ -530,3 +534,98 @@ def test_breakdown_labels_whose_enum_labels_contain_commas_are_shortened() -> No
         "COUPLE BOTH ELIGIBLE"
     )
     assert by_path[f"{schedule}.INDEPENDENT.INDIVIDUAL"].label == "INDIVIDUAL"
+
+
+def test_a_dynamic_may_set_a_parameter_whose_economy_or_household_flag_is_set() -> None:
+    assert is_dynamic_settable(economy=True, household=True)
+    assert is_dynamic_settable(economy=True, household=False)
+    assert is_dynamic_settable(economy=False, household=True)
+    assert not is_dynamic_settable(economy=False, household=False)
+    # Versions stored before catalog format 2 have no flags, so none is settable.
+    assert not is_dynamic_settable(economy=None, household=None)
+    assert is_dynamic_settable(economy=None, household=True)
+
+
+def test_the_dynamic_rule_has_no_path_requirement_unlike_the_reform_rule() -> None:
+    top_level = _parameter("simulation.marginal_tax_rate_delta")
+    under_gov = _parameter("gov.simulation.labor_supply_responses.elasticities.income")
+
+    assert is_dynamic_settable_parameter(top_level)
+    assert not is_reform_changeable_parameter(top_level)
+    assert is_dynamic_settable_parameter(under_gov)
+
+
+def _us_dynamic_tree_sources() -> tuple[list, list]:
+    nodes = [
+        TreeNodeSource(name="gov", label="Government"),
+        TreeNodeSource(name="gov.simulation", label="Simulation"),
+        TreeNodeSource(name="simulation", label="Simulation"),
+    ]
+    parameters = [
+        _parameter(
+            "gov.simulation.capital_gains_responses.elasticity",
+            label="capital gains elasticity",
+        ),
+        _parameter("simulation.marginal_tax_rate_delta"),
+        _parameter(
+            "simulation.marginal_tax_rate_adults",
+            label="Number of adults to simulate a marginal tax rate for",
+            economy=True,
+            household=False,
+        ),
+        _parameter("simulation.hidden", economy=False, household=False),
+    ]
+    return nodes, parameters
+
+
+def test_a_tree_built_with_the_dynamic_rule_lists_what_a_dynamic_may_set() -> None:
+    nodes, parameters = _us_dynamic_tree_sources()
+
+    rows = build_parameter_tree(
+        nodes=nodes, parameters=parameters, is_changeable=is_dynamic_settable_parameter
+    )
+    by_path = _rows_by_path(rows)
+
+    assert [row.path for row in _children(rows, "")] == ["gov", "simulation"]
+    assert [row.path for row in _reform_children(rows, "")] == ["gov", "simulation"]
+    assert [row.path for row in _reform_children(rows, "simulation")] == [
+        "simulation.marginal_tax_rate_delta",
+        "simulation.marginal_tax_rate_adults",
+    ]
+    assert by_path["simulation"].child_count == 3
+    assert by_path["simulation"].reform_child_count == 2
+    assert by_path["simulation.hidden"].reform_changeable is False
+    assert by_path["simulation.hidden"].reform_position is None
+    assert by_path["simulation.marginal_tax_rate_delta"].label == (
+        "Marginal tax rate delta"
+    )
+    assert by_path["gov.simulation.capital_gains_responses.elasticity"].label == (
+        "Capital gains elasticity"
+    )
+
+
+def test_the_tree_keeps_the_reform_rule_unless_another_is_given() -> None:
+    nodes, parameters = _us_dynamic_tree_sources()
+
+    rows = build_parameter_tree(nodes=nodes, parameters=parameters)
+
+    assert [row.path for row in _reform_children(rows, "")] == ["gov"]
+    assert _rows_by_path(rows)["simulation"].reform_changeable is False
+
+
+def test_enum_labels_map_each_value_name_to_every_label_given_it() -> None:
+    labels = enum_labels_by_value(
+        [
+            ("SINGLE", "Single"),
+            ("JOINT", "Joint"),
+            ("SINGLE", "Single person"),
+            ("NONE", None),
+            ("ONE", 1),
+        ]
+    )
+
+    assert labels == {
+        "SINGLE": frozenset({"Single", "Single person"}),
+        "JOINT": frozenset({"Joint"}),
+        "ONE": frozenset({"1"}),
+    }

@@ -13,6 +13,8 @@ from policyengine_api.services.v2.metadata.database_connectors.reads import read
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from policyengine_api.data.v2.models.metadata import CatalogEnumValue
+
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -72,3 +74,23 @@ def read_all_variables(session: Session, *, model_version_id: UUID) -> list[Vari
         .where(col(Variable.tax_benefit_model_version_id) == model_version_id)
         .order_by(col(Variable.name)),
     )
+
+
+def read_variable_enum_values(
+    session: Session, *, model_version_id: UUID
+) -> list[list[CatalogEnumValue]]:
+    """Return the enum values of each of a model version's enum variables.
+
+    Only the ``enum_values`` column is read, of the variables that have one;
+    the dynamic parameter tree takes its enum labels from them.
+    """
+    # A select of one column returns each row's value itself. A variable
+    # stored with a JSON null rather than SQL NULL has no values either.
+    enum_value_lists = read_rows(
+        session,
+        select(col(Variable.enum_values)).where(
+            col(Variable.tax_benefit_model_version_id) == model_version_id,
+            col(Variable.enum_values).is_not(None),
+        ),
+    )
+    return [list(enum_values) for enum_values in enum_value_lists if enum_values]

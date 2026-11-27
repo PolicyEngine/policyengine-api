@@ -825,6 +825,12 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "/v2/parameters?country_id=us",
                     "/v2/parameters/children?country_id=us&parent_path=gov",
                     "/v2/parameter-values?country_id=us",
+                    "/v2/dynamic-parameters?country_id=us",
+                    (
+                        "/v2/dynamic-parameters/children?country_id=us"
+                        "&parent_path=simulation&settable=true"
+                    ),
+                    "/v2/dynamic-parameter-values?country_id=us",
                     "/v2/datasets?country_id=us",
                     "/v2/regions?country_id=us",
                 )
@@ -848,6 +854,8 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "/v2/variables/{variable_id}?country_id=us",
                     "/v2/parameters/{parameter_id}?country_id=us",
                     "/v2/parameter-values/{value_id}?country_id=us",
+                    "/v2/dynamic-parameters/{parameter_id}?country_id=us",
+                    "/v2/dynamic-parameter-values/{value_id}?country_id=us",
                     "/v2/datasets/{dataset_id}?country_id=us",
                     "/v2/regions/{region_id}?country_id=us",
                     "/v2/regions/by-code/state/ca?country_id=us",
@@ -942,6 +950,20 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                     "result.parameters",
                     "result.node_labels",
                     "result.missing_names",
+                ),
+                route_group="metadata",
+            ),
+            ContractRequest(
+                method="GET",
+                path="/v2/model-catalog/dynamic-parameters?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.policyengine_version",
+                    "result.catalog_format",
+                    "result.parameters",
+                    "result.node_labels",
                 ),
                 route_group="metadata",
             ),

@@ -14,6 +14,9 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+    MetadataCatalogDynamicParametersResult,
+)
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataCatalogParameter,
@@ -54,6 +57,10 @@ class ResourceReader:
         self.close_error = close_error
         self.calls: list[tuple[str, tuple, dict]] = []
         self.closed = False
+        # The metadata service hands the dynamic parameter reads to its
+        # dynamic_parameters attribute; the fake answers and records them as
+        # its own reads, under their method names.
+        self.dynamic_parameters = self
 
     def __getattr__(self, name: str):
         if name not in self.results:
@@ -82,6 +89,8 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
     parameter_value_id = uuid4()
     dataset_id = uuid4()
     region_id = uuid4()
+    dynamic_parameter_id = uuid4()
+    dynamic_parameter_value_id = uuid4()
     model = MetadataModel(
         id=model_id,
         name="policyengine-us",
@@ -129,6 +138,23 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
         id=parameter_value_id,
         parameter_id=parameter_id,
         value=0.1,
+        start_date=datetime(2025, 1, 1, tzinfo=UTC),
+        end_date=None,
+    )
+    dynamic_parameter = MetadataParameterSummary(
+        id=dynamic_parameter_id,
+        name="simulation.marginal_tax_rate_delta",
+        label=None,
+        description="The amount the marginal tax rate calculation adds",
+        data_type="int",
+        unit="currency-USD",
+        economy=True,
+        household=True,
+    )
+    dynamic_parameter_value = MetadataCanonicalParameterValue(
+        id=dynamic_parameter_value_id,
+        parameter_id=dynamic_parameter_id,
+        value=1000,
         start_date=datetime(2025, 1, 1, tzinfo=UTC),
         end_date=None,
     )
@@ -215,6 +241,37 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
                 node_labels={"gov.example": "Example policy"},
                 missing_names=["gov.removed"],
             ),
+            "list_dynamic_parameters": page([dynamic_parameter]),
+            "get_dynamic_parameter": detail(dynamic_parameter),
+            "list_dynamic_parameter_children": page(
+                [
+                    MetadataParameterChild(
+                        path=dynamic_parameter.name,
+                        label="Marginal tax rate delta",
+                        type="parameter",
+                        parameter=dynamic_parameter,
+                    )
+                ]
+            ),
+            "list_dynamic_parameter_values": page([dynamic_parameter_value]),
+            "get_dynamic_parameter_value": detail(dynamic_parameter_value),
+            "get_catalog_dynamic_parameters": MetadataCatalogDynamicParametersResult(
+                policyengine_version=version,
+                catalog_format=2,
+                parameters=[
+                    MetadataCatalogParameter(
+                        **dynamic_parameter.model_dump(),
+                        values=[
+                            MetadataDatedValue(
+                                start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                                end_date=None,
+                                value=1000,
+                            )
+                        ],
+                    )
+                ],
+                node_labels={"simulation": None},
+            ),
             "get_catalog_variables": MetadataCatalogVariablesResult(
                 policyengine_version=version,
                 catalog_format=2,
@@ -283,6 +340,8 @@ def resource_results() -> tuple[dict[str, object], dict[str, object]]:
             "parameter_value_id": parameter_value_id,
             "dataset_id": dataset_id,
             "region_id": region_id,
+            "dynamic_parameter_id": dynamic_parameter_id,
+            "dynamic_parameter_value_id": dynamic_parameter_value_id,
         },
     )
 
@@ -348,6 +407,13 @@ def every_resource_path(ids: dict[str, object]) -> list[str]:
         "/v2/model-catalog?country_id=us",
         "/v2/model-catalog/variables?country_id=us",
         "/v2/model-catalog/parameters?country_id=us&name=gov.example.rate",
+        "/v2/dynamic-parameters?country_id=us",
+        "/v2/dynamic-parameters/children?country_id=us&parent_path=simulation",
+        f"/v2/dynamic-parameters/{ids['dynamic_parameter_id']}?country_id=us",
+        "/v2/dynamic-parameter-values?country_id=us",
+        f"/v2/dynamic-parameter-values/{ids['dynamic_parameter_value_id']}"
+        "?country_id=us",
+        "/v2/model-catalog/dynamic-parameters?country_id=us",
     ]
 
 

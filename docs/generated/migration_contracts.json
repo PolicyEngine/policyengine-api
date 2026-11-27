@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 113,
+    "request_count": 119,
     "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 20
@@ -34,6 +34,8 @@
         "metadata",
         "countries",
         "datasets",
+        "dynamic-parameter-values",
+        "dynamic-parameters",
         "economy-options",
         "model-catalog",
         "parameter-values",
@@ -1849,6 +1851,54 @@
           "expected_status": 200,
           "headers": [],
           "method": "GET",
+          "path": "/v2/dynamic-parameters?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/dynamic-parameters/children?country_id=us&parent_path=simulation&settable=true",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/dynamic-parameter-values?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
           "path": "/v2/datasets?country_id=us",
           "route_group": "metadata",
           "stable_response_fields": [
@@ -1934,6 +1984,32 @@
           "headers": [],
           "method": "GET",
           "path": "/v2/parameter-values/{value_id}?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.item"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/dynamic-parameters/{parameter_id}?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.item"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/dynamic-parameter-values/{value_id}?country_id=us",
           "route_group": "metadata",
           "stable_response_fields": [
             "status",
@@ -2074,6 +2150,21 @@
             "result.parameters",
             "result.node_labels",
             "result.missing_names"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "headers": [],
+          "method": "GET",
+          "path": "/v2/model-catalog/dynamic-parameters?country_id=us",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policyengine_version",
+            "result.catalog_format",
+            "result.parameters",
+            "result.node_labels"
           ]
         }
       ]

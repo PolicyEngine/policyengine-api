@@ -23,7 +23,6 @@ The tree holds policy parameters only (C1 · 50): model assumptions, stored in
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -40,6 +39,7 @@ from policyengine_api.data.v2.catalog.parameter_tree import (
     TreeNodeSource,
     TreeParameterSource,
     build_parameter_tree,
+    enum_labels_by_value,
 )
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     StoredVersion,
@@ -143,12 +143,11 @@ def catalog_parameter_tree(
 
 def enum_value_labels(country: CountryCatalog) -> dict[str, frozenset[str]]:
     """Return the labels the country's enum variables give each value's name."""
-    labels: dict[str, set[str]] = defaultdict(set)
-    for variable in country.variables:
-        for enum_value in variable.enum_values or ():
-            if enum_value.label is not None:
-                labels[enum_value.value].add(str(enum_value.label))
-    return {value: frozenset(names) for value, names in labels.items()}
+    return enum_labels_by_value(
+        (enum_value.value, enum_value.label)
+        for variable in country.variables
+        for enum_value in variable.enum_values or ()
+    )
 
 
 def _table_rows(

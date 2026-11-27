@@ -44,6 +44,9 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_variables i
     read_variable,
     read_variables,
 )
+from policyengine_api.services.v2.metadata.dynamic_parameters.services import (
+    DynamicParameterMetadataService,
+)
 from policyengine_api.services.v2.metadata.transformations import (
     ancestor_paths,
     dated_values_by_parameter_name,
@@ -119,6 +122,7 @@ class V2MetadataService:
     MetadataResourceNotFoundError when the selected catalog lacks the item.
     Reads of current-law values, the parameter tree or the search file raise
     CatalogValuesPrunedError for a version catalog pruning removed them from.
+    The dynamic parameter category's reads are ``dynamic_parameters``'s.
     """
 
     def __init__(
@@ -138,6 +142,9 @@ class V2MetadataService:
             database_session,
             running_policyengine_version=running_policyengine_version,
             selected_catalogs=selected_catalogs,
+        )
+        self.dynamic_parameters = DynamicParameterMetadataService(
+            database_session, self._catalogs
         )
 
     def close(self) -> None:

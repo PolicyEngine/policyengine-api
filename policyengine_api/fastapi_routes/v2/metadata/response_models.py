@@ -7,6 +7,9 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import Field
 
+from policyengine_api.services.v2.metadata.dynamic_parameters.types import (
+    MetadataCatalogDynamicParametersResult,
+)
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataCatalogParametersResult,
@@ -117,6 +120,38 @@ class MetadataParameterValueDetailResponse(
     """Success response holding one parameter value."""
 
 
+class MetadataDynamicParameterPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterSummary]]
+):
+    """Success response holding one page of dynamic parameters."""
+
+
+class MetadataDynamicParameterDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataParameterSummary]]
+):
+    """Success response holding one dynamic parameter."""
+
+
+class MetadataDynamicParameterChildPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterChild]]
+):
+    """Success response holding one page of a dynamic parameter path's children."""
+
+
+class MetadataDynamicParameterValuePageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataCanonicalParameterValue]]
+):
+    """Success response holding one page of dynamic parameters' current-law values."""
+
+
+class MetadataDynamicParameterValueDetailResponse(
+    MetadataResourceSuccessResponse[
+        MetadataDetailResult[MetadataCanonicalParameterValue]
+    ]
+):
+    """Success response holding one current-law value of a dynamic parameter."""
+
+
 class MetadataDatasetPageResponse(
     MetadataResourceSuccessResponse[MetadataPageResult[MetadataDataset]]
 ):
@@ -163,6 +198,12 @@ class MetadataCatalogParametersResponse(
     MetadataResourceSuccessResponse[MetadataCatalogParametersResult]
 ):
     """Success response holding parameters fetched by name, with their values."""
+
+
+class MetadataCatalogDynamicParametersResponse(
+    MetadataResourceSuccessResponse[MetadataCatalogDynamicParametersResult]
+):
+    """Success response holding every dynamic parameter of one catalog version."""
 
 
 class MetadataParameterSearchFileEditabilityChange(StrictResponseModel):

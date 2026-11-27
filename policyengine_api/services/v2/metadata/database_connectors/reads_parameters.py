@@ -1,4 +1,10 @@
-"""Database selections for parameter and canonical-value metadata."""
+"""Database selections for parameter and canonical-value metadata.
+
+Policy parameters are in ``parameters`` and ``parameter_values``. Dynamic
+parameters are in ``dynamic_parameters`` and ``dynamic_parameter_values``
+(C1 · 50); their reads here return only current-law values, never a
+dynamic's own (C1 · 51).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,12 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import Parameter, ParameterValue
+from policyengine_api.data.v2.models import (
+    DynamicParameter,
+    DynamicParameterValue,
+    Parameter,
+    ParameterValue,
+)
 from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
 from policyengine_api.services.v2.metadata.types import CurrentLawValueRow
 
@@ -195,5 +206,174 @@ def read_current_law_values_by_parameter_name(
             col(ParameterValue.dynamic_id).is_(None),
         )
         .order_by(col(Parameter.name), col(ParameterValue.start_date)),
+    )
+    return [CurrentLawValueRow(*row) for row in rows]
+
+
+def read_dynamic_parameters(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    offset: int,
+    limit: int,
+    parameter_filter: ParameterFilter,
+) -> list[DynamicParameter]:
+    """Return a page of a model version's dynamic parameters in name order.
+
+    The filter's search matches name, label or description as a literal,
+    case-insensitive substring, and its names keep only parameters with those
+    exact names. Fetch limit + 1 rows so the caller can tell whether another
+    page exists.
+    """
+    statement = select(DynamicParameter).where(
+        col(DynamicParameter.tax_benefit_model_version_id) == model_version_id
+    )
+    if parameter_filter.names is not None:
+        statement = statement.where(
+            col(DynamicParameter.name).in_(sorted(parameter_filter.names))
+        )
+    search = parameter_filter.search
+    if search:
+        pattern = f"%{_escape_like(search)}%"
+        statement = statement.where(
+            sa.or_(
+                col(DynamicParameter.name).ilike(pattern, escape="\\"),
+                col(DynamicParameter.label).ilike(pattern, escape="\\"),
+                col(DynamicParameter.description).ilike(pattern, escape="\\"),
+            )
+        )
+    return read_rows(
+        session,
+        statement.order_by(col(DynamicParameter.name)).offset(offset).limit(limit + 1),
+    )
+
+
+def read_all_dynamic_parameters(
+    session: Session, *, model_version_id: UUID
+) -> list[DynamicParameter]:
+    """Return every dynamic parameter of a model version, in name order."""
+    return read_rows(
+        session,
+        select(DynamicParameter)
+        .where(col(DynamicParameter.tax_benefit_model_version_id) == model_version_id)
+        .order_by(col(DynamicParameter.name)),
+    )
+
+
+def read_dynamic_parameter(
+    session: Session, *, model_version_id: UUID, parameter_id: UUID
+) -> DynamicParameter | None:
+    """Return the model version's dynamic parameter with parameter_id, or None."""
+    rows = read_rows(
+        session,
+        select(DynamicParameter).where(
+            col(DynamicParameter.id) == parameter_id,
+            col(DynamicParameter.tax_benefit_model_version_id) == model_version_id,
+        ),
+    )
+    return rows[0] if rows else None
+
+
+def read_dynamic_parameter_values(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    selection: ParameterValueSelection,
+    offset: int,
+    limit: int,
+) -> list[DynamicParameterValue]:
+    """Return a page of a model version's current-law dynamic parameter values.
+
+    Values a dynamic owns are excluded. The selection's parameter_id keeps one
+    parameter's values, its parameter_names the values of the parameters with
+    those names, and its selected_day those in effect on that day. Rows are
+    ordered by parameter name, then newest first, and limit + 1 are fetched so
+    the caller can tell whether another page exists.
+    """
+    selected_day = selection.selected_day
+    statement = (
+        select(DynamicParameterValue)
+        .join(
+            DynamicParameter,
+            col(DynamicParameter.id) == col(DynamicParameterValue.dynamic_parameter_id),
+        )
+        .where(
+            col(DynamicParameter.tax_benefit_model_version_id) == model_version_id,
+            col(DynamicParameterValue.dynamic_id).is_(None),
+        )
+    )
+    if selection.parameter_id is not None:
+        statement = statement.where(
+            col(DynamicParameterValue.dynamic_parameter_id) == selection.parameter_id
+        )
+    if selection.parameter_names is not None:
+        statement = statement.where(
+            col(DynamicParameter.name).in_(sorted(selection.parameter_names))
+        )
+    if selected_day is not None:
+        statement = statement.where(
+            col(DynamicParameterValue.start_date) <= selected_day,
+            sa.or_(
+                col(DynamicParameterValue.end_date).is_(None),
+                col(DynamicParameterValue.end_date) >= selected_day,
+            ),
+        )
+    return read_rows(
+        session,
+        statement.order_by(
+            col(DynamicParameter.name),
+            col(DynamicParameterValue.start_date).desc(),
+            col(DynamicParameterValue.id),
+        )
+        .offset(offset)
+        .limit(limit + 1),
+    )
+
+
+def read_dynamic_parameter_value(
+    session: Session, *, model_version_id: UUID, value_id: UUID
+) -> DynamicParameterValue | None:
+    """Return the model version's current-law dynamic value with value_id, or None."""
+    rows = read_rows(
+        session,
+        select(DynamicParameterValue)
+        .join(
+            DynamicParameter,
+            col(DynamicParameter.id) == col(DynamicParameterValue.dynamic_parameter_id),
+        )
+        .where(
+            col(DynamicParameterValue.id) == value_id,
+            col(DynamicParameter.tax_benefit_model_version_id) == model_version_id,
+            col(DynamicParameterValue.dynamic_id).is_(None),
+        ),
+    )
+    return rows[0] if rows else None
+
+
+def read_current_law_dynamic_values(
+    session: Session, *, model_version_id: UUID
+) -> list[CurrentLawValueRow]:
+    """Return the current-law values of every dynamic parameter of a model version.
+
+    Values a dynamic owns are excluded. Rows are ordered by parameter name,
+    then start date.
+    """
+    rows = read_rows(
+        session,
+        select(
+            col(DynamicParameter.name),
+            col(DynamicParameterValue.value_json),
+            col(DynamicParameterValue.start_date),
+            col(DynamicParameterValue.end_date),
+        )
+        .join(
+            DynamicParameter,
+            col(DynamicParameter.id) == col(DynamicParameterValue.dynamic_parameter_id),
+        )
+        .where(
+            col(DynamicParameter.tax_benefit_model_version_id) == model_version_id,
+            col(DynamicParameterValue.dynamic_id).is_(None),
+        )
+        .order_by(col(DynamicParameter.name), col(DynamicParameterValue.start_date)),
     )
     return [CurrentLawValueRow(*row) for row in rows]

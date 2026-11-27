@@ -16,6 +16,7 @@ from policyengine_api.query_parameters import (
     CatalogParameterQuery,
     CatalogQuery,
     CatalogVersionQuery,
+    DynamicParameterChildrenQuery,
     ParameterChildrenQuery,
     ParameterCollectionQuery,
     ParameterValueCollectionQuery,
@@ -40,6 +41,10 @@ RegionCollectionQueryDependency = Annotated[
 ]
 ParameterChildrenQueryDependency = Annotated[
     ParameterChildrenQuery, Depends(query_dependency(ParameterChildrenQuery))
+]
+DynamicParameterChildrenQueryDependency = Annotated[
+    DynamicParameterChildrenQuery,
+    Depends(query_dependency(DynamicParameterChildrenQuery)),
 ]
 ParameterCollectionQueryDependency = Annotated[
     ParameterCollectionQuery, Depends(query_dependency(ParameterCollectionQuery))
