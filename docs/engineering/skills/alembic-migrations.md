@@ -310,8 +310,9 @@ and `refused(session, ...)`.
   takes the Python value, such as `[2026]`, not its JSON text.
 - **Columns a mapper leaves out**: a column kept in its table but left out of
   the model's mapper (`exclude_properties`) until a revision drops it, as
-  the per-user and cliff columns of `reports`, `report_runs` and
-  `budget_window_runs` were until revision `4e30076d4b9f`, has no statement
+  `parameter_values.dynamic_id` is until C1 · 53's revision, and the per-user
+  and cliff columns of `reports`, `report_runs` and `budget_window_runs` were
+  until revision `4e30076d4b9f`, has no statement
   through the model: `update(Model).values(column=...)` raises
   `AttributeError`, a constructor value is never stored, and `Model.column`
   is the table's Core column, which the rule rules out even in a `select`. A

@@ -20,7 +20,7 @@ run and cliff calculation tables, and ``poverty`` and ``withheld_area_codes``
 have no ``updated_at``. A column a model's mapper leaves out
 (``exclude_properties``) would have no statement through the model, so its
 writes and refusals would go through a class that maps it; since revision
-``4e30076d4b9f`` no model leaves a column out.
+``4e30076d4b9f`` no model of these tables leaves a column out.
 """
 
 from __future__ import annotations
@@ -612,7 +612,7 @@ def test_the_public_api_reads_runs_and_results_but_writes_neither(
 
 
 # The class that maps the columns each model's mapper leaves out. Since
-# revision 4e30076d4b9f no model leaves a column out.
+# revision 4e30076d4b9f no model of the run tables leaves a column out.
 UNMAPPED_COLUMN_CLASSES: dict[type[Any], type[Any]] = {}
 
 
