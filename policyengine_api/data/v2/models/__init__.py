@@ -70,6 +70,10 @@ from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyUserMapping,
     LegacyUserPolicyMapping,
 )
+from policyengine_api.data.v2.models.published_reports import (  # noqa: E402  # tables declared after the naming convention above
+    PublishedReport,
+    PublishedReportVersion,
+)
 from policyengine_api.data.v2.models.reports import (  # noqa: E402
     BudgetWindowRun,
     Report,
@@ -170,6 +174,8 @@ __all__ = [
     "Policy",
     "Poverty",
     "ProgramStatistics",
+    "PublishedReport",
+    "PublishedReportVersion",
     "Region",
     "RegionType",
     "Report",

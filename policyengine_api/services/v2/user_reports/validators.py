@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.associations.validators import (
+    AssociationConflictError,
     AssociationLinkNotFoundError,
     AssociationNotFoundError,
     AssociationReferenceConflictError,
@@ -26,6 +27,10 @@ class AssociationReportNotFoundError(LookupError):
 
 class AssociationBudgetWindowConflictError(AssociationReferenceConflictError):
     """A saved report's budget_window_years disagrees with the report it names."""
+
+
+class PublishedUserReportRepointError(AssociationConflictError):
+    """A published saved report can't name another report until withdrawn (409)."""
 
 
 # A saved report stores a window of one year as no window.
@@ -107,3 +112,20 @@ def require_owned_user_policy(*, owned: bool, user_policy_id: UUID) -> None:
             "user and country"
         )
         raise AssociationLinkNotFoundError(msg)
+
+
+def require_unpublished_to_repoint(
+    *, association: UserReportAssociation, report_id: UUID | None, published: bool
+) -> None:
+    """Refuse to repoint a published saved report to another report, or to none.
+
+    Raise PublishedUserReportRepointError when ``published`` and
+    ``report_id``, the report the update leaves named, isn't the one it
+    names now.
+    """
+    if published and report_id != association.report_id:
+        msg = (
+            f"Saved report {association.id} is published, so it can't name "
+            "another report; withdraw its published page first"
+        )
+        raise PublishedUserReportRepointError(msg)

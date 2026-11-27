@@ -22,6 +22,7 @@ from policyengine_api.fastapi_routes.resource_service_protocols import (
     V2HouseholdCalculationResourceService,
     V2HouseholdResourceService,
     V2PolicyResourceService,
+    V2PublishedReportResourceService,
     V2StoredReportResourceService,
     V2StoredSimulationResourceService,
     V2UserDynamicResourceService,
@@ -81,6 +82,7 @@ __all__ = [
     "V2HouseholdResourceService",
     "V2MetadataResourceReader",
     "V2PolicyResourceService",
+    "V2PublishedReportResourceService",
     "V2StoredReportResourceService",
     "V2StoredSimulationResourceService",
     "V2UserDynamicResourceService",
@@ -488,6 +490,34 @@ def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
     )
 
 
+def _default_v2_published_report_service_factory() -> V2PublishedReportResourceService:
+    from policyengine_api.data.v2.database import (
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.published_reports.database_session import (
+        PublishedReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.published_reports.services import (
+        V2PublishedReportService,
+    )
+    from policyengine_api.services.v2.stored_reports.database_session import (
+        StoredReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.stored_reports.services import (
+        V2StoredReportService,
+    )
+
+    # The public read reads reports only, so the report service needs no
+    # submissions or run records.
+    return V2PublishedReportService(
+        PublishedReportDatabaseSession(get_v2_session_factory()),
+        reports=V2StoredReportService(
+            StoredReportDatabaseSession(get_v2_session_factory()),
+            current_versions=_current_package_versions,
+        ),
+    )
+
+
 def _default_v2_account_service_factory() -> V2AccountResourceService:
     from policyengine_api.data.v2.database import (
         get_v2_session_factory,
@@ -611,6 +641,9 @@ class NativeRouteDependencies:
     v2_user_report_service_factory: Callable[[], V2UserReportResourceService] | None = (
         None
     )
+    v2_published_report_service_factory: (
+        Callable[[], V2PublishedReportResourceService] | None
+    ) = None
     v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
     v2_user_type_service_factory: Callable[[], V2UserTypeResourceService] | None = None
     v2_user_invitation_service_factory: (
@@ -655,6 +688,9 @@ class NativeRouteDependencies:
                 _default_v2_user_simulation_service_factory
             ),
             v2_user_report_service_factory=_default_v2_user_report_service_factory,
+            v2_published_report_service_factory=(
+                _default_v2_published_report_service_factory
+            ),
             v2_account_service_factory=_default_v2_account_service_factory,
             v2_user_type_service_factory=_default_v2_user_type_service_factory,
             v2_user_invitation_service_factory=(

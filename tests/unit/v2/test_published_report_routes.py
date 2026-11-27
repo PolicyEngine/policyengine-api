@@ -13,6 +13,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+
+from policyengine_api.data.v2.models import UserType
+from policyengine_api.migration_flags import infer_route_group
 from policyengine_api.services.v2.published_reports.types import (
     PublicationRead,
     PublicationVersionRead,
@@ -30,10 +33,6 @@ from policyengine_api.services.v2.published_reports.validators import (
     PublishedVersionNotFoundError,
     UnpublishableUserReportError,
 )
-
-from policyengine_api.data.v2.models import UserType
-from policyengine_api.fastapi_routes.v2.reports.response_models import report_item
-from policyengine_api.migration_flags import infer_route_group
 from policyengine_api.services.v2.stored_reports.economy_results.types import (
     EconomyResultUnreadableError,
 )
@@ -50,7 +49,12 @@ from tests.unit.v2.published_report_support import (
     publication_body,
     without_run,
 )
-from tests.unit.v2.stored_report_support import report_read, report_run_read
+from tests.unit.v2.stored_report_support import (
+    FakeReportService,
+    report_read,
+    report_route_client,
+    report_run_read,
+)
 from tests.unit.v2.user_route_support import (
     PRINCIPAL,
     RecordingService,
@@ -393,6 +397,16 @@ def _public_client(publications: RecordingService):
     return client, user_types
 
 
+def _report_as_its_route_answers(published: PublishedReportRead) -> dict[str, Any]:
+    """Return the report as GET /v2/reports/{id}?run_id= answers it."""
+    response = report_route_client(
+        reports=FakeReportService(report=published.report)
+    ).get(f"/v2/reports/{published.report.id}?country_id=us&run_id={RUN_ID}")
+    assert response.status_code == 200
+    item: dict[str, Any] = response.json()["result"]["item"]
+    return item
+
+
 def test_anyone_reads_a_published_report_without_its_owner() -> None:
     published = _published_report()
     publications = RecordingService(published)
@@ -425,7 +439,7 @@ def test_anyone_reads_a_published_report_without_its_owner() -> None:
                 "versions": [EXPECTED_VERSION],
                 "published_at": "2026-11-28T09:00:00Z",
                 "updated_at": "2026-11-28T10:00:00Z",
-                "report": report_item(published.report).model_dump(mode="json"),
+                "report": _report_as_its_route_answers(published),
             }
         },
     }

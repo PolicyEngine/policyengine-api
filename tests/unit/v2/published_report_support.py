@@ -12,13 +12,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from policyengine_api.services.v2.published_reports.database_session import (
-    PublishedReportDatabaseSession,
-)
-from policyengine_api.services.v2.published_reports.services import (
-    V2PublishedReportService,
-)
-
 from policyengine_api.data.v2.models import (
     BudgetWindowRun,
     Report,
@@ -31,6 +24,12 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
 from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.published_reports.database_session import (
+    PublishedReportDatabaseSession,
+)
+from policyengine_api.services.v2.published_reports.services import (
+    V2PublishedReportService,
+)
 from tests.unit.v2.stored_report_support import report_read, report_run_read
 
 if TYPE_CHECKING:
@@ -177,7 +176,7 @@ def store_report_run(
         baseline_simulation_run_id=uuid4(),
         reform_simulation_run_id=uuid4(),
         budget_window_run_id=budget_window_run_id,
-        year=None if budget_window_run_id is None else 2026,
+        year=None if budget_window_run_id is None else 2026 + days_later,
         country_package_version="1.5.0",
         policyengine_version=f"4.{2 + days_later}.0",
         status=status,

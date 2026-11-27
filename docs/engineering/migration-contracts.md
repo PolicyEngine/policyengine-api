@@ -23,7 +23,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `household` | `household`, `households`, `household-calculations`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations`, `user-simulations` | `simulation` | `economy` |
-| `report` | `report`, `reports`, `user-reports`, `shared-reports` | `report` | `report` |
+| `report` | `report`, `reports`, `user-reports`, `shared-reports`, `published-reports` | `report` | `report` |
 | `user_profile` | `user-profile`, `me`, `admin` | `user` | `none` |
 
 ## App V2 Workflow Contracts

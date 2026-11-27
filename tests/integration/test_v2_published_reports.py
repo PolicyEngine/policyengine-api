@@ -16,17 +16,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
-from policyengine_api.services.v2.published_reports.database_session import (
-    PublishedReportDatabaseSession,
-)
-from policyengine_api.services.v2.published_reports.services import (
-    V2PublishedReportService,
-)
-from policyengine_api.services.v2.published_reports.types import (
-    PublicationCreateInput,
-    PublicationUpdateInput,
-    PublicationVersionInput,
-)
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col
@@ -37,6 +26,17 @@ from policyengine_api.data.v2.models import (
     ReportRun,
     User,
     UserReportAssociation,
+)
+from policyengine_api.services.v2.published_reports.database_session import (
+    PublishedReportDatabaseSession,
+)
+from policyengine_api.services.v2.published_reports.services import (
+    V2PublishedReportService,
+)
+from policyengine_api.services.v2.published_reports.types import (
+    PublicationCreateInput,
+    PublicationUpdateInput,
+    PublicationVersionInput,
 )
 from policyengine_api.services.v2.stored_reports.database_session import (
     StoredReportDatabaseSession,
@@ -424,8 +424,5 @@ def test_the_previous_revision_has_no_published_report_tables(
     assert set(PUBLISHED_TABLES) <= upgraded_tables
     assert "uq_user_report_associations_id_report_id" in upgraded_unique
     assert foreign_keys == {
-        "fk_published_reports_user_report_id_report_id_user_report_associations": (
-            "CASCADE",
-            "RESTRICT",
-        )
+        "fk_published_reports_user_report_report": ("CASCADE", "RESTRICT")
     }

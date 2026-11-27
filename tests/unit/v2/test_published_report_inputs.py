@@ -12,12 +12,12 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+
 from policyengine_api.services.v2.published_reports.types import (
     PublicationCreateInput,
     PublicationUpdateInput,
 )
-from pydantic import ValidationError
-
 from tests.unit.v2.published_report_support import publication_body, without_run
 
 
@@ -104,7 +104,7 @@ def test_the_limits_themselves_are_accepted() -> None:
 )
 def test_a_malformed_publication_is_refused(changes: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
-        PublicationCreateInput.model_validate(publication_body(uuid4(), **changes))
+        PublicationCreateInput.model_validate({**publication_body(uuid4()), **changes})
 
 
 def test_an_edit_takes_only_the_fields_sent() -> None:

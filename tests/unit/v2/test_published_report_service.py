@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
+
+from policyengine_api.data.v2.models import ReportRunStatus
 from policyengine_api.services.v2.published_reports.types import (
     PublicationCreateInput,
     PublicationUpdateInput,
@@ -28,8 +30,6 @@ from policyengine_api.services.v2.published_reports.validators import (
     PublishedVersionNotFoundError,
     UnpublishableUserReportError,
 )
-
-from policyengine_api.data.v2.models import ReportRunStatus
 from policyengine_api.services.v2.user_reports.database_session import (
     UserReportDatabaseSession,
 )
@@ -56,13 +56,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from uuid import UUID
 
+    from sqlalchemy.orm import sessionmaker
+    from sqlmodel import Session
+
     from policyengine_api.services.v2.published_reports.services import (
         V2PublishedReportService,
     )
     from policyengine_api.services.v2.published_reports.types import PublicationRead
-    from sqlalchemy.orm import sessionmaker
-    from sqlmodel import Session
-
     from tests.unit.v2.published_report_support import SavedReportRows
 
 

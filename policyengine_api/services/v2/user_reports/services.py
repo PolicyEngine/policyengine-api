@@ -56,6 +56,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.reads import 
     read_owned_user_report_row,
     read_report_budget_window_size,
     read_report_exists,
+    read_user_report_published,
     read_user_report_row,
     read_user_report_rows,
 )
@@ -74,6 +75,7 @@ from policyengine_api.services.v2.user_reports.validators import (
     require_matching_budget_window,
     require_owned_user_policy,
     require_stored_report,
+    require_unpublished_to_repoint,
     require_user_report,
 )
 
@@ -450,8 +452,10 @@ class V2UserReportService:
         Raise AssociationReferenceConflictError when the update would leave
         the saved report naming both, AssociationBudgetWindowConflictError
         when it would leave a ``budget_window_years`` that disagrees with the
-        named report's budget window, and UserReportNotFoundError if the
-        principal has no such report in this country. A saved report that
+        named report's budget window, PublishedUserReportRepointError when it
+        would name another report, or none, for a published saved report, and
+        UserReportNotFoundError if the principal has no such report in this
+        country. A saved report that
         names a detailed-save report after the update, and whose ``report_id``
         or ``last_run_at`` the update supplies, takes the owner's newest
         request for one of that report's runs as ``last_run_at``, or null.
@@ -477,6 +481,14 @@ class V2UserReportService:
                 association_id=association_id,
             )
             require_one_report_after_update(association, association_input)
+            if "report_id" in association_input.model_fields_set:
+                require_unpublished_to_repoint(
+                    association=association,
+                    report_id=association_input.report_id,
+                    published=read_user_report_published(
+                        session, association_id=association.id
+                    ),
+                )
             validate_stored_report(
                 session, country_id=country_id, report_id=association_input.report_id
             )

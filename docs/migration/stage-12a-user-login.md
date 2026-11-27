@@ -607,6 +607,58 @@ budget_window_years, baseline_reform, last_run_at, created_at, updated_at}`:
   provisions. There is no shared list or search, and the owner routes stay
   owner-scoped.
 
+### Published reports
+
+An author or admin publishes one of their saved reports as a public,
+read-only page that research posts can link to (D6 · 1). The page is linked
+by the saved report's ID and shows one succeeded run of the detailed-save
+report the saved report names. Every route takes `country_id`.
+
+| Route | Who | What it does |
+| --- | --- | --- |
+| `POST /v2/user-reports/{id}/publication` | The owner, author or admin (403 below author) | Publishes: `run_id`, `summary`, `author_ids`, `tags`, `content`, `show_past_versions`. 201. |
+| `GET /v2/user-reports/{id}/publication` | The owner, any type | The page with every version, newest first. |
+| `PATCH /v2/user-reports/{id}/publication` | The owner, author or admin | Sets the fields sent; none may be null. |
+| `POST /v2/user-reports/{id}/publication/versions` | The owner, author or admin | Moves the page to another succeeded run of its report, as a new version. 201. |
+| `DELETE /v2/user-reports/{id}/publication` | The owner, any type | Withdraws the page, deleting its versions. 204. |
+| `GET /v2/published-reports/{id}` | Anyone, no credential | The published report, with `version_id` to read an earlier version. |
+
+- **Runs:** a version names one run: a report run of an economy or household
+  report, or a budget-window run of a budget window. It must have succeeded
+  (409 otherwise) and be one of the report's runs (404 otherwise). A page
+  shows each run at most once (409). Running the report again never moves
+  the page.
+- **Fields:** `summary` is 1 to 300 characters; `author_ids` are 1 to 10 IDs
+  from the website's `authors.json`, and `tags` up to 20 of its topic and
+  location tags, both lower-case words joined by hyphens and checked for
+  form only. `content` is an ordered list of at most 100 blocks, Markdown
+  (`{"type": "markdown", "markdown": ...}`, at most 20,000 characters,
+  rendered without raw HTML) or an output card
+  (`{"type": "output", "output": <key>}`, by v3's key, each at most once);
+  a card left out is removed. One content serves every version. Request
+  bodies are at most 4 MiB.
+- **Past versions:** with `show_past_versions`, readers may open the page's
+  earlier versions; turned off, those stay stored and only the newest can
+  be read.
+- **Refusals:** a saved report is published once (409). One that names only
+  a v1 report output, or has no name (the page's title), can't be published
+  (409).
+- **The public read** answers the page's title (the saved report's name),
+  summary, author IDs, tags and content; the saved report's source note,
+  provisions, validation, budget window and the name of the reform it was
+  compared with; the version read and the versions a reader may open, each
+  with its run's versions and when the page moved to it; and the report
+  with that version's run, as `GET /v2/reports/{id}?run_id=` answers it,
+  labelled with the title. The owner, the saved report's `description` (the
+  owner's notes), the owner's saved-reform IDs and `last_run_at` are left
+  out. It never provisions a user.
+- **Deletes and repointing:** `published_reports` has a composite foreign
+  key `(user_report_id, report_id)` to `user_report_associations (id,
+  report_id)`, `ON DELETE CASCADE`, `ON UPDATE RESTRICT`. Deleting the saved
+  report, or its owner's account, deletes the page; repointing a published
+  saved report to another report, or to none, is refused (409) until the
+  page is withdrawn. A run a page has shown can't be deleted.
+
 ### Saved detailed-save simulations and reports
 
 `POST` and `PATCH` on `/v2/user-simulations` and `/v2/user-reports` take a

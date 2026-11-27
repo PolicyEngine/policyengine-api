@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
+    PublishedReport,
     Report,
     UserPolicy,
     UserReportAssociation,
@@ -158,3 +159,8 @@ def read_report_budget_window_size(
             Report.id == report_id, Report.country == country_id
         )
     ).one_or_none()
+
+
+def read_user_report_published(session: Session, *, association_id: UUID) -> bool:
+    """Return whether the saved report is published as a public page."""
+    return session.get(PublishedReport, association_id) is not None

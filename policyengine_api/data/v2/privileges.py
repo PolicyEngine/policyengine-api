@@ -364,6 +364,11 @@ TABLE_ACCESS: Final[dict[str, TableAccess]] = {
     # changes one afterwards.
     "user_report_run_associations": _access(runtime=READ_INSERT_DELETE),
     "user_simulation_associations": _access(runtime=READ_WRITE),
+    # Saved reports their authors published, which API v1 writes, changes
+    # and deletes, and the runs each has shown: added as a page moves to a
+    # newer run, never changed, and deleted when the page is withdrawn.
+    "published_reports": _access(runtime=READ_WRITE),
+    "published_report_versions": _access(runtime=READ_INSERT_DELETE),
     "users": _access(runtime=READ_WRITE),
     # Each change of a signed-in user's type, recorded by the admin routes,
     # invitations and the type script. Afterwards only the time the user
