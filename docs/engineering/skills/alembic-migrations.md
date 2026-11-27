@@ -1763,9 +1763,10 @@ response unchanged.
 before the new release takes traffic (see "CI/CD behavior"), and a whole-row
 load names every mapped column:
 
-- An API v1 release whose `ParameterValue` doesn't map `dynamic_id`: C1 · 50
-  leaves it out of the mapper (the user's decision 1 for C1 · 53), and every
-  release since C1 · 50's revision deployed contains that change.
+- An API v1 release whose `ParameterValue` doesn't map `dynamic_id`: C1 · 51a
+  leaves it out of the mapper (the user's decision 1 for C1 · 53; C1 · 50
+  merged without that change), so the pull request merges only once C1 · 51a's
+  release is in production.
 - The simulation service's C1 · 52 (PolicyEngine/policyengine-sim-api#1129),
   which stops mapping the column: older releases select it in every policy
   read.
