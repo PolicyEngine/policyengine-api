@@ -145,7 +145,8 @@ if TYPE_CHECKING:
         HouseholdCalculationInput,
     )
 
-# The route's path, which the generated operation sends the request to.
+# The route's path, which tests check requests against. The generated
+# operation holds its own copy, which it sends the request to.
 HOUSEHOLD_CALCULATIONS_PATH = "/household-calculations"
 UNREADABLE_ANSWER = "The simulation service's answer could not be read."
 # Statuses after which no job of the submission runs: the service's

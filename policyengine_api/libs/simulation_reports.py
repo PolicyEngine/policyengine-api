@@ -168,7 +168,8 @@ if TYPE_CHECKING:
         StartedReportRun,
     )
 
-# The routes' paths, which the generated operations send the requests to.
+# The routes' paths, which tests check requests against. Each generated
+# operation holds its own copy, which it sends the request to.
 SIMULATIONS_PATH = "/simulations"
 REPORTS_PATH = "/reports"
 

@@ -136,7 +136,8 @@ class _RerunRefusal(Refusal):
 def report_runs_path(report_id: UUID) -> str:
     """Return the simulation service's path for the report's runs.
 
-    The generated ``rerun_report`` operation sends the request to it.
+    Tests check requests against it. The generated ``rerun_report``
+    operation builds its own copy, which it sends the request to.
     """
     return f"/reports/{report_id}/runs"
 
