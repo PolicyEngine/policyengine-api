@@ -50,6 +50,15 @@ from policyengine_api.libs.simulation_reports import (
     report_request,
     simulation_request,
 )
+from policyengine_api.libs.simulation_service_answers import (
+    simulation_service_http_client,
+)
+from policyengine_api.libs.simulation_service_operations import (
+    post_household_calculation,
+    post_report,
+    post_report_rerun,
+    post_simulation,
+)
 from policyengine_api.request_context import _asgi_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
@@ -753,3 +762,76 @@ def test_a_rerun_started_with_202_is_read() -> None:
     assert [serialization.model_name for serialization in serializations] == [
         "ReportRerunRequest"
     ]
+
+
+def send_rerun(http_client: httpx.Client, body: dict[str, Any]) -> object:
+    return post_report_rerun(http_client, rerun_input().report_id, body)
+
+
+@pytest.mark.parametrize(
+    ("send", "hand_built_body", "changed_field"),
+    [
+        pytest.param(
+            post_household_calculation,
+            {
+                **household_calculation_request(calculation_input()),
+                "field_the_model_lacks": 1,
+            },
+            "field_the_model_lacks",
+            id="household calculation, a field the model lacks",
+        ),
+        pytest.param(
+            post_simulation,
+            {
+                **simulation_request(simulation_input()),
+                "field_the_model_lacks": 1,
+            },
+            "field_the_model_lacks",
+            id="simulation, a field the model lacks",
+        ),
+        pytest.param(
+            post_report,
+            {**report_request(report_input()), "field_the_model_lacks": 1},
+            "field_the_model_lacks",
+            id="economy report, a field the model lacks",
+        ),
+        pytest.param(
+            post_report,
+            {
+                **budget_window_request(window_input()),
+                "spm": {"geography_kind": "national", "option_the_model_lacks": 1},
+            },
+            "spm",
+            id="budget window, an SPM option the model lacks",
+        ),
+        pytest.param(
+            post_report,
+            {
+                **household_report_request(household_report_input()),
+                "reform": {"policy_id": str(POLICY_ID), "field_the_model_lacks": 1},
+            },
+            "reform",
+            id="household report, a side's field the model lacks",
+        ),
+        pytest.param(
+            send_rerun,
+            {**report_rerun_request(rerun_input()), "field_the_model_lacks": 1},
+            "field_the_model_lacks",
+            id="rerun, a field the model lacks",
+        ),
+    ],
+)
+def test_a_body_the_generated_model_would_change_is_not_sent(
+    send: Callable[[httpx.Client, dict[str, Any]], object],
+    hand_built_body: dict[str, Any],
+    changed_field: str,
+) -> None:
+    service = ScriptedService(201, {})
+    http_client = simulation_service_http_client(
+        transport=httpx.MockTransport(service.answer)
+    )
+
+    with pytest.raises(ValueError, match=changed_field):
+        send(http_client, hand_built_body)
+
+    assert service.requests == []
