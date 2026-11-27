@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -430,13 +430,19 @@ class ParameterValue(IdentifiedModel, table=True):
 
     A value owned by a policy is deleted with it, and a policy sets at most one
     per parameter and start date. A value with no policy is current law, and a
-    parameter has at most one per start date. ``dynamic_id`` is no longer
-    written: a dynamic's values are ``DynamicParameterValue`` rows since
-    revision 7f7335f0eb31 moved them, and C1 · 53 drops the column, its check
-    and its index once no simulation service release maps it.
+    parameter has at most one per start date. A dynamic's values are
+    ``DynamicParameterValue`` rows since revision 7f7335f0eb31 moved them, so
+    no row has a ``dynamic_id``. The column stays a SQLModel field, as rule
+    ``api.data.orm-only`` requires of every column, and ``exclude_properties``
+    leaves it out of the mapper, so API v1 neither loads nor writes it: a value
+    given to the constructor is never stored, and the class attribute is the
+    table's column, not a value to read. A release keeps working while C1 · 53
+    drops the column, its check and its index, once no simulation service
+    release maps it either.
     """
 
     __tablename__ = "parameter_values"
+    __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("dynamic_id",)}
     __table_args__ = (
         sa.CheckConstraint(
             "policy_id IS NULL OR dynamic_id IS NULL",
@@ -500,6 +506,8 @@ class ParameterValue(IdentifiedModel, table=True):
         foreign_key="policies.id",
         ondelete="CASCADE",
     )
+    # In the table but left out of the mapper (``exclude_properties``) until a
+    # revision drops it.
     dynamic_id: UUID | None = Field(
         default=None,
         foreign_key="dynamics.id",

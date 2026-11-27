@@ -5,8 +5,10 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
+from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
@@ -22,6 +24,9 @@ from policyengine_api.data.v2.models import (
 )
 from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
+from tests.integration.parameter_values_with_dynamics import (
+    ParameterValueWithDynamic,
+)
 from tests.unit.v2.v2_schema_reading import (
     declared_index,
     model_columns,
@@ -152,6 +157,11 @@ def test_identical_dynamic_content_is_stored_once() -> None:
 
 
 def test_a_dynamic_sets_one_value_per_parameter_and_start_date() -> None:
+    """The table keeps the rule while it keeps ``dynamic_id``.
+
+    ``ParameterValue`` no longer maps the column, so the values are written
+    through the column-only ``ParameterValueWithDynamic``.
+    """
     model, version, parameter = _catalog()
 
     with (
@@ -163,17 +173,22 @@ def test_a_dynamic_sets_one_value_per_parameter_and_start_date() -> None:
         dynamic = _dynamic(model, version)
         session.add(dynamic)
         session.commit()
-        for value in (0.1, 0.2):
-            session.add(
-                ParameterValue(
-                    parameter_id=parameter.id,
-                    dynamic_id=dynamic.id,
-                    value_json=value,
-                    start_date=START_DATE,
+        dynamic_value = {
+            "parameter_id": parameter.id,
+            "dynamic_id": dynamic.id,
+            "start_date": START_DATE,
+        }
+        session.execute(
+            insert(ParameterValueWithDynamic).values(
+                id=uuid4(), value_json=0.1, **dynamic_value
+            )
+        )
+        with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
+            session.execute(
+                insert(ParameterValueWithDynamic).values(
+                    id=uuid4(), value_json=0.2, **dynamic_value
                 )
             )
-        with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
-            session.commit()
 
 
 def test_a_mapping_cannot_name_another_country_s_dynamic() -> None:

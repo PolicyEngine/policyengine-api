@@ -25,12 +25,14 @@ from policyengine_api.data.v2.models import (
     Dynamic,
     LegacyPolicyMapping,
     Parameter,
-    ParameterValue,
     Policy,
 )
 from tests.fixtures.database_sessions import schema_inspector
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config, table_columns
 from tests.integration.alembic_version_rows import current_revision
+from tests.integration.parameter_values_with_dynamics import (
+    ParameterValueWithDynamic,
+)
 from tests.integration.simulation_rows import (
     PublicApiRows,
     add_row,
@@ -252,6 +254,12 @@ def test_the_revision_changes_only_dynamics_their_values_and_mappings(
 def test_a_dynamic_is_stored_once_and_sets_one_value_per_parameter_and_date(
     session: Session,
 ) -> None:
+    """A dynamic is unique by its content hash, and its values as a policy's are.
+
+    ``parameter_values`` keeps ``dynamic_id`` and the revision's partial unique
+    index until C1 · 53 drops them; ``ParameterValue`` no longer maps the
+    column, so the values are written through ``ParameterValueWithDynamic``.
+    """
     rows = insert_public_api_rows(session)
     parameter_id = _insert_parameter(session, rows)
     dynamic_id = _insert_dynamic(session, rows)
@@ -267,14 +275,14 @@ def test_a_dynamic_is_stored_once_and_sets_one_value_per_parameter_and_date(
         "value_json": 0.1,
         "start_date": datetime(2026, 1, 1, tzinfo=UTC),
     }
-    add_row(session, ParameterValue, id=uuid4(), **value)
+    add_row(session, ParameterValueWithDynamic, id=uuid4(), **value)
     with refused(session, match="uq_parameter_values_dynamic_parameter_start_date"):
-        add_row(session, ParameterValue, id=uuid4(), **value)
+        add_row(session, ParameterValueWithDynamic, id=uuid4(), **value)
     # Another dynamic may set the same parameter from the same date.
     other_dynamic_id = _insert_dynamic(session, rows, content_hash="e" * 64)
     add_row(
         session,
-        ParameterValue,
+        ParameterValueWithDynamic,
         id=uuid4(),
         **{**value, "dynamic_id": other_dynamic_id},
     )

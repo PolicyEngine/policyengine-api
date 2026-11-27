@@ -22,6 +22,7 @@ from policyengine_api.data.v2 import database
 from policyengine_api.data.v2.catalog import (
     publication,
     publication_inserts,
+    publication_pruning,
     publication_reconciliation,
     publication_staging,
     publication_types,
@@ -38,16 +39,20 @@ from policyengine_api.data.v2.catalog.publication_types import (
     CatalogPublicationError,
 )
 from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
+from policyengine_api.data.v2.models import TaxBenefitModel, TaxBenefitModelVersion
 from policyengine_api.dynamic_parameters import (
     is_dynamic_parameter,
     is_dynamic_parameter_path,
 )
+from tests.fixtures.database_sessions import recorded_statements, sqlite_v2_sessions
 from tests.fixtures.v2_catalog import (
     catalog_with_dynamic_parameters,
     normalized_catalog,
 )
 
 REPO = Path(__file__).parents[3]
+# ``parameter_values.dynamic_id``, but not ``dynamic_parameter_values.dynamic_id``.
+PARAMETER_VALUES_DYNAMIC_ID = re.compile(r"\bparameter_values\.dynamic_id\b")
 
 
 class FakeCopy:
@@ -283,6 +288,45 @@ def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
     )
     assert "pg_advisory_xact_lock" in compiled_lock
     assert str(publication.PUBLICATION_ADVISORY_LOCK_KEY) in compiled_lock
+
+
+def test_publication_names_no_parameter_values_dynamic_id() -> None:
+    """Publication selects and writes current-law values by ``policy_id`` alone.
+
+    C1 · 53 drops ``parameter_values.dynamic_id``, which no row has set since
+    C1 · 50 moved dynamics' values, and this release must go on publishing
+    afterwards, after a rollback for example. The insert, the comparison of
+    stored values, the uniqueness check and pruning name no such column.
+    """
+    dialect = postgresql.dialect()
+    stored_values = next(
+        stored
+        for table_name, _staged, stored in publication_reconciliation._comparison_pairs(
+            normalized_catalog().country("us"), with_format_2=True
+        )
+        if table_name == "parameter values"
+    )
+    for statement in (publication_inserts.INSERT_PARAMETER_VALUES, stored_values):
+        compiled = str(statement.compile(dialect=dialect))
+        assert "parameter_values" in compiled
+        assert "dynamic_id" not in compiled
+
+    with sqlite_v2_sessions() as sessions, sessions() as session:
+        model = TaxBenefitModel(name="policyengine-us")
+        version = TaxBenefitModelVersion(
+            model=model, version="1.0.0", current_law_id=1, metadata_time_periods=[]
+        )
+        session.add_all([model, version])
+        session.flush()
+        with recorded_statements(session) as statements:
+            publication_reconciliation.assert_canonical_value_uniqueness(session)
+            pruned = publication_pruning.prune_catalog_version(session, version.id)
+
+    assert pruned is not None
+    assert sum("FROM parameter_values" in statement for statement in statements) == 2
+    assert not any(
+        PARAMETER_VALUES_DYNAMIC_ID.search(statement) for statement in statements
+    )
 
 
 def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:

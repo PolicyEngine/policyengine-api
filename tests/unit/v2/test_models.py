@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import uuid4
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import configure_mappers
 from sqlmodel.sql.sqltypes import AutoString
 
@@ -529,6 +529,39 @@ def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> No
     )
     predicate = str(index.dialect_options["postgresql"]["where"])
     assert predicate == "policy_id IS NULL AND dynamic_id IS NULL"
+
+
+def test_parameter_values_keep_dynamic_id_which_the_model_no_longer_maps() -> None:
+    """API v1 names no ``parameter_values.dynamic_id``; the table keeps it for now.
+
+    The deploy upgrades the schema before the new release takes traffic, so
+    the release still serving when C1 · 53 drops the column must not name it,
+    and a whole-row load names every mapped column. The table keeps the
+    column, its key to ``dynamics``, the single-owner check and both partial
+    indexes that name it until that revision.
+    """
+    values = stored_v2_table("parameter_values")
+
+    assert "dynamic_id" not in model_columns(ParameterValue)
+    assert "dynamic_id" not in sa.inspect(ParameterValue).attrs
+    assert "dynamic_id" in values.columns
+    assert [key.columns for key in values.foreign_keys_to("dynamics")] == [
+        ("dynamic_id",)
+    ]
+    assert "ck_parameter_values_single_owner" in values.constraint_names
+    assert {
+        "uq_parameter_values_dynamic_parameter_start_date",
+        "uq_parameter_values_canonical_parameter_start_date",
+    } <= set(values.indexes)
+
+
+def test_a_whole_parameter_value_read_names_no_dynamic_id() -> None:
+    statement = sa.select(ParameterValue)
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        compiled = str(statement.compile(dialect=dialect))
+        assert "parameter_values.parameter_id" in compiled
+        assert "dynamic_id" not in compiled
 
 
 def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:

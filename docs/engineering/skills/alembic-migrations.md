@@ -310,8 +310,9 @@ and `refused(session, ...)`.
   takes the Python value, such as `[2026]`, not its JSON text.
 - **Columns a mapper leaves out**: a column kept in its table but left out of
   the model's mapper (`exclude_properties`) until a revision drops it, as
-  the per-user and cliff columns of `reports`, `report_runs` and
-  `budget_window_runs` were until revision `4e30076d4b9f`, has no statement
+  `parameter_values.dynamic_id` is until C1 · 53's revision, and the per-user
+  and cliff columns of `reports`, `report_runs` and `budget_window_runs` were
+  until revision `4e30076d4b9f`, has no statement
   through the model: `update(Model).values(column=...)` raises
   `AttributeError`, a constructor value is never stored, and `Model.column`
   is the table's Core column, which the rule rules out even in a `select`. A
@@ -712,7 +713,7 @@ publication advisory lock, reads the model's stored versions again, skips the
 version if the rule no longer chooses it, and otherwise deletes exactly:
 
 - the version's current-law `parameter_values`: rows of the version's
-  parameters whose `policy_id` and `dynamic_id` are both null;
+  parameters whose `policy_id` is null;
 - the version's current-law `dynamic_parameter_values`: rows of the version's
   dynamic parameters whose `dynamic_id` is null (since revision
   `7f7335f0eb31`, by the user's decision C1 · 46, Q3);
@@ -725,8 +726,7 @@ never deletes or changes any other row: not `parameters` or
 reforms' and dynamics' included), not the `tax_benefit_model_versions` row
 apart from that column, and not `parameter_nodes`, `variables`, `regions`,
 `datasets`, `policies`, `dynamics`, any `parameter_values` row with a
-`policy_id` or `dynamic_id`, or any `dynamic_parameter_values` row with a
-`dynamic_id`.
+`policy_id`, or any `dynamic_parameter_values` row with a `dynamic_id`.
 A transaction that raises an exception, of any kind, rolls back that
 version alone; the failure is reported in the command's evidence and on
 stderr, the command still succeeds, and the next publication tries again.
@@ -1711,7 +1711,10 @@ both (`MAINTAIN`), and updates neither; the simulation service and
 its Modal workers read both, which C1 · 52 needs; comparison runs have no
 access. `parameter_values.dynamic_id`, its single-owner check and its partial
 unique index stay until C1 · 53, because older simulation service releases
-map the column. `tests/integration/test_alembic_v2_dynamic_parameter_tables.py`
+map the column; API v1 stops mapping it from C1 · 51a's release (see
+"Columns a mapper leaves out"), so the release serving while C1 · 53's
+revision runs names none of what it drops.
+`tests/integration/test_alembic_v2_dynamic_parameter_tables.py`
 checks that nothing else changes, the move with both kinds of row, the
 refusal, the read-only step, the downgrade and the re-upgrade, and
 `tests/integration/test_v2_catalog_publication_dynamic_parameters.py`

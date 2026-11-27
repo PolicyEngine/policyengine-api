@@ -118,12 +118,11 @@ def read_parameter_values(
 ) -> list[ParameterValue]:
     """Return a page of a model version's current-law parameter values.
 
-    Values tied to a policy or dynamic are excluded. The selection's
-    parameter_id keeps one parameter's values, its parameter_names the values
-    of the parameters with those names, and its selected_day those in effect
-    on that day. Rows are ordered by parameter name, then newest
-    first, and limit + 1 are fetched so the caller can tell whether another
-    page exists.
+    A policy's values are excluded. The selection's parameter_id keeps one
+    parameter's values, its parameter_names the values of the parameters with
+    those names, and its selected_day those in effect on that day. Rows are
+    ordered by parameter name, then newest first, and limit + 1 are fetched
+    so the caller can tell whether another page exists.
     """
     parameter_id = selection.parameter_id
     selected_day = selection.selected_day
@@ -133,7 +132,6 @@ def read_parameter_values(
         .where(
             col(Parameter.tax_benefit_model_version_id) == model_version_id,
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         )
     )
     if parameter_id is not None:
@@ -174,7 +172,6 @@ def read_parameter_value(
             col(ParameterValue.id) == value_id,
             col(Parameter.tax_benefit_model_version_id) == model_version_id,
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         ),
     )
     return rows[0] if rows else None
@@ -185,8 +182,8 @@ def read_current_law_values_by_parameter_name(
 ) -> list[CurrentLawValueRow]:
     """Return the current-law values of the named parameters of a model version.
 
-    Values tied to a policy or dynamic are excluded. Rows are ordered by
-    parameter name, then start date.
+    A policy's values are excluded. Rows are ordered by parameter name, then
+    start date.
     """
     if not parameter_names:
         return []
@@ -203,7 +200,6 @@ def read_current_law_values_by_parameter_name(
             col(Parameter.tax_benefit_model_version_id) == model_version_id,
             col(Parameter.name).in_(sorted(parameter_names)),
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         )
         .order_by(col(Parameter.name), col(ParameterValue.start_date)),
     )
