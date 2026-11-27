@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -13,7 +13,6 @@ from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import (
     Country,
-    Dynamic,
     Household,
     LegacyPolicyMapping,
     LegacyUserMapping,
@@ -30,9 +29,6 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
 from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
-from tests.integration.parameter_values_with_dynamics import (
-    ParameterValueWithDynamic,
-)
 
 
 @contextmanager
@@ -98,7 +94,6 @@ def test_direct_sqlalchemy_categories_are_complete_and_documented() -> None:
         "named_constraints_and_indexes",
         "ambiguous_foreign_key_relationships",
         "transaction_conflict_recovery",
-        "columns_left_out_of_the_mapper",
     }
     assert all(DIRECT_SQLALCHEMY_EXCEPTIONS.values())
 
@@ -265,37 +260,13 @@ def test_policy_content_hash_is_unique_per_canonicalization_version() -> None:
             session.commit()
 
 
-def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
-    model, version, parameter, policy = _policy_graph(content_hash="b" * 64)
-    dynamic = Dynamic(
-        country_id="us",
-        tax_benefit_model_id=model.id,
-        tax_benefit_model_version_id=version.id,
-        canonicalization_version=1,
-        content_hash="d" * 64,
-    )
+def test_policy_parameter_value_period_and_identity_constraints() -> None:
+    _model, _version, parameter, policy = _policy_graph(content_hash="b" * 64)
     start = datetime(2026, 1, 1, tzinfo=UTC)
 
     with _relational_sqlite_session() as session:
         session.add_all([parameter, policy])
         session.commit()
-        session.add(dynamic)
-        session.commit()
-
-        # ParameterValue no longer maps dynamic_id, which the table keeps
-        # until C1 · 53 drops it with the check.
-        with pytest.raises(IntegrityError, match="ck_parameter_values_single_owner"):
-            session.execute(
-                sa.insert(ParameterValueWithDynamic).values(
-                    id=uuid4(),
-                    parameter_id=parameter.id,
-                    policy_id=policy.id,
-                    dynamic_id=dynamic.id,
-                    value_json={"rate": 0.1},
-                    start_date=start,
-                )
-            )
-        session.rollback()
 
         invalid_period = ParameterValue(
             parameter_id=parameter.id,

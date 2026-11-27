@@ -273,11 +273,14 @@ def _assert_head(sessions: sessionmaker[Session]) -> None:
         index["name"]: index
         for index in schema_inspector(sessions).get_indexes("parameter_values")
     }
-    canonical_index = parameter_value_indexes[
-        "uq_parameter_values_canonical_parameter_start_date"
+    current_law_index = parameter_value_indexes[
+        "uq_parameter_values_current_law_parameter_start_date"
     ]
-    assert canonical_index["unique"]
-    assert canonical_index["column_names"] == ["parameter_id", "start_date"]
+    assert current_law_index["unique"]
+    assert current_law_index["column_names"] == ["parameter_id", "start_date"]
+    assert current_law_index["dialect_options"]["postgresql_where"] == (
+        "(policy_id IS NULL)"
+    )
     policy_value_constraint = next(
         constraint
         for constraint in schema_inspector(sessions).get_unique_constraints(
@@ -547,10 +550,13 @@ def _assert_stage11_downgrade(sessions: sessionmaker[Session]) -> None:
 
 def _assert_baseline_downgrade(sessions: sessionmaker[Session]) -> None:
     _assert_revision(sessions, BASELINE_REVISION)
-    assert "uq_parameter_values_canonical_parameter_start_date" not in {
+    assert {
+        "uq_parameter_values_canonical_parameter_start_date",
+        "uq_parameter_values_current_law_parameter_start_date",
+    }.isdisjoint(
         index["name"]
         for index in schema_inspector(sessions).get_indexes("parameter_values")
-    }
+    )
 
 
 def _assert_base(sessions: sessionmaker[Session]) -> None:

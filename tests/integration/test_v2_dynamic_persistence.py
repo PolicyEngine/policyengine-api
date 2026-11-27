@@ -39,9 +39,6 @@ from policyengine_api.services.v2.policies.database_session import (
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
-from tests.integration.parameter_values_with_dynamics import (
-    ParameterValueWithDynamic,
-)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -227,7 +224,8 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
     """Return the names a policy's or a dynamic's stored values set.
 
     A policy's values are ``parameter_values`` rows; a dynamic's are
-    ``dynamic_parameter_values`` rows, and it sets no ``parameter_values`` row.
+    ``dynamic_parameter_values`` rows (``parameter_values`` has no
+    ``dynamic_id`` since revision 1c651058fac5).
     """
     if policy_id is not None:
         return set(
@@ -237,16 +235,6 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
                 .where(ParameterValue.policy_id == policy_id)
             )
         )
-    # ParameterValue no longer maps the column, which the table keeps until
-    # C1 · 53 drops it.
-    assert (
-        session.scalars(
-            select(ParameterValueWithDynamic.id).where(
-                ParameterValueWithDynamic.dynamic_id == dynamic_id
-            )
-        ).all()
-        == []
-    )
     return set(
         session.scalars(
             select(DynamicParameter.name)

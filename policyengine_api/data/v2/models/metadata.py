@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -431,23 +431,12 @@ class ParameterValue(IdentifiedModel, table=True):
     A value owned by a policy is deleted with it, and a policy sets at most one
     per parameter and start date. A value with no policy is current law, and a
     parameter has at most one per start date. A dynamic's values are
-    ``DynamicParameterValue`` rows since revision 7f7335f0eb31 moved them, so
-    no row has a ``dynamic_id``. The column stays a SQLModel field, as rule
-    ``api.data.orm-only`` requires of every column, and ``exclude_properties``
-    leaves it out of the mapper, so API v1 neither loads nor writes it: a value
-    given to the constructor is never stored, and the class attribute is the
-    table's column, not a value to read. A release keeps working while C1 · 53
-    drops the column, its check and its index, once no simulation service
-    release maps it either.
+    ``DynamicParameterValue`` rows: revision 7f7335f0eb31 moved them there, and
+    revision 1c651058fac5 dropped ``dynamic_id`` with its check and index.
     """
 
     __tablename__ = "parameter_values"
-    __mapper_args__: ClassVar[dict[str, Any]] = {"exclude_properties": ("dynamic_id",)}
     __table_args__ = (
-        sa.CheckConstraint(
-            "policy_id IS NULL OR dynamic_id IS NULL",
-            name="ck_parameter_values_single_owner",
-        ),
         sa.CheckConstraint(
             "end_date IS NULL OR end_date >= start_date",
             name="ck_parameter_values_effective_period",
@@ -458,18 +447,6 @@ class ParameterValue(IdentifiedModel, table=True):
             "start_date",
             name="uq_parameter_values_policy_parameter_start_date",
         ),
-        # A dynamic's values are unique as a policy's are. The index covers
-        # only dynamics' rows, so it doesn't index every current-law value;
-        # rows without a dynamic never conflict in a unique key anyway.
-        sa.Index(
-            "uq_parameter_values_dynamic_parameter_start_date",
-            "dynamic_id",
-            "parameter_id",
-            "start_date",
-            unique=True,
-            postgresql_where=sa.text("dynamic_id IS NOT NULL"),
-            sqlite_where=sa.text("dynamic_id IS NOT NULL"),
-        ),
         sa.Index(
             "ix_parameter_values_parameter_period",
             "parameter_id",
@@ -477,15 +454,17 @@ class ParameterValue(IdentifiedModel, table=True):
             "end_date",
         ),
         # SQLModel does not expose dialect-specific partial unique indexes.
-        # Canonical values have neither an owning policy nor dynamic, while
-        # those owners may each store their own value for the same period.
+        # Current-law values have no owning policy, while each policy may
+        # store its own value for the same period. Alembic compares an
+        # index's condition by its name only, so the index took a new name
+        # when its condition stopped naming dynamic_id (revision 1c651058fac5).
         sa.Index(
-            "uq_parameter_values_canonical_parameter_start_date",
+            "uq_parameter_values_current_law_parameter_start_date",
             "parameter_id",
             "start_date",
             unique=True,
-            postgresql_where=sa.text("policy_id IS NULL AND dynamic_id IS NULL"),
-            sqlite_where=sa.text("policy_id IS NULL AND dynamic_id IS NULL"),
+            postgresql_where=sa.text("policy_id IS NULL"),
+            sqlite_where=sa.text("policy_id IS NULL"),
         ),
     )
 
@@ -504,13 +483,6 @@ class ParameterValue(IdentifiedModel, table=True):
     policy_id: UUID | None = Field(
         default=None,
         foreign_key="policies.id",
-        ondelete="CASCADE",
-    )
-    # In the table but left out of the mapper (``exclude_properties``) until a
-    # revision drops it.
-    dynamic_id: UUID | None = Field(
-        default=None,
-        foreign_key="dynamics.id",
         ondelete="CASCADE",
     )
 
