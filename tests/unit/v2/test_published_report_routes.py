@@ -383,7 +383,7 @@ def test_a_body_over_sixteen_mebibytes_is_refused() -> None:
 
 
 def test_a_publication_the_database_refuses_answers_a_conflict() -> None:
-    """Two publishes or moves at once: the database's keys refuse the second."""
+    """A write the database's keys refuse, behind the row locks, answers 409."""
     publications = RecordingService()
     publications.error = IntegrityError(
         "INSERT INTO published_report_versions", {}, Exception("duplicate key")
@@ -568,8 +568,17 @@ def test_openapi_lists_each_owner_routes_own_failures() -> None:
     versions = paths["/v2/user-reports/{association_id}/publication/versions"]
 
     for operation in (publication["post"], publication["patch"], versions["post"]):
-        assert set(operation["responses"]) >= {"401", "403", "404", "409", "413"}
+        assert set(operation["responses"]) >= {"401", "403", "404", "413"}
         assert "author or admin" in operation["responses"]["403"]["description"]
+    publish_conflicts = publication["post"]["responses"]["409"]["description"]
+    move_conflicts = versions["post"]["responses"]["409"]["description"]
+    assert "published already" in publish_conflicts
+    assert "shown" not in publish_conflicts
+    assert "shown" in move_conflicts
+    assert "published already" not in move_conflicts
+    assert "409" not in publication["patch"]["responses"]
+    assert "run" not in publication["patch"]["responses"]["404"]["description"]
+    assert "run" in versions["post"]["responses"]["404"]["description"]
     for operation in (publication["get"], publication["delete"]):
         assert {"409", "413"}.isdisjoint(operation["responses"])
         assert "author" not in operation["responses"]["403"]["description"]
@@ -594,3 +603,4 @@ def test_openapi_shows_no_edit_field_as_nullable() -> None:
     for name, field in fields.items():
         alternatives = field.get("anyOf", [field])
         assert {"type": "null"} not in alternatives, name
+    assert schemas["PublicationPatchRequest"]["minProperties"] == 1

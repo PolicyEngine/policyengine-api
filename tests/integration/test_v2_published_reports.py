@@ -383,7 +383,7 @@ def test_a_run_a_page_has_shown_cannot_be_deleted(
 def test_a_second_page_or_a_second_version_of_one_run_is_refused(
     owner_sessions: sessionmaker[Session], published: dict[str, Any]
 ) -> None:
-    """Two publishes or moves at once: the database's keys refuse the second."""
+    """The keys hold a page per saved report and a run per page, behind the locks."""
     with (
         owner_sessions.begin() as session,
         refused(session, IntegrityError, match="pk_published_reports"),
@@ -592,6 +592,7 @@ def test_a_budget_window_is_published_with_its_window_run(
                         budget_window_run_id=window_run_id, year=year
                     ),
                 ),
+                result=us_economy_result(),
             )
         user_report_id = _saved_report(
             session, user_id=user_id, report_id=window.report_id
@@ -608,6 +609,14 @@ def test_a_budget_window_is_published_with_its_window_run(
         (version.run_id, version.policyengine_version)
         for version in publication.versions
     ] == [(window_run_id, CURRENT_VERSIONS["policyengine_version"])]
+    page = _service(runtime_sessions).get_published_report(
+        country_id="us", user_report_id=user_report_id
+    )
+    assert page.report.kind == "budget_window"
+    assert page.report.label == "Expanded child tax credit"
+    assert page.report.run is not None
+    assert page.report.run.id == window_run_id
+    assert page.report.result is not None
     with (
         owner_sessions.begin() as session,
         refused(

@@ -88,6 +88,8 @@ def test_the_limits_themselves_are_accepted() -> None:
         {"tags": ["us_ca"]},
         {"tags": ["us", "us"]},
         {"content": [_markdown("")]},
+        {"summary": "A\x00summary"},
+        {"content": [_markdown("Text with a \x00 in it")]},
         {"content": [_markdown("m" * 20_001)]},
         {"content": [_output("budgetary_impact")] * 2},
         {"content": [_output(f"card_{number}") for number in range(101)]},
