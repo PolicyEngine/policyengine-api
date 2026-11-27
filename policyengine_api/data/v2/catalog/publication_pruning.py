@@ -12,8 +12,8 @@ Keeping two others keeps the version the serving revision runs after a
 release whose promotion failed, or a rollback to an older version, since the
 release workflow seeds before it deploys. Pruning a version deletes exactly:
 
-- its current-law parameter values: those of its parameters with neither a
-  policy nor a dynamic, and those of its dynamic parameters with no dynamic;
+- its current-law parameter values: those of its parameters with no policy,
+  and those of its dynamic parameters with no dynamic;
 - its parameter tree rows;
 - its parameter search files;
 
@@ -284,7 +284,6 @@ def prune_catalog_version(session: Session, version_id: UUID) -> PrunedRows | No
         sa.delete(ParameterValue).where(
             col(ParameterValue.parameter_id).in_(version_parameter_ids),
             col(ParameterValue.policy_id).is_(None),
-            col(ParameterValue.dynamic_id).is_(None),
         ),
     )
     version_dynamic_parameter_ids = sa.select(col(DynamicParameter.id)).where(

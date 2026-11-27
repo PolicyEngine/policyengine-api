@@ -327,7 +327,6 @@ INSERT_PARAMETER_VALUES = sa.insert(ParameterValue).from_select(
         "start_date",
         "end_date",
         "policy_id",
-        "dynamic_id",
     ],
     sa.select(
         col(StagedParameterValue.id),
@@ -340,7 +339,6 @@ INSERT_PARAMETER_VALUES = sa.insert(ParameterValue).from_select(
         col(StagedParameterValue.start_date),
         col(StagedParameterValue.end_date),
         sa.cast(sa.null(), column_type(ParameterValue, "policy_id")),
-        sa.cast(sa.null(), column_type(ParameterValue, "dynamic_id")),
     )
     .select_from(
         sa.join(

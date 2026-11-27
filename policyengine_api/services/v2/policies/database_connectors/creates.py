@@ -58,7 +58,6 @@ def create_parameter_values(
         [
             ParameterValue(
                 policy_id=policy_id,
-                dynamic_id=None,
                 parameter_id=value.parameter_id,
                 value_json=value.value,
                 start_date=value.start_date,
