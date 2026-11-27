@@ -28,6 +28,7 @@ from policyengine_api.data.v2.models import (
     User,
     UserReportAssociation,
 )
+from policyengine_api.data.v2.privileges import declared_privileges
 from policyengine_api.services.v2.published_reports.database_session import (
     PublishedReportDatabaseSession,
 )
@@ -48,7 +49,11 @@ from policyengine_api.services.v2.user_reports.database_session import (
 )
 from policyengine_api.services.v2.user_reports.services import V2UserReportService
 from policyengine_api.services.v2.user_reports.types import UserReportUpdateInput
-from tests.fixtures.database_sessions import recorded_statements, schema_inspector
+from tests.fixtures.database_sessions import (
+    grant_declared_v2_privileges,
+    recorded_statements,
+    schema_inspector,
+)
 from tests.fixtures.economy_results import us_economy_result
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config
 from tests.integration.simulation_rows import add_row, refused
@@ -444,18 +449,27 @@ def test_a_version_names_exactly_one_run(
 
 def test_the_previous_revision_has_no_published_report_tables(
     owner_sessions: sessionmaker[Session],
+    managed_v2_roles: ManagedV2Roles,
+    disposable_v2_database_url: str,
 ) -> None:
-    command.downgrade(alembic_v2_config(), PREVIOUS_REVISION)
-    with owner_sessions() as session:
-        inspector = schema_inspector(session)
-        downgraded_tables = set(inspector.get_table_names())
-        downgraded_unique = {
-            constraint["name"]
-            for constraint in inspector.get_unique_constraints(
-                "user_report_associations"
-            )
-        }
-    command.upgrade(alembic_v2_config(), "head")
+    try:
+        command.downgrade(alembic_v2_config(), PREVIOUS_REVISION)
+        with owner_sessions() as session:
+            inspector = schema_inspector(session)
+            downgraded_tables = set(inspector.get_table_names())
+            downgraded_unique = {
+                constraint["name"]
+                for constraint in inspector.get_unique_constraints(
+                    "user_report_associations"
+                )
+            }
+    finally:
+        # The upgrade creates the tables afresh, without the roles' grants.
+        command.upgrade(alembic_v2_config(), "head")
+        grant_declared_v2_privileges(
+            disposable_v2_database_url,
+            declared_privileges(managed_v2_roles.deployment_environment),
+        )
     with owner_sessions() as session:
         inspector = schema_inspector(session)
         upgraded_tables = set(inspector.get_table_names())

@@ -129,7 +129,7 @@ def require_published_report_kept(
 
     Raise PublishedUserReportRepointError when ``published`` and the update
     names another report, and PublishedUserReportNameRequiredError when it
-    clears the name, the page's title.
+    clears the name, the page's title, or leaves it only blanks.
     """
     if not published:
         return
@@ -140,7 +140,7 @@ def require_published_report_kept(
             "another report; withdraw its published page first"
         )
         raise PublishedUserReportRepointError(msg)
-    if "name" in supplied and association_input.name is None:
+    if "name" in supplied and not (association_input.name or "").strip():
         msg = (
             f"Saved report {association.id} is published, and its name is the "
             "page's title; give it another name, or withdraw the page first"

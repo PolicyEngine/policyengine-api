@@ -30,6 +30,40 @@ def read_publication_row(
     return session.get(PublishedReport, user_report_id)
 
 
+def lock_publication_row(
+    session: Session, *, user_report_id: UUID
+) -> PublishedReport | None:
+    """Return the saved report's published report, locked until the transaction ends.
+
+    An edit, a move and a withdrawal each lock it, so none of them changes a
+    page another has just withdrawn.
+    """
+    return session.scalar(
+        select(PublishedReport)
+        .where(col(PublishedReport.user_report_id) == user_report_id)
+        .with_for_update()
+    )
+
+
+def lock_owned_user_report_row(
+    session: Session, *, user_id: UUID, country_id: str, user_report_id: UUID
+) -> UserReportAssociation | None:
+    """Return the user's saved report, locked until the transaction ends.
+
+    A publish locks it, as the saved report's edit does, so its name and
+    report can't change while the publish reads them.
+    """
+    return session.scalar(
+        select(UserReportAssociation)
+        .where(
+            col(UserReportAssociation.id) == user_report_id,
+            col(UserReportAssociation.country_id) == country_id,
+            col(UserReportAssociation.user_id) == user_id,
+        )
+        .with_for_update()
+    )
+
+
 def read_published_report_rows(
     session: Session, *, country_id: str, user_report_id: UUID
 ) -> tuple[PublishedReport, UserReportAssociation] | None:

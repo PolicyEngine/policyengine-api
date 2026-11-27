@@ -54,11 +54,11 @@ from policyengine_api.services.v2.published_reports.transformations import (
 )
 from policyengine_api.services.v2.published_reports.types import ShownVersions
 from policyengine_api.services.v2.published_reports.validators import (
+    PublicationNotFoundError,
+    PublishedReportNotFoundError,
     PublishedReportStorageError,
     readable_versions,
     require_new_run,
-    require_owned_versions,
-    require_public_versions,
     require_publication,
     require_publishable,
     require_published_report,
@@ -66,6 +66,7 @@ from policyengine_api.services.v2.published_reports.validators import (
     require_report_row,
     require_succeeded_run,
     require_unpublished,
+    require_versions,
 )
 from policyengine_api.services.v2.stored_reports.transformations import report_kind
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
@@ -119,26 +120,34 @@ def _owned_user_report(
     *,
     country_id: str,
     user_report_id: UUID,
+    lock: bool = False,
 ) -> UserReportAssociation:
     """Return the principal's saved report in the country, or raise not found.
 
-    A signed-out browser's user is never provisioned: one not stored yet
-    owns nothing.
+    With ``lock``, the row stays locked until the transaction ends, as a
+    publish needs. A signed-out browser's user is never provisioned: one
+    not stored yet owns nothing.
     """
     owner = resolve_principal_user_for_read_in_session(
         session, principal, country_id=country_id
     )
-    return require_user_report(
-        None
-        if owner is None
-        else read_owned_user_report_row(
+    if owner is None:
+        association = None
+    elif lock:
+        association = publication_reads.lock_owned_user_report_row(
+            session,
+            user_id=owner.user_id,
+            country_id=country_id,
+            user_report_id=user_report_id,
+        )
+    else:
+        association = read_owned_user_report_row(
             session,
             user_id=owner.user_id,
             country_id=country_id,
             association_id=user_report_id,
-        ),
-        association_id=user_report_id,
-    )
+        )
+    return require_user_report(association, association_id=user_report_id)
 
 
 def _versions(session: Session, user_report_id: UUID) -> list[PublicationVersionRead]:
@@ -215,9 +224,11 @@ class V2PublishedReportService:
         return publication_read(
             publication,
             country_id=country_id,
-            versions=require_owned_versions(
+            versions=require_versions(
                 _versions(session, publication.user_report_id),
-                user_report_id=publication.user_report_id,
+                missing=PublicationNotFoundError(
+                    f"Saved report {publication.user_report_id} is not published"
+                ),
             ),
         )
 
@@ -228,20 +239,25 @@ class V2PublishedReportService:
         *,
         country_id: str,
         user_report_id: UUID,
+        lock: bool = False,
     ) -> tuple[UserReportAssociation, PublishedReport]:
         """Return the principal's saved report and its published report.
 
-        Raise UserReportNotFoundError when the principal has no such saved
-        report in the country, and PublicationNotFoundError when it isn't
-        published.
+        With ``lock``, the published report stays locked until the transaction
+        ends, as an edit, a move and a withdrawal need. Raise
+        UserReportNotFoundError when the principal has no such saved report in
+        the country, and PublicationNotFoundError when it isn't published.
         """
         association = _owned_user_report(
             session, principal, country_id=country_id, user_report_id=user_report_id
         )
+        read_page = (
+            publication_reads.lock_publication_row
+            if lock
+            else publication_reads.read_publication_row
+        )
         publication = require_publication(
-            publication_reads.read_publication_row(
-                session, user_report_id=user_report_id
-            ),
+            read_page(session, user_report_id=user_report_id),
             user_report_id=user_report_id,
         )
         return association, publication
@@ -269,6 +285,7 @@ class V2PublishedReportService:
                 principal,
                 country_id=country_id,
                 user_report_id=user_report_id,
+                lock=True,
             )
             report_id = require_publishable(association)
             require_unpublished(
@@ -342,6 +359,7 @@ class V2PublishedReportService:
                 principal,
                 country_id=country_id,
                 user_report_id=user_report_id,
+                lock=True,
             )
             update_publication(
                 session,
@@ -374,10 +392,14 @@ class V2PublishedReportService:
                 principal,
                 country_id=country_id,
                 user_report_id=user_report_id,
+                lock=True,
             )
             require_new_run(
-                require_owned_versions(
-                    _versions(session, user_report_id), user_report_id=user_report_id
+                require_versions(
+                    _versions(session, user_report_id),
+                    missing=PublicationNotFoundError(
+                        f"Saved report {user_report_id} is not published"
+                    ),
                 ),
                 run_id=version_input.run_id,
             )
@@ -415,6 +437,7 @@ class V2PublishedReportService:
                 principal,
                 country_id=country_id,
                 user_report_id=user_report_id,
+                lock=True,
             )
             delete_publication(session, publication)
 
@@ -445,10 +468,11 @@ class V2PublishedReportService:
             page = publication_read(
                 publication,
                 country_id=country_id,
-                versions=require_public_versions(
+                versions=require_versions(
                     _versions(session, user_report_id),
-                    user_report_id=user_report_id,
-                    country_id=country_id,
+                    missing=PublishedReportNotFoundError(
+                        f"No published report {user_report_id} in {country_id}"
+                    ),
                 ),
             )
             baseline_user_policy_id = association.baseline_user_policy_id

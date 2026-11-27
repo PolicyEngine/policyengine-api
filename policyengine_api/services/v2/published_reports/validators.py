@@ -69,7 +69,7 @@ def require_publishable(association: UserReportAssociation) -> UUID:
     """Return the detailed-save report a saved report names, if it can be published.
 
     Raise UnpublishableUserReportError for a saved report that names only a
-    v1 report output, or has no name, the page's title.
+    v1 report output, or has no name, the page's title, or only blanks.
     """
     if association.report_id is None:
         msg = (
@@ -77,7 +77,7 @@ def require_publishable(association: UserReportAssociation) -> UUID:
             "only a saved report of a detailed-save report can be published"
         )
         raise UnpublishableUserReportError(msg)
-    if association.name is None:
+    if not (association.name or "").strip():
         msg = (
             f"Saved report {association.id} has no name, which its published "
             "page shows as its title; name it first"
@@ -161,34 +161,16 @@ def require_published_report(
     return found
 
 
-def require_owned_versions(
-    versions: Sequence[PublicationVersionRead], *, user_report_id: UUID
+def require_versions(
+    versions: Sequence[PublicationVersionRead], *, missing: Exception
 ) -> Sequence[PublicationVersionRead]:
-    """Return a published report's versions, or raise PublicationNotFoundError.
+    """Return a published report's versions, or raise ``missing`` when there are none.
 
     A published report always has a version; a read finds none only when the
     page was withdrawn, or its saved report deleted, between its statements.
     """
     if not versions:
-        msg = f"Saved report {user_report_id} is not published"
-        raise PublicationNotFoundError(msg)
-    return versions
-
-
-def require_public_versions(
-    versions: Sequence[PublicationVersionRead],
-    *,
-    user_report_id: UUID,
-    country_id: str,
-) -> Sequence[PublicationVersionRead]:
-    """Return a published report's versions, or raise PublishedReportNotFoundError.
-
-    A read finds none only when the page was withdrawn, or its saved report
-    deleted, between its statements.
-    """
-    if not versions:
-        msg = f"No published report {user_report_id} in {country_id}"
-        raise PublishedReportNotFoundError(msg)
+        raise missing
     return versions
 
 

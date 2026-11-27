@@ -89,21 +89,42 @@ enforce_publication_request_size = request_size_limit(
     MAXIMUM_PUBLICATION_REQUEST_BYTES, label="16 MiB"
 )
 
+# Every owner route's failures; each write adds its own.
 PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    **USER_RESOURCE_ERROR_RESPONSES,
+    401: USER_RESOURCE_ERROR_RESPONSES[401],
+    403: {
+        "model": V2ErrorResponse,
+        "description": "Machine (client-credentials) principals are not permitted.",
+    },
+    404: {
+        "model": V2ErrorResponse,
+        "description": (
+            "The saved report does not exist, belongs to another user, or is "
+            "not published."
+        ),
+    },
+    422: {
+        "model": V2ErrorResponse,
+        "description": "The ID, the query or the body does not match the schema.",
+    },
+    500: USER_RESOURCE_ERROR_RESPONSES[500],
+    503: USER_RESOURCE_ERROR_RESPONSES[503],
+}
+PUBLICATION_WRITE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     403: {
         "model": V2ErrorResponse,
         "description": (
             "Publishing, editing and moving a published report need an author "
-            "or admin; reading and withdrawing it need only its owner. Machine "
-            "(client-credentials) principals are refused on every route."
+            "or admin; machine (client-credentials) principals are not "
+            "permitted."
         ),
     },
     404: {
         "model": V2ErrorResponse,
         "description": (
-            "The saved report does not exist, belongs to another user, is not "
-            "published, or the run is not one of its report's runs."
+            "The saved report does not exist, belongs to another user or is "
+            "not published (to edit or move it), or the run is not one of its "
+            "report's runs."
         ),
     },
     409: {
@@ -119,8 +140,6 @@ PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": "The request body exceeds 16 MiB.",
     },
 }
-# Nothing these routes check answers 400.
-del PUBLICATION_ERROR_RESPONSES[400]
 PUBLISHED_REPORT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {
         "model": V2ErrorResponse,
@@ -229,6 +248,7 @@ def build_v2_user_report_publication_router(
         response_model=PublicationDetailResponse,
         status_code=201,
         dependencies=[Depends(require_author)],
+        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
         summary="Publish one of the current user's saved reports",
         description=(
             "Authors and admins only (403 below author). Publishes the saved "
@@ -293,6 +313,7 @@ def build_v2_user_report_publication_router(
         path,
         response_model=PublicationDetailResponse,
         dependencies=[Depends(require_author)],
+        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
         summary="Edit the current user's published report",
         description=(
             "Authors and admins only (403 below author). Sets the fields "
@@ -348,6 +369,7 @@ def build_v2_user_report_publication_router(
         response_model=PublicationDetailResponse,
         status_code=201,
         dependencies=[Depends(require_author)],
+        responses=PUBLICATION_WRITE_ERROR_RESPONSES,
         summary="Move the current user's published report to another run",
         description=(
             "Authors and admins only (403 below author). The page shows the "

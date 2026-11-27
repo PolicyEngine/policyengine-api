@@ -50,6 +50,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.deletes impor
     delete_user_report,
 )
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
+    lock_owned_user_report_row,
     read_all_user_report_rows,
     read_owned_user_policy_exists,
     read_owned_user_policy_row,
@@ -475,10 +476,15 @@ class V2UserReportService:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
             )
-            association = read_owned_user_report(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
+            # Locked, so a publish of this saved report, which locks it too,
+            # can't read its name or report while this changes them.
+            association = require_user_report(
+                lock_owned_user_report_row(
+                    session,
+                    user_id=owner.user_id,
+                    country_id=country_id,
+                    association_id=association_id,
+                ),
                 association_id=association_id,
             )
             require_one_report_after_update(association, association_input)

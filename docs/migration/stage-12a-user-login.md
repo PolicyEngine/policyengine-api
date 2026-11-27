@@ -641,8 +641,8 @@ report the saved report names. Every route takes `country_id`.
   earlier versions; turned off, those stay stored and only the newest can
   be read.
 - **Refusals:** a saved report is published once (409). One that names only
-  a v1 report output, or has no name (the page's title), can't be published
-  (409).
+  a v1 report output, or has no name (the page's title) or only blanks,
+  can't be published (409). An edit sends at least one field, none as null.
 - **The public read** answers the page's title (the saved report's name),
   summary, author IDs, tags and content; the saved report's source note,
   provisions, validation, budget window and the name of the reform it was
@@ -656,9 +656,15 @@ report the saved report names. Every route takes `country_id`.
   key `(user_report_id, report_id)` to `user_report_associations (id,
   report_id)`, `ON DELETE CASCADE`, `ON UPDATE RESTRICT`. Deleting the saved
   report, or its owner's account, deletes the page. Repointing a published
-  saved report to another report, or clearing its name (the page's title),
+  saved report to another report, or clearing or blanking its name (the
+  page's title),
   is refused (409) until the page is withdrawn. A run a page has shown can't
   be deleted.
+- **Locks:** a publish and the saved report's PATCH lock the saved report's
+  row, and a page's edit, move and withdrawal lock the page's, so each waits
+  for another write of the same row to finish.
+- **Not yet in the export:** `GET /v2/me/export` and admins' saved-items read
+  don't include published pages.
 
 ### Saved detailed-save simulations and reports
 

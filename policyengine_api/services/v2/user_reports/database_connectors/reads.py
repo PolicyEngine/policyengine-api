@@ -36,6 +36,29 @@ def read_owned_user_report_row(
     ).one_or_none()
 
 
+def lock_owned_user_report_row(
+    session: Session,
+    *,
+    user_id: UUID,
+    country_id: str,
+    association_id: UUID,
+) -> UserReportAssociation | None:
+    """Return the user's association, locked (FOR UPDATE) until the transaction ends.
+
+    A publish locks the same row, so an edit and a publish of one saved
+    report run one after the other.
+    """
+    return session.exec(
+        select(UserReportAssociation)
+        .where(
+            UserReportAssociation.id == association_id,
+            UserReportAssociation.country_id == country_id,
+            UserReportAssociation.user_id == user_id,
+        )
+        .with_for_update()
+    ).one_or_none()
+
+
 def read_user_report_row(
     session: Session,
     *,

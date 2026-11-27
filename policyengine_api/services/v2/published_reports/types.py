@@ -14,7 +14,7 @@ removed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Literal, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 from pydantic import (
     BaseModel,
@@ -155,11 +155,36 @@ class PublicationCreateInput(PublicationFields):
     run_id: ResourceId
 
 
+def _without_null_alternatives(schema: dict[str, Any]) -> None:
+    """Show each optional field of an edit's schema as its type alone.
+
+    An edit may leave a field out but never send it as null, so the null
+    alternative and null default the field's ``| None`` gives are removed.
+    """
+    for name, field in schema.get("properties", {}).items():
+        alternatives = [
+            alternative
+            for alternative in field.get("anyOf", [])
+            if alternative != {"type": "null"}
+        ]
+        shown = {key: value for key, value in field.items() if key != "anyOf"}
+        shown.pop("default", None)
+        if len(alternatives) == 1:
+            shown.update(alternatives[0])
+        elif alternatives:
+            shown["anyOf"] = alternatives
+        schema["properties"][name] = shown
+
+
 class PublicationUpdateInput(StrictPublicationModel):
     """The fields of a published report an edit sends; the others stay.
 
-    None of them may be sent as null.
+    An edit sends at least one of them, and none as null.
     """
+
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra=_without_null_alternatives
+    )
 
     summary: PublishedSummary | None = None
     author_ids: AuthorIds | None = None
@@ -169,6 +194,9 @@ class PublicationUpdateInput(StrictPublicationModel):
 
     @model_validator(mode="after")
     def _checked(self) -> PublicationUpdateInput:
+        if not self.model_fields_set:
+            msg = "An edit sends at least one field"
+            raise ValueError(msg)
         cleared = sorted(
             name for name in self.model_fields_set if getattr(self, name) is None
         )
