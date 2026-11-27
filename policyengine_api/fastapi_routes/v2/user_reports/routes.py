@@ -210,7 +210,10 @@ def build_v2_user_report_router(
             "Updates the fields sent. A saved report that names a detailed-save "
             "report after the update, and whose report_id or last_run_at the "
             "request sends, answers last_run_at as the owner's newest request for "
-            "one of that report's runs through /v2/reports, or null."
+            "one of that report's runs through /v2/reports, or null. A published "
+            "saved report (/v2/user-reports/{id}/publication) can't name another "
+            "report, or have its name, the page's title, cleared, until the page "
+            "is withdrawn (409)."
         ),
     )
     def patch_user_report_route(
@@ -238,6 +241,10 @@ def build_v2_user_report_router(
         status_code=204,
         response_class=Response,
         summary="Delete one of the current user's saved reports",
+        description=(
+            "Deletes the saved report; the detailed-save report it names stays. "
+            "A published saved report's public page is deleted with it."
+        ),
     )
     def delete_user_report_route(
         association_id: UUID,

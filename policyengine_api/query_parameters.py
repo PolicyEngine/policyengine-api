@@ -497,6 +497,23 @@ class ReportDetailQuery(CountryQuery):
     )
 
 
+class PublishedReportQuery(CountryQuery):
+    """Query contract for reading a published report in a country.
+
+    ``version_id`` names the version to read: the newest, or an earlier one
+    while its author shows past versions. Without it, the newest is read.
+    """
+
+    version_id: ResourceId | None = Field(
+        default=None,
+        description=(
+            "The published report's version to read: its newest, or an "
+            "earlier one while its author shows past versions. Without it, "
+            "the newest."
+        ),
+    )
+
+
 class ReportRunsQuery(CountryQuery):
     """Query contract for a report's runs in a country: listing or starting one."""
 

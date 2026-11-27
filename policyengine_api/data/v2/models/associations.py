@@ -301,7 +301,9 @@ class UserReportAssociation(TimestampedModel, table=True):
     report that names a missing report, and a report a saved one names can't
     be deleted. ``legacy_report_id`` is the requested v1 report output
     identifier. The optional ``user_policy_id`` links a v3 report to the same
-    owner's saved reform and is cleared when that reform is deleted.
+    owner's saved reform and is cleared when that reform is deleted. A saved
+    report an author published (``published_reports``) can't be repointed
+    to another report, and deleting it deletes the published page.
     """
 
     __tablename__ = "user_report_associations"
@@ -311,6 +313,9 @@ class UserReportAssociation(TimestampedModel, table=True):
             "country_id",
             name="uq_user_report_associations_id_country",
         ),
+        # A published report's key names the saved report with its report,
+        # so repointing a published saved report is refused.
+        sa.UniqueConstraint("id", "report_id"),
         sa.CheckConstraint(
             "report_id IS NOT NULL OR legacy_report_id IS NOT NULL",
             name="ck_user_report_associations_report_ref",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from policyengine_api.services.v2.associations.validators import (
+    AssociationConflictError,
     AssociationLinkNotFoundError,
     AssociationNotFoundError,
     AssociationReferenceConflictError,
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from policyengine_api.data.v2.models import UserReportAssociation
+    from policyengine_api.services.v2.user_reports.types import UserReportUpdateInput
 
 
 class UserReportNotFoundError(AssociationNotFoundError):
@@ -26,6 +28,14 @@ class AssociationReportNotFoundError(LookupError):
 
 class AssociationBudgetWindowConflictError(AssociationReferenceConflictError):
     """A saved report's budget_window_years disagrees with the report it names."""
+
+
+class PublishedUserReportRepointError(AssociationConflictError):
+    """A published saved report can't name another report until withdrawn (409)."""
+
+
+class PublishedUserReportNameRequiredError(AssociationConflictError):
+    """A published saved report's name is its page's title, so it stays set (409)."""
 
 
 # A saved report stores a window of one year as no window.
@@ -107,3 +117,41 @@ def require_owned_user_policy(*, owned: bool, user_policy_id: UUID) -> None:
             "user and country"
         )
         raise AssociationLinkNotFoundError(msg)
+
+
+def is_blank_name(name: str | None) -> bool:
+    """Return whether a saved report's name is missing or only blanks.
+
+    A published report's title is its saved report's name, so such a name
+    can't be published or left on a published saved report.
+    """
+    return not (name or "").strip()
+
+
+def require_published_report_kept(
+    *,
+    association: UserReportAssociation,
+    association_input: UserReportUpdateInput,
+    published: bool,
+) -> None:
+    """Refuse an update that would change what a published saved report's page shows.
+
+    Raise PublishedUserReportRepointError when ``published`` and the update
+    names another report, and PublishedUserReportNameRequiredError when it
+    clears the name, the page's title, or leaves it only blanks.
+    """
+    if not published:
+        return
+    supplied = association_input.model_fields_set
+    if "report_id" in supplied and association_input.report_id != association.report_id:
+        msg = (
+            f"Saved report {association.id} is published, so it can't name "
+            "another report; withdraw its published page first"
+        )
+        raise PublishedUserReportRepointError(msg)
+    if "name" in supplied and is_blank_name(association_input.name):
+        msg = (
+            f"Saved report {association.id} is published, and its name is the "
+            "page's title; give it another name, or withdraw the page first"
+        )
+        raise PublishedUserReportNameRequiredError(msg)

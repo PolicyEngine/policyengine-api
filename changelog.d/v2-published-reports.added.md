@@ -1,0 +1,1 @@
+Authors and admins can publish one of their saved reports as a public, read-only page (`POST /v2/user-reports/{id}/publication`), edit it, move it to a newer succeeded run as a new version, and withdraw it; anyone reads a published report, with no credential, at `GET /v2/published-reports/{id}`.

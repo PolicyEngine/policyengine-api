@@ -46,6 +46,10 @@ from policyengine_api.fastapi_routes.v2.metadata.parameter_routes import (
     build_v2_metadata_parameter_router,
 )
 from policyengine_api.fastapi_routes.v2.policies.routes import build_v2_policy_router
+from policyengine_api.fastapi_routes.v2.published_reports.routes import (
+    build_v2_published_report_router,
+    build_v2_user_report_publication_router,
+)
 from policyengine_api.fastapi_routes.v2.reports.routes import build_v2_report_router
 from policyengine_api.fastapi_routes.v2.simulations.routes import (
     build_v2_simulation_router,
@@ -82,6 +86,8 @@ def build_v2_router(
     router.include_router(build_v2_admin_invitation_router(dependencies))
     router.include_router(build_v2_user_report_router(dependencies))
     router.include_router(build_v2_shared_report_router(dependencies))
+    router.include_router(build_v2_user_report_publication_router(dependencies))
+    router.include_router(build_v2_published_report_router(dependencies))
     router.include_router(build_v2_user_simulation_router(dependencies))
     router.include_router(build_v2_user_household_router(dependencies))
     router.include_router(build_v2_user_policy_router(dependencies))

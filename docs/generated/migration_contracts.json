@@ -99,7 +99,8 @@
         "report",
         "reports",
         "user-reports",
-        "shared-reports"
+        "shared-reports",
+        "published-reports"
       ],
       "sim_flow": "report"
     },

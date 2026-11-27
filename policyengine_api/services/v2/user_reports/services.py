@@ -40,6 +40,9 @@ from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
+from policyengine_api.services.v2.published_reports.database_connectors.reads import (
+    read_publication_row,
+)
 from policyengine_api.services.v2.report_run_records.database_connectors import (
     reads as record_reads,
 )
@@ -50,6 +53,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.deletes impor
     delete_user_report,
 )
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
+    lock_owned_user_report_row,
     read_all_user_report_rows,
     read_owned_user_policy_exists,
     read_owned_user_policy_row,
@@ -73,6 +77,7 @@ from policyengine_api.services.v2.user_reports.types import UserReportListing
 from policyengine_api.services.v2.user_reports.validators import (
     require_matching_budget_window,
     require_owned_user_policy,
+    require_published_report_kept,
     require_stored_report,
     require_user_report,
 )
@@ -450,8 +455,11 @@ class V2UserReportService:
         Raise AssociationReferenceConflictError when the update would leave
         the saved report naming both, AssociationBudgetWindowConflictError
         when it would leave a ``budget_window_years`` that disagrees with the
-        named report's budget window, and UserReportNotFoundError if the
-        principal has no such report in this country. A saved report that
+        named report's budget window, PublishedUserReportRepointError when it
+        would name another report for a published saved report,
+        PublishedUserReportNameRequiredError when it would clear a published
+        saved report's name, the page's title, and UserReportNotFoundError if
+        the principal has no such report in this country. A saved report that
         names a detailed-save report after the update, and whose ``report_id``
         or ``last_run_at`` the update supplies, takes the owner's newest
         request for one of that report's runs as ``last_run_at``, or null.
@@ -470,13 +478,27 @@ class V2UserReportService:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
             )
-            association = read_owned_user_report(
-                session,
-                user_id=owner.user_id,
-                country_id=country_id,
+            # Locked, so a publish of this saved report, which locks it too,
+            # can't read its name or report while this changes them.
+            association = require_user_report(
+                lock_owned_user_report_row(
+                    session,
+                    user_id=owner.user_id,
+                    country_id=country_id,
+                    association_id=association_id,
+                ),
                 association_id=association_id,
             )
             require_one_report_after_update(association, association_input)
+            if {"report_id", "name"} & association_input.model_fields_set:
+                require_published_report_kept(
+                    association=association,
+                    association_input=association_input,
+                    published=read_publication_row(
+                        session, user_report_id=association.id
+                    )
+                    is not None,
+                )
             validate_stored_report(
                 session, country_id=country_id, report_id=association_input.report_id
             )

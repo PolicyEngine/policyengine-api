@@ -44,6 +44,13 @@ if TYPE_CHECKING:
         NativePolicyCreation,
         NativePolicyCreationInput,
     )
+    from policyengine_api.services.v2.published_reports.types import (
+        PublicationCreateInput,
+        PublicationRead,
+        PublicationUpdateInput,
+        PublicationVersionInput,
+        PublishedReportRead,
+    )
     from policyengine_api.services.v2.simulation_service.types import (
         EconomySimulationCreationInput,
         ReportCreationInput,
@@ -342,6 +349,61 @@ class V2StoredReportResourceService(Protocol):
         window's are its budget-window runs, each with its years. Raise
         ``StoredReportNotFoundError`` when the country has no such report.
         """
+        ...
+
+
+class V2PublishedReportResourceService(Protocol):
+    """Route-independent publishing of saved reports, and their public read."""
+
+    def publish_report(
+        self,
+        *,
+        principal: AccountPrincipal,
+        country_id: str,
+        user_report_id: UUID,
+        publication_input: PublicationCreateInput,
+    ) -> PublicationRead:
+        """Publish the principal's saved report, showing the run the input names."""
+        ...
+
+    def get_publication(
+        self, *, principal: AccountPrincipal, country_id: str, user_report_id: UUID
+    ) -> PublicationRead:
+        """Return the principal's published report with every version."""
+        ...
+
+    def update_publication(
+        self,
+        *,
+        principal: AccountPrincipal,
+        country_id: str,
+        user_report_id: UUID,
+        publication_input: PublicationUpdateInput,
+    ) -> PublicationRead:
+        """Set the fields the edit sends on the principal's published report."""
+        ...
+
+    def add_publication_version(
+        self,
+        *,
+        principal: AccountPrincipal,
+        country_id: str,
+        user_report_id: UUID,
+        version_input: PublicationVersionInput,
+    ) -> PublicationRead:
+        """Move the principal's published report to another run, as a version."""
+        ...
+
+    def withdraw_publication(
+        self, *, principal: AccountPrincipal, country_id: str, user_report_id: UUID
+    ) -> None:
+        """Delete the principal's published report with its versions."""
+        ...
+
+    def get_published_report(
+        self, *, country_id: str, user_report_id: UUID, version_id: UUID | None
+    ) -> PublishedReportRead:
+        """Return a published report as anyone reads it, with no credential."""
         ...
 
 
