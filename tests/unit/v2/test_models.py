@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import uuid4
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import configure_mappers
 from sqlmodel.sql.sqltypes import AutoString
 
@@ -546,6 +546,15 @@ def test_parameter_values_hold_only_policy_and_current_law_values() -> None:
     assert "ck_parameter_values_single_owner" not in values.constraint_names
     assert "uq_parameter_values_dynamic_parameter_start_date" not in values.indexes
     assert "uq_parameter_values_canonical_parameter_start_date" not in values.indexes
+
+
+def test_a_whole_parameter_value_read_names_no_dynamic_id() -> None:
+    statement = sa.select(ParameterValue)
+
+    for dialect in (postgresql.dialect(), sqlite.dialect()):
+        compiled = str(statement.compile(dialect=dialect))
+        assert "parameter_values.parameter_id" in compiled
+        assert "dynamic_id" not in compiled
 
 
 def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:

@@ -310,7 +310,8 @@ and `refused(session, ...)`.
   takes the Python value, such as `[2026]`, not its JSON text.
 - **Columns a mapper leaves out**: a column kept in its table but left out of
   the model's mapper (`exclude_properties`) until a revision drops it, as
-  the per-user and cliff columns of `reports`, `report_runs` and
+  `parameter_values.dynamic_id` was until revision `1c651058fac5`, and the
+  per-user and cliff columns of `reports`, `report_runs` and
   `budget_window_runs` were until revision `4e30076d4b9f`, has no statement
   through the model: `update(Model).values(column=...)` raises
   `AttributeError`, a constructor value is never stored, and `Model.column`
@@ -1713,7 +1714,10 @@ both (`MAINTAIN`), and updates neither; the simulation service and
 its Modal workers read both, which C1 · 52 needs; comparison runs have no
 access. `parameter_values.dynamic_id`, its single-owner check and its partial
 unique index stay until revision `1c651058fac5` (see "API v2 parameter values
-without dynamics"), because older simulation service releases map the column. `tests/integration/test_alembic_v2_dynamic_parameter_tables.py`
+without dynamics"), because older simulation service releases map the column;
+API v1 stops mapping it from C1 · 51a's release (see "Columns a mapper leaves
+out"), so the release serving while that revision runs names none of what it
+drops. `tests/integration/test_alembic_v2_dynamic_parameter_tables.py`
 checks that nothing else changes, the move with both kinds of row, the
 refusal, the read-only step, the downgrade and the re-upgrade, and
 `tests/integration/test_v2_catalog_publication_dynamic_parameters.py`
