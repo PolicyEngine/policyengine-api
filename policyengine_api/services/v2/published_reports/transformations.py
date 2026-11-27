@@ -6,7 +6,12 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from pydantic import TypeAdapter
+
 from policyengine_api.services.v2.published_reports.types import (
+    ContentBlock,
+    MarkdownBlock,
+    OutputBlock,
     PublicationRead,
     PublicationVersionRead,
     PublishedReportRead,
@@ -33,6 +38,15 @@ if TYPE_CHECKING:
         StoredReportRead,
     )
     from policyengine_api.services.v2.user_reports.types import SharedUserReportRead
+
+
+# Stored content is written from checked blocks; reading it back types it.
+_STORED_CONTENT = TypeAdapter(list[ContentBlock])
+
+
+def stored_content(stored: list[dict[str, Any]]) -> list[MarkdownBlock | OutputBlock]:
+    """Return a published report's stored content as its blocks."""
+    return _STORED_CONTENT.validate_python(stored)
 
 
 def _aware(moment: datetime) -> datetime:
@@ -111,7 +125,7 @@ def publication_read(
         summary=publication.summary,
         author_ids=list(publication.author_ids),
         tags=list(publication.tags),
-        content=list(publication.content),
+        content=stored_content(publication.content),
         show_past_versions=publication.show_past_versions,
         versions=tuple(versions),
         published_at=_aware(publication.created_at),

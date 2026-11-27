@@ -14,7 +14,7 @@ removed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 
 from pydantic import (
     BaseModel,
@@ -224,7 +224,7 @@ class PublicationRead:
     summary: str
     author_ids: list[str]
     tags: list[str]
-    content: list[dict[str, Any]]
+    content: list[MarkdownBlock | OutputBlock]
     show_past_versions: bool
     versions: tuple[PublicationVersionRead, ...]
     published_at: datetime
@@ -271,7 +271,7 @@ class PublishedReportRead:
     summary: str
     author_ids: list[str]
     tags: list[str]
-    content: list[dict[str, Any]]
+    content: list[MarkdownBlock | OutputBlock]
     show_past_versions: bool
     saved_report: PublishedSavedReportRead
     version: PublicationVersionRead

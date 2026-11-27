@@ -81,10 +81,12 @@ from policyengine_api.services.v2.stored_reports.validators import (
     ReportStorageError,
 )
 
-# A page's content may hold 100 Markdown blocks of 20,000 characters each.
-MAXIMUM_PUBLICATION_REQUEST_BYTES = 4 * 1024 * 1024
+# A page's content may hold 100 Markdown blocks of 20,000 characters each:
+# up to 8 MB in UTF-8, or 12 MB as JSON that escapes every character outside
+# ASCII (6 bytes each, outside supplementary planes), within this limit.
+MAXIMUM_PUBLICATION_REQUEST_BYTES = 16 * 1024 * 1024
 enforce_publication_request_size = request_size_limit(
-    MAXIMUM_PUBLICATION_REQUEST_BYTES, label="4 MiB"
+    MAXIMUM_PUBLICATION_REQUEST_BYTES, label="16 MiB"
 )
 
 PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -93,8 +95,8 @@ PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": V2ErrorResponse,
         "description": (
             "Publishing, editing and moving a published report need an author "
-            "or admin; machine (client-credentials) principals are not "
-            "permitted."
+            "or admin; reading and withdrawing it need only its owner. Machine "
+            "(client-credentials) principals are refused on every route."
         ),
     },
     404: {
@@ -114,7 +116,7 @@ PUBLICATION_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
     413: {
         "model": V2ErrorResponse,
-        "description": "The request body exceeds 4 MiB.",
+        "description": "The request body exceeds 16 MiB.",
     },
 }
 # Nothing these routes check answers 400.

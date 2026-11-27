@@ -161,6 +161,37 @@ def require_published_report(
     return found
 
 
+def require_owned_versions(
+    versions: Sequence[PublicationVersionRead], *, user_report_id: UUID
+) -> Sequence[PublicationVersionRead]:
+    """Return a published report's versions, or raise PublicationNotFoundError.
+
+    A published report always has a version; a read finds none only when the
+    page was withdrawn, or its saved report deleted, between its statements.
+    """
+    if not versions:
+        msg = f"Saved report {user_report_id} is not published"
+        raise PublicationNotFoundError(msg)
+    return versions
+
+
+def require_public_versions(
+    versions: Sequence[PublicationVersionRead],
+    *,
+    user_report_id: UUID,
+    country_id: str,
+) -> Sequence[PublicationVersionRead]:
+    """Return a published report's versions, or raise PublishedReportNotFoundError.
+
+    A read finds none only when the page was withdrawn, or its saved report
+    deleted, between its statements.
+    """
+    if not versions:
+        msg = f"No published report {user_report_id} in {country_id}"
+        raise PublishedReportNotFoundError(msg)
+    return versions
+
+
 def readable_versions(
     versions: Sequence[PublicationVersionRead], *, show_past_versions: bool
 ) -> tuple[PublicationVersionRead, ...]:

@@ -636,7 +636,7 @@ report the saved report names. Every route takes `country_id`.
   rendered without raw HTML) or an output card
   (`{"type": "output", "output": <key>}`, by v3's key, each at most once);
   a card left out is removed. One content serves every version. Request
-  bodies are at most 4 MiB.
+  bodies are at most 16 MiB.
 - **Past versions:** with `show_past_versions`, readers may open the page's
   earlier versions; turned off, those stay stored and only the newest can
   be read.
@@ -655,9 +655,10 @@ report the saved report names. Every route takes `country_id`.
 - **Deletes and repointing:** `published_reports` has a composite foreign
   key `(user_report_id, report_id)` to `user_report_associations (id,
   report_id)`, `ON DELETE CASCADE`, `ON UPDATE RESTRICT`. Deleting the saved
-  report, or its owner's account, deletes the page; repointing a published
-  saved report to another report, or to none, is refused (409) until the
-  page is withdrawn. A run a page has shown can't be deleted.
+  report, or its owner's account, deletes the page. Repointing a published
+  saved report to another report, or clearing its name (the page's title),
+  is refused (409) until the page is withdrawn. A run a page has shown can't
+  be deleted.
 
 ### Saved detailed-save simulations and reports
 

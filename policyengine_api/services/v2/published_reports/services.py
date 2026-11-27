@@ -57,6 +57,8 @@ from policyengine_api.services.v2.published_reports.validators import (
     PublishedReportStorageError,
     readable_versions,
     require_new_run,
+    require_owned_versions,
+    require_public_versions,
     require_publication,
     require_publishable,
     require_published_report,
@@ -202,6 +204,23 @@ class V2PublishedReportService:
         self._database_session = database_session
         self._reports = reports
 
+    def _owned_page(
+        self, session: Session, publication: PublishedReport, *, country_id: str
+    ) -> PublicationRead:
+        """Return the owner's published report with its versions, as read now.
+
+        Raise PublicationNotFoundError when it has none: it was withdrawn
+        between this read's statements.
+        """
+        return publication_read(
+            publication,
+            country_id=country_id,
+            versions=require_owned_versions(
+                _versions(session, publication.user_report_id),
+                user_report_id=publication.user_report_id,
+            ),
+        )
+
     def _owned_publication(
         self,
         session: Session,
@@ -301,11 +320,7 @@ class V2PublishedReportService:
                 country_id=country_id,
                 user_report_id=user_report_id,
             )
-            return publication_read(
-                publication,
-                country_id=country_id,
-                versions=_versions(session, user_report_id),
-            )
+            return self._owned_page(session, publication, country_id=country_id)
 
     def update_publication(
         self,
@@ -334,11 +349,7 @@ class V2PublishedReportService:
                 values=publication_update_values(publication_input),
                 updated_at=utc_now(),
             )
-            return publication_read(
-                publication,
-                country_id=country_id,
-                versions=_versions(session, user_report_id),
-            )
+            return self._owned_page(session, publication, country_id=country_id)
 
     def add_publication_version(
         self,
@@ -365,7 +376,10 @@ class V2PublishedReportService:
                 user_report_id=user_report_id,
             )
             require_new_run(
-                _versions(session, user_report_id), run_id=version_input.run_id
+                require_owned_versions(
+                    _versions(session, user_report_id), user_report_id=user_report_id
+                ),
+                run_id=version_input.run_id,
             )
             run = _succeeded_run(
                 session,
@@ -380,11 +394,7 @@ class V2PublishedReportService:
                 published_at=moved_at,
             )
             update_publication(session, publication, values={}, updated_at=moved_at)
-            return publication_read(
-                publication,
-                country_id=country_id,
-                versions=_versions(session, user_report_id),
-            )
+            return self._owned_page(session, publication, country_id=country_id)
 
     def withdraw_publication(
         self,
@@ -435,7 +445,11 @@ class V2PublishedReportService:
             page = publication_read(
                 publication,
                 country_id=country_id,
-                versions=_versions(session, user_report_id),
+                versions=require_public_versions(
+                    _versions(session, user_report_id),
+                    user_report_id=user_report_id,
+                    country_id=country_id,
+                ),
             )
             baseline_user_policy_id = association.baseline_user_policy_id
             saved_report = published_saved_report_read(
