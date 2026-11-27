@@ -51,6 +51,12 @@ dependencies = [
     # complete frozen environment from uv.lock; the generic image installs
     # this requirement directly.
     "policyengine[models]==6.20.0",
+    # The simulation service's generated client, which builds every request
+    # API v1 sends to it (policyengine_api.libs.simulation_service_operations).
+    # The pin is a release whose request models hold every field API v1 sends;
+    # moving it is its own change, tested by
+    # tests/unit/libs/test_simulation_generated_client.py.
+    "policyengine-api-simulation-client==0.20261127.430",
     "pydantic",
     "pymysql",
     "python-dotenv",
@@ -78,9 +84,6 @@ dev = [
     # newer than two weeks; moving to it is its own change.
     "diff-cover>=10.6,<11",
     "mypy>=1.15,<2",
-    # The simulation service's generated client, which the tests of API v1's
-    # requests to the simulation service compare them with.
-    "policyengine-api-simulation-client==0.20261127.430",
     "pytest",
     "pytest-snapshot",
     "pytest-timeout",

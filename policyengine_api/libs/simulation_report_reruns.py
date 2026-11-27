@@ -5,6 +5,9 @@ does: it posts ``{"force": …}`` to the Cloud Run simulation service's
 ``POST /reports/{report_id}/runs``, through the same HTTP client as the
 service's other v2 routes (``policyengine_api.libs.simulation_reports``),
 with ``"include_cliffs": true`` when the re-run asks for cliffs. The
+request goes through the generated client's ``rerun_report`` operation
+(``post_report_rerun`` in
+``policyengine_api.libs.simulation_service_operations``). The
 service creates the stored report's new run on its default worker's
 versions and starts it, keeping every earlier run. Without ``force``, each
 side reuses a run of its own simulation that succeeded on those versions.
@@ -131,7 +134,10 @@ class _RerunRefusal(Refusal):
 
 
 def report_runs_path(report_id: UUID) -> str:
-    """Return the simulation service's path for the report's runs."""
+    """Return the simulation service's path for the report's runs.
+
+    The generated ``rerun_report`` operation sends the request to it.
+    """
     return f"/reports/{report_id}/runs"
 
 
@@ -146,22 +152,6 @@ def report_rerun_request(rerun: ReportRerunInput) -> dict[str, Any]:
     if rerun.include_cliffs:
         body["include_cliffs"] = True
     return body
-
-
-def post_report_rerun(
-    http_client: httpx.Client, report_id: UUID, body: dict[str, Any]
-) -> SimulationAnswer:
-    """Send one re-run to the simulation service and return its answer.
-
-    Raise httpx.HTTPError when no answer arrives, and GatewayAuthError when
-    the gateway token cannot be fetched. ``http_client`` has the service's
-    base URL. With the generated simulation client, this body becomes the
-    route's operation (``rerun_report.sync_detailed`` with ``report_id`` and
-    ``ReportRerunRequest.from_dict(body)``), as
-    ``policyengine_api.libs.simulation_reports.post_report`` describes.
-    """
-    response = http_client.post(report_runs_path(report_id), json=body)
-    return SimulationAnswer(status_code=response.status_code, content=response.content)
 
 
 def _refusal(answer: SimulationAnswer) -> _RerunRefusal | None:

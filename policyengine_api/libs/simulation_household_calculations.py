@@ -87,11 +87,12 @@ context that the response middleware doesn't see. It is the attempt's ID,
 which the service never received after a connection never made or a gateway
 token that couldn't be fetched.
 
-Wiring the generated simulation client: ``post_household_calculation`` is the
-only code that sends the request, and it returns the status and body, which
-the rest of this module reads. Once a ``policyengine-api-simulation-client``
-release has the household calculation route, depend on that release and make
-the function call the generated operation, as its docstring says.
+The request goes through the simulation service's generated client:
+``post_household_calculation``
+(``policyengine_api.libs.simulation_service_operations``) builds it with the
+generated ``submit_household_calculation`` operation and
+``HouseholdCalculationRequest`` model, sends it, and returns the status and
+body, which the rest of this module reads.
 """
 
 from __future__ import annotations
@@ -120,6 +121,9 @@ from policyengine_api.libs.simulation_service_answers import (
     status_and_code,
     submit_again,
 )
+from policyengine_api.libs.simulation_service_operations import (
+    post_household_calculation,
+)
 from policyengine_api.request_context import start_observability_id
 from policyengine_api.services.v2.household_calculations.types import (
     HouseholdCalculationAccepted,
@@ -141,6 +145,7 @@ if TYPE_CHECKING:
         HouseholdCalculationInput,
     )
 
+# The route's path, which the generated operation sends the request to.
 HOUSEHOLD_CALCULATIONS_PATH = "/household-calculations"
 UNREADABLE_ANSWER = "The simulation service's answer could not be read."
 # Statuses after which no job of the submission runs: the service's
@@ -217,30 +222,6 @@ def household_calculation_request(
     if calculation.spm is not None:
         body["spm"] = calculation.spm.model_dump(mode="json")
     return body
-
-
-def post_household_calculation(
-    http_client: httpx.Client, body: dict[str, Any]
-) -> SimulationAnswer:
-    """Send one submission to the simulation service and return its answer.
-
-    Raise httpx.HTTPError when no answer arrives, and GatewayAuthError when
-    the gateway token cannot be fetched. ``http_client`` has the service's
-    base URL. To send through the generated client instead, this body
-    becomes, with ``Client`` from ``policyengine_api_simulation_client``,
-    ``submit_household_calculation`` from its ``api.default`` package and
-    ``HouseholdCalculationRequest`` from its ``models``, the names the
-    simulation service's OpenAPI document gives the route::
-
-        client = Client(base_url=str(http_client.base_url))
-        client.set_httpx_client(http_client)
-        response = submit_household_calculation.sync_detailed(
-            client=client, body=HouseholdCalculationRequest.from_dict(body)
-        )
-        return SimulationAnswer(int(response.status_code), response.content)
-    """
-    response = http_client.post(HOUSEHOLD_CALCULATIONS_PATH, json=body)
-    return SimulationAnswer(status_code=response.status_code, content=response.content)
 
 
 def _invalid_request_reason(refusal: Refusal, code: str | None = None) -> str:
