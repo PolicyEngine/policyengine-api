@@ -1,3 +1,14 @@
+## [5.58.0] - 2026-11-27
+
+### Added
+
+- API v1 serves dynamic parameters and their current-law values apart from policy parameters, US `simulation.*` included: `GET /v2/dynamic-parameters` (with `/{parameter_id}` and `/children?settable=true`), `GET /v2/dynamic-parameter-values` (with `/{value_id}`) and `GET /v2/model-catalog/dynamic-parameters`, which returns a version's whole category in one response.
+
+### Fixed
+
+- Request logs of the `/v2/model-catalog` routes record Supabase as their database read source and no write source, as the other v2 metadata reads do, instead of the sources `DB_READ_METADATA` and `DB_WRITE_METADATA` select for the `metadata` route group.
+
+
 ## [5.57.2] - 2026-11-26
 
 ### Changed
