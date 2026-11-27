@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import sqlalchemy as sa
@@ -30,6 +30,9 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.data.v2.models.base import DIRECT_SQLALCHEMY_EXCEPTIONS
 from tests.fixtures.database_sessions import sqlite_v2_sessions
 from tests.fixtures.v2_countries import add_listed_countries
+from tests.integration.parameter_values_with_dynamics import (
+    ParameterValueWithDynamic,
+)
 
 
 @contextmanager
@@ -278,16 +281,19 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
         session.add(dynamic)
         session.commit()
 
-        invalid_owner = ParameterValue(
-            parameter_id=parameter.id,
-            policy_id=policy.id,
-            dynamic_id=dynamic.id,
-            value_json={"rate": 0.1},
-            start_date=start,
-        )
-        session.add(invalid_owner)
-        with pytest.raises(IntegrityError):
-            session.commit()
+        # ParameterValue no longer maps dynamic_id, which the table keeps
+        # until C1 · 53 drops it with the check.
+        with pytest.raises(IntegrityError, match="ck_parameter_values_single_owner"):
+            session.execute(
+                sa.insert(ParameterValueWithDynamic).values(
+                    id=uuid4(),
+                    parameter_id=parameter.id,
+                    policy_id=policy.id,
+                    dynamic_id=dynamic.id,
+                    value_json={"rate": 0.1},
+                    start_date=start,
+                )
+            )
         session.rollback()
 
         invalid_period = ParameterValue(

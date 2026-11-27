@@ -47,6 +47,9 @@ from policyengine_api.data.v2.models import (
 from tests.fixtures.database_sessions import schema_inspector
 from tests.fixtures.integration.alembic_v2 import alembic_v2_config
 from tests.integration.alembic_version_rows import current_revision
+from tests.integration.parameter_values_with_dynamics import (
+    ParameterValueWithDynamic,
+)
 from tests.integration.simulation_rows import add_row, refused
 
 if TYPE_CHECKING:
@@ -284,7 +287,7 @@ def _store_country(session: Session, country_id: str) -> StoredCountry:
     for name in DYNAMIC_PARAMETERS[country_id]:
         add_row(
             session,
-            ParameterValue,
+            ParameterValueWithDynamic,
             id=uuid4(),
             parameter_id=stored.parameter_ids[name],
             dynamic_id=stored.dynamic_id,
@@ -415,7 +418,10 @@ def _parameter_rows(session: Session, model: Any, version_ids: list[UUID]) -> se
 
 
 def _parameter_value_rows(session: Session, version_ids: list[UUID]) -> set:
-    """Return ``parameter_values`` rows of the versions' parameters."""
+    """Return ``parameter_values`` rows of the versions' parameters.
+
+    The table has ``dynamic_id`` at the revisions these tests read it at.
+    """
     return {
         (
             row.id,
@@ -428,8 +434,10 @@ def _parameter_value_rows(session: Session, version_ids: list[UUID]) -> set:
             row.dynamic_id,
         )
         for row in session.scalars(
-            select(ParameterValue)
-            .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
+            select(ParameterValueWithDynamic)
+            .join(
+                Parameter, col(Parameter.id) == ParameterValueWithDynamic.parameter_id
+            )
             .where(col(Parameter.tax_benefit_model_version_id).in_(version_ids))
         )
     }
@@ -955,7 +963,7 @@ def test_the_upgrade_refuses_while_a_dynamic_value_names_a_policy_parameter(
     with sessions.begin() as session:
         add_row(
             session,
-            ParameterValue,
+            ParameterValueWithDynamic,
             id=value_id,
             parameter_id=us.parameter_ids[US_POLICY_PARAMETER],
             dynamic_id=us.dynamic_id,

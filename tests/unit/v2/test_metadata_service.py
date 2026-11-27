@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -57,6 +58,9 @@ from tests.fixtures.v2_metadata_service_helpers import (
 )
 
 pytest_plugins = ("tests.fixtures.v2_metadata_service",)
+
+# ``parameter_values.dynamic_id``, but not ``dynamic_parameter_values.dynamic_id``.
+PARAMETER_VALUES_DYNAMIC_ID = re.compile(r"\bparameter_values\.dynamic_id\b")
 
 
 def test_resource_collection_uses_bounded_pagination_without_counting(
@@ -167,6 +171,46 @@ def test_parameter_values_are_separate_canonical_resources(
     assert [item.value for item in all_values.items] == [0.2, 0.1]
     assert [item.value for item in current_value.items] == [0.2]
     assert all(item.parameter_id == parameter.id for item in all_values.items)
+
+
+def test_current_law_value_reads_name_no_parameter_values_dynamic_id(
+    catalog_session: Session,
+) -> None:
+    """Current-law values are selected by ``policy_id`` alone.
+
+    C1 · 53 drops ``parameter_values.dynamic_id`` while this release may still
+    serve; no row has one since C1 · 50 moved dynamics' values. The value
+    list, a value's detail and the model catalog's parameters (which read
+    values by parameter name) name no such column.
+    """
+    service = catalog_service(catalog_session)
+    parameter = service.list_parameters("us").items[0]
+
+    values, list_statements = recorded_statements(
+        catalog_session,
+        lambda: service.list_parameter_values(
+            "us", value_filter=ParameterValueFilter(parameter_id=parameter.id)
+        ),
+    )
+    value, detail_statements = recorded_statements(
+        catalog_session,
+        lambda: service.get_parameter_value("us", values.items[0].id),
+    )
+    catalog_parameters, catalog_statements = recorded_statements(
+        catalog_session,
+        lambda: service.get_catalog_parameters("us", names=[parameter.name]),
+    )
+
+    assert [item.value for item in values.items] == [0.2, 0.1]
+    assert value.item == values.items[0]
+    assert [
+        [dated.value for dated in item.values] for item in catalog_parameters.parameters
+    ] == [[0.1, 0.2]]
+    statements = [*list_statements, *detail_statements, *catalog_statements]
+    assert sum("from parameter_values" in statement for statement in statements) == 3
+    assert not any(
+        PARAMETER_VALUES_DYNAMIC_ID.search(statement) for statement in statements
+    )
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import gzip
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -61,6 +61,7 @@ from tests.integration.simulation_rows import add_row
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from datetime import datetime
 
     from sqlalchemy.orm import sessionmaker
     from sqlmodel import Session
@@ -146,7 +147,6 @@ def _current_law_values(
             .where(
                 col(Parameter.tax_benefit_model_version_id) == version_id,
                 col(ParameterValue.policy_id).is_(None),
-                col(ParameterValue.dynamic_id).is_(None),
             )
         )
         dynamic_values = session.execute(
@@ -400,6 +400,96 @@ def _prunable_counts(sessions: sessionmaker[Session], version_id: UUID) -> dict:
     }
 
 
+@dataclass(frozen=True)
+class StoredDynamicValue:
+    """A dynamic's value the test stored: its ID, parameter, value and dates."""
+
+    id: UUID
+    dynamic_id: UUID
+    dynamic_parameter_id: UUID
+    value_json: Any
+    start_date: datetime
+
+
+def _add_dynamic_value_on_a_current_law_date(
+    sessions: sessionmaker[Session], version_id: UUID
+) -> StoredDynamicValue:
+    """Store a US dynamic of the version with a value of one of its assumptions.
+
+    The value starts when the assumption's current-law value starts, so only
+    its ``dynamic_id`` tells pruning that it isn't current law.
+    """
+    name = "simulation.marginal_tax_rate_delta"
+    parameter_id = _parameters_by_name(sessions, DynamicParameter, version_id)[name]
+    with sessions.begin() as session:
+        model_id, start_date = session.execute(
+            sa.select(
+                col(TaxBenefitModelVersion.model_id),
+                col(DynamicParameterValue.start_date),
+            )
+            .join(
+                DynamicParameter,
+                col(DynamicParameter.tax_benefit_model_version_id)
+                == col(TaxBenefitModelVersion.id),
+            )
+            .join(
+                DynamicParameterValue,
+                col(DynamicParameterValue.dynamic_parameter_id)
+                == col(DynamicParameter.id),
+            )
+            .where(
+                col(DynamicParameter.id) == parameter_id,
+                col(DynamicParameterValue.dynamic_id).is_(None),
+            )
+        ).one()
+        stored = StoredDynamicValue(
+            id=uuid4(),
+            dynamic_id=uuid4(),
+            dynamic_parameter_id=parameter_id,
+            value_json=5,
+            start_date=start_date,
+        )
+        add_row(
+            session,
+            Dynamic,
+            id=stored.dynamic_id,
+            country_id="us",
+            tax_benefit_model_id=model_id,
+            tax_benefit_model_version_id=version_id,
+            canonicalization_version=1,
+            content_hash="e" * 64,
+        )
+        add_row(
+            session,
+            DynamicParameterValue,
+            id=stored.id,
+            dynamic_parameter_id=stored.dynamic_parameter_id,
+            dynamic_id=stored.dynamic_id,
+            value_json=stored.value_json,
+            start_date=stored.start_date,
+        )
+    return stored
+
+
+def _dynamic_values(
+    sessions: sessionmaker[Session], dynamic_id: UUID
+) -> list[StoredDynamicValue]:
+    """Return a dynamic's stored values, in the shape the test stored them."""
+    with sessions() as session:
+        return [
+            StoredDynamicValue(*row)
+            for row in session.execute(
+                sa.select(
+                    col(DynamicParameterValue.id),
+                    col(DynamicParameterValue.dynamic_id),
+                    col(DynamicParameterValue.dynamic_parameter_id),
+                    col(DynamicParameterValue.value_json),
+                    col(DynamicParameterValue.start_date),
+                ).where(col(DynamicParameterValue.dynamic_id) == dynamic_id)
+            )
+        ]
+
+
 def test_pruning_deletes_both_tables_current_law_values_and_restore_rewrites_them(
     publication_sessions: sessionmaker[Session],
     writer_sessions: sessionmaker[Session],
@@ -414,6 +504,9 @@ def test_pruning_deletes_both_tables_current_law_values_and_restore_rewrites_the
         country_id: _version_id(publication_sessions, country_id, OLD_VERSION)
         for country_id in COUNTRY_IDS
     }
+    dynamic_value = _add_dynamic_value_on_a_current_law_date(
+        publication_sessions, old_ids["us"]
+    )
     first_published = {
         country_id: _current_law_values(publication_sessions, version_id)
         for country_id, version_id in old_ids.items()
@@ -457,6 +550,9 @@ def test_pruning_deletes_both_tables_current_law_values_and_restore_rewrites_the
             _parameters_by_name(publication_sessions, DynamicParameter, version_id)
             == dynamic_parameters[country_id]
         )
+    assert _dynamic_values(publication_sessions, dynamic_value.dynamic_id) == [
+        dynamic_value
+    ]
 
     rollback = _publish(writer_sessions, OLD_VERSION)
 

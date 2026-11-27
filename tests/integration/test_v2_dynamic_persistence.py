@@ -39,6 +39,9 @@ from policyengine_api.services.v2.policies.database_session import (
 )
 from policyengine_api.services.v2.policies.services import V2PolicyService
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from tests.integration.parameter_values_with_dynamics import (
+    ParameterValueWithDynamic,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -110,12 +113,7 @@ def _remove_catalog(
             )
         )
         session.execute(
-            delete(ParameterValue).where(
-                or_(
-                    ParameterValue.policy_id.in_(policy_ids),
-                    ParameterValue.dynamic_id.in_(dynamic_ids),
-                )
-            )
+            delete(ParameterValue).where(ParameterValue.policy_id.in_(policy_ids))
         )
         session.execute(
             delete(DynamicParameterValue).where(
@@ -239,9 +237,13 @@ def _stored_names(session: Session, *, policy_id=None, dynamic_id=None) -> set[s
                 .where(ParameterValue.policy_id == policy_id)
             )
         )
+    # ParameterValue no longer maps the column, which the table keeps until
+    # C1 · 53 drops it.
     assert (
         session.scalars(
-            select(ParameterValue.id).where(ParameterValue.dynamic_id == dynamic_id)
+            select(ParameterValueWithDynamic.id).where(
+                ParameterValueWithDynamic.dynamic_id == dynamic_id
+            )
         ).all()
         == []
     )
