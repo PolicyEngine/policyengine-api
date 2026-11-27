@@ -78,6 +78,9 @@ dev = [
     # newer than two weeks; moving to it is its own change.
     "diff-cover>=10.6,<11",
     "mypy>=1.15,<2",
+    # The simulation service's generated client, which the tests of API v1's
+    # requests to the simulation service compare them with.
+    "policyengine-api-simulation-client==0.20261127.430",
     "pytest",
     "pytest-snapshot",
     "pytest-timeout",
